@@ -1,31 +1,42 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.material.Button
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import theme.ClickTheme
+import ui.screens.HomeScreen
 
 @Composable
 @Preview
 fun App() {
-    var text by remember { mutableStateOf("Hello, World!") }
-
-    MaterialTheme {
-        Button(onClick = {
-            text = "Hello, Desktop!"
-        }) {
-            Text(text)
-        }
+    ClickTheme {
+        HomeScreen(
+            onNFCTapClick = {
+                println("NFC Tap initiated - Ready to connect!")
+            },
+            onConnectionsClick = {
+                println("Navigate to Connections")
+            },
+            onMapClick = {
+                println("Navigate to Map View")
+            },
+            onVibeCheckClick = {
+                println("Start Vibe Check")
+            },
+            onReconnectClick = {
+                println("Reconnect feature")
+            },
+            onSettingsClick = {
+                println("Navigate to Settings")
+            }
+        )
     }
 }
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication) {
+    Window(
+        onCloseRequest = ::exitApplication,
+        title = "Click - Turn encounters into connections"
+    ) {
         App()
     }
 }
