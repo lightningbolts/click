@@ -48,7 +48,7 @@ kotlin {
 
 android {
     namespace = "compose.project.click.click"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "compose.project.click.click"
