@@ -19,6 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.AdaptiveSurface
 
 data class ClickConnection(
     val name: String,
@@ -59,48 +62,49 @@ fun ConnectionsListView(onConnectionSelected: (ClickConnection) -> Unit) {
         )
     }
 
-    Column(
+    AdaptiveBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundLight)
     ) {
-        // Header with Material You
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = GlassLight.copy(alpha = 0.95f),
-            shadowElevation = 2.dp,
-            tonalElevation = 1.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+            // Header with adaptive surface
+            AdaptiveSurface(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    "Clicks",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = OnSurfaceLight
-                )
-                Text(
-                    "${connections.size} connections",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = OnSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "Clicks",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = OnSurfaceLight
+                    )
+                    Text(
+                        "${connections.size} connections",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OnSurfaceVariant
+                    )
+                }
             }
-        }
 
-        // Connections List
-        LazyColumn(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(connections) { connection ->
-                ConnectionItem(
-                    connection = connection,
-                    onClick = { onConnectionSelected(connection) }
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = 72.dp),
-                    color = Color.LightGray.copy(alpha = 0.3f)
-                )
+            // Connections List
+            LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(connections) { connection ->
+                    ConnectionItem(
+                        connection = connection,
+                        onClick = { onConnectionSelected(connection) }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 72.dp),
+                        color = Color.LightGray.copy(alpha = 0.3f)
+                    )
+                }
             }
         }
     }
@@ -108,9 +112,8 @@ fun ConnectionsListView(onConnectionSelected: (ClickConnection) -> Unit) {
 
 @Composable
 fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
-    Surface(
+    AdaptiveCard(
         modifier = Modifier.fillMaxWidth(),
-        color = SurfaceLight,
         onClick = onClick
     ) {
         Row(
@@ -226,124 +229,123 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
         )
     }
 
-    Column(
+    AdaptiveBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundLight)
     ) {
-        // Header with Material You glass morphism
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = GlassLight.copy(alpha = 0.95f),
-            shadowElevation = 2.dp,
-            tonalElevation = 1.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Header with adaptive surface
+            AdaptiveSurface(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = onBackPressed) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurfaceLight)
-                }
-
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(PrimaryBlue, LightBlue)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        connection.name.first().toString(),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                    IconButton(onClick = onBackPressed) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurfaceLight)
+                    }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        connection.name,
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = OnSurfaceLight
-                    )
-                    if (connection.isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(PrimaryBlue, LightBlue)
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            "Online",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF4CAF50)
+                            connection.name.first().toString(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                }
 
-                IconButton(onClick = { /* Voice call */ }) {
-                    Icon(Icons.Filled.Call, contentDescription = "Voice Call", tint = PrimaryBlue)
-                }
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                IconButton(onClick = { /* Video call */ }) {
-                    Icon(Icons.Filled.VideoCall, contentDescription = "Video Call", tint = PrimaryBlue)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            connection.name,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = OnSurfaceLight
+                        )
+                        if (connection.isOnline) {
+                            Text(
+                                "Online",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = { /* Voice call */ }) {
+                        Icon(Icons.Filled.Call, contentDescription = "Voice Call", tint = PrimaryBlue)
+                    }
+
+                    IconButton(onClick = { /* Video call */ }) {
+                        Icon(Icons.Filled.VideoCall, contentDescription = "Video Call", tint = PrimaryBlue)
+                    }
                 }
             }
-        }
 
-        // Messages
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(messages) { message ->
-                ChatMessageBubble(message)
-            }
-        }
-
-        // Input
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = SurfaceLight,
-            shadowElevation = 4.dp
-        ) {
-            Row(
+            // Messages
+            LazyColumn(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = messageText,
-                    onValueChange = { messageText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message") },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryBlue,
-                        unfocusedBorderColor = Color.LightGray
-                    )
-                )
+                items(messages) { message ->
+                    ChatMessageBubble(message)
+                }
+            }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                IconButton(
-                    onClick = { /* Send message */ },
+            // Input
+            AdaptiveSurface(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
                     modifier = Modifier
-                        .size(48.dp)
-                        .background(PrimaryBlue, RoundedCornerShape(24.dp))
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = Color.White
+                    OutlinedTextField(
+                        value = messageText,
+                        onValueChange = { messageText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Message") },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = Color.LightGray
+                        )
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(
+                        onClick = { /* Send message */ },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(PrimaryBlue, RoundedCornerShape(24.dp))
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
         }
@@ -386,4 +388,3 @@ fun ChatMessageBubble(message: ChatMessage) {
         }
     }
 }
-

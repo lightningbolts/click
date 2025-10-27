@@ -3,7 +3,6 @@ package compose.project.click.click.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -18,143 +17,140 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveButton
+import compose.project.click.click.ui.components.AdaptiveCard
 
 @Composable
 fun HomeScreen() {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BackgroundLight),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        item {
-            // Header with Material You typography
-            Column {
-                Text(
-                    "Hi Bob!",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = OnSurfaceLight
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Who are you clicking with today?",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = OnSurfaceVariant
-                )
-            }
-        }
-
-        item {
-            // Online Friends - Click Prompts with Material You
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = SurfaceLight
-                ),
-                elevation = CardDefaults.elevatedCardElevation(
-                    defaultElevation = 2.dp
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            Icons.Filled.Phone,
-                            contentDescription = null,
-                            tint = PrimaryBlue,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            "Online Friends",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = OnSurfaceLight
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Online friends list
-                    OnlineFriendItem("Alice", "Available to click!")
-                    OnlineFriendItem("Charlie", "Free now")
-                    OnlineFriendItem("Diana", "Let's connect!")
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            item {
+                // Header with Material You typography
+                Column {
+                    Text(
+                        "Hi Bob!",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = OnSurfaceLight
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Who are you clicking with today?",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = OnSurfaceVariant
+                    )
                 }
             }
-        }
 
-        item {
-            // Recent Clicks Section
-            Text(
-                "Recent Clicks",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = OnSurfaceLight
-            )
-        }
+            item {
+                // Online Friends - Click Prompts using AdaptiveCard
+                AdaptiveCard(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                Icons.Filled.Phone,
+                                contentDescription = null,
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Online Friends",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = OnSurfaceLight
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
 
-        items(3) { index ->
-            RecentClickCard(
-                name = listOf("Alice", "Charlie", "Diana")[index],
-                time = listOf("2h ago", "Yesterday", "3d ago")[index],
-                location = listOf("Coffee Shop", "Park", "Downtown")[index]
-            )
-        }
+                        // Online friends list
+                        OnlineFriendItem("Alice", "Available to click!")
+                        OnlineFriendItem("Charlie", "Free now")
+                        OnlineFriendItem("Diana", "Let's connect!")
+                    }
+                }
+            }
 
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Your Stats",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = OnSurfaceLight
-            )
-        }
-
-        item {
-            // Stats Grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.Check,
-                    value = "47",
-                    label = "Total Clicks"
-                )
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.DateRange,
-                    value = "12",
-                    label = "This Week"
+            item {
+                // Recent Clicks Section
+                Text(
+                    "Recent Clicks",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnSurfaceLight
                 )
             }
-        }
 
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.LocationOn,
-                    value = "8",
-                    label = "Locations"
+            items(3) { index ->
+                RecentClickCard(
+                    name = listOf("Alice", "Charlie", "Diana")[index],
+                    time = listOf("2h ago", "Yesterday", "3d ago")[index],
+                    location = listOf("Coffee Shop", "Park", "Downtown")[index]
                 )
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.Person,
-                    value = "15",
-                    label = "Connections"
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Your Stats",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnSurfaceLight
                 )
+            }
+
+            item {
+                // Stats Grid
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.Check,
+                        value = "47",
+                        label = "Total Clicks"
+                    )
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.DateRange,
+                        value = "12",
+                        label = "This Week"
+                    )
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.LocationOn,
+                        value = "8",
+                        label = "Locations"
+                    )
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.Person,
+                        value = "15",
+                        label = "Connections"
+                    )
+                }
             }
         }
     }
@@ -203,31 +199,20 @@ fun OnlineFriendItem(name: String, status: String) {
             )
         }
 
-        FilledTonalButton(
+        AdaptiveButton(
             onClick = { },
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = SoftBlue,
-                contentColor = PrimaryBlue
-            ),
-            shape = RoundedCornerShape(20.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
-        ) {
-            Text("Click", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
-        }
+            modifier = Modifier,
+            content = {
+                Text("Click", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
+            }
+        )
     }
 }
 
 @Composable
 fun RecentClickCard(name: String, time: String, location: String) {
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = SurfaceLight
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 1.dp
-        )
+    AdaptiveCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
@@ -288,15 +273,8 @@ fun StatCard(
     value: String,
     label: String
 ) {
-    ElevatedCard(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = SurfaceLight
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 1.dp
-        )
+    AdaptiveCard(
+        modifier = modifier
     ) {
         Column(
             modifier = Modifier
@@ -325,4 +303,3 @@ fun StatCard(
         }
     }
 }
-

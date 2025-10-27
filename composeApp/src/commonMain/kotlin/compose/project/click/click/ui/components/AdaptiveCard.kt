@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
@@ -173,4 +172,3 @@ fun getAdaptivePadding(): androidx.compose.ui.unit.Dp {
     val isIOS = getPlatform().name.contains("iOS", ignoreCase = true)
     return if (isIOS) 16.dp else 20.dp
 }
-

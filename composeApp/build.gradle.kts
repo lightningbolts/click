@@ -29,6 +29,7 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            // WebView-based map needs no native Map SDK dependency
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -57,6 +58,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        // MapLibre doesn't require an API key
     }
     packaging {
         resources {
@@ -77,4 +79,3 @@ android {
 dependencies {
     debugImplementation(compose.uiTooling)
 }
-

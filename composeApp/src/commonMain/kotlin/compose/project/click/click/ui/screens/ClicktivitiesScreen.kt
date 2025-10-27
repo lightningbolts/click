@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Attractions
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Info
@@ -15,15 +14,21 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.SportsBaseball
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveButton
+import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.AdaptiveSurface
+import compose.project.click.click.ui.theme.DeepBlue
+import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SoftBlue
+import compose.project.click.click.ui.theme.TextSecondary
 
 data class Clicktivity(
     val title: String,
@@ -82,78 +87,63 @@ fun ClicktivitiesScreen() {
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BackgroundLight)
-    ) {
-        // Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = SurfaceLight,
-            shadowElevation = 2.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Text(
-                    "Clicktivities",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = DeepBlue
-                )
-                Text(
-                    "AI-powered activities for you and your clicks",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Clicktivities",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = DeepBlue
+                    )
+                    Text(
+                        "AI-powered activities for you and your clicks",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
             }
-        }
 
-        // Coming Soon Badge
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = SoftBlue
-            )
-        ) {
-            Row(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SoftBlue)
             ) {
-                Icon(
-                    Icons.Filled.Info,
-                    contentDescription = null,
-                    tint = PrimaryBlue,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    "Coming after MVP • 2% transaction fee",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = DeepBlue,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        // Activities List
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(clicktivities) { activity ->
-                ClicktivityCard(activity)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        "Coming after MVP • 2% transaction fee",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DeepBlue,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(clicktivities) { activity ->
+                    ClicktivityCard(activity)
+                }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
     }
@@ -161,14 +151,7 @@ fun ClicktivitiesScreen() {
 
 @Composable
 fun ClicktivityCard(activity: Clicktivity) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = SurfaceLight
-        ),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
+    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -242,20 +225,8 @@ fun ClicktivityCard(activity: Clicktivity) {
                             color = PrimaryBlue
                         )
 
-                        Button(
-                            onClick = { /* Coming soon */ },
-                            enabled = false,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = PrimaryBlue,
-                                disabledContainerColor = Color.LightGray
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                "Coming Soon",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                        AdaptiveButton(onClick = {}, enabled = false) {
+                            Text("Coming Soon", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -263,4 +234,3 @@ fun ClicktivityCard(activity: Clicktivity) {
         }
     }
 }
-

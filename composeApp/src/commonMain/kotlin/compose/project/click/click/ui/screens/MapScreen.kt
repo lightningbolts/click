@@ -19,6 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.AdaptiveSurface
+import compose.project.click.click.ui.components.PlatformMap
+import compose.project.click.click.ui.components.MapPin
 
 data class MapLocation(
     val name: String,
@@ -26,7 +31,9 @@ data class MapLocation(
     val clickCount: Int,
     val distance: String,
     val isNearby: Boolean = false,
-    val friendsHere: List<String> = emptyList()
+    val friendsHere: List<String> = emptyList(),
+    val latitude: Double,
+    val longitude: Double
 )
 
 @Composable
@@ -35,12 +42,12 @@ fun MapScreen() {
 
     val locations = remember {
         listOf(
-            MapLocation("Starbucks Coffee", "123 Main St", 12, "0.2 mi", true, listOf("Alice", "Charlie")),
-            MapLocation("Central Park", "Park Ave", 8, "0.5 mi", true, listOf("Diana")),
-            MapLocation("Tech Hub Coworking", "456 Tech Blvd", 15, "0.8 mi", false),
-            MapLocation("The Local Cafe", "789 Coffee Ln", 6, "1.2 mi", false, listOf("Eve")),
-            MapLocation("Downtown Mall", "Shopping District", 10, "1.5 mi", false),
-            MapLocation("Riverside Park", "River Rd", 5, "2.1 mi", false)
+            MapLocation("Starbucks Coffee", "123 Main St", 12, "0.2 mi", true, listOf("Alice", "Charlie"), 40.7580, -73.9855),
+            MapLocation("Central Park", "Park Ave", 8, "0.5 mi", true, listOf("Diana"), 40.785091, -73.968285),
+            MapLocation("Tech Hub Coworking", "456 Tech Blvd", 15, "0.8 mi", false, emptyList(), 40.741895, -73.989308),
+            MapLocation("The Local Cafe", "789 Coffee Ln", 6, "1.2 mi", false, listOf("Eve"), 40.73061, -73.935242),
+            MapLocation("Downtown Mall", "Shopping District", 10, "1.5 mi", false, emptyList(), 40.7505, -73.9934),
+            MapLocation("Riverside Park", "River Rd", 5, "2.1 mi", false, emptyList(), 40.8007, -73.9700)
         )
     }
 
@@ -50,207 +57,180 @@ fun MapScreen() {
         else -> locations
     }
 
-    Column(
+    val pins = remember(filteredLocations) {
+        filteredLocations.map {
+            MapPin(title = it.name, latitude = it.latitude, longitude = it.longitude, isNearby = it.isNearby)
+        }
+    }
+
+    AdaptiveBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundLight)
     ) {
-        // Header with Material You
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = GlassLight.copy(alpha = 0.95f),
-            shadowElevation = 2.dp,
-            tonalElevation = 1.dp
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
+            // Header with adaptive surface
+            AdaptiveSurface(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(20.dp)
                 ) {
-                    Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "Map",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = OnSurfaceLight,
+                            )
+                            Text(
+                                "Discover click spots near you",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = OnSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { /* Center on current location */ },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(SoftBlue, CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Filled.MyLocation,
+                                contentDescription = "My Location",
+                                tint = PrimaryBlue
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Filter chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedFilter == "All",
+                            onClick = { selectedFilter = "All" },
+                            label = { Text("All Spots") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedFilter == "Nearby",
+                            onClick = { selectedFilter = "Nearby" },
+                            label = { Text("Nearby") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedFilter == "Friends",
+                            onClick = { selectedFilter = "Friends" },
+                            label = { Text("Friends") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Actual map with markers
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+            ) {
+                PlatformMap(
+                    modifier = Modifier.fillMaxSize(),
+                    pins = pins,
+                    onPinTapped = { /* TODO: navigate to details */ }
+                )
+
+                // Floating stats card overlay
+                AdaptiveCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.LocationOn,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Map",
-                            style = MaterialTheme.typography.headlineSmall,
+                            "${locations.count { it.isNearby }} nearby",
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = OnSurfaceLight
                         )
-                        Text(
-                            "Discover click spots near you",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = OnSurfaceVariant
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { /* Center on current location */ },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(SoftBlue, CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Filled.MyLocation,
-                            contentDescription = "My Location",
-                            tint = PrimaryBlue
-                        )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Filter chips
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedFilter == "All",
-                        onClick = { selectedFilter = "All" },
-                        label = { Text("All Spots") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryBlue,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedFilter == "Nearby",
-                        onClick = { selectedFilter = "Nearby" },
-                        label = { Text("Nearby") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryBlue,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedFilter == "Friends",
-                        onClick = { selectedFilter = "Friends" },
-                        label = { Text("Friends") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryBlue,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
-        }
-
-        // Map placeholder with gradient
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            SoftBlue.copy(alpha = 0.3f),
-                            SoftBlue.copy(alpha = 0.1f)
-                        )
-                    )
-                )
-        ) {
-            // Map pins visualization
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Filled.Map,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = PrimaryBlue.copy(alpha = 0.6f)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "Interactive Map View",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = OnSurfaceVariant,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    "${filteredLocations.size} locations",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
             }
 
-            // Floating stats card
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White,
-                shadowElevation = 4.dp
+            // Locations list
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.LocationOn,
-                        contentDescription = null,
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                item {
                     Text(
-                        "${locations.count { it.isNearby }} nearby",
-                        style = MaterialTheme.typography.labelLarge,
+                        "Click Locations",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = OnSurfaceLight
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
-            }
-        }
 
-        // Locations list
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Text(
-                    "Click Locations",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = OnSurfaceLight
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                items(filteredLocations) { location ->
+                    LocationCard(location)
+                }
 
-            items(filteredLocations) { location ->
-                LocationCard(location)
-            }
-
-            if (filteredLocations.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
+                if (filteredLocations.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Filled.SearchOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = TextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "No locations found",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = TextSecondary
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Filled.SearchOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = TextSecondary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "No locations found",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = TextSecondary
+                                )
+                            }
                         }
                     }
                 }
@@ -261,15 +241,8 @@ fun MapScreen() {
 
 @Composable
 fun LocationCard(location: MapLocation) {
-    ElevatedCard(
+    AdaptiveCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = SurfaceLight
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 2.dp
-        ),
         onClick = { /* Navigate to location details */ }
     ) {
         Row(
@@ -426,4 +399,3 @@ fun LocationCard(location: MapLocation) {
         }
     }
 }
-

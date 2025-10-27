@@ -10,34 +10,40 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveButton
+import compose.project.click.click.ui.components.AdaptiveCard
 
 @Composable
 fun AddClickScreen() {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
 
-    Box(
+    AdaptiveBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundLight),
-        contentAlignment = Alignment.Center
     ) {
-        if (!isClicked) {
-            // Add Click State
-            AddClickContent(
-                onClickSuccess = { userName ->
-                    isClicked = true
-                    clickedUserName = userName
-                }
-            )
-        } else {
-            // Clicked State
-            ClickedSuccessContent(userName = clickedUserName)
+        Box(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!isClicked) {
+                // Add Click State
+                AddClickContent(
+                    onClickSuccess = { userName ->
+                        isClicked = true
+                        clickedUserName = userName
+                    }
+                )
+            } else {
+                // Clicked State
+                ClickedSuccessContent(userName = clickedUserName)
+            }
         }
     }
 }
@@ -70,13 +76,8 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
 
         // QR Code Placeholder
-        Card(
-            modifier = Modifier.size(280.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White
-            ),
-            elevation = CardDefaults.cardElevation(4.dp)
+        AdaptiveCard(
+            modifier = Modifier.size(280.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -122,12 +123,8 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
 
         // NFC Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = SoftBlue
-            )
+        AdaptiveCard(
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
@@ -155,16 +152,12 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
         Spacer(modifier = Modifier.height(24.dp))
 
         // Demo button (remove in production)
-        FilledTonalButton(
+        AdaptiveButton(
             onClick = { onClickSuccess("Alice") },
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = SoftBlue,
-                contentColor = PrimaryBlue
-            ),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Text("Demo: Simulate Click", fontWeight = FontWeight.Medium)
-        }
+            content = {
+                Text("Demo: Simulate Click", fontWeight = FontWeight.Medium)
+            }
+        )
     }
 }
 
@@ -214,12 +207,8 @@ fun ClickedSuccessContent(userName: String) {
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = SoftBlue
-            )
+        AdaptiveCard(
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -245,4 +234,3 @@ fun ClickedSuccessContent(userName: String) {
         }
     }
 }
-
