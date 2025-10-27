@@ -80,18 +80,27 @@ fun MapScreen() {
             Box(modifier = Modifier.padding(horizontal = 20.dp)) {
                 PageHeader(title = "Map", subtitle = "Discover click spots near you")
             }
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Actual map with markers
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp)
+            // Map container with rounded corners and border
+            Box(modifier = Modifier
+                .padding(horizontal = 20.dp)
             ) {
-                PlatformMap(
-                    modifier = Modifier.fillMaxSize(),
-                    pins = pins,
-                    onPinTapped = { /* TODO: navigate to details */ }
-                )
+                val mapShape = RoundedCornerShape(20.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .clip(mapShape)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, mapShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    PlatformMap(
+                        modifier = Modifier.fillMaxSize(),
+                        pins = pins,
+                        onPinTapped = { /* TODO: navigate to details */ }
+                    )
+                }
 
                 // Floating stats card overlay
                 AdaptiveCard(
@@ -110,7 +119,7 @@ fun MapScreen() {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "${'$'}{locations.count { it.isNearby }} nearby",
+                            "${locations.count { it.isNearby }} nearby",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -287,7 +296,7 @@ fun LocationCard(location: MapLocation) {
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            "${'$'}{location.clickCount} clicks",
+                            "${location.clickCount} clicks",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium
@@ -330,7 +339,7 @@ fun LocationCard(location: MapLocation) {
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        "+${'$'}{location.friendsHere.size - 3}",
+                                        "+${location.friendsHere.size - 3}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold
