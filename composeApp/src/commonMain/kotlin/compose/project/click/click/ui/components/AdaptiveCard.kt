@@ -25,16 +25,16 @@ fun AdaptiveCard(
         Surface(
             modifier = modifier,
             shape = RoundedCornerShape(20.dp),
-            color = Color.White.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
             shadowElevation = 0.dp,
             onClick = onClick ?: {}
         ) {
             Box(
                 modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.3f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f))
                     .border(
                         width = 0.5.dp,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                         shape = RoundedCornerShape(20.dp)
                     )
             ) {
@@ -50,7 +50,7 @@ fun AdaptiveCard(
             modifier = modifier,
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.elevatedCardColors(
-                containerColor = SurfaceLight
+                containerColor = MaterialTheme.colorScheme.surface
             ),
             elevation = CardDefaults.elevatedCardElevation(
                 defaultElevation = 2.dp
@@ -76,15 +76,15 @@ fun AdaptiveSurface(
         // iOS: Frosted glass header
         Surface(
             modifier = modifier,
-            color = Color.White.copy(alpha = 0.8f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
             shadowElevation = 0.dp
         ) {
             Box(
                 modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.4f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
                     .border(
                         width = 0.5.dp,
-                        color = Color.White.copy(alpha = 0.3f),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
                         shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
                     )
             ) {
@@ -95,7 +95,7 @@ fun AdaptiveSurface(
         // Android: Material surface
         Surface(
             modifier = modifier,
-            color = GlassLight.copy(alpha = 0.95f),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
             shadowElevation = 2.dp,
             tonalElevation = 1.dp
         ) {
@@ -109,12 +109,8 @@ fun AdaptiveBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val isIOS = getPlatform().name.contains("iOS", ignoreCase = true)
-
     Box(
-        modifier = modifier.background(
-            if (isIOS) Color(0xFFF8F9FA) else BackgroundLight
-        ),
+        modifier = modifier.background(MaterialTheme.colorScheme.background),
         content = content
     )
 }
@@ -135,7 +131,7 @@ fun AdaptiveButton(
             modifier = modifier,
             enabled = enabled,
             colors = ButtonDefaults.buttonColors(
-                containerColor = PrimaryBlue,
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color.White
             ),
             shape = RoundedCornerShape(12.dp),
@@ -152,8 +148,8 @@ fun AdaptiveButton(
             modifier = modifier,
             enabled = enabled,
             colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = SoftBlue,
-                contentColor = PrimaryBlue
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.primary
             ),
             shape = RoundedCornerShape(20.dp),
             content = content

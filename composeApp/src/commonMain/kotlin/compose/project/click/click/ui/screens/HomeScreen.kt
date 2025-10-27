@@ -20,6 +20,8 @@ import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.SectionTitle
 
 @Composable
 fun HomeScreen() {
@@ -27,31 +29,22 @@ fun HomeScreen() {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize(),
-            contentPadding = PaddingValues(20.dp),
+            contentPadding = PaddingValues(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item {
-                // Header with Material You typography
-                Column {
-                    Text(
-                        "Hi Bob!",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = OnSurfaceLight
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Who are you clicking with today?",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = OnSurfaceVariant
-                    )
-                }
+                PageHeader(
+                    title = "Hi Bob!",
+                    subtitle = "Who are you clicking with today?"
+                )
             }
 
             item {
                 // Online Friends - Click Prompts using AdaptiveCard
                 AdaptiveCard(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp)
@@ -63,7 +56,7 @@ fun HomeScreen() {
                             Icon(
                                 Icons.Filled.Phone,
                                 contentDescription = null,
-                                tint = PrimaryBlue,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -71,7 +64,7 @@ fun HomeScreen() {
                                 "Online Friends",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = OnSurfaceLight
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -86,11 +79,9 @@ fun HomeScreen() {
 
             item {
                 // Recent Clicks Section
-                Text(
-                    "Recent Clicks",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = OnSurfaceLight
+                SectionTitle(
+                    text = "Recent Clicks",
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
 
@@ -104,18 +95,18 @@ fun HomeScreen() {
 
             item {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Your Stats",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = OnSurfaceLight
+                SectionTitle(
+                    text = "Your Stats",
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
 
             item {
                 // Stats Grid
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     StatCard(
@@ -135,7 +126,9 @@ fun HomeScreen() {
 
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     StatCard(
@@ -170,7 +163,10 @@ fun OnlineFriendItem(name: String, status: String) {
                 .clip(RoundedCornerShape(24.dp))
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(PrimaryBlue, LightBlue)
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
                     )
                 ),
             contentAlignment = Alignment.Center
@@ -190,12 +186,12 @@ fun OnlineFriendItem(name: String, status: String) {
                 name,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyLarge,
-                color = OnSurfaceLight
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 status,
                 style = MaterialTheme.typography.bodyMedium,
-                color = OnSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -212,7 +208,9 @@ fun OnlineFriendItem(name: String, status: String) {
 @Composable
 fun RecentClickCard(name: String, time: String, location: String) {
     AdaptiveCard(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
     ) {
         Row(
             modifier = Modifier
@@ -224,12 +222,12 @@ fun RecentClickCard(name: String, time: String, location: String) {
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(SoftBlue),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     name.first().toString(),
-                    color = PrimaryBlue,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -242,7 +240,7 @@ fun RecentClickCard(name: String, time: String, location: String) {
                     "Clicked with $name",
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = OnSurfaceLight
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
@@ -252,13 +250,13 @@ fun RecentClickCard(name: String, time: String, location: String) {
                         Icons.Filled.LocationOn,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = OnSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         "$location • $time",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -285,7 +283,7 @@ fun StatCard(
             Icon(
                 icon,
                 contentDescription = null,
-                tint = PrimaryBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(32.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -293,12 +291,12 @@ fun StatCard(
                 value,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = OnSurfaceLight
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 label,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

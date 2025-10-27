@@ -22,6 +22,7 @@ import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.AdaptiveSurface
+import compose.project.click.click.ui.components.PageHeader
 
 data class ClickConnection(
     val name: String,
@@ -66,45 +67,26 @@ fun ConnectionsListView(onConnectionSelected: (ClickConnection) -> Unit) {
         modifier = Modifier
             .fillMaxSize()
     ) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            // Header with adaptive surface
-            AdaptiveSurface(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-                ) {
-                    Text(
-                        "Clicks",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = OnSurfaceLight
-                    )
-                    Text(
-                        "${connections.size} connections",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = OnSurfaceVariant
-                    )
-                }
+            item {
+                PageHeader(
+                    title = "Clicks",
+                    subtitle = "${connections.size} connections"
+                )
             }
 
-            // Connections List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(connections) { connection ->
-                    ConnectionItem(
-                        connection = connection,
-                        onClick = { onConnectionSelected(connection) }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 72.dp),
-                        color = Color.LightGray.copy(alpha = 0.3f)
-                    )
-                }
+            items(connections) { connection ->
+                ConnectionItem(
+                    connection = connection,
+                    onClick = { onConnectionSelected(connection) }
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 72.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                )
             }
         }
     }
@@ -130,7 +112,10 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                         .clip(RoundedCornerShape(28.dp))
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(PrimaryBlue, LightBlue)
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                )
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -151,7 +136,7 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                             .align(Alignment.BottomEnd)
                             .background(Color(0xFF4CAF50), RoundedCornerShape(8.dp))
                             .padding(2.dp)
-                            .background(Color.White, RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
                             .background(Color(0xFF4CAF50), RoundedCornerShape(6.dp))
                     )
                 }
@@ -169,12 +154,12 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                         connection.name,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = OnSurfaceLight
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         connection.time,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -188,7 +173,10 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                     Text(
                         connection.lastMessage,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (connection.unreadCount > 0) OnSurfaceLight else TextSecondary,
+                        color = if (connection.unreadCount > 0) 
+                            MaterialTheme.colorScheme.onSurface 
+                        else 
+                            MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = if (connection.unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
                         modifier = Modifier.weight(1f)
                     )
@@ -198,7 +186,7 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                         Box(
                             modifier = Modifier
                                 .size(24.dp)
-                                .background(PrimaryBlue, RoundedCornerShape(12.dp)),
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -248,7 +236,11 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBackPressed) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnSurfaceLight)
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack, 
+                            contentDescription = "Back", 
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     Box(
@@ -257,7 +249,10 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
                             .clip(RoundedCornerShape(20.dp))
                             .background(
                                 Brush.linearGradient(
-                                    colors = listOf(PrimaryBlue, LightBlue)
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                    )
                                 )
                             ),
                         contentAlignment = Alignment.Center
@@ -276,7 +271,7 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
                             connection.name,
                             fontWeight = FontWeight.SemiBold,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = OnSurfaceLight
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         if (connection.isOnline) {
                             Text(
@@ -288,11 +283,19 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
                     }
 
                     IconButton(onClick = { /* Voice call */ }) {
-                        Icon(Icons.Filled.Call, contentDescription = "Voice Call", tint = PrimaryBlue)
+                        Icon(
+                            Icons.Filled.Call, 
+                            contentDescription = "Voice Call", 
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
 
                     IconButton(onClick = { /* Video call */ }) {
-                        Icon(Icons.Filled.VideoCall, contentDescription = "Video Call", tint = PrimaryBlue)
+                        Icon(
+                            Icons.Filled.VideoCall, 
+                            contentDescription = "Video Call", 
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -327,8 +330,8 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
                         placeholder = { Text("Message") },
                         shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = Color.LightGray
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     )
 
@@ -338,7 +341,7 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
                         onClick = { /* Send message */ },
                         modifier = Modifier
                             .size(48.dp)
-                            .background(PrimaryBlue, RoundedCornerShape(24.dp))
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp))
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.Send,
@@ -368,21 +371,30 @@ fun ChatMessageBubble(message: ChatMessage) {
                 bottomEnd = if (message.isSent) 4.dp else 16.dp
             ),
             colors = CardDefaults.cardColors(
-                containerColor = if (message.isSent) PrimaryBlue else SurfaceLight
+                containerColor = if (message.isSent) 
+                    MaterialTheme.colorScheme.primary 
+                else 
+                    MaterialTheme.colorScheme.surface
             ),
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     message.text,
-                    color = if (message.isSent) Color.White else OnSurfaceLight,
+                    color = if (message.isSent) 
+                        Color.White 
+                    else 
+                        MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     message.time,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (message.isSent) Color.White.copy(alpha = 0.7f) else TextSecondary
+                    color = if (message.isSent) 
+                        Color.White.copy(alpha = 0.7f) 
+                    else 
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

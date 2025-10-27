@@ -16,37 +16,52 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 @Composable
 @Preview
 fun App() {
+    var isDarkMode by remember { mutableStateOf(false) }
+    var currentRoute by remember { mutableStateOf("home") }
+
     MaterialTheme(
-        colorScheme = lightColorScheme(
+        colorScheme = if (isDarkMode) darkColorScheme(
+            primary = PrimaryBlue,
+            secondary = AccentBlue,
+            background = BackgroundDark,
+            surface = SurfaceDark,
+            onSurface = OnSurfaceDark,
+            onSurfaceVariant = Color(0xFFB0B0B0),
+            primaryContainer = Color(0xFF1E3A5F),
+            onPrimaryContainer = LightBlue,
+            surfaceVariant = Color(0xFF2A2A2A),
+            onBackground = OnSurfaceDark
+        ) else lightColorScheme(
             primary = PrimaryBlue,
             secondary = AccentBlue,
             background = BackgroundLight,
             surface = SurfaceLight,
             onSurface = OnSurfaceLight,
+            onSurfaceVariant = OnSurfaceVariant,
             primaryContainer = SoftBlue,
-            onPrimaryContainer = DeepBlue
+            onPrimaryContainer = DeepBlue,
+            surfaceVariant = GlassLight,
+            onBackground = OnSurfaceLight
         )
     ) {
-        var currentRoute by remember { mutableStateOf("home") }
-
         Scaffold(
             bottomBar = {
                 NavigationBar(
-                    containerColor = SurfaceLight.copy(alpha = 0.95f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                     tonalElevation = 8.dp
                 ) {
                     bottomNavItems.forEach { item ->
                         NavigationBarItem(
                             icon = { Icon(item.icon, contentDescription = item.title) },
-                            label = { Text(item.title) },
+                            label = null, // Icon-only navigation
                             selected = currentRoute == item.route,
                             onClick = { currentRoute = item.route },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = PrimaryBlue,
-                                selectedTextColor = PrimaryBlue,
-                                indicatorColor = SoftBlue,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                     }
@@ -55,14 +70,17 @@ fun App() {
         ) { paddingValues ->
             Surface(
                 modifier = Modifier.padding(paddingValues),
-                color = BackgroundLight
+                color = MaterialTheme.colorScheme.background
             ) {
                 when (currentRoute) {
                     NavigationItem.Home.route -> HomeScreen()
                     NavigationItem.AddClick.route -> AddClickScreen()
                     NavigationItem.Connections.route -> ConnectionsScreen()
                     NavigationItem.Map.route -> MapScreen()
-                    NavigationItem.Clicktivities.route -> ClicktivitiesScreen()
+                    NavigationItem.Settings.route -> SettingsScreen(
+                        isDarkMode = isDarkMode,
+                        onDarkModeToggle = { isDarkMode = it }
+                    )
                 }
             }
         }
