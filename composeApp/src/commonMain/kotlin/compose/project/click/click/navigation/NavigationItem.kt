@@ -13,7 +13,7 @@ sealed class NavigationItem(
     object AddClick : NavigationItem("add_click", "Add Click", Icons.Filled.Add)
     object Connections : NavigationItem("connections", "Clicks", Icons.Filled.Person)
     object Map : NavigationItem("map", "Map", Icons.Filled.LocationOn)
-    object Clicktivities : NavigationItem("clicktivities", "Clicktivities", Icons.Filled.Star)
+    object Settings : NavigationItem("settings", "Settings", Icons.Filled.Settings)
 }
 
 val bottomNavItems = listOf(
@@ -21,6 +21,5 @@ val bottomNavItems = listOf(
     NavigationItem.AddClick,
     NavigationItem.Connections,
     NavigationItem.Map,
-    NavigationItem.Clicktivities
+    NavigationItem.Settings
 )
-

@@ -2,6 +2,7 @@ package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -17,32 +18,35 @@ import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.PageHeader
 
 @Composable
 fun AddClickScreen() {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
 
-    AdaptiveBackground(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize(),
-            contentAlignment = Alignment.Center
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            if (!isClicked) {
-                // Add Click State
-                AddClickContent(
-                    onClickSuccess = { userName ->
-                        isClicked = true
-                        clickedUserName = userName
+            item { PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect") }
+
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!isClicked) {
+                        AddClickContent(onClickSuccess = { userName ->
+                            isClicked = true
+                            clickedUserName = userName
+                        })
+                    } else {
+                        ClickedSuccessContent(userName = clickedUserName)
                     }
-                )
-            } else {
-                // Clicked State
-                ClickedSuccessContent(userName = clickedUserName)
+                }
             }
         }
     }
@@ -52,7 +56,7 @@ fun AddClickScreen() {
 fun AddClickContent(onClickSuccess: (String) -> Unit) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -61,7 +65,7 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
             "Add a Click",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            color = OnSurfaceLight
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -69,7 +73,7 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
         Text(
             "Scan QR code or tap NFC to connect",
             style = MaterialTheme.typography.bodyLarge,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
 
@@ -85,18 +89,17 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
                     .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // QR Code Pattern Simulation (replace with actual QR code generator)
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(SurfaceLight),
+                        .background(MaterialTheme.colorScheme.surface),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Box(
                         modifier = Modifier
                             .size(220.dp)
-                            .background(SoftBlue)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
                     ) {
                         Column(
                             modifier = Modifier.fillMaxSize(),
@@ -107,11 +110,11 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
                                 Icons.Filled.Check,
                                 contentDescription = "QR Code",
                                 modifier = Modifier.size(120.dp),
-                                tint = PrimaryBlue
+                                tint = MaterialTheme.colorScheme.primary
                             )
                             Text(
                                 "QR CODE",
-                                color = PrimaryBlue,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -136,14 +139,14 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
                 Icon(
                     Icons.Filled.Close,
                     contentDescription = "NFC",
-                    tint = PrimaryBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     "Hold devices together for NFC",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = OnSurfaceLight,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -151,13 +154,11 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Demo button (remove in production)
         AdaptiveButton(
             onClick = { onClickSuccess("Alice") },
-            content = {
-                Text("Demo: Simulate Click", fontWeight = FontWeight.Medium)
-            }
-        )
+        ) {
+            Text("Demo: Simulate Click", fontWeight = FontWeight.Medium)
+        }
     }
 }
 
@@ -165,7 +166,7 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
 fun ClickedSuccessContent(userName: String) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -175,7 +176,7 @@ fun ClickedSuccessContent(userName: String) {
             modifier = Modifier
                 .size(120.dp)
                 .background(
-                    color = PrimaryBlue.copy(alpha = 0.1f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(60.dp)
                 ),
             contentAlignment = Alignment.Center
@@ -184,7 +185,7 @@ fun ClickedSuccessContent(userName: String) {
                 Icons.Filled.Check,
                 contentDescription = "Success",
                 modifier = Modifier.size(80.dp),
-                tint = PrimaryBlue
+                tint = MaterialTheme.colorScheme.primary
             )
         }
 
@@ -193,7 +194,7 @@ fun ClickedSuccessContent(userName: String) {
         Text(
             "Clicked with",
             style = MaterialTheme.typography.headlineSmall,
-            color = TextSecondary
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -202,7 +203,7 @@ fun ClickedSuccessContent(userName: String) {
             userName,
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            color = DeepBlue
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Spacer(modifier = Modifier.height(48.dp))
@@ -220,14 +221,14 @@ fun ClickedSuccessContent(userName: String) {
                     "Connection established!",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = DeepBlue,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "You can now chat, call, and see your click history with $userName",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
             }
