@@ -30,12 +30,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.isSystemInDarkTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
 fun App() {
-    var isDarkMode by remember { mutableStateOf(false) }
+    // Initialize from system theme so dark mode applies on main page immediately
+    val systemDark = isSystemInDarkTheme()
+    var isDarkMode by remember { mutableStateOf(systemDark) }
 
     val scheme = if (isDarkMode) {
         darkColorScheme(
