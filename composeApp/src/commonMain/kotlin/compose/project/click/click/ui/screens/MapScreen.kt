@@ -24,6 +24,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.AdaptiveSurface
 import compose.project.click.click.ui.components.PlatformMap
 import compose.project.click.click.ui.components.MapPin
+import compose.project.click.click.ui.components.PageHeader
 
 data class MapLocation(
     val name: String,
@@ -63,91 +64,17 @@ fun MapScreen() {
         }
     }
 
-    AdaptiveBackground(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
-            // Header with adaptive surface
-            AdaptiveSurface(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                "Map",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = OnSurfaceLight,
-                            )
-                            Text(
-                                "Discover click spots near you",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = OnSurfaceVariant
-                            )
-                        }
+    val clicktivities = remember {
+        listOf(
+            Clicktivity("Coffee Meetup", "Grab coffee at a recommended local spot", Icons.Filled.LocalCafe, "$5-15", "Food"),
+            Clicktivity("Movie Night", "Watch the latest movies together at nearby theaters", Icons.Filled.Movie, "$20-40", "Entertainment"),
+            Clicktivity("Concert Tickets", "AI-matched concerts based on your music taste", Icons.Filled.MusicNote, "$40-200", "Music")
+        )
+    }
 
-                        IconButton(
-                            onClick = { /* Center on current location */ },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(SoftBlue, CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Filled.MyLocation,
-                                contentDescription = "My Location",
-                                tint = PrimaryBlue
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Filter chips
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = selectedFilter == "All",
-                            onClick = { selectedFilter = "All" },
-                            label = { Text("All Spots") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                        FilterChip(
-                            selected = selectedFilter == "Nearby",
-                            onClick = { selectedFilter = "Nearby" },
-                            label = { Text("Nearby") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                        FilterChip(
-                            selected = selectedFilter == "Friends",
-                            onClick = { selectedFilter = "Friends" },
-                            label = { Text("Friends") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                }
-            }
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            PageHeader(title = "Map", subtitle = "Discover click spots near you")
 
             // Actual map with markers
             Box(
@@ -187,7 +114,7 @@ fun MapScreen() {
                 }
             }
 
-            // Locations list
+            // Locations list + integrated clicktivities
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(20.dp),
@@ -198,13 +125,26 @@ fun MapScreen() {
                         "Click Locations",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = OnSurfaceLight
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 items(filteredLocations) { location ->
                     LocationCard(location)
+                }
+
+                item { Spacer(modifier = Modifier.height(24.dp)) }
+                item {
+                    Text(
+                        "Clicktivities",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = OnSurfaceLight
+                    )
+                }
+                items(clicktivities) { activity ->
+                    ClicktivityCard(activity)
                 }
 
                 if (filteredLocations.isEmpty()) {

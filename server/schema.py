@@ -6,15 +6,16 @@ class User:
     connections = []
     share_key = 0
     def __init__(self, name:str, email:str):
-        share_key = time.time() * random.getrandbits(32)
+        share_key = time.time() * random.getrandbits(64)
         self.name = name
         self.email = email
 
 class Message:
-    def __init__(self, user:User, content:str):
+    def __init__(self, user:User, content:str, timeEdited:float):
         self.user = user
         self.content = content
-
+        self.timeCreated = time.time()
+        self.timeEdited = timeEdited
 class Chat:
     messages:list[Message] = []
 
@@ -26,7 +27,7 @@ class Connection:
     def __init__(self, user1: User, user2: User, location:tuple[float, float]):
         self.created = time.time()
         self.expiry = time.time() + 30 * 24 * 3600
-        #location is a long + lat coordinate pair. But is this right? may want to change to a semantic location ie "Red Square"
+        #location is a lat + long coordinate pair. But is this right? may want to change to a semantic location ie "Red Square"
         self.location = location
         self.users = (user1, user2)
         self.chat = Chat()
