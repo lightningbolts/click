@@ -13,20 +13,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import compose.project.click.click.ui.components.getAdaptiveCornerRadius
+import compose.project.click.click.ui.components.getAdaptivePadding
 
 @Composable
 fun PageHeader(title: String, subtitle: String? = null) {
     Surface(
         modifier = Modifier
             .fillMaxWidth(),
-        // Round only the bottom corners so the top edge is flush with the screen
-        shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+        // Match app cards' rounding
+        shape = RoundedCornerShape(getAdaptiveCornerRadius()),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 0.dp
+        shadowElevation = 2.dp
     ) {
-        // Rely on parent padding (e.g., LazyColumn contentPadding) for horizontal spacing
-        Column(modifier = Modifier.padding(vertical = 16.dp)) {
+        // Match app cards' padding
+        Column(modifier = Modifier.padding(horizontal = getAdaptivePadding(), vertical = 16.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineLarge,
