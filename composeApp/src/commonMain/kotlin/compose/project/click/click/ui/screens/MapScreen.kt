@@ -18,12 +18,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.vector.ImageVector
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.AdaptiveSurface
+import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.PlatformMap
 import compose.project.click.click.ui.components.MapPin
+import compose.project.click.click.ui.components.SectionTitle
 
 data class MapLocation(
     val name: String,
@@ -34,6 +36,14 @@ data class MapLocation(
     val friendsHere: List<String> = emptyList(),
     val latitude: Double,
     val longitude: Double
+)
+
+data class Clicktivity(
+    val title: String,
+    val description: String,
+    val icon: ImageVector,
+    val price: String,
+    val category: String
 )
 
 @Composable
@@ -51,6 +61,32 @@ fun MapScreen() {
         )
     }
 
+    val clicktivities = remember {
+        listOf(
+            Clicktivity(
+                "McDonald's Together",
+                "Order food together and enjoy a meal with your click",
+                Icons.Filled.Fastfood,
+                "$15-30",
+                "Food"
+            ),
+            Clicktivity(
+                "Movie Night",
+                "Watch the latest movies together at nearby theaters",
+                Icons.Filled.Movie,
+                "$20-40",
+                "Entertainment"
+            ),
+            Clicktivity(
+                "Coffee Meetup",
+                "Grab coffee at a recommended local spot",
+                Icons.Filled.LocalCafe,
+                "$5-15",
+                "Food"
+            )
+        )
+    }
+
     val filteredLocations = when (selectedFilter) {
         "Nearby" -> locations.filter { it.isNearby }
         "Friends" -> locations.filter { it.friendsHere.isNotEmpty() }
@@ -64,16 +100,15 @@ fun MapScreen() {
     }
 
     AdaptiveBackground(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Header with adaptive surface
-            AdaptiveSurface(
-                modifier = Modifier.fillMaxWidth()
+            // Map header area with filters
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp)
@@ -86,14 +121,15 @@ fun MapScreen() {
                         Column {
                             Text(
                                 "Map",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = OnSurfaceLight,
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 "Discover click spots near you",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = OnSurfaceVariant
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -101,12 +137,12 @@ fun MapScreen() {
                             onClick = { /* Center on current location */ },
                             modifier = Modifier
                                 .size(48.dp)
-                                .background(SoftBlue, CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
                         ) {
                             Icon(
                                 Icons.Filled.MyLocation,
                                 contentDescription = "My Location",
-                                tint = PrimaryBlue
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -123,7 +159,7 @@ fun MapScreen() {
                             onClick = { selectedFilter = "All" },
                             label = { Text("All Spots") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = Color.White
                             )
                         )
@@ -132,7 +168,7 @@ fun MapScreen() {
                             onClick = { selectedFilter = "Nearby" },
                             label = { Text("Nearby") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = Color.White
                             )
                         )
@@ -141,7 +177,7 @@ fun MapScreen() {
                             onClick = { selectedFilter = "Friends" },
                             label = { Text("Friends") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = Color.White
                             )
                         )
@@ -173,7 +209,7 @@ fun MapScreen() {
                         Icon(
                             Icons.Filled.LocationOn,
                             contentDescription = null,
-                            tint = PrimaryBlue,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -181,30 +217,30 @@ fun MapScreen() {
                             "${locations.count { it.isNearby }} nearby",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = OnSurfaceLight
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
             }
 
-            // Locations list
+            // Locations and Clicktivities list
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(20.dp),
+                contentPadding = PaddingValues(vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
-                    Text(
-                        "Click Locations",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = OnSurfaceLight
+                    SectionTitle(
+                        text = "Click Locations",
+                        modifier = Modifier.padding(horizontal = 20.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 items(filteredLocations) { location ->
-                    LocationCard(location)
+                    LocationCard(
+                        location = location,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
                 }
 
                 if (filteredLocations.isEmpty()) {
@@ -222,17 +258,66 @@ fun MapScreen() {
                                     Icons.Filled.SearchOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
-                                    tint = TextSecondary
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     "No locations found",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
+                }
+
+                // Clicktivities section integrated into Map
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    SectionTitle(
+                        text = "Clicktivities",
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Coming after MVP • 2% transaction fee",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                items(clicktivities) { activity ->
+                    ClicktivityCard(
+                        activity = activity,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
                 }
             }
         }
@@ -240,9 +325,9 @@ fun MapScreen() {
 }
 
 @Composable
-fun LocationCard(location: MapLocation) {
+fun LocationCard(location: MapLocation, modifier: Modifier = Modifier) {
     AdaptiveCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         onClick = { /* Navigate to location details */ }
     ) {
         Row(
@@ -259,11 +344,17 @@ fun LocationCard(location: MapLocation) {
                     .background(
                         if (location.isNearby) {
                             Brush.linearGradient(
-                                colors = listOf(PrimaryBlue, LightBlue)
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                )
                             )
                         } else {
                             Brush.linearGradient(
-                                colors = listOf(SoftBlue, SoftBlue)
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.primaryContainer
+                                )
                             )
                         }
                     ),
@@ -272,7 +363,7 @@ fun LocationCard(location: MapLocation) {
                 Icon(
                     Icons.Filled.LocationOn,
                     contentDescription = null,
-                    tint = if (location.isNearby) Color.White else PrimaryBlue,
+                    tint = if (location.isNearby) Color.White else MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -291,7 +382,7 @@ fun LocationCard(location: MapLocation) {
                             location.name,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = OnSurfaceLight
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -299,13 +390,13 @@ fun LocationCard(location: MapLocation) {
                                 Icons.Filled.Place,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
-                                tint = OnSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 location.address,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -313,14 +404,20 @@ fun LocationCard(location: MapLocation) {
                     // Distance badge
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (location.isNearby) PrimaryBlue.copy(alpha = 0.1f) else SoftBlue
+                        color = if (location.isNearby) 
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) 
+                        else 
+                            MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
                             location.distance,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
-                            color = if (location.isNearby) PrimaryBlue else OnSurfaceVariant
+                            color = if (location.isNearby) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -338,13 +435,13 @@ fun LocationCard(location: MapLocation) {
                             Icons.Filled.TouchApp,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = PrimaryBlue
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             "${location.clickCount} clicks",
                             style = MaterialTheme.typography.labelMedium,
-                            color = OnSurfaceLight,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -361,10 +458,13 @@ fun LocationCard(location: MapLocation) {
                                         .clip(CircleShape)
                                         .background(
                                             Brush.linearGradient(
-                                                colors = listOf(LightBlue, PrimaryBlue)
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                                    MaterialTheme.colorScheme.primary
+                                                )
                                             )
                                         )
-                                        .border(2.dp, SurfaceLight, CircleShape),
+                                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -380,8 +480,8 @@ fun LocationCard(location: MapLocation) {
                                     modifier = Modifier
                                         .size(24.dp)
                                         .clip(CircleShape)
-                                        .background(TextSecondary)
-                                        .border(2.dp, SurfaceLight, CircleShape),
+                                        .background(MaterialTheme.colorScheme.onSurfaceVariant)
+                                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -392,6 +492,92 @@ fun LocationCard(location: MapLocation) {
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ClicktivityCard(activity: Clicktivity, modifier: Modifier = Modifier) {
+    AdaptiveCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        activity.icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            activity.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                activity.category,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        activity.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            activity.price,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        AdaptiveButton(onClick = {}, enabled = false) {
+                            Text("Coming Soon", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

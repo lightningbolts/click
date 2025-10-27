@@ -24,13 +24,9 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.AdaptiveSurface
-import compose.project.click.click.ui.theme.DeepBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SoftBlue
-import compose.project.click.click.ui.theme.TextSecondary
+import compose.project.click.click.ui.components.PageHeader
 
-data class Clicktivity(
+data class ClicktivityItem(
     val title: String,
     val description: String,
     val icon: ImageVector,
@@ -42,42 +38,42 @@ data class Clicktivity(
 fun ClicktivitiesScreen() {
     val clicktivities = remember {
         listOf(
-            Clicktivity(
+            ClicktivityItem(
                 "McDonald's Together",
                 "Order food together and enjoy a meal with your click",
                 Icons.Filled.Fastfood,
                 "$15-30",
                 "Food"
             ),
-            Clicktivity(
+            ClicktivityItem(
                 "Movie Night",
                 "Watch the latest movies together at nearby theaters",
                 Icons.Filled.Movie,
                 "$20-40",
                 "Entertainment"
             ),
-            Clicktivity(
+            ClicktivityItem(
                 "Baseball Game",
                 "Catch a game with your favorite click buddies",
                 Icons.Filled.SportsBaseball,
                 "$50-150",
                 "Sports"
             ),
-            Clicktivity(
+            ClicktivityItem(
                 "Concert Tickets",
                 "AI-matched concerts based on your music taste",
                 Icons.Filled.MusicNote,
                 "$40-200",
                 "Music"
             ),
-            Clicktivity(
+            ClicktivityItem(
                 "Coffee Meetup",
                 "Grab coffee at a recommended local spot",
                 Icons.Filled.LocalCafe,
                 "$5-15",
                 "Food"
             ),
-            Clicktivity(
+            ClicktivityItem(
                 "Adventure Park",
                 "Theme parks and adventure activities nearby",
                 Icons.Filled.Attractions,
@@ -88,70 +84,66 @@ fun ClicktivitiesScreen() {
     }
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Text(
-                        "Clicktivities",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = DeepBlue
-                    )
-                    Text(
-                        "AI-powered activities for you and your clicks",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                PageHeader(
+                    title = "Clicktivities",
+                    subtitle = "AI-powered activities for you and your clicks"
+                )
             }
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SoftBlue)
-            ) {
-                Row(
+            item {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 20.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
                 ) {
-                    Icon(
-                        Icons.Filled.Info,
-                        contentDescription = null,
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        "Coming after MVP • 2% transaction fee",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = DeepBlue,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            "Coming after MVP • 2% transaction fee",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(clicktivities) { activity ->
-                    ClicktivityCard(activity)
-                }
-
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+            items(clicktivities) { activity ->
+                ClicktivityItemCard(
+                    activity = activity,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
             }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
 
 @Composable
-fun ClicktivityCard(activity: Clicktivity) {
-    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+fun ClicktivityItemCard(activity: ClicktivityItem, modifier: Modifier = Modifier) {
+    AdaptiveCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -164,13 +156,13 @@ fun ClicktivityCard(activity: Clicktivity) {
                 Box(
                     modifier = Modifier
                         .size(56.dp)
-                        .background(SoftBlue, RoundedCornerShape(28.dp)),
+                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(28.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         activity.icon,
                         contentDescription = null,
-                        tint = PrimaryBlue,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -187,17 +179,17 @@ fun ClicktivityCard(activity: Clicktivity) {
                             activity.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = DeepBlue
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = PrimaryBlue.copy(alpha = 0.1f)
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                         ) {
                             Text(
                                 activity.category,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = PrimaryBlue,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -208,7 +200,7 @@ fun ClicktivityCard(activity: Clicktivity) {
                     Text(
                         activity.description,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -222,7 +214,7 @@ fun ClicktivityCard(activity: Clicktivity) {
                             activity.price,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = PrimaryBlue
+                            color = MaterialTheme.colorScheme.primary
                         )
 
                         AdaptiveButton(onClick = {}, enabled = false) {
