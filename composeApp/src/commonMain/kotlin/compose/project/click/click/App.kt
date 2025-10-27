@@ -1,50 +1,70 @@
 package compose.project.click.click
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import org.jetbrains.compose.resources.painterResource
+import compose.project.click.click.navigation.NavigationItem
+import compose.project.click.click.navigation.bottomNavItems
+import compose.project.click.click.ui.screens.*
+import compose.project.click.click.ui.theme.*
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
-import click.composeapp.generated.resources.Res
-import click.composeapp.generated.resources.compose_multiplatform
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
 fun App() {
-    MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            Spacer(modifier = Modifier.height(30.dp))
-            Text("Hi Bob!", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    MaterialTheme(
+        colorScheme = lightColorScheme(
+            primary = PrimaryBlue,
+            secondary = AccentBlue,
+            background = BackgroundLight,
+            surface = SurfaceLight,
+            onSurface = OnSurfaceLight,
+            primaryContainer = SoftBlue,
+            onPrimaryContainer = DeepBlue
+        )
+    ) {
+        var currentRoute by remember { mutableStateOf("home") }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Who are you clicking with today?", fontSize = 15.sp)
-
-
+        Scaffold(
+            bottomBar = {
+                NavigationBar(
+                    containerColor = SurfaceLight.copy(alpha = 0.95f),
+                    tonalElevation = 8.dp
+                ) {
+                    bottomNavItems.forEach { item ->
+                        NavigationBarItem(
+                            icon = { Icon(item.icon, contentDescription = item.title) },
+                            label = { Text(item.title) },
+                            selected = currentRoute == item.route,
+                            onClick = { currentRoute = item.route },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = PrimaryBlue,
+                                selectedTextColor = PrimaryBlue,
+                                indicatorColor = SoftBlue,
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextSecondary
+                            )
+                        )
+                    }
+                }
+            }
+        ) { paddingValues ->
+            Surface(
+                modifier = Modifier.padding(paddingValues),
+                color = BackgroundLight
+            ) {
+                when (currentRoute) {
+                    NavigationItem.Home.route -> HomeScreen()
+                    NavigationItem.AddClick.route -> AddClickScreen()
+                    NavigationItem.Connections.route -> ConnectionsScreen()
+                    NavigationItem.Map.route -> MapScreen()
+                    NavigationItem.Clicktivities.route -> ClicktivitiesScreen()
+                }
+            }
         }
     }
 }
