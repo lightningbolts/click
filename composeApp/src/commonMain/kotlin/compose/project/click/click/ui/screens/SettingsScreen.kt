@@ -18,41 +18,50 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PageHeader
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 
 @Composable
 fun SettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: () -> Unit
 ) {
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item { PageHeader(title = "Settings") }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                PageHeader(title = "Settings")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
 
-            item {
-                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            "Appearance",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.DarkMode, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Dark Mode", modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = isDarkMode,
-                                onCheckedChange = { onToggleDarkMode() },
-                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "Appearance",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.DarkMode, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Dark Mode", modifier = Modifier.weight(1f))
+                                Switch(
+                                    checked = isDarkMode,
+                                    onCheckedChange = { onToggleDarkMode() },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
+                                )
+                            }
                         }
                     }
                 }

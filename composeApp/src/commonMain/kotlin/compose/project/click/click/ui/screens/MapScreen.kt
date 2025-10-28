@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
@@ -27,6 +29,9 @@ import compose.project.click.click.ui.components.MapPin
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.Clicktivity
 import compose.project.click.click.ui.components.ClicktivityCard
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 
 data class MapLocation(
     val name: String,
@@ -42,6 +47,7 @@ data class MapLocation(
 @Composable
 fun MapScreen() {
     var selectedFilter by remember { mutableStateOf("All") }
+    var zoom by remember { mutableStateOf(12.0) }
 
     val locations = remember {
         listOf(
@@ -74,18 +80,18 @@ fun MapScreen() {
         )
     }
 
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header with consistent horizontal padding
-            Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+            // Header: topInset only, minimal spacer
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 PageHeader(title = "Map", subtitle = "Discover click spots near you")
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Map container with rounded corners and border
-            Box(modifier = Modifier
-                .padding(horizontal = 20.dp)
-            ) {
+            Box(modifier = Modifier.padding(horizontal = 20.dp)) {
                 val mapShape = RoundedCornerShape(20.dp)
                 Box(
                     modifier = Modifier
@@ -98,32 +104,43 @@ fun MapScreen() {
                     PlatformMap(
                         modifier = Modifier.fillMaxSize(),
                         pins = pins,
-                        onPinTapped = { /* TODO: navigate to details */ }
+                        zoom = zoom,
+                        onPinTapped = { }
                     )
-                }
 
-                // Floating stats card overlay
-                AdaptiveCard(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                    // Zoom controls: bottom-right, lifted above logo area
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp, bottom = 56.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            Icons.Filled.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "${locations.count { it.isNearby }} nearby",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        FilledTonalIconButton(
+                            onClick = { zoom = (zoom + 1) },
+                            modifier = Modifier.semantics { contentDescription = "Zoom in" }
+                        ) { Icon(Icons.Filled.Add, contentDescription = null) }
+                        FilledTonalIconButton(
+                            onClick = { zoom = (zoom - 1) },
+                            modifier = Modifier.semantics { contentDescription = "Zoom out" }
+                        ) { Icon(Icons.Filled.Remove, contentDescription = null) }
+                    }
+
+                    // Stats overlay remains top-right
+                    AdaptiveCard(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "${locations.count { it.isNearby }} nearby",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

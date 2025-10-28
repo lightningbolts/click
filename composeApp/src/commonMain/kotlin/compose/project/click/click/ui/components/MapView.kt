@@ -16,6 +16,6 @@ data class MapPin(
 expect fun PlatformMap(
     modifier: Modifier,
     pins: List<MapPin>,
+    zoom: Double,
     onPinTapped: (MapPin) -> Unit = {}
 )
-

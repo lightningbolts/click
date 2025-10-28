@@ -19,32 +19,42 @@ import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PageHeader
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 
 @Composable
 fun AddClickScreen() {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
 
-    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            item { PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect") }
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!isClicked) {
-                        AddClickContent(onClickSuccess = { userName ->
-                            isClicked = true
-                            clickedUserName = userName
-                        })
-                    } else {
-                        ClickedSuccessContent(userName = clickedUserName)
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!isClicked) {
+                            AddClickContent(onClickSuccess = { userName ->
+                                isClicked = true
+                                clickedUserName = userName
+                            })
+                        } else {
+                            ClickedSuccessContent(userName = clickedUserName)
+                        }
                     }
                 }
             }

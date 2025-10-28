@@ -13,6 +13,7 @@ import platform.MapKit.*
 actual fun PlatformMap(
     modifier: Modifier,
     pins: List<MapPin>,
+    zoom: Double,
     onPinTapped: (MapPin) -> Unit
 ) {
     UIKitView(
@@ -20,14 +21,14 @@ actual fun PlatformMap(
             val map = MKMapView()
             map.showsCompass = true
             map.showsScale = false
+            map.zoomEnabled = true
+            map.scrollEnabled = true
             map
         },
         modifier = modifier,
         update = { map ->
-            // Remove existing annotations
+            // Clear and add annotations
             map.removeAnnotations(map.annotations)
-
-            // Add new annotations
             pins.forEach { pin ->
                 val ann = MKPointAnnotation()
                 ann.setTitle(pin.title)
@@ -35,12 +36,24 @@ actual fun PlatformMap(
                 map.addAnnotation(ann)
             }
 
-            // Center on first
-            pins.firstOrNull()?.let { first ->
-                val span: CValue<MKCoordinateSpan> = MKCoordinateSpanMake(0.05, 0.05)
-                val region = MKCoordinateRegionMake(CLLocationCoordinate2DMake(first.latitude, first.longitude), span)
-                map.setRegion(region, true)
+            val first = pins.firstOrNull() ?: return@UIKitView
+            val clamped = zoom.coerceIn(0.0, 22.0)
+            val spanDelta = when {
+                clamped >= 20 -> 0.002
+                clamped >= 18 -> 0.005
+                clamped >= 16 -> 0.01
+                clamped >= 14 -> 0.02
+                clamped >= 12 -> 0.04
+                clamped >= 10 -> 0.08
+                clamped >= 8 -> 0.16
+                clamped >= 6 -> 0.32
+                clamped >= 4 -> 0.64
+                clamped >= 2 -> 1.28
+                else -> 2.56
             }
+            val span: CValue<MKCoordinateSpan> = MKCoordinateSpanMake(spanDelta, spanDelta)
+            val region = MKCoordinateRegionMake(CLLocationCoordinate2DMake(first.latitude, first.longitude), span)
+            map.setRegion(region, true)
         }
     )
 }

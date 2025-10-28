@@ -23,6 +23,9 @@ import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.AdaptiveSurface
 import compose.project.click.click.ui.components.PageHeader
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 
 data class ClickConnection(
     val name: String,
@@ -62,24 +65,30 @@ fun ConnectionsListView(onConnectionSelected: (ClickConnection) -> Unit) {
             ClickConnection("Grace", "📍 See you at the park", "1w ago", 0, false),
         )
     }
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item { PageHeader(title = "Clicks", subtitle = "${connections.size} connections") }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                PageHeader(title = "Clicks", subtitle = "${connections.size} connections")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
 
-            items(connections) { connection ->
-                ConnectionItem(
-                    connection = connection,
-                    onClick = { onConnectionSelected(connection) }
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = 72.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(connections) { connection ->
+                    ConnectionItem(
+                        connection = connection,
+                        onClick = { onConnectionSelected(connection) }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 72.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    )
+                }
             }
         }
     }

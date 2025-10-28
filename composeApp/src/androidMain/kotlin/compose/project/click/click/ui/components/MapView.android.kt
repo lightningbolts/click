@@ -6,8 +6,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -28,9 +27,18 @@ private class MapJsBridge(
 actual fun PlatformMap(
     modifier: Modifier,
     pins: List<MapPin>,
+    zoom: Double,
     onPinTapped: (MapPin) -> Unit
 ) {
     val context = LocalContext.current
+    var lastKey by remember { mutableStateOf<String?>(null) }
+
+    fun buildKey(): String = buildString {
+        append("z=")
+        append(zoom)
+        append(";p=")
+        append(pins.hashCode())
+    }
 
     AndroidView(
         modifier = modifier,
@@ -49,24 +57,29 @@ actual fun PlatformMap(
             webView.addJavascriptInterface(bridge, "AndroidBridge")
 
             // Initial load
+            val html = htmlForPins(pins, zoom)
             webView.loadDataWithBaseURL(
                 "https://demotiles.maplibre.org/",
-                htmlForPins(pins),
+                html,
                 "text/html",
                 "UTF-8",
                 null
             )
+            lastKey = buildKey()
             webView
         },
         update = { webView ->
-            // Reload full HTML when pins change (simple and robust)
-            webView.loadDataWithBaseURL(
-                "https://demotiles.maplibre.org/",
-                htmlForPins(pins),
-                "text/html",
-                "UTF-8",
-                null
-            )
+            val key = buildKey()
+            if (key != lastKey) {
+                webView.loadDataWithBaseURL(
+                    "https://demotiles.maplibre.org/",
+                    htmlForPins(pins, zoom),
+                    "text/html",
+                    "UTF-8",
+                    null
+                )
+                lastKey = key
+            }
         },
         onRelease = { webView ->
             webView.removeJavascriptInterface("AndroidBridge")
@@ -75,16 +88,11 @@ actual fun PlatformMap(
             webView.destroy()
         }
     )
-
-    // Lifecycle handled by onRelease
-    DisposableEffect(Unit) {
-        onDispose { /* no-op */ }
-    }
 }
 
-private fun htmlForPins(pins: List<MapPin>): String {
+private fun htmlForPins(pins: List<MapPin>, zoom: Double): String {
     val center = pins.firstOrNull()?.let { "[${it.longitude}, ${it.latitude}]" } ?: "[-73.9855, 40.7580]"
-    val zoom = if (pins.isNotEmpty()) 12 else 10
+    val z = zoom.coerceIn(0.0, 22.0)
     val pinsJson = pins.mapIndexed { index, p ->
         """{"title": "${p.title.escapeJson()}", "lat": ${p.latitude}, "lng": ${p.longitude}, "idx": $index, "nearby": ${p.isNearby}}"""
     }.joinToString(prefix = "[", postfix = "]")
@@ -110,9 +118,16 @@ private fun htmlForPins(pins: List<MapPin>): String {
                 container: 'map',
                 style: 'https://demotiles.maplibre.org/style.json',
                 center: $center,
-                zoom: $zoom
+                zoom: $z,
+                minZoom: 0,
+                maxZoom: 22
               });
               map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+              // Double-tap to zoom in
+              map.on('dblclick', (e) => {
+                const nz = Math.min(map.getZoom() + 1, 22);
+                map.easeTo({ center: e.lngLat, zoom: nz });
+              });
 
               map.on('load', () => {
                 pins.forEach(p => {
