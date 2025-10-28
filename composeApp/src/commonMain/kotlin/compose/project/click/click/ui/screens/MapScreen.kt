@@ -82,7 +82,7 @@ fun MapScreen() {
     }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val headerTop = if (topInset > 20.dp) topInset - 20.dp else 0.dp
+    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {

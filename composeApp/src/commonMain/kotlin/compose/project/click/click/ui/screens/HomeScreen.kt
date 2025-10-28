@@ -31,7 +31,7 @@ import androidx.compose.foundation.layout.statusBars
 @Composable
 fun HomeScreen() {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val headerTop = if (topInset > 20.dp) topInset - 20.dp else 0.dp
+    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
