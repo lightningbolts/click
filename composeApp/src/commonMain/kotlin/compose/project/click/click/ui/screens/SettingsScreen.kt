@@ -29,13 +29,13 @@ fun SettingsScreen(
     onToggleDarkMode: () -> Unit
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topInsetDelta = (topInset - 8.dp).coerceAtLeast(0.dp)
+    val headerTop = if (topInset > 20.dp) topInset - 20.dp else 0.dp
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInsetDelta, end = 20.dp)) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
                 PageHeader(title = "Settings")
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

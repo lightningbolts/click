@@ -22,7 +22,6 @@ import compose.project.click.click.ui.components.PageHeader
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.ui.unit.coerceAtLeast
 
 @Composable
 fun AddClickScreen() {
@@ -30,14 +29,14 @@ fun AddClickScreen() {
     var clickedUserName by remember { mutableStateOf("") }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topInsetDelta = (topInset - 8.dp).coerceAtLeast(0.dp)
+    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInsetDelta, end = 20.dp)) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
                 PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect")
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -201,49 +200,28 @@ fun ClickedSuccessContent(userName: String) {
             )
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            "Clicked with",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            "Clicked with $userName!",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            userName,
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            "You're now connected and can start chatting.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        AdaptiveCard(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Connection established!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "You can now chat, call, and see your click history with $userName",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
+        AdaptiveButton(onClick = { /* go back or show chat */ }) {
+            Text("Start Chatting")
         }
     }
 }

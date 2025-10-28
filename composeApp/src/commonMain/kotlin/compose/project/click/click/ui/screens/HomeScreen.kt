@@ -27,18 +27,17 @@ import compose.project.click.click.ui.components.StatCard
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.ui.unit.coerceAtLeast
 
 @Composable
 fun HomeScreen() {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topInsetDelta = (topInset - 8.dp).coerceAtLeast(0.dp)
+    val headerTop = if (topInset > 20.dp) topInset - 20.dp else 0.dp
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInsetDelta, end = 20.dp)) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
                 PageHeader(title = "Home", subtitle = "Who are you clicking with today?")
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
