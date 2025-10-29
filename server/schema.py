@@ -17,6 +17,8 @@ class User:
         self.email = email
         self.image = image
         self.createdAt = time.time()
+        self.lastSignedIn = time.time()
+        self.connections = []
 
 
 

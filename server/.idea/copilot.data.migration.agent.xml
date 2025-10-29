@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AgentMigrationStateService">
+    <option name="pendingSessionIds">
+      <option value="c90a35c6-1d73-4099-94f6-9a97526ba4e6" />
+    </option>
+    <option name="pendingTurns">
+      <map>
+        <entry key="3d372f07-ca7e-48f2-bfd8-08150f7d9fd4">
+          <value>
+            <set>
+              <option value="5c3e0d6c-3578-4cd5-84bb-96776d570727" />
+              <option value="16980cc7-ec6a-42cb-85bd-99e8362893ad" />
+            </set>
+          </value>
+        </entry>
+        <entry key="c90a35c6-1d73-4099-94f6-9a97526ba4e6">
+          <value>
+            <set>
+              <option value="8db8e091-6c7b-41c9-b6ca-b3ea0545090a" />
+              <option value="dca7a3e4-1a10-43e0-a258-c23e0a3bf2d4" />
+              <option value="6cf117c1-f598-44b7-9628-ffa5fe55350e" />
+              <option value="2af755ca-01a5-45de-a467-69870639ca3a" />
+              <option value="c76c8fdb-f89b-454f-9d98-0ef78004cbba" />
+            </set>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <pendingWorkingSetItems>
+      <entry key="3d372f07-ca7e-48f2-bfd8-08150f7d9fd4">
+        <set>
+          <option value="file://$PROJECT_DIR$/test_connection.py" />
+        </set>
+      </entry>
+      <entry key="c90a35c6-1d73-4099-94f6-9a97526ba4e6">
+        <set>
+          <option value="file://$PROJECT_DIR$/test_connection.py" />
+        </set>
+      </entry>
+    </pendingWorkingSetItems>
+  </component>
+</project>
