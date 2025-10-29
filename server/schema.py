@@ -5,13 +5,20 @@ import uuid
 class User:
     connections = []
     share_key = 0
-    def __init__(self, name:str, email:str, image:str):
+    def __init__(self, name:str, email:str, image:str, setup_dict=None):
+        if(setup_dict is not None):
+            #careful!
+            for key, value in setup_dict.items():
+                setattr(self, key, value)
+            return
         self.id = uuid.uuid4()
         share_key = time.time() * random.getrandbits(64)
         self.name = name
         self.email = email
         self.image = image
         self.createdAt = time.time()
+
+
 
 class Message:
     def __init__(self, user:User, content:str, timeEdited:float):
@@ -28,6 +35,7 @@ class Chat:
 class Connection:
     should_continue = (False, False)
     def __init__(self, user1: User, user2: User, location:tuple[float, float]):
+        self.id = uuid.uuid4()
         self.created = time.time()
         self.expiry = time.time() + 30 * 24 * 3600
         #location is a lat + long coordinate pair. But is this right? may want to change to a semantic location ie "Red Square"

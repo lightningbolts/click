@@ -6,6 +6,7 @@ import jwt
 import requests
 from google.oauth2 import id_token
 from flask import Flask, request, jsonify
+import os
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
@@ -48,6 +49,13 @@ app = Flask(__name__)
 @app.route('/')
 def hello_world():  # put application's code here
     return 'Hello World!'
+
+@app.route('/create_account', methods=['POST'])
+def create_account():
+    if(validate(request.headers['Authorization'])):
+        pass
+    else:
+        return "log in!"
 
 @app.route('/google', methods=['POST'])
 def google():
