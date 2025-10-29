@@ -41,6 +41,11 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:VERSION"))
+            implementation("io.github.jan-tennert.supabase:postgrest-kt")
+            implementation("io.github.jan-tennert.supabase:auth-kt")
+            implementation("io.github.jan-tennert.supabase:realtime-kt")
+            implementation("io.ktor:ktor-client-[engine]:KTOR_VERSION")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

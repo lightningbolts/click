@@ -1,14 +1,17 @@
 import random
 import time
-
+import uuid
 
 class User:
     connections = []
     share_key = 0
-    def __init__(self, name:str, email:str):
+    def __init__(self, name:str, email:str, image:str):
+        self.id = uuid.uuid4()
         share_key = time.time() * random.getrandbits(64)
         self.name = name
         self.email = email
+        self.image = image
+        self.createdAt = time.time()
 
 class Message:
     def __init__(self, user:User, content:str, timeEdited:float):
