@@ -35,6 +35,7 @@ fun LoginScreen(
     onSignUpClick: () -> Unit,
     onGoogleSignIn: () -> Unit,
     onEmailSignIn: (email: String, password: String) -> Unit,
+    onSkipLogin: () -> Unit = {},
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -296,6 +297,21 @@ fun LoginScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Skip Login Button (for development/testing)
+            TextButton(
+                onClick = onSkipLogin,
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Skip for Now",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }

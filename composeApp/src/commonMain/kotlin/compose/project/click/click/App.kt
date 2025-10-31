@@ -48,6 +48,7 @@ fun App() {
     val tokenStorage = remember { createTokenStorage() }
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     var showSignUp by remember { mutableStateOf(false) }
+    var skipLogin by remember { mutableStateOf(false) }  // For development/testing
 
     val scheme = if (isDarkMode) {
         darkColorScheme(
@@ -72,8 +73,8 @@ fun App() {
     }
 
     MaterialTheme(colorScheme = scheme) {
-        // Show login/signup screens when not authenticated
-        if (!authViewModel.isAuthenticated) {
+        // Show login/signup screens when not authenticated and not skipped
+        if (!authViewModel.isAuthenticated && !skipLogin) {
             if (showSignUp) {
                 SignUpScreen(
                     onSignUpSuccess = {
@@ -112,6 +113,9 @@ fun App() {
                     },
                     onEmailSignIn = { email, password ->
                         authViewModel.signInWithEmail(email, password)
+                    },
+                    onSkipLogin = {
+                        skipLogin = true  // Skip authentication for development
                     },
                     isLoading = authViewModel.authState is AuthState.Loading,
                     errorMessage = if (authViewModel.authState is AuthState.Error) {
