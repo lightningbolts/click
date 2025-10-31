@@ -14,3 +14,4 @@ def get_semantic_location(geo_location:tuple[float, float]) -> object:
 def print_response(response):
     print(response.status_code, response.reason)
     print(response.text)
+
