@@ -52,6 +52,7 @@ class Connection:
         #location is a lat + long coordinate pair. But is this right? may want to change to a semantic location ie "Red Square"
         self.location = location
         self.user_ids = (user1.id, user2.id)
+        #todo: is this right?
         self.chat = Chat()
         user1.connections.append(self.id)
         user2.connections.append(self.id)
