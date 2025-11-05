@@ -8,6 +8,9 @@ from google.oauth2 import id_token
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
+import database_ops
+from database_ops import fetch_connection
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -55,8 +58,9 @@ def hello_world():  # put application's code here
 
 @app.route('/create_account', methods=['POST'])
 def create_account():
-    if(validate(request.headers['Authorization'])):
-        pass
+    if validate(request.headers['Authorization']):
+        user_data = request.json
+        return database_ops.create_user(user_data["name"], user_data["email"], user_data["image_src"])
     else:
         return "log in!"
 
@@ -66,11 +70,11 @@ def google():
     try:
         # Specify the WEB_CLIENT_ID of the app that accesses the backend:
         idinfo = id_token.verify_oauth2_token(request.args['token'], requests.Request(), GOOGLE_CLIENT_ID)
-        if (idinfo['aud'] == GOOGLE_CLIENT_ID and 'accounts.google.com' in idinfo['iss'] and idinfo['hd'] == "uw.edu" and idinfo['exp'] >= time.time()):
+        if (idinfo['aud'] == GOOGLE_CLIENT_ID and 'accounts.google.com' in idinfo['iss'] and idinfo['exp'] >= time.time()):
             #plus one day
             encoded_jwt = jwt.encode({'org': idinfo['hd'], 'cid': idinfo['aud'], 'exp': time.time() + 86400}, GOOGLE_CLIENT_SECRET, algorithm="HS256")
             refresh = generate_refresh_token()
-            return jsonify({"jwt": encoded_jwt, "refresh" : refresh}), 200
+            return jsonify({"jwt": encoded_jwt, "refresh" : refresh, "user": database_ops.fetch_user_with_email(request.args["email"])}), 200
         else:
             return "not allowed", 403
     except:
@@ -98,6 +102,65 @@ def logout():
         return "logged out"
     except:
         return "server error", 500
+
+
+@app.route("/user/<name>", methods=['GET'])
+def user(name):
+    user_fetched = database_ops.fetch_user(name)
+    if(user_fetched == None):
+        return "user not found", 404
+    return jsonify({user_fetched})
+
+@app.route("/user_with_email/<email>", methods=['GET'])
+def user_with_email(email):
+    user_fetched = database_ops.fetch_user_with_email(email)
+    if(user_fetched == None):
+        return "user not found", 404
+    return jsonify(user_fetched)
+
+@app.route("/connections/", methods=['GET'])
+def connections():
+    list = request.json["connections"]
+    return jsonify([database_ops.fetch_connection(id) for id in list if not database_ops.delete_connection_if_expired(id)])
+
+@app.route("/connection/<id>", methods=['GET'])
+def connection(id):
+    if database_ops.delete_connection_if_expired(id):
+        return "connection expired", 404
+    return jsonify(database_ops.fetch_connection(id))
+
+@app.route("/connection/new/", methods=['POST'])
+def new_connection():
+    id1 = request.args.get("id1")
+    id2 = request.args.get("id2")
+    lat = request.args.get("lat")
+    long = request.args.get("long")
+    if not (isinstance(lat, float)):
+        lat = 0.0
+    if not (isinstance(long, float)):
+        long = 0.0
+    user1 = database_ops.fetch_user_with_id(id1)
+    user2 = database_ops.fetch_user_with_id(id2)
+    return database_ops.create_connection(user1, user2, (lat, long))
+
+
+@app.route("/messages/restore", methods=['GET'])
+def message_restore():
+    conn = fetch_connection(request.args.get("id"))
+    return jsonify(conn.chat)
+
+@app.route("/message/new", methods=['POST'])
+def message_new():
+    return 200
+
+@app.route("/pollpairs", methods=['POST'])
+def pollpairs():
+    return 200
+
+
+
+
+
 
 
 

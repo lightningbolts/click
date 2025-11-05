@@ -5,7 +5,6 @@ from utils import get_semantic_location
 
 class User:
     connections = []
-    share_key = 0
     def __init__(self, name:str=None, email:str=None, image:str=None, setup_dict=None):
         if(setup_dict is not None):
             #careful!
@@ -13,13 +12,14 @@ class User:
                 setattr(self, key, value)
             return
         self.id = str(uuid.uuid4())
-        self.share_key = time.time() * random.getrandbits(64)
         self.name = name
         self.email = email
         self.image = image
         self.createdAt = time.time()
-        self.lastSignedIn = time.time()
+        self.lastSignedIn = self.createdAt
         self.connections = []
+        self.connection_today = -1
+        self.last_paired = self.createdAt
 
 class Message:
     def __init__(self, user:User, content:str, timeEdited:float, setup_dict=None):
@@ -60,7 +60,7 @@ class Connection:
         user1.connections.append(self.id)
         user2.connections.append(self.id)
 
-    def check_and_delete(self):
-        if time.time() > self.expiry and self.should_continue.__contains__(False):
-            del self
+    def check_for_expiry(self) -> bool:
+        return time.time() > self.expiry and self.should_continue.__contains__(False)
+
 
