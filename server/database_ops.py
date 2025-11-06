@@ -88,9 +88,8 @@ def create_connection(
     supabase.table("users").update(vars(user2)).eq("id", user2.id).execute()
     return connection
 
-def fetch_message(id:str) -> Message:
-    return Message(setup_dict=[x for x in supabase.table("messages").execute()["data"] if x["id"] == id][0])
-
-def create_message(user:User, content:str) -> Message:
-    supabase.table("messages").insert({"user_id":user.id, "content":content}).execute()
-    return Message(setup_dict=[x for x in json.loads(supabase.table("messages")["data"]) if x["user_id"] == user.id][0])
+def create_message(connid: str, userid:str, content:str) -> Chat:
+    connection  = fetch_connection(connid)
+    connection.chat.add_message(userid, content)
+    supabase.table("connections").update(vars(connection)).eq("id", connid).execute()
+    return connection.chat

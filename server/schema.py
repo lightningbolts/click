@@ -22,27 +22,27 @@ class User:
         self.last_paired = self.createdAt
 
 class Message:
-    def __init__(self, user:User, content:str, timeEdited:float, setup_dict=None):
-        if (setup_dict is not None):
+    def __init__(self, userid:str, content:str, timeEdited:float, setup_dict=None):
+        if setup_dict is not None:
             # careful!
             for key, value in setup_dict.items():
                 setattr(self, key, value)
             return
         self.id = uuid.uuid4()
-        self.user_id = user.id
+        self.user_id = userid
         self.content = content
         self.timeCreated = time.time()
         self.timeEdited = timeEdited
 
 class Chat:
     messages:list[Message] = []
-    def add_message(self, user:User, content:str):
-        self.messages.append(Message(user, content))
+    def add_message(self, userid:str, content:str):
+        self.messages.append(Message(userid, content))
 
 class Connection:
     should_continue = (False, False)
     def __init__(self, user1: User, user2: User, geo_location:tuple[float, float], setup_dict=None):
-        if (setup_dict is not None):
+        if setup_dict is not None:
             # careful!
             for key, value in setup_dict.items():
                 setattr(self, key, value)

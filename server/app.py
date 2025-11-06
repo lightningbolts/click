@@ -151,7 +151,8 @@ def message_restore():
 
 @app.route("/message/new", methods=['POST'])
 def message_new():
-    return 200
+    conn = fetch_connection(request.args.get("connid"))
+    return jsonify(database_ops.create_message(conn.id, request.args.get("userid"), request.args.get("content")))
 
 @app.route("/pollpairs", methods=['POST'])
 def pollpairs():
