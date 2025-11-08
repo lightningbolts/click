@@ -18,6 +18,7 @@ class User:
         self.createdAt = time.time()
         self.lastSignedIn = self.createdAt
         self.connections = []
+        self.paired_with = []
         self.connection_today = -1
         self.last_paired = self.createdAt
 

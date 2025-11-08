@@ -57,7 +57,11 @@ def delete_connection_if_expired(id: str) -> bool:
         return True
     return False
 
-
+def update_user_with_id(id:str, user:User) -> bool:
+    if fetch_user_with_id(id) is None:
+        return False
+    supabase.table("users").update(vars(user)).eq("id", id).execute()
+    return True
 
 
 def fetch_connection(id: str) -> Connection:
@@ -93,3 +97,8 @@ def create_message(connid: str, userid:str, content:str) -> Chat:
     connection.chat.add_message(userid, content)
     supabase.table("connections").update(vars(connection)).eq("id", connid).execute()
     return connection.chat
+
+def generate_pair(userid:str) -> tuple[User, bool]:
+    user = fetch_user_with_id(userid)
+
+    return user, False

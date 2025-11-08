@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import time
 import uuid
 import jwt
@@ -156,7 +157,33 @@ def message_new():
 
 @app.route("/pollpairs", methods=['POST'])
 def pollpairs():
-    return 200
+    user_id = request.args.get("id")
+    user = database_ops.fetch_user_with_id(user_id)
+    if user.last_paired < time.time() - 86400:
+        counter = 0
+        randIndex = len(user.connections) - counter
+        proposed_connection = database_ops.fetch_connection(user.connections[randIndex])
+        other_user_id = [item for item in proposed_connection.user_ids if not item == user_id][0]
+        other_user = database_ops.fetch_user_with_id(other_user_id)
+        while user.connections[randIndex] not in user.paired_with and other_user.last_paired < time.time() - 86400:
+            randIndex = random.randint(0, len(user.connections))
+            if randIndex < 0:
+                return  404
+            proposed_connection = database_ops.fetch_connection(user.connections[randIndex])
+            other_user_id = [item for item in proposed_connection.user_ids if not item == user_id][0]
+            other_user = database_ops.fetch_user_with_id(other_user_id)
+        user.paired_with.append(user.connections[randIndex])
+        other_user.paired_with.append(user.connections[randIndex])
+        user.connection_today = user.connections[randIndex]
+        other_user.connection_today = user.connections[randIndex]
+        right_now = time.time()
+        user.last_paired = right_now
+        other_user.last_paired = right_now
+        database_ops.update_user_with_id(user_id, user)
+        database_ops.update_user_with_id(other_user_id, other_user)
+        return proposed_connection
+    else:
+        return fetch_connection(user.connection_today)
 
 
 
