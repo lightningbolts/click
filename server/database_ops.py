@@ -63,6 +63,11 @@ def update_user_with_id(id:str, user:User) -> bool:
     supabase.table("users").update(vars(user)).eq("id", id).execute()
     return True
 
+def update_connection_with_id(id:str, connection:Connection) -> bool:
+    if fetch_user_with_id(id) is None:
+        return False
+    supabase.table("connections").update(vars(connection)).eq("id", id).execute()
+    return True
 
 def fetch_connection(id: str) -> Connection:
     return Connection(

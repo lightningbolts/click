@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
 import database_ops
-from database_ops import fetch_connection
+from database_ops import fetch_connection, update_connection_with_id
 
 # Load environment variables from .env file
 load_dotenv()
@@ -150,40 +150,52 @@ def message_restore():
     conn = fetch_connection(request.args.get("id"))
     return jsonify(conn.chat)
 
+#may need route for several messages
 @app.route("/message/new", methods=['POST'])
 def message_new():
     conn = fetch_connection(request.args.get("connid"))
+    if not conn.has_begun:
+        return 500
     return jsonify(database_ops.create_message(conn.id, request.args.get("userid"), request.args.get("content")))
 
 @app.route("/pollpairs", methods=['POST'])
 def pollpairs():
     user_id = request.args.get("id")
     user = database_ops.fetch_user_with_id(user_id)
-    if user.last_paired < time.time() - 86400:
+    right_now = time.time()
+    user.lastPolled = right_now
+    #todo: test this conditional
+    if user.last_paired < right_now - 86400:
         counter = 0
-        randIndex = len(user.connections) - counter
-        proposed_connection = database_ops.fetch_connection(user.connections[randIndex])
+        index = len(user.connections) - counter
+        proposed_connection = database_ops.fetch_connection(user.connections[index])
         other_user_id = [item for item in proposed_connection.user_ids if not item == user_id][0]
         other_user = database_ops.fetch_user_with_id(other_user_id)
-        while user.connections[randIndex] not in user.paired_with and other_user.last_paired < time.time() - 86400:
-            randIndex = random.randint(0, len(user.connections))
-            if randIndex < 0:
-                return  404
-            proposed_connection = database_ops.fetch_connection(user.connections[randIndex])
+        while user.connections[index] not in user.paired_with and other_user.last_paired < time.time() - 86400:
+            index = random.randint(0, len(user.connections))
+            if index < 0:
+                return  500
+            proposed_connection = database_ops.fetch_connection(user.connections[index])
             other_user_id = [item for item in proposed_connection.user_ids if not item == user_id][0]
             other_user = database_ops.fetch_user_with_id(other_user_id)
-        user.paired_with.append(user.connections[randIndex])
-        other_user.paired_with.append(user.connections[randIndex])
-        user.connection_today = user.connections[randIndex]
-        other_user.connection_today = user.connections[randIndex]
-        right_now = time.time()
+        user.paired_with.append(user.connections[index])
+        other_user.paired_with.append(user.connections[index])
+        user.connection_today = user.connections[index]
+        other_user.connection_today = user.connections[index]
         user.last_paired = right_now
         other_user.last_paired = right_now
-        database_ops.update_user_with_id(user_id, user)
-        database_ops.update_user_with_id(other_user_id, other_user)
-        return proposed_connection
+        if(database_ops.update_user_with_id(user_id, user) and database_ops.update_user_with_id(other_user_id, other_user))
+            return proposed_connection
+        return 500
     else:
-        return fetch_connection(user.connection_today)
+        connection = fetch_connection(user.paired_with)
+        other_user_id = [item for item in connection.user_ids if not item == user_id][0]
+        other_user = database_ops.fetch_user_with_id(other_user_id)
+        if other_user.lastPolled + 300 > right_now:
+            connection.has_begun = True
+        if(update_connection_with_id(user.paired_with), connection):
+            return connection
+        return 500
 
 
 

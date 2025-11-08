@@ -16,7 +16,7 @@ class User:
         self.email = email
         self.image = image
         self.createdAt = time.time()
-        self.lastSignedIn = self.createdAt
+        self.lastPolled = self.createdAt
         self.connections = []
         self.paired_with = []
         self.connection_today = -1
@@ -42,6 +42,7 @@ class Chat:
 
 class Connection:
     should_continue = (False, False)
+    has_begun = False
     def __init__(self, user1: User, user2: User, geo_location:tuple[float, float], setup_dict=None):
         if setup_dict is not None:
             # careful!
