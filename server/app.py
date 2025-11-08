@@ -184,7 +184,7 @@ def pollpairs():
         other_user.connection_today = user.connections[index]
         user.last_paired = right_now
         other_user.last_paired = right_now
-        if(database_ops.update_user_with_id(user_id, user) and database_ops.update_user_with_id(other_user_id, other_user))
+        if database_ops.update_user_with_id(user_id, user) and database_ops.update_user_with_id(other_user_id, other_user):
             return proposed_connection
         return 500
     else:
@@ -193,7 +193,7 @@ def pollpairs():
         other_user = database_ops.fetch_user_with_id(other_user_id)
         if other_user.lastPolled + 300 > right_now:
             connection.has_begun = True
-        if(update_connection_with_id(user.paired_with), connection):
+        if update_connection_with_id(user.paired_with, connection):
             return connection
         return 500
 
