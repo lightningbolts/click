@@ -2,12 +2,12 @@ package compose.project.click.click.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Blue-based minimal color palette
-val PrimaryBlue = Color(0xFF4A90E2)
-val LightBlue = Color(0xFF7AB8F5)
-val DeepBlue = Color(0xFF2B5F8F)
-val SoftBlue = Color(0xFFE3F2FD)
-val AccentBlue = Color(0xFF1976D2)
+// Purple-based minimal color palette
+val PrimaryBlue = Color(0xFF8338EC)  // Main purple color
+val LightBlue = Color(0xFFA374F9)    // Lighter purple
+val DeepBlue = Color(0xFF5F1DAD)     // Darker purple
+val SoftBlue = Color(0xFFF3EBFF)     // Very light purple tint
+val AccentBlue = Color(0xFF6A1BC9)   // Accent purple
 
 val BackgroundLight = Color(0xFFFAFAFA)
 val SurfaceLight = Color(0xFFFFFFFF)

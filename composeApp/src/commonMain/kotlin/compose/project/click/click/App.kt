@@ -194,7 +194,24 @@ fun App() {
                         when (currentRoute) {
                             NavigationItem.Home.route -> HomeScreen()
                             NavigationItem.AddClick.route -> AddClickScreen()
-                            NavigationItem.Connections.route -> ConnectionsScreen()
+                            NavigationItem.Connections.route -> {
+                                // Get userId from AuthState - use a placeholder for now
+                                val userId = when (val state = authViewModel.authState) {
+                                    is AuthState.Success -> state.userId
+                                    else -> ""
+                                }
+                                if (userId.isNotEmpty()) {
+                                    ConnectionsScreen(userId = userId)
+                                } else {
+                                    // Show loading or login prompt
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("Please log in to view connections")
+                                    }
+                                }
+                            }
                             NavigationItem.Map.route -> MapScreen()
                             NavigationItem.Settings.route -> SettingsScreen(
                                 isDarkMode = isDarkMode,

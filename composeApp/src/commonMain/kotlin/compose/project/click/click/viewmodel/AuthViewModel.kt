@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
 import kotlinx.coroutines.launch
 
@@ -17,7 +17,7 @@ sealed class AuthState {
 }
 
 class AuthViewModel(
-    private val apiClient: ApiClient = ApiClient(),
+    private val authRepository: AuthRepository = AuthRepository(),
     private val tokenStorage: TokenStorage
 ) : ViewModel() {
     var authState by mutableStateOf<AuthState>(AuthState.Idle)
@@ -33,14 +33,13 @@ class AuthViewModel(
     private fun checkAuthStatus() {
         viewModelScope.launch {
             try {
-                val jwt = tokenStorage.getJwt()
-                val refreshToken = tokenStorage.getRefreshToken()
-
-                if (jwt != null && refreshToken != null) {
-                    // TODO: Validate JWT expiration and refresh if needed
+                val user = authRepository.getCurrentUser()
+                if (user != null) {
                     isAuthenticated = true
-                    // Extract email from JWT if needed
-                    authState = AuthState.Success("", "")
+                    authState = AuthState.Success(
+                        userId = user.id,
+                        email = user.email ?: ""
+                    )
                 } else {
                     isAuthenticated = false
                     authState = AuthState.Idle
@@ -57,15 +56,14 @@ class AuthViewModel(
             try {
                 authState = AuthState.Loading
 
-                val result = apiClient.login(email, password)
+                val result = authRepository.signInWithEmail(email, password)
 
                 result.fold(
-                    onSuccess = { response ->
-                        tokenStorage.saveTokens(response.jwt, response.refresh)
+                    onSuccess = { user ->
                         isAuthenticated = true
                         authState = AuthState.Success(
-                            userId = response.user?.email ?: "",
-                            email = response.user?.email ?: email
+                            userId = user.id,
+                            email = user.email ?: email
                         )
                     },
                     onFailure = { error ->
@@ -83,15 +81,14 @@ class AuthViewModel(
             try {
                 authState = AuthState.Loading
 
-                val result = apiClient.signUp(email, password, name)
+                val result = authRepository.signUpWithEmail(email, password, name)
 
                 result.fold(
-                    onSuccess = { response ->
-                        tokenStorage.saveTokens(response.jwt, response.refresh)
+                    onSuccess = { user ->
                         isAuthenticated = true
                         authState = AuthState.Success(
-                            userId = response.user?.email ?: "",
-                            email = response.user?.email ?: email
+                            userId = user.id,
+                            email = user.email ?: email
                         )
                     },
                     onFailure = { error ->
@@ -104,52 +101,20 @@ class AuthViewModel(
         }
     }
 
-    fun signInWithGoogle(googleToken: String) {
-        viewModelScope.launch {
-            try {
-                authState = AuthState.Loading
-
-                val result = apiClient.authenticateWithGoogle(googleToken)
-
-                result.fold(
-                    onSuccess = { response ->
-                        tokenStorage.saveTokens(response.jwt, response.refresh)
-                        isAuthenticated = true
-                        authState = AuthState.Success(
-                            userId = response.user?.email ?: "",
-                            email = response.user?.email ?: ""
-                        )
-                    },
-                    onFailure = { error ->
-                        authState = AuthState.Error(error.message ?: "Failed to sign in with Google")
-                    }
-                )
-            } catch (e: Exception) {
-                authState = AuthState.Error(e.message ?: "An error occurred during Google sign in")
-            }
-        }
-    }
-
     suspend fun refreshTokenIfNeeded() {
         try {
-            val refreshToken = tokenStorage.getRefreshToken() ?: return
-
-            val result = apiClient.refreshToken(refreshToken)
+            val result = authRepository.refreshSession()
             result.fold(
-                onSuccess = { newJwt ->
-                    val currentRefreshToken = tokenStorage.getRefreshToken() ?: ""
-                    tokenStorage.saveTokens(newJwt, currentRefreshToken)
+                onSuccess = {
+                    // Session refreshed successfully
                 },
                 onFailure = {
-                    // Refresh failed, clear tokens and require re-login
-                    tokenStorage.clearTokens()
+                    // Refresh failed, require re-login
                     isAuthenticated = false
                     authState = AuthState.Idle
                 }
             )
         } catch (e: Exception) {
-            // Refresh failed, clear tokens
-            tokenStorage.clearTokens()
             isAuthenticated = false
             authState = AuthState.Idle
         }
@@ -158,15 +123,12 @@ class AuthViewModel(
     fun signOut() {
         viewModelScope.launch {
             try {
-                val refreshToken = tokenStorage.getRefreshToken()
-                if (refreshToken != null) {
-                    apiClient.logout(refreshToken)
-                }
+                authRepository.signOut()
                 tokenStorage.clearTokens()
                 isAuthenticated = false
                 authState = AuthState.Idle
             } catch (e: Exception) {
-                // Even if logout fails on server, clear local tokens
+                // Even if logout fails, clear local state
                 tokenStorage.clearTokens()
                 isAuthenticated = false
                 authState = AuthState.Idle
@@ -176,11 +138,6 @@ class AuthViewModel(
 
     fun resetAuthState() {
         authState = AuthState.Idle
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        apiClient.close()
     }
 }
 

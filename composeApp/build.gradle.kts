@@ -33,6 +33,9 @@ kotlin {
 
             // Ktor Android engine
             implementation("io.ktor:ktor-client-android:3.0.1")
+
+            // Security crypto for encrypted shared preferences
+            implementation("androidx.security:security-crypto:1.1.0-alpha06")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -55,6 +58,9 @@ kotlin {
             implementation("io.ktor:ktor-client-core:3.0.1")
             implementation("io.ktor:ktor-client-content-negotiation:3.0.1")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
+
+            // DateTime library
+            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
         }
         iosMain.dependencies {
             // Ktor iOS engine

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,77 +28,176 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.unit.coerceAtLeast
-
-data class ClickConnection(
-    val name: String,
-    val lastMessage: String,
-    val time: String,
-    val unreadCount: Int = 0,
-    val isOnline: Boolean = false
-)
+import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.viewmodel.ChatListState
+import compose.project.click.click.viewmodel.ChatMessagesState
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.math.absoluteValue
 
 @Composable
-fun ConnectionsScreen() {
-    var selectedConnection by remember { mutableStateOf<ClickConnection?>(null) }
+fun ConnectionsScreen(
+    userId: String,
+    viewModel: ChatViewModel = viewModel { ChatViewModel() }
+) {
+    var selectedChatId by remember { mutableStateOf<String?>(null) }
 
-    if (selectedConnection == null) {
+    LaunchedEffect(userId) {
+        viewModel.setCurrentUser(userId)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.leaveChatRoom()
+        }
+    }
+
+    if (selectedChatId == null) {
         ConnectionsListView(
-            onConnectionSelected = { connection ->
-                selectedConnection = connection
+            viewModel = viewModel,
+            onChatSelected = { chatId ->
+                selectedChatId = chatId
+                viewModel.loadChatMessages(chatId)
             }
         )
     } else {
         ChatView(
-            connection = selectedConnection!!,
-            onBackPressed = { selectedConnection = null }
+            viewModel = viewModel,
+            onBackPressed = {
+                selectedChatId = null
+                viewModel.leaveChatRoom()
+                viewModel.loadChats() // Refresh chat list
+            }
         )
     }
 }
 
+
 @Composable
-fun ConnectionsListView(onConnectionSelected: (ClickConnection) -> Unit) {
-    val connections = remember {
-        listOf(
-            ClickConnection("Alice", "See you tomorrow!", "2m ago", 2, true),
-            ClickConnection("Charlie", "That was fun!", "1h ago", 0, true),
-            ClickConnection("Diana", "Let's click again soon", "Yesterday", 1, false),
-            ClickConnection("Eve", "Thanks for the coffee ☕", "2d ago", 0, false),
-            ClickConnection("Frank", "Great meeting you!", "3d ago", 0, false),
-            ClickConnection("Grace", "📍 See you at the park", "1w ago", 0, false),
-        )
-    }
+fun ConnectionsListView(
+    viewModel: ChatViewModel,
+    onChatSelected: (String) -> Unit
+) {
+    val chatListState by viewModel.chatListState.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
-                PageHeader(title = "Clicks", subtitle = "${connections.size} connections")
+                when (val state = chatListState) {
+                    is ChatListState.Success -> {
+                        PageHeader(
+                            title = "Clicks",
+                            subtitle = "${state.chats.size} ${if (state.chats.size == 1) "connection" else "connections"}"
+                        )
+                    }
+                    else -> {
+                        PageHeader(title = "Clicks", subtitle = "Loading...")
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(6.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(connections) { connection ->
-                    ConnectionItem(
-                        connection = connection,
-                        onClick = { onConnectionSelected(connection) }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 72.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                    )
+            when (val state = chatListState) {
+                is ChatListState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is ChatListState.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Error loading chats",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                state.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = { viewModel.loadChats() }) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                }
+                is ChatListState.Success -> {
+                    if (state.chats.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.ChatBubbleOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    "No connections yet",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Start clicking with people nearby!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(state.chats, key = { it.chat.id }) { chatDetails ->
+                                ConnectionItem(
+                                    chatDetails = chatDetails,
+                                    onClick = { onChatSelected(chatDetails.chat.id) }
+                                )
+                                if (chatDetails != state.chats.last()) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 72.dp),
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+
 @Composable
-fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
+fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
+    val user = chatDetails.otherUser
+    val lastMessage = chatDetails.lastMessage
+    val unreadCount = chatDetails.unreadCount
+    val timeText = lastMessage?.let { formatTimestamp(it.createdAt) } ?: "No messages"
+
     AdaptiveCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
@@ -108,7 +208,7 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar with online indicator
+            // Avatar
             Box {
                 Box(
                     modifier = Modifier
@@ -125,20 +225,10 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        connection.name.first().toString(),
+                        user.name.firstOrNull()?.toString()?.uppercase() ?: "?",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge
-                    )
-                }
-
-                // Online indicator
-                if (connection.isOnline) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .align(Alignment.BottomEnd)
-                            .background(Color(0xFF4CAF50), RoundedCornerShape(8.dp))
                     )
                 }
             }
@@ -152,13 +242,14 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        connection.name,
+                        user.name,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
-                        connection.time,
+                        timeText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -172,14 +263,15 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        connection.lastMessage,
+                        lastMessage?.content ?: "Start a conversation",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (connection.unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (connection.unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
-                        modifier = Modifier.weight(1f)
+                        color = if (unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1
                     )
 
-                    if (connection.unreadCount > 0) {
+                    if (unreadCount > 0) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
@@ -188,7 +280,7 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                connection.unreadCount.toString(),
+                                unreadCount.toString(),
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
@@ -201,119 +293,244 @@ fun ConnectionItem(connection: ClickConnection, onClick: () -> Unit) {
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
-    var messageText by remember { mutableStateOf("") }
+fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
+    val chatMessagesState by viewModel.chatMessagesState.collectAsState()
+    val messageInput by viewModel.messageInput.collectAsState()
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
-    val messages = remember {
-        listOf(
-            ChatMessage("Hey! Want to grab coffee?", false, "10:30 AM"),
-            ChatMessage("Sure! Where?", true, "10:32 AM"),
-            ChatMessage("The usual spot?", false, "10:33 AM"),
-            ChatMessage(connection.lastMessage, true, "10:35 AM"),
-        )
+    // Scroll to bottom when new messages arrive
+    LaunchedEffect(chatMessagesState) {
+        if (chatMessagesState is ChatMessagesState.Success) {
+            val messages = (chatMessagesState as ChatMessagesState.Success).messages
+            if (messages.isNotEmpty()) {
+                coroutineScope.launch {
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+            }
+        }
     }
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBackPressed) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    )
+            when (val state = chatMessagesState) {
+                is ChatMessagesState.Loading -> {
+                    // Header
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBackPressed) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onSurface
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            connection.name.first().toString(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            connection.name,
-                            fontWeight = FontWeight.SemiBold,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (connection.isOnline) {
+                            }
                             Text(
-                                "Online",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF4CAF50)
+                                "Loading...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
-
-                    IconButton(onClick = { }) { Icon(Icons.Filled.Call, contentDescription = "Voice Call", tint = MaterialTheme.colorScheme.primary) }
-                    IconButton(onClick = { }) { Icon(Icons.Filled.VideoCall, contentDescription = "Video Call", tint = MaterialTheme.colorScheme.primary) }
-                }
-            }
-
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(messages) { message -> ChatMessageBubble(message) }
-            }
-
-            AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message") },
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = { },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp))
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
-                            tint = Color.White
-                        )
+                        CircularProgressIndicator()
+                    }
+                }
+                is ChatMessagesState.Error -> {
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBackPressed) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Error loading chat",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                state.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                is ChatMessagesState.Success -> {
+                    val chatDetails = state.chatDetails
+                    val messages = state.messages
+
+                    // Header
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBackPressed) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primary,
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    chatDetails.otherUser.name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    chatDetails.otherUser.name,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    chatDetails.otherUser.email,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Messages
+                    if (messages.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Filled.ChatBubbleOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    "No messages yet",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Say hi to ${chatDetails.otherUser.name}!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(messages, key = { it.message.id }) { messageWithUser ->
+                                ChatMessageBubble(messageWithUser)
+                            }
+                        }
+                    }
+
+                    // Input
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = messageInput,
+                                onValueChange = { viewModel.updateMessageInput(it) },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("Message ${chatDetails.otherUser.name}") },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                maxLines = 5
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            IconButton(
+                                onClick = { viewModel.sendMessage() },
+                                enabled = messageInput.trim().isNotEmpty(),
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(
+                                        if (messageInput.trim().isNotEmpty())
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                        RoundedCornerShape(24.dp)
+                                    )
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send",
+                                    tint = if (messageInput.trim().isNotEmpty())
+                                        Color.White
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -321,39 +538,72 @@ fun ChatView(connection: ClickConnection, onBackPressed: () -> Unit) {
     }
 }
 
-data class ChatMessage(val text: String, val isSent: Boolean, val time: String)
 
 @Composable
-fun ChatMessageBubble(message: ChatMessage) {
+fun ChatMessageBubble(messageWithUser: MessageWithUser) {
+    val message = messageWithUser.message
+    val isSent = messageWithUser.isSent
+
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isSent) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
         Card(
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
-                bottomStart = if (message.isSent) 16.dp else 4.dp,
-                bottomEnd = if (message.isSent) 4.dp else 16.dp
+                bottomStart = if (isSent) 16.dp else 4.dp,
+                bottomEnd = if (isSent) 4.dp else 16.dp
             ),
             colors = CardDefaults.cardColors(
-                containerColor = if (message.isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                containerColor = if (isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
             ),
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    message.text,
-                    color = if (message.isSent) Color.White else MaterialTheme.colorScheme.onSurface,
+                    message.content,
+                    color = if (isSent) Color.White else MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    message.time,
+                    formatMessageTime(message.createdAt),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (message.isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 }
+
+// Utility function to format timestamps
+private fun formatTimestamp(timestamp: Long): String {
+    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+    val diff = now - timestamp
+
+    return when {
+        diff < 60_000 -> "Just now"
+        diff < 3600_000 -> "${diff / 60_000}m ago"
+        diff < 86400_000 -> "${diff / 3600_000}h ago"
+        diff < 604800_000 -> "${diff / 86400_000}d ago"
+        else -> "${diff / 604800_000}w ago"
+    }
+}
+
+private fun formatMessageTime(timestamp: Long): String {
+    val instant = Instant.fromEpochMilliseconds(timestamp)
+    val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+
+    val hour = dateTime.hour
+    val minute = dateTime.minute.toString().padStart(2, '0')
+    val amPm = if (hour < 12) "AM" else "PM"
+    val displayHour = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+
+    return "$displayHour:$minute $amPm"
+}
+
