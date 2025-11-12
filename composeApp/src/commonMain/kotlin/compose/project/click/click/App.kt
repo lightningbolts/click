@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +29,7 @@ import compose.project.click.click.ui.theme.*
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.nfc.rememberNfcManager
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -139,6 +141,7 @@ fun App() {
         } else {
             // Main app content when authenticated
             var currentRoute by remember { mutableStateOf("home") }
+            var showNfcScreen by remember { mutableStateOf(false) }
             var isSearchOpen by remember { mutableStateOf(false) }
             var searchQuery by remember { mutableStateOf("") }
 
@@ -204,33 +207,62 @@ fun App() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        when (currentRoute) {
-                            NavigationItem.Home.route -> HomeScreen()
-                            NavigationItem.AddClick.route -> AddClickScreen()
-                            NavigationItem.Connections.route -> {
-                                // Get userId from AuthState - use a placeholder for now
-                                val userId = when (val state = authViewModel.authState) {
-                                    is AuthState.Success -> state.userId
-                                    else -> ""
+                        if (showNfcScreen) {
+                            // Get userId from AuthState and authToken from TokenStorage
+                            val userId = when (val state = authViewModel.authState) {
+                                is AuthState.Success -> state.userId
+                                else -> ""
+                            }
+                            val authToken by produceState(initialValue = "") {
+                                value = tokenStorage.getJwt() ?: ""
+                            }
+
+                            val nfcManager = rememberNfcManager()
+
+                            NfcScreen(
+                                userId = userId,
+                                authToken = authToken,
+                                nfcManager = nfcManager,
+                                onConnectionCreated = { connectionId ->
+                                    // Navigate to connections and show the new connection
+                                    showNfcScreen = false
+                                    currentRoute = NavigationItem.Connections.route
+                                },
+                                onBackPressed = {
+                                    showNfcScreen = false
                                 }
-                                if (userId.isNotEmpty()) {
-                                    ConnectionsScreen(userId = userId)
-                                } else {
-                                    // Show loading or login prompt
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("Please log in to view connections")
+                            )
+                        } else {
+                            when (currentRoute) {
+                                NavigationItem.Home.route -> HomeScreen()
+                                NavigationItem.AddClick.route -> AddClickScreen(
+                                    onNavigateToNfc = { showNfcScreen = true }
+                                )
+                                NavigationItem.Connections.route -> {
+                                    // Get userId from AuthState - use a placeholder for now
+                                    val userId = when (val state = authViewModel.authState) {
+                                        is AuthState.Success -> state.userId
+                                        else -> ""
+                                    }
+                                    if (userId.isNotEmpty()) {
+                                        ConnectionsScreen(userId = userId)
+                                    } else {
+                                        // Show loading or login prompt
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("Please log in to view connections")
+                                        }
                                     }
                                 }
+                                NavigationItem.Map.route -> MapScreen()
+                                NavigationItem.Settings.route -> SettingsScreen(
+                                    isDarkMode = isDarkMode,
+                                    onToggleDarkMode = { isDarkMode = !isDarkMode },
+                                    onSignOut = { authViewModel.signOut() }
+                                )
                             }
-                            NavigationItem.Map.route -> MapScreen()
-                            NavigationItem.Settings.route -> SettingsScreen(
-                                isDarkMode = isDarkMode,
-                                onToggleDarkMode = { isDarkMode = !isDarkMode },
-                                onSignOut = { authViewModel.signOut() }
-                            )
                         }
                     }
 

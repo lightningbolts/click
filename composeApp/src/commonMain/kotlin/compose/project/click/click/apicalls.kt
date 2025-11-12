@@ -9,8 +9,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-@Serializable
-data class LoginObject(val jwt: String, val refresh: String, val user: User)
 
 class Api(initialToken: String, initialRefresh: String) {
     var token: String = initialToken

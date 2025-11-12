@@ -5,12 +5,15 @@ import compose.project.click.click.data.models.ErrorResponse
 import compose.project.click.click.data.models.GoogleAuthRequest
 import compose.project.click.click.data.models.LoginRequest
 import compose.project.click.click.data.models.SignUpRequest
+import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.User
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.get
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -114,6 +117,51 @@ class ApiClient(private val baseUrl: String = "http://localhost:5000") {
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("Logout failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createConnection(
+        authToken: String,
+        user1Id: String,
+        user2Id: String,
+        latitude: Double,
+        longitude: Double
+    ): Result<Connection> {
+        return try {
+            val response = client.post("$baseUrl/connection/new/") {
+                header("Authorization", authToken)
+                parameter("id1", user1Id)
+                parameter("id2", user2Id)
+                parameter("lat", latitude)
+                parameter("long", longitude)
+            }
+
+            if (response.status.value in 200..299) {
+                Result.success(response.body<Connection>())
+            } else {
+                val error = try {
+                    response.body<ErrorResponse>()
+                } catch (e: Exception) {
+                    ErrorResponse("Failed to create connection")
+                }
+                Result.failure(Exception(error.error))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getUserById(userId: String): Result<User> {
+        return try {
+            val response = client.get("$baseUrl/user/$userId")
+
+            if (response.status.value in 200..299) {
+                Result.success(response.body<User>())
+            } else {
+                Result.failure(Exception("User not found"))
             }
         } catch (e: Exception) {
             Result.failure(e)

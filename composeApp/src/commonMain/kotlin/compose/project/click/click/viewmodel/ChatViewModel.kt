@@ -7,6 +7,8 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.data.storage.createTokenStorage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -26,7 +28,8 @@ sealed class ChatMessagesState {
 }
 
 class ChatViewModel(
-    private val chatRepository: ChatRepository = ChatRepository()
+    tokenStorage: TokenStorage = createTokenStorage(),
+    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = tokenStorage)
 ) : ViewModel() {
 
     private val _chatListState = MutableStateFlow<ChatListState>(ChatListState.Loading)

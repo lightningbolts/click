@@ -607,3 +607,4 @@ private fun formatMessageTime(timestamp: Long): String {
     return "$displayHour:$minute $amPm"
 }
 
+
