@@ -157,7 +157,7 @@ def new_connection():
             long = 0.0
         user1 = database_ops.fetch_user_with_id(id1)
         user2 = database_ops.fetch_user_with_id(id2)
-        return database_ops.create_connection(user1, user2, (lat, long)) \
+        return database_ops.create_connection(user1, user2, (lat, long)) 
     return "log in", 405
 
 
