@@ -35,6 +35,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.ktor.client.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +47,15 @@ fun App() {
     // Initialize from system theme so dark mode applies on main page immediately
     val systemDark = isSystemInDarkTheme()
     var isDarkMode by remember { mutableStateOf(systemDark) }
+
+    // Ktor client
+    val client = remember {
+        HttpClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+    }
 
     // Auth ViewModel with TokenStorage
     val tokenStorage = remember { createTokenStorage() }
