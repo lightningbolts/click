@@ -43,7 +43,7 @@ class Api(initialToken: String, initialRefresh: String) {
             token = loginDetails.jwt
             refresh = loginDetails.refresh
             val secondResponse = client.post(baseUrl + "create_account") {
-                headers.append("Authorization", "Bearer ${loginDetails.jwt}")
+                headers.append("Authorization", loginDetails.jwt)
                 contentType(ContentType.Application.Json)
                 setBody(Json.encodeToString(mapOf("name" to name, "email" to email, "imageSrc" to imageSrc)))
             }
@@ -57,7 +57,7 @@ class Api(initialToken: String, initialRefresh: String) {
     private suspend fun refreshToken(): Boolean {
         val response = client.post(baseUrl + "refresh") {
             // Assuming the refresh token is sent in the Authorization header
-            headers.append("Authorization", "Bearer $refresh")
+            headers.append("Authorization", refresh)
         }
         if (response.status.value == 200) {
             // Assuming the response body is the new JWT token
@@ -70,13 +70,13 @@ class Api(initialToken: String, initialRefresh: String) {
     suspend fun poll(id: String): Connection? {
         var response = client.get(baseUrl + "poll/") {
             parameter("id", id)
-            headers.append("Authorization", "Bearer $token")
+            headers.append("Authorization", token)
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
             response = client.get(baseUrl + "poll/") {
                 parameter("id", id)
-                headers.append("Authorization", "Bearer $token")
+                headers.append("Authorization", token)
             }
         }
         if (response.status.value == 200) {
@@ -87,12 +87,12 @@ class Api(initialToken: String, initialRefresh: String) {
 
     suspend fun userByName(name: String): User? {
         var response = client.get(baseUrl + "user/$name") {
-            headers.append("Authorization", "Bearer $token")
+            headers.append("Authorization", token)
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
             response = client.get(baseUrl + "user/$name") {
-                headers.append("Authorization", "Bearer $token")
+                headers.append("Authorization", token)
             }
         }
         if (response.status.value == 200) {
@@ -103,12 +103,12 @@ class Api(initialToken: String, initialRefresh: String) {
 
     suspend fun userByEmail(email: String): User? {
         var response = client.get(baseUrl + "user_with_email/$email") {
-            headers.append("Authorization", "Bearer $token")
+            headers.append("Authorization", token)
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
             response = client.get(baseUrl + "user_with_email/$email") {
-                headers.append("Authorization", "Bearer $token")
+                headers.append("Authorization", token)
             }
         }
 
@@ -120,14 +120,14 @@ class Api(initialToken: String, initialRefresh: String) {
 
     suspend fun getConnections(ids: List<String>): List<Connection>? {
         var response = client.post(baseUrl + "connections/") {
-            headers.append("Authorization", "Bearer $token")
+            headers.append("Authorization", token)
             contentType(ContentType.Application.Json)
             setBody(Json.encodeToString(ids))
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
             response = client.post(baseUrl + "connections/") {
-                headers.append("Authorization", "Bearer $token")
+                headers.append("Authorization", token)
                 contentType(ContentType.Application.Json)
                 setBody(Json.encodeToString(ids))
             }
@@ -140,7 +140,7 @@ class Api(initialToken: String, initialRefresh: String) {
 
     suspend fun newConnection(id1: String, id2: String, location: GeoLocation): Connection? {
         var response = client.post(baseUrl + "connections/new") {
-            headers.append("Authorization", "Bearer $token")
+            headers.append("Authorization", token)
             parameter("id1", id1)
             parameter("id2", id2)
             parameter("lat", location.lat.toString())
@@ -149,7 +149,7 @@ class Api(initialToken: String, initialRefresh: String) {
         while (response.status.value == 401) {
             if (!refreshToken()) return null
             response = client.post(baseUrl + "connections/new") {
-                headers.append("Authorization", "Bearer $token")
+                headers.append("Authorization", token)
                 parameter("id1", id1)
                 parameter("id2", id2)
                 parameter("lat", location.lat.toString())
