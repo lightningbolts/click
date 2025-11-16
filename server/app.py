@@ -1,17 +1,11 @@
-import json
 import os
 import random
 import time
-import uuid
-import jwt
-import requests
-from google.oauth2 import id_token
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
 import database_ops
-import schema
 from database_ops import fetch_connection, update_connection_with_id
 from chat_ops import ChatOperations
 from supabase import create_client, Client
@@ -98,7 +92,7 @@ def connection(id):
 
 @app.route("/connection/new/", methods=['POST'])
 def new_connection():
-    if validate(request.headers['Authorization']):
+    if validate(request.headers['Authorization'], request.args.get("email")):
         id1 = request.args.get("id1")
         id2 = request.args.get("id2")
         lat = request.args.get("lat")
@@ -176,7 +170,7 @@ def pollpairs():
 @app.route('/api/chats/user/<user_id>', methods=['GET'])
 def get_user_chats(user_id):
     """Get all chats for a user with details"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -192,7 +186,7 @@ def get_user_chats(user_id):
 @app.route('/api/chats/<chat_id>', methods=['GET'])
 def get_chat(chat_id):
     """Get a specific chat by ID"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -210,7 +204,7 @@ def get_chat(chat_id):
 @app.route('/api/chats/<chat_id>/messages', methods=['GET'])
 def get_chat_messages(chat_id):
     """Get all messages for a specific chat"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -226,7 +220,7 @@ def get_chat_messages(chat_id):
 @app.route('/api/chats/<chat_id>/messages', methods=['POST'])
 def send_message(chat_id):
     """Send a new message in a chat"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -255,7 +249,7 @@ def send_message(chat_id):
 @app.route('/api/chats/<chat_id>/mark_read', methods=['POST'])
 def mark_messages_read(chat_id):
     """Mark messages as read for a user"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -282,7 +276,7 @@ def mark_messages_read(chat_id):
 @app.route('/api/chats/<chat_id>/messages/<message_id>', methods=['PUT'])
 def update_message(chat_id, message_id):
     """Update a message's content"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -311,7 +305,7 @@ def update_message(chat_id, message_id):
 @app.route('/api/chats/<chat_id>/messages/<message_id>', methods=['DELETE'])
 def delete_message(chat_id, message_id):
     """Delete a message"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -338,7 +332,7 @@ def delete_message(chat_id, message_id):
 @app.route('/api/chats/connection/<connection_id>', methods=['GET'])
 def get_chat_for_connection(connection_id):
     """Get the chat associated with a connection"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
@@ -356,7 +350,7 @@ def get_chat_for_connection(connection_id):
 @app.route('/api/chats/<chat_id>/participants', methods=['GET'])
 def get_chat_participants(chat_id):
     """Get the participants in a chat"""
-    if not validate(request.headers.get('Authorization', '')):
+    if not validate(request.headers.get('Authorization'), request.args.get("email")):
         return jsonify({"error": "Unauthorized"}), 401
 
     if not chat_ops:
