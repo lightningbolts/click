@@ -7,17 +7,26 @@ import jwt
 import requests
 from google.oauth2 import id_token
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from dotenv import load_dotenv
 
 import database_ops
 import schema
 from database_ops import fetch_connection, update_connection_with_id
+from chat_ops import ChatOperations
+from supabase import create_client, Client
 
 # Load environment variables from .env file
 load_dotenv()
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+
+# Initialize Supabase client for chat functionality
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+chat_ops = ChatOperations(supabase) if supabase else None
 
 
 def validate(encoded, email):
@@ -31,6 +40,15 @@ def validate(encoded, email):
         return False
 
 app = Flask(__name__)
+
+# Enable CORS for iOS/Android/Web clients
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",  # In production, restrict this to your domains
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 
 @app.route('/')
@@ -153,5 +171,213 @@ def pollpairs():
             return 500
     return "log in", 405
 
+# ============== CHAT API ENDPOINTS ==============
+
+@app.route('/api/chats/user/<user_id>', methods=['GET'])
+def get_user_chats(user_id):
+    """Get all chats for a user with details"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        chats = chat_ops.fetch_chats_for_user(user_id)
+        return jsonify({"chats": chats}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>', methods=['GET'])
+def get_chat(chat_id):
+    """Get a specific chat by ID"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        chat = chat_ops.fetch_chat_by_id(chat_id)
+        if not chat:
+            return jsonify({"error": "Chat not found"}), 404
+        return jsonify({"chat": chat}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>/messages', methods=['GET'])
+def get_chat_messages(chat_id):
+    """Get all messages for a specific chat"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        messages = chat_ops.fetch_messages_for_chat(chat_id)
+        return jsonify({"messages": messages}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>/messages', methods=['POST'])
+def send_message(chat_id):
+    """Send a new message in a chat"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        user_id = data.get('user_id')
+        content = data.get('content')
+
+        if not user_id or not content:
+            return jsonify({"error": "user_id and content are required"}), 400
+
+        message = chat_ops.create_message(chat_id, user_id, content)
+        if not message:
+            return jsonify({"error": "Failed to create message"}), 500
+
+        return jsonify({"message": message}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>/mark_read', methods=['POST'])
+def mark_messages_read(chat_id):
+    """Mark messages as read for a user"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
+
+        success = chat_ops.mark_messages_as_read(chat_id, user_id)
+        if not success:
+            return jsonify({"error": "Failed to mark messages as read"}), 500
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>/messages/<message_id>', methods=['PUT'])
+def update_message(chat_id, message_id):
+    """Update a message's content"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        user_id = data.get('user_id')
+        content = data.get('content')
+
+        if not user_id or not content:
+            return jsonify({"error": "user_id and content are required"}), 400
+
+        message = chat_ops.update_message(message_id, user_id, content)
+        if not message:
+            return jsonify({"error": "Failed to update message or unauthorized"}), 403
+
+        return jsonify({"message": message}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>/messages/<message_id>', methods=['DELETE'])
+def delete_message(chat_id, message_id):
+    """Delete a message"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
+
+        success = chat_ops.delete_message(message_id, user_id)
+        if not success:
+            return jsonify({"error": "Failed to delete message or unauthorized"}), 403
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/connection/<connection_id>', methods=['GET'])
+def get_chat_for_connection(connection_id):
+    """Get the chat associated with a connection"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        chat = chat_ops.fetch_chat_for_connection(connection_id)
+        if not chat:
+            return jsonify({"error": "Chat not found for this connection"}), 404
+        return jsonify({"chat": chat}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chats/<chat_id>/participants', methods=['GET'])
+def get_chat_participants(chat_id):
+    """Get the participants in a chat"""
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        participants = chat_ops.get_chat_participants(chat_id)
+        return jsonify({"participants": participants}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============== END CHAT API ENDPOINTS ==============
+
 if __name__ == '__main__':
-    app.run()
+    # Run on all network interfaces (0.0.0.0) so iOS simulator can connect
+    # Port 5000 is the default
+    print("🚀 Starting Flask server...")
+    print("📡 Server will be accessible at:")
+    print(f"   - Local: http://localhost:5000")
+    print(f"   - Network: http://<your-ip>:5000")
+    print("💡 iOS Simulator: Use your Mac's local IP address in ApiConfig.kt")
+    print()
+    app.run(host='0.0.0.0', port=5000, debug=True)
