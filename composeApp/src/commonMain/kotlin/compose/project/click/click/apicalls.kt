@@ -54,10 +54,11 @@ class Api(initialToken: String, initialRefresh: String) {
         return null
     }
 
-    private suspend fun refreshToken(): Boolean {
+    private suspend fun refreshToken(email: String): Boolean {
         val response = client.post(baseUrl + "refresh") {
             // Assuming the refresh token is sent in the Authorization header
             headers.append("Authorization", refresh)
+            parameter("email", email)
         }
         if (response.status.value == 200) {
             // Assuming the response body is the new JWT token
@@ -67,10 +68,11 @@ class Api(initialToken: String, initialRefresh: String) {
         return false
     }
 
-    suspend fun poll(id: String): Connection? {
+    suspend fun poll(id: String, email: String): Connection? {
         var response = client.get(baseUrl + "poll/") {
             parameter("id", id)
             headers.append("Authorization", token)
+            parameter("email", email)
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
@@ -85,9 +87,10 @@ class Api(initialToken: String, initialRefresh: String) {
         return null
     }
 
-    suspend fun userByName(name: String): User? {
+    suspend fun userByName(name: String, email: String): User? {
         var response = client.get(baseUrl + "user/$name") {
             headers.append("Authorization", token)
+            parameter("email", email)
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
@@ -118,9 +121,10 @@ class Api(initialToken: String, initialRefresh: String) {
         return null
     }
 
-    suspend fun getConnections(ids: List<String>): List<Connection>? {
+    suspend fun getConnections(ids: List<String>, email: String): List<Connection>? {
         var response = client.post(baseUrl + "connections/") {
             headers.append("Authorization", token)
+            parameter("email", email)
             contentType(ContentType.Application.Json)
             setBody(Json.encodeToString(ids))
         }
@@ -138,13 +142,14 @@ class Api(initialToken: String, initialRefresh: String) {
         return null
     }
 
-    suspend fun newConnection(id1: String, id2: String, location: GeoLocation): Connection? {
+    suspend fun newConnection(id1: String, id2: String, location: GeoLocation, email: String): Connection? {
         var response = client.post(baseUrl + "connections/new") {
             headers.append("Authorization", token)
             parameter("id1", id1)
             parameter("id2", id2)
             parameter("lat", location.lat.toString())
             parameter("lon", location.lon.toString())
+            parameter("email", email)
         }
         while (response.status.value == 401) {
             if (!refreshToken()) return null
@@ -154,6 +159,7 @@ class Api(initialToken: String, initialRefresh: String) {
                 parameter("id2", id2)
                 parameter("lat", location.lat.toString())
                 parameter("lon", location.lon.toString())
+                parameter("email", email)
             }
         }
         if (response.status.value == 200) {
