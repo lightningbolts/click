@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -68,6 +69,7 @@ fun ConnectionsScreen(
     } else {
         ChatView(
             viewModel = viewModel,
+            chatId = selectedChatId!!,
             onBackPressed = {
                 selectedChatId = null
                 viewModel.leaveChatRoom()
@@ -296,20 +298,30 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
+fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val messageInput by viewModel.messageInput.collectAsState()
+    val typingUsers by viewModel.typingUsers.collectAsState()
+    val chatListState by viewModel.chatListState.collectAsState()
+
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var forwardMessageId by remember { mutableStateOf<String?>(null) }
+
+    // Start typing monitoring for this chat
+    LaunchedEffect(chatId) {
+        viewModel.startTypingMonitoring(chatId)
+    }
 
     // Scroll to bottom when new messages arrive
     LaunchedEffect(chatMessagesState) {
         if (chatMessagesState is ChatMessagesState.Success) {
             val messages = (chatMessagesState as ChatMessagesState.Success).messages
             if (messages.isNotEmpty()) {
-                coroutineScope.launch {
-                    listState.animateScrollToItem(messages.size - 1)
-                }
+                coroutineScope.launch { listState.animateScrollToItem(messages.size - 1) }
             }
         }
     }
@@ -343,9 +355,7 @@ fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    ) { CircularProgressIndicator() }
                 }
                 is ChatMessagesState.Error -> {
                     AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
@@ -388,55 +398,91 @@ fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
 
                     // Header
                     AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            Box(
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.primary,
-                                                MaterialTheme.colorScheme.primaryContainer
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    chatDetails.otherUser.name.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                IconButton(onClick = onBackPressed) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    MaterialTheme.colorScheme.primaryContainer
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        chatDetails.otherUser.name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        chatDetails.otherUser.name,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        chatDetails.otherUser.email,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                IconButton(onClick = { searchOpen = !searchOpen }) {
+                                    Icon(Icons.Filled.Search, contentDescription = "Search")
+                                }
                             }
 
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    chatDetails.otherUser.name,
-                                    fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    chatDetails.otherUser.email,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            if (searchOpen) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        placeholder = { Text("Search messages") }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    TextButton(onClick = {
+                                        if (searchQuery.isNotBlank()) {
+                                            viewModel.searchMessages(chatId, searchQuery)
+                                        }
+                                    }) { Text("Go") }
+                                    Spacer(Modifier.width(4.dp))
+                                    TextButton(onClick = {
+                                        searchOpen = false
+                                        searchQuery = ""
+                                        // reload chat messages
+                                        viewModel.loadChatMessages(chatId)
+                                    }) { Text("Clear") }
+                                }
                             }
                         }
                     }
@@ -480,9 +526,49 @@ fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(messages, key = { it.message.id }) { messageWithUser ->
-                                ChatMessageBubble(messageWithUser)
+                                ChatMessageBubble(
+                                    messageWithUser = messageWithUser,
+                                    currentUserId = viewModel.currentUserId.collectAsState().value,
+                                    onToggleReaction = { reaction ->
+                                        val uid = viewModel.currentUserId.value
+                                        if (uid != null) {
+                                            val hasReaction = messageWithUser.message.reactions.any { it.reactionType == reaction && it.userId == uid }
+                                            if (hasReaction) viewModel.removeReaction(messageWithUser.message.id, reaction)
+                                            else viewModel.addReaction(messageWithUser.message.id, reaction)
+                                        }
+                                    },
+                                    onForward = { msgId ->
+                                        forwardMessageId = msgId
+                                    }
+                                )
                             }
                         }
+                    }
+
+                    // Typing indicator
+                    if (typingUsers.isNotEmpty()) {
+                        Text(
+                            text = typingUsers.joinToString(", ") + " is typing...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    // Forward dialog
+                    if (forwardMessageId != null) {
+                        ForwardDialog(
+                            chatListState = chatListState,
+                            currentChatId = chatId,
+                            onSelect = { targetChatId ->
+                                val msgId = forwardMessageId
+                                if (msgId != null) {
+                                    viewModel.forwardMessage(msgId, targetChatId)
+                                }
+                                forwardMessageId = null
+                            },
+                            onDismiss = { forwardMessageId = null }
+                        )
                     }
 
                     // Input
@@ -495,7 +581,10 @@ fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
                         ) {
                             OutlinedTextField(
                                 value = messageInput,
-                                onValueChange = { viewModel.updateMessageInput(it) },
+                                onValueChange = {
+                                    viewModel.updateMessageInput(it)
+                                    viewModel.onUserTyping(chatId)
+                                },
                                 modifier = Modifier.weight(1f),
                                 placeholder = { Text("Message ${chatDetails.otherUser.name}") },
                                 shape = RoundedCornerShape(24.dp),
@@ -538,40 +627,137 @@ fun ChatView(viewModel: ChatViewModel, onBackPressed: () -> Unit) {
     }
 }
 
+@Composable
+private fun ForwardDialog(
+    chatListState: ChatListState,
+    currentChatId: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Forward to...") },
+        text = {
+            when (chatListState) {
+                is ChatListState.Success -> {
+                    val options = chatListState.chats.filter { it.chat.id != currentChatId }
+                    if (options.isEmpty()) Text("No other chats available")
+                    else LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
+                        items(options, key = { it.chat.id }) { item ->
+                            ListItem(
+                                headlineContent = { Text(item.otherUser.name) },
+                                supportingContent = { Text(item.otherUser.email) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(8.dp)
+                                    .clickable {
+                                        onSelect(item.chat.id)
+                                    }
+                            )
+                        }
+                    }
+                }
+                is ChatListState.Loading -> { CircularProgressIndicator() }
+                is ChatListState.Error -> { Text("Failed to load chats") }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
 
 @Composable
-fun ChatMessageBubble(messageWithUser: MessageWithUser) {
+fun ChatMessageBubble(
+    messageWithUser: MessageWithUser,
+    currentUserId: String?,
+    onToggleReaction: (String) -> Unit,
+    onForward: (String) -> Unit
+) {
     val message = messageWithUser.message
     val isSent = messageWithUser.isSent
+
+    val grouped = remember(message.reactions) { message.reactions.groupBy { it.reactionType } }
+    val commonReactions = listOf("👍", "❤️", "😂")
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
-        Card(
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isSent) 16.dp else 4.dp,
-                bottomEnd = if (isSent) 4.dp else 16.dp
-            ),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-            ),
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    message.content,
-                    color = if (isSent) Color.White else MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    formatMessageTime(message.createdAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        Column(horizontalAlignment = if (isSent) Alignment.End else Alignment.Start) {
+            Card(
+                shape = RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = if (isSent) 16.dp else 4.dp,
+                    bottomEnd = if (isSent) 4.dp else 16.dp
+                ),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                ),
+                modifier = Modifier.widthIn(max = 300.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        message.content,
+                        color = if (isSent) Color.White else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            formatMessageTime(message.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        // Message status (simple): ✓ (sent), ✓✓ (delivered/read)
+                        if (isSent) {
+                            Spacer(Modifier.width(6.dp))
+                            val status = message.status.lowercase()
+                            val double = (status == "delivered" || status == "read" || message.isRead)
+                            Text(
+                                text = if (double) "✓✓" else "✓",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Reactions row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                // Existing aggregated reactions
+                grouped.forEach { (emoji, list) ->
+                    AssistChip(
+                        onClick = { onToggleReaction(emoji) },
+                        label = { Text("$emoji ${list.size}") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    )
+                }
+                // Quick add reactions
+                commonReactions.forEach { emoji ->
+                    if (!grouped.containsKey(emoji)) {
+                        AssistChip(
+                            onClick = { onToggleReaction(emoji) },
+                            label = { Text(emoji) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    }
+                }
+                // Forward action
+                TextButton(onClick = { onForward(message.id) }) { Text("Forward") }
             }
         }
     }
@@ -606,5 +792,3 @@ private fun formatMessageTime(timestamp: Long): String {
 
     return "$displayHour:$minute $amPm"
 }
-
-

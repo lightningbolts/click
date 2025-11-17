@@ -280,3 +280,103 @@ class ChatOperations:
             print(f"Error fetching chat participants: {e}")
             return []
 
+    def add_reaction(self, message_id: str, user_id: str, reaction_type: str) -> Optional[Dict[str, Any]]:
+        """Add a reaction to a message"""
+        try:
+            now = int(time.time() * 1000)
+            reaction = {
+                "message_id": message_id,
+                "user_id": user_id,
+                "reaction_type": reaction_type,
+                "created_at": now
+            }
+            response = self.supabase.table("message_reactions").insert(reaction).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            print(f"Error adding reaction: {e}")
+            return None
+
+    def remove_reaction(self, message_id: str, user_id: str, reaction_type: str) -> bool:
+        """Remove a user's reaction from a message"""
+        try:
+            self.supabase.table("message_reactions").delete().eq("message_id", message_id).eq("user_id", user_id).eq("reaction_type", reaction_type).execute()
+            return True
+        except Exception as e:
+            print(f"Error removing reaction: {e}")
+            return False
+
+    def fetch_reactions(self, message_id: str) -> List[Dict[str, Any]]:
+        """Fetch all reactions for a message"""
+        try:
+            response = self.supabase.table("message_reactions").select("*").eq("message_id", message_id).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            print(f"Error fetching reactions: {e}")
+            return []
+
+    def set_typing(self, chat_id: str, user_id: str) -> bool:
+        """Upsert typing indicator for a user in a chat"""
+        try:
+            now = int(time.time() * 1000)
+            existing = self.supabase.table("typing_events").select("id").eq("chat_id", chat_id).eq("user_id", user_id).execute()
+            if existing.data:
+                self.supabase.table("typing_events").update({"updated_at": now}).eq("id", existing.data[0]["id"]).execute()
+            else:
+                self.supabase.table("typing_events").insert({"chat_id": chat_id, "user_id": user_id, "updated_at": now}).execute()
+            return True
+        except Exception as e:
+            print(f"Error setting typing: {e}")
+            return False
+
+    def fetch_typing_users(self, chat_id: str) -> List[str]:
+        """Fetch users currently typing in a chat (within last 3s)"""
+        try:
+            cutoff = int(time.time() * 1000) - 3000
+            response = self.supabase.table("typing_events").select("user_id, updated_at").eq("chat_id", chat_id).gt("updated_at", cutoff).execute()
+            return [row["user_id"] for row in response.data] if response.data else []
+        except Exception as e:
+            print(f"Error fetching typing users: {e}")
+            return []
+
+    def search_messages(self, chat_id: str, query: str) -> List[Dict[str, Any]]:
+        """Search messages in a chat by substring"""
+        try:
+            response = self.supabase.table("messages").select("*").eq("chat_id", chat_id).ilike("content", f"%{query}%").order("created_at", desc=False).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            print(f"Error searching messages: {e}")
+            return []
+
+    def forward_message(self, source_message_id: str, target_chat_id: str, forwarding_user_id: str) -> Optional[Dict[str, Any]]:
+        """Forward an existing message to another chat"""
+        try:
+            src = self.supabase.table("messages").select("*").eq("id", source_message_id).execute()
+            if not src.data:
+                return None
+            original = src.data[0]
+            now = int(time.time() * 1000)
+            new_msg = {
+                "chat_id": target_chat_id,
+                "user_id": forwarding_user_id,
+                "content": original.get("content", ""),
+                "created_at": now,
+                "is_read": False,
+                "status": "sent"
+            }
+            response = self.supabase.table("messages").insert(new_msg).execute()
+            if response.data:
+                self.update_chat_timestamp(target_chat_id)
+                return response.data[0]
+            return None
+        except Exception as e:
+            print(f"Error forwarding message: {e}")
+            return None
+
+    def update_message_status(self, message_id: str, status: str) -> bool:
+        """Update status of a message"""
+        try:
+            self.supabase.table("messages").update({"status": status}).eq("id", message_id).execute()
+            return True
+        except Exception as e:
+            print(f"Error updating message status: {e}")
+            return False

@@ -55,6 +55,36 @@ class ChatApiClient(
     @Serializable
     data class DeleteMessageRequest(val user_id: String)
 
+    @Serializable
+    data class ReactionsResponse(val reactions: List<ReactionApiModel>)
+
+    @Serializable
+    data class ReactionApiModel(
+        val id: String,
+        val message_id: String,
+        val user_id: String,
+        val reaction_type: String,
+        val created_at: Long
+    )
+
+    @Serializable
+    data class AddReactionRequest(val user_id: String, val reaction_type: String)
+
+    @Serializable
+    data class RemoveReactionRequest(val user_id: String, val reaction_type: String)
+
+    @Serializable
+    data class TypingRequest(val user_id: String)
+
+    @Serializable
+    data class StatusUpdateRequest(val status: String)
+
+    @Serializable
+    data class ForwardMessageRequest(val target_chat_id: String, val user_id: String)
+
+    @Serializable
+    data class SearchMessagesResponse(val messages: List<MessageApiModel>)
+
     // API Models (snake_case to match Python API)
     @Serializable
     data class ChatApiModel(
@@ -77,7 +107,7 @@ class ChatApiClient(
         val created_at: Long,
         val updated_at: Long? = null,
         val is_read: Boolean,
-        val user: UserApiModel? = null
+        val status: String? = null
     )
 
     @Serializable
@@ -316,6 +346,131 @@ class ChatApiClient(
         }
     }
 
+    /**
+     * Get reactions for a message
+     */
+    suspend fun getMessageReactions(messageId: String, authToken: String): Result<List<MessageReaction>> {
+        return try {
+            val response = client.get("$baseUrl/api/messages/$messageId/reactions") {
+                header("Authorization", authToken)
+            }
+            if (response.status.value in 200..299) {
+                val reactionsResponse = response.body<ReactionsResponse>()
+                Result.success(reactionsResponse.reactions.map { it.toReaction() })
+            } else Result.failure(Exception("Failed to fetch reactions: ${response.status}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Add a reaction to a message
+     */
+    suspend fun addReaction(messageId: String, userId: String, reactionType: String, authToken: String): Result<MessageReaction> {
+        return try {
+            val response = client.post("$baseUrl/api/messages/$messageId/reactions") {
+                header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
+                setBody(AddReactionRequest(user_id = userId, reaction_type = reactionType))
+            }
+            if (response.status.value in 200..299) {
+                val reactionWrapper = response.body<ReactionResponse>()
+                Result.success(reactionWrapper.reaction.toReaction())
+            } else Result.failure(Exception("Failed to add reaction: ${response.status}"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Remove a reaction from a message
+     */
+    suspend fun removeReaction(messageId: String, userId: String, reactionType: String, authToken: String): Result<Boolean> {
+        return try {
+            val response = client.delete("$baseUrl/api/messages/$messageId/reactions") {
+                header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
+                setBody(RemoveReactionRequest(user_id = userId, reaction_type = reactionType))
+            }
+            Result.success(response.status.value in 200..299)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Set typing status for a chat
+     */
+    suspend fun setTyping(chatId: String, userId: String, authToken: String): Result<Boolean> {
+        return try {
+            val response = client.post("$baseUrl/api/chats/$chatId/typing") {
+                header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
+                setBody(TypingRequest(user_id = userId))
+            }
+            Result.success(response.status.value in 200..299)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    @Serializable
+    data class TypingUsersResponse(val user_ids: List<String>)
+
+    /**
+     * Get list of users currently typing in a chat
+     */
+    suspend fun getTypingUsers(chatId: String, authToken: String): Result<List<String>> {
+        return try {
+            val response = client.get("$baseUrl/api/chats/$chatId/typing") { header("Authorization", authToken) }
+            if (response.status.value in 200..299) {
+                val typingResponse = response.body<TypingUsersResponse>()
+                Result.success(typingResponse.user_ids)
+            } else Result.failure(Exception("Failed to fetch typing users: ${response.status}"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Update the status of a message
+     */
+    suspend fun updateMessageStatus(messageId: String, status: String, authToken: String): Result<Boolean> {
+        return try {
+            val response = client.post("$baseUrl/api/messages/$messageId/status") {
+                header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
+                setBody(StatusUpdateRequest(status = status))
+            }
+            Result.success(response.status.value in 200..299)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Forward a message to another chat
+     */
+    suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String, authToken: String): Result<Message> {
+        return try {
+            val response = client.post("$baseUrl/api/messages/$messageId/forward") {
+                header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
+                setBody(ForwardMessageRequest(target_chat_id = targetChatId, user_id = userId))
+            }
+            if (response.status.value in 200..299) {
+                val msgResponse = response.body<MessageResponse>()
+                Result.success(msgResponse.message.toMessage())
+            } else Result.failure(Exception("Failed to forward message: ${response.status}"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Search messages in a chat
+     */
+    suspend fun searchMessages(chatId: String, query: String, authToken: String): Result<List<Message>> {
+        return try {
+            val response = client.get("$baseUrl/api/chats/$chatId/search") {
+                header("Authorization", authToken)
+                url { parameters.append("q", query) }
+            }
+            if (response.status.value in 200..299) {
+                val searchResponse = response.body<SearchMessagesResponse>()
+                Result.success(searchResponse.messages.map { it.toMessage() })
+            } else Result.failure(Exception("Failed to search messages: ${response.status}"))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     // Extension functions to convert API models to domain models
     private fun ChatApiModel.toChat(): Chat {
         return Chat(
@@ -353,6 +508,14 @@ class ChatApiClient(
         )
     }
 
+    private fun ReactionApiModel.toReaction(): MessageReaction = MessageReaction(
+        id = id,
+        messageId = message_id,
+        userId = user_id,
+        reactionType = reaction_type,
+        createdAt = created_at
+    )
+
     private fun MessageApiModel.toMessage(): Message {
         return Message(
             id = id,
@@ -361,7 +524,8 @@ class ChatApiClient(
             content = content,
             createdAt = created_at,
             updatedAt = updated_at,
-            isRead = is_read
+            isRead = is_read,
+            status = status ?: "sent"
         )
     }
 
@@ -389,5 +553,7 @@ class ChatApiClient(
             shouldContinue = should_continue
         )
     }
-}
 
+    @Serializable
+    data class ReactionResponse(val reaction: ReactionApiModel)
+}

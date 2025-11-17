@@ -436,10 +436,133 @@ def get_chat_participants(chat_id):
         return jsonify({"error": str(e)}), 500
 
 
-# ============== END CHAT API ENDPOINTS ==============
+@app.route('/api/messages/<message_id>/reactions', methods=['GET'])
+def get_message_reactions(message_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        reactions = chat_ops.fetch_reactions(message_id)
+        return jsonify({"reactions": reactions}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/api/messages/<message_id>/reactions', methods=['POST'])
+def add_message_reaction(message_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        reaction_type = data.get('reaction_type')
+        if not user_id or not reaction_type:
+            return jsonify({"error": "user_id and reaction_type required"}), 400
+        reaction = chat_ops.add_reaction(message_id, user_id, reaction_type)
+        if not reaction:
+            return jsonify({"error": "Failed to add reaction"}), 500
+        return jsonify({"reaction": reaction}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/api/messages/<message_id>/reactions', methods=['DELETE'])
+def remove_message_reaction(message_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        reaction_type = data.get('reaction_type')
+        if not user_id or not reaction_type:
+            return jsonify({"error": "user_id and reaction_type required"}), 400
+        success = chat_ops.remove_reaction(message_id, user_id, reaction_type)
+        if not success:
+            return jsonify({"error": "Failed to remove reaction"}), 500
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/api/chats/<chat_id>/typing', methods=['POST'])
+def set_typing(chat_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({"error": "user_id required"}), 400
+        success = chat_ops.set_typing(chat_id, user_id)
+        return jsonify({"success": success}), 200 if success else 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/chats/<chat_id>/typing', methods=['GET'])
+def get_typing_users(chat_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        users = chat_ops.fetch_typing_users(chat_id)
+        return jsonify({"user_ids": users}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/chats/<chat_id>/search', methods=['GET'])
+def search_chat_messages(chat_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        query = request.args.get('q', '')
+        if not query:
+            return jsonify({"messages": []}), 200
+        messages = chat_ops.search_messages(chat_id, query)
+        return jsonify({"messages": messages}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/messages/<message_id>/status', methods=['POST'])
+def update_message_status(message_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        data = request.get_json() or {}
+        status = data.get('status')
+        if status not in ['sending', 'sent', 'delivered', 'read', 'failed']:
+            return jsonify({"error": "Invalid status"}), 400
+        success = chat_ops.update_message_status(message_id, status)
+        return jsonify({"success": success}), 200 if success else 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/messages/<message_id>/forward', methods=['POST'])
+def forward_message(message_id):
+    if not validate(request.headers.get('Authorization', '')):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not chat_ops:
+        return jsonify({"error": "Chat service not configured"}), 500
+    try:
+        data = request.get_json() or {}
+        target_chat_id = data.get('target_chat_id')
+        user_id = data.get('user_id')
+        if not target_chat_id or not user_id:
+            return jsonify({"error": "target_chat_id and user_id required"}), 400
+        forwarded = chat_ops.forward_message(message_id, target_chat_id, user_id)
+        if not forwarded:
+            return jsonify({"error": "Failed to forward message"}), 500
+        return jsonify({"message": forwarded}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     # Run on all network interfaces (0.0.0.0) so iOS simulator can connect

@@ -11,6 +11,7 @@ import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 sealed class ChatListState {
     data object Loading : ChatListState()
@@ -44,8 +45,13 @@ class ChatViewModel(
     private val _messageInput = MutableStateFlow("")
     val messageInput: StateFlow<String> = _messageInput.asStateFlow()
 
+    private val _typingUsers = MutableStateFlow<List<String>>(emptyList())
+    val typingUsers: StateFlow<List<String>> = _typingUsers.asStateFlow()
+
     private var currentChatId: String? = null
     private var realtimeJob: kotlinx.coroutines.Job? = null
+    private var typingPollingJob: kotlinx.coroutines.Job? = null
+    private var lastTypingSent: Long = 0L
 
     // Set the current user
     fun setCurrentUser(userId: String) {
@@ -183,9 +189,77 @@ class ChatViewModel(
         _chatMessagesState.value = ChatMessagesState.Loading
     }
 
+    fun startTypingMonitoring(chatId: String) {
+        typingPollingJob?.cancel()
+        typingPollingJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    val users = chatRepository.getTypingUsers(chatId)
+                    val currentUser = _currentUserId.value
+                    _typingUsers.value = users.filter { it != currentUser }
+                } catch (e: Exception) {
+                    // ignore transient errors
+                }
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
+
+    fun onUserTyping(chatId: String) {
+        val userId = _currentUserId.value ?: return
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (now - lastTypingSent > 800L) { // debounce
+            lastTypingSent = now
+            viewModelScope.launch { chatRepository.setTyping(chatId, userId) }
+        }
+    }
+
+    fun addReaction(messageId: String, reactionType: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            val success = chatRepository.addReaction(messageId, userId, reactionType)
+            if (!success) println("Failed to add reaction")
+        }
+    }
+
+    fun removeReaction(messageId: String, reactionType: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            val success = chatRepository.removeReaction(messageId, userId, reactionType)
+            if (!success) println("Failed to remove reaction")
+        }
+    }
+
+    fun forwardMessage(messageId: String, targetChatId: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            val forwarded = chatRepository.forwardMessage(messageId, targetChatId, userId)
+            if (forwarded == null) println("Failed to forward message")
+        }
+    }
+
+    fun searchMessages(chatId: String, query: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            try {
+                val results = chatRepository.searchMessages(chatId, query)
+                val messagesWithUsers = results.mapNotNull { message ->
+                    val user = chatRepository.getUserById(message.userId)
+                    if (user != null) MessageWithUser(message, user, message.userId == userId) else null
+                }
+                val chatDetails = chatRepository.fetchChatWithDetails(chatId, userId)
+                if (chatDetails != null) {
+                    _chatMessagesState.value = ChatMessagesState.Success(messagesWithUsers, chatDetails)
+                }
+            } catch (e: Exception) {
+                println("Search error: ${e.message}")
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         realtimeJob?.cancel()
+        typingPollingJob?.cancel()
     }
 }
-
