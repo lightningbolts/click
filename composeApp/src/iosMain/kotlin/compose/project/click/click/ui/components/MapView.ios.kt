@@ -39,23 +39,20 @@ actual fun PlatformMap(
             }
 
             val first = pins.firstOrNull() ?: return@UIKitView
-            val clamped = zoom.coerceIn(0.0, 22.0)
-            val spanDelta = when {
-                clamped >= 20 -> 0.002
-                clamped >= 18 -> 0.005
-                clamped >= 16 -> 0.01
-                clamped >= 14 -> 0.02
-                clamped >= 12 -> 0.04
-                clamped >= 10 -> 0.08
-                clamped >= 8 -> 0.16
-                clamped >= 6 -> 0.32
-                clamped >= 4 -> 0.64
-                clamped >= 2 -> 1.28
-                else -> 2.56
-            }
+            val clamped = zoom.coerceIn(2.0, 20.0)
+
+            // Calculate span delta using exponential function for smoother zoom
+            // Formula: span = base^(maxZoom - currentZoom) * scale
+            val spanDelta = kotlin.math.pow(1.5, (20.0 - clamped)) * 0.0001
+
             val span: CValue<MKCoordinateSpan> = MKCoordinateSpanMake(spanDelta, spanDelta)
-            val region = MKCoordinateRegionMake(CLLocationCoordinate2DMake(first.latitude, first.longitude), span)
-            map.setRegion(region, true)
+            val region = MKCoordinateRegionMake(
+                CLLocationCoordinate2DMake(first.latitude, first.longitude),
+                span
+            )
+
+            // Use animated=false to ensure immediate update
+            map.setRegion(region, false)
         }
     )
 }
