@@ -3,27 +3,32 @@ package compose.project.click.click.data.models
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class GeoLocation(
+    val lat: Double,
+    val lon: Double
+)
+
+@Serializable
 data class User(
     val id: String,
-    val name: String,
-    val email: String,
+    val name: String? = null,
+    val email: String? = null,
     val image: String? = null,
-    val shareKey: Long = 0,
+    val createdAt: Long,
+    val lastPolled: Long? = null,
     val connections: List<String> = emptyList(),
-    val createdAt: Long
+    val paired_with: List<String> = emptyList(),
+    val connection_today: Int = -1,
+    val last_paired: Long? = null
 )
 
 @Serializable
 data class Message(
     val id: String,
-    val chatId: String,
-    val userId: String,
+    val user_id: String,
     val content: String,
-    val createdAt: Long,
-    val updatedAt: Long? = null,
-    val isRead: Boolean = false,
-    val status: String = "sent",
-    val reactions: List<MessageReaction> = emptyList()
+    val timeCreated: Long,
+    val timeEdited: Long? = null
 )
 
 @Serializable
@@ -36,23 +41,29 @@ data class MessageReaction(
 )
 
 @Serializable
-data class Connection(
-    val id: String,
-    val user1Id: String,
-    val user2Id: String,
-    val chatId: String,
-    val location: String? = null,
-    val created: Long,
-    val expiry: Long? = null,
-    val shouldContinue: Boolean = false
+data class Chat(
+    val messages: List<Message> = emptyList()
 )
 
+/**
+ * Represents a connection between two users.
+ * Matches the Python schema.py Connection class.
+ */
 @Serializable
-data class Chat(
+data class Connection(
     val id: String,
-    val connectionId: String,
-    val createdAt: Long,
-    val updatedAt: Long
+    val created: Long,
+    val expiry: Long,
+    // Geographic location as lat/lon coordinate pair
+    val geo_location: GeoLocation,
+    // Full JSON object from semantic location lookup (e.g., from Nominatim)
+    val full_location: Map<String, String>? = null,
+    // Display name from the semantic location lookup (e.g., "Red Square")
+    val semantic_location: String? = null,
+    val user_ids: List<String>,
+    val chat: Chat = Chat(),
+    val should_continue: List<Boolean> = listOf(false, false),
+    val has_begun: Boolean = false
 )
 
 // UI models for chat functionality

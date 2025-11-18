@@ -23,6 +23,8 @@ actual fun PlatformMap(
             map.showsScale = false
             map.zoomEnabled = true
             map.scrollEnabled = true
+            map.showsUserLocation = true
+            map.userTrackingMode = MKUserTrackingModeFollow
             map
         },
         modifier = modifier,

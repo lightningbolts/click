@@ -93,12 +93,12 @@ class ChatViewModel(
 
                 // Get user details for each message
                 val messagesWithUsers = messages.mapNotNull { message ->
-                    val user = chatRepository.getUserById(message.userId)
+                    val user = chatRepository.getUserById(message.user_id)
                     if (user != null) {
                         MessageWithUser(
                             message = message,
                             user = user,
-                            isSent = message.userId == userId
+                            isSent = message.user_id == userId
                         )
                     } else null
                 }
@@ -124,12 +124,12 @@ class ChatViewModel(
                 chatRepository.subscribeToMessages(chatId)
                     .collect { message ->
                         // Get user for the new message
-                        val user = chatRepository.getUserById(message.userId)
+                        val user = chatRepository.getUserById(message.user_id)
                         if (user != null) {
                             val messageWithUser = MessageWithUser(
                                 message = message,
                                 user = user,
-                                isSent = message.userId == userId
+                                isSent = message.user_id == userId
                             )
 
                             // Update state with new message
@@ -244,8 +244,8 @@ class ChatViewModel(
             try {
                 val results = chatRepository.searchMessages(chatId, query)
                 val messagesWithUsers = results.mapNotNull { message ->
-                    val user = chatRepository.getUserById(message.userId)
-                    if (user != null) MessageWithUser(message, user, message.userId == userId) else null
+                    val user = chatRepository.getUserById(message.user_id)
+                    if (user != null) MessageWithUser(message, user, message.user_id == userId) else null
                 }
                 val chatDetails = chatRepository.fetchChatWithDetails(chatId, userId)
                 if (chatDetails != null) {

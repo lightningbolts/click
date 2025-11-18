@@ -87,17 +87,15 @@ class SupabaseRepository {
 
     suspend fun fetchUserConnections(userId: String): List<Connection> {
         return try {
-            val result = supabase.from("connections")
-                .select {
-                    filter {
-                        or {
-                            eq("user1Id", userId)
-                            eq("user2Id", userId)
-                        }
-                    }
-                }
+            // For now, fetch all connections and filter in-memory
+            // TODO: Update with proper PostgreSQL array query when supabase-kt supports it
+            val allConnections = supabase.from("connections")
+                .select()
                 .decodeList<Connection>()
-            result
+
+            allConnections.filter { connection ->
+                connection.user_ids.contains(userId)
+            }
         } catch (e: Exception) {
             println("Error fetching user connections: ${e.message}")
             emptyList()

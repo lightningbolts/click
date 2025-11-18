@@ -172,10 +172,10 @@ fun ConnectionsListView(
                             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(state.chats, key = { it.chat.id }) { chatDetails ->
+                            items(state.chats, key = { it.connection.id }) { chatDetails ->
                                 ConnectionItem(
                                     chatDetails = chatDetails,
-                                    onClick = { onChatSelected(chatDetails.chat.id) }
+                                    onClick = { onChatSelected(chatDetails.connection.id) }
                                 )
                                 if (chatDetails != state.chats.last()) {
                                     HorizontalDivider(
@@ -198,7 +198,7 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
     val user = chatDetails.otherUser
     val lastMessage = chatDetails.lastMessage
     val unreadCount = chatDetails.unreadCount
-    val timeText = lastMessage?.let { formatTimestamp(it.createdAt) } ?: "No messages"
+    val timeText = lastMessage?.let { formatTimestamp(it.timeCreated) } ?: "No messages"
 
     AdaptiveCard(
         modifier = Modifier.fillMaxWidth(),
@@ -227,7 +227,7 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        user.name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                        user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge
@@ -244,7 +244,7 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        user.name,
+                        user.name ?: "Unknown",
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -428,7 +428,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        chatDetails.otherUser.name.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                        chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -438,13 +438,13 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        chatDetails.otherUser.name,
+                                        chatDetails.otherUser.name ?: "Unknown",
                                         fontWeight = FontWeight.SemiBold,
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        chatDetails.otherUser.email,
+                                        chatDetails.otherUser.email ?: "",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -530,12 +530,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     messageWithUser = messageWithUser,
                                     currentUserId = viewModel.currentUserId.collectAsState().value,
                                     onToggleReaction = { reaction ->
-                                        val uid = viewModel.currentUserId.value
-                                        if (uid != null) {
-                                            val hasReaction = messageWithUser.message.reactions.any { it.reactionType == reaction && it.userId == uid }
-                                            if (hasReaction) viewModel.removeReaction(messageWithUser.message.id, reaction)
-                                            else viewModel.addReaction(messageWithUser.message.id, reaction)
-                                        }
+                                        // TODO: Re-implement reactions with separate table
+                                        // Reactions removed temporarily since Message model was updated
                                     },
                                     onForward = { msgId ->
                                         forwardMessageId = msgId
@@ -640,13 +636,13 @@ private fun ForwardDialog(
         text = {
             when (chatListState) {
                 is ChatListState.Success -> {
-                    val options = chatListState.chats.filter { it.chat.id != currentChatId }
+                    val options = chatListState.chats.filter { it.connection.id != currentChatId }
                     if (options.isEmpty()) Text("No other chats available")
                     else LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                        items(options, key = { it.chat.id }) { item ->
+                        items(options, key = { it.connection.id }) { item ->
                             ListItem(
-                                headlineContent = { Text(item.otherUser.name) },
-                                supportingContent = { Text(item.otherUser.email) },
+                                headlineContent = { Text(item.otherUser.name ?: "Unknown") },
+                                supportingContent = { Text(item.otherUser.email ?: "") },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
@@ -654,7 +650,7 @@ private fun ForwardDialog(
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .padding(8.dp)
                                     .clickable {
-                                        onSelect(item.chat.id)
+                                        onSelect(item.connection.id)
                                     }
                             )
                         }
@@ -680,7 +676,8 @@ fun ChatMessageBubble(
     val message = messageWithUser.message
     val isSent = messageWithUser.isSent
 
-    val grouped = remember(message.reactions) { message.reactions.groupBy { it.reactionType } }
+    // TODO: Re-implement reactions with separate table
+    val grouped = emptyMap<String, List<Any>>()
     val commonReactions = listOf("👍", "❤️", "😂")
 
     Row(
@@ -709,53 +706,21 @@ fun ChatMessageBubble(
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            formatMessageTime(message.createdAt),
+                            formatMessageTime(message.timeCreated),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        // Message status (simple): ✓ (sent), ✓✓ (delivered/read)
-                        if (isSent) {
-                            Spacer(Modifier.width(6.dp))
-                            val status = message.status.lowercase()
-                            val double = (status == "delivered" || status == "read" || message.isRead)
-                            Text(
-                                text = if (double) "✓✓" else "✓",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        // TODO: Add message status back when we have that in the schema
                     }
                 }
             }
 
-            // Reactions row
+            // Actions row (reactions temporarily disabled)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(top = 4.dp)
             ) {
-                // Existing aggregated reactions
-                grouped.forEach { (emoji, list) ->
-                    AssistChip(
-                        onClick = { onToggleReaction(emoji) },
-                        label = { Text("$emoji ${list.size}") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                }
-                // Quick add reactions
-                commonReactions.forEach { emoji ->
-                    if (!grouped.containsKey(emoji)) {
-                        AssistChip(
-                            onClick = { onToggleReaction(emoji) },
-                            label = { Text(emoji) },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        )
-                    }
-                }
                 // Forward action
                 TextButton(onClick = { onForward(message.id) }) { Text("Forward") }
             }

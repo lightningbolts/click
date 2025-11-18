@@ -47,7 +47,10 @@ actual fun PlatformMap(
             webView.settings.javaScriptEnabled = true
             webView.settings.domStorageEnabled = true
             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-            webView.webChromeClient = WebChromeClient()
+            webView.settings.builtInZoomControls = true
+            webView.settings.displayZoomControls = false
+            webView.settings.setSupportZoom(true)
+            webView.webChromeClient = object : WebChromeClient() {}
 
             val bridge = MapJsBridge { index ->
                 if (index in pins.indices) {
@@ -105,8 +108,9 @@ private fun htmlForPins(pins: List<MapPin>, zoom: Double): String {
             <link href=\"https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css\" rel=\"stylesheet\" />
             <style>
               html, body, #map { height:100%; width:100%; margin:0; padding:0; }
-              .marker { width: 20px; height: 20px; border-radius: 50%; background: #1e88e5; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
-              .marker.nearby { background: #42a5f5; }
+              .marker { width: 20px; height: 20px; border-radius: 50%; background: ${"#1e88e5"}; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.25); }
+              .marker.nearby { background: ${"#42a5f5"}; }
+              .mapboxgl-ctrl-group { box-shadow: 0 2px 8px rgba(0,0,0,0.12); border-radius: 12px; overflow: hidden; }
             </style>
           </head>
           <body>
@@ -122,12 +126,16 @@ private fun htmlForPins(pins: List<MapPin>, zoom: Double): String {
                 minZoom: 0,
                 maxZoom: 22
               });
-              map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
-              // Double-tap to zoom in
-              map.on('dblclick', (e) => {
-                const nz = Math.min(map.getZoom() + 1, 22);
-                map.easeTo({ center: e.lngLat, zoom: nz });
-              });
+              map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                  const user = [pos.coords.longitude, pos.coords.latitude];
+                  const el = document.createElement('div');
+                  el.className = 'marker nearby';
+                  new maplibregl.Marker({ element: el }).setLngLat(user).addTo(map);
+                });
+              }
 
               map.on('load', () => {
                 pins.forEach(p => {

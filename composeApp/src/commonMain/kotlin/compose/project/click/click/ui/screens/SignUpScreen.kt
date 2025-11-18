@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.theme.*
+import androidx.compose.ui.zIndex
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,26 +72,22 @@ fun SignUpScreen(
                 )
             )
     ) {
-        // Back Button - Positioned absolutely at top left
-        Surface(
+        // Back Button - Positioned absolutely at top left with proper clickable surface
+        IconButton(
+            onClick = onLoginClick,
             modifier = Modifier
                 .padding(start = 16.dp, top = topInset + 8.dp)
+                .align(Alignment.TopStart)
+                .size(48.dp)
                 .shadow(2.dp, CircleShape)
-                .align(Alignment.TopStart),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp
+                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                .zIndex(2f)
         ) {
-            IconButton(
-                onClick = onLoginClick,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to Login",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back to Login",
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
 
         // Main Content
@@ -469,4 +466,3 @@ fun SignUpScreen(
         }
     }
 }
-

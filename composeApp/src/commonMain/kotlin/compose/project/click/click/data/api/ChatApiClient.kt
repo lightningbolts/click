@@ -119,15 +119,22 @@ class ChatApiClient(
     )
 
     @Serializable
+    data class GeoLocationApi(
+        val lat: Double,
+        val lon: Double
+    )
+
+    @Serializable
     data class ConnectionApiModel(
         val id: String,
-        val user1_id: String,
-        val user2_id: String,
-        val chat_id: String? = null,
-        val location: String? = null,
+        val user_ids: List<String>,
+        val geo_location: GeoLocationApi,
+        val full_location: Map<String, String>? = null,
+        val semantic_location: String? = null,
         val created: Long,
         val expiry: Long,
-        val should_continue: Boolean = false
+        val should_continue: List<Boolean> = listOf(false, false),
+        val has_begun: Boolean = false
     )
 
     /**
@@ -163,7 +170,7 @@ class ChatApiClient(
 
             if (response.status.value in 200..299) {
                 val chatResponse = response.body<ChatResponse>()
-                Result.success(chatResponse.chat.toChat())
+                Result.success(Chat(messages = emptyList())) // Chat structure simplified
             } else {
                 Result.failure(Exception("Failed to fetch chat: ${response.status}"))
             }
@@ -311,7 +318,7 @@ class ChatApiClient(
 
             if (response.status.value in 200..299) {
                 val chatResponse = response.body<ChatResponse>()
-                Result.success(chatResponse.chat.toChat())
+                Result.success(Chat(messages = emptyList())) // Chat structure simplified
             } else {
                 Result.failure(Exception("Failed to fetch chat for connection: ${response.status}"))
             }
@@ -472,36 +479,31 @@ class ChatApiClient(
     }
 
     // Extension functions to convert API models to domain models
-    private fun ChatApiModel.toChat(): Chat {
-        return Chat(
-            id = id,
-            connectionId = connection_id,
-            createdAt = created_at,
-            updatedAt = updated_at
-        )
-    }
-
     private fun ChatApiModel.toChatWithDetails(): ChatWithDetails {
         return ChatWithDetails(
-            chat = toChat(),
+            chat = Chat(messages = emptyList()),
             connection = connection?.toConnection() ?: Connection(
                 id = connection_id,
-                user1Id = "",
-                user2Id = "",
-                chatId = id,
-                location = null,
+                user_ids = emptyList(),
+                geo_location = compose.project.click.click.data.models.GeoLocation(0.0, 0.0),
+                full_location = null,
+                semantic_location = null,
                 created = created_at,
                 expiry = created_at + 86400000,
-                shouldContinue = false
+                should_continue = listOf(false, false),
+                has_begun = false
             ),
             otherUser = other_user?.toUser() ?: User(
                 id = "",
                 name = "Unknown",
                 email = "",
                 image = null,
-                shareKey = 0,
+                createdAt = 0,
+                lastPolled = null,
                 connections = emptyList(),
-                createdAt = 0
+                paired_with = emptyList(),
+                connection_today = -1,
+                last_paired = null
             ),
             lastMessage = last_message?.toMessage(),
             unreadCount = unread_count
@@ -519,13 +521,10 @@ class ChatApiClient(
     private fun MessageApiModel.toMessage(): Message {
         return Message(
             id = id,
-            chatId = chat_id,
-            userId = user_id,
+            user_id = user_id,
             content = content,
-            createdAt = created_at,
-            updatedAt = updated_at,
-            isRead = is_read,
-            status = status ?: "sent"
+            timeCreated = created_at,
+            timeEdited = updated_at
         )
     }
 
@@ -535,22 +534,29 @@ class ChatApiClient(
             name = name,
             email = email,
             image = image,
-            shareKey = 0,
+            createdAt = 0,
+            lastPolled = null,
             connections = emptyList(),
-            createdAt = 0
+            paired_with = emptyList(),
+            connection_today = -1,
+            last_paired = null
         )
     }
 
     private fun ConnectionApiModel.toConnection(): Connection {
         return Connection(
             id = id,
-            user1Id = user1_id,
-            user2Id = user2_id,
-            chatId = chat_id ?: "",
-            location = location,
+            user_ids = user_ids,
+            geo_location = compose.project.click.click.data.models.GeoLocation(
+                lat = geo_location.lat,
+                lon = geo_location.lon
+            ),
+            full_location = full_location,
+            semantic_location = semantic_location,
             created = created,
             expiry = expiry,
-            shouldContinue = should_continue
+            should_continue = should_continue,
+            has_begun = has_begun
         )
     }
 

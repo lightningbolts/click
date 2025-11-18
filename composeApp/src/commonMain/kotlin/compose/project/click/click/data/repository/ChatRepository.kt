@@ -45,11 +45,8 @@ class ChatRepository(
                 println("Error fetching messages: ${it.message}")
                 emptyList()
             }
-            // Fetch reactions for each message
-            baseMessages.map { msg ->
-                val reactions = apiClient.getMessageReactions(msg.id, authToken).getOrElse { emptyList() }
-                msg.copy(reactions = reactions)
-            }
+            // Return messages as-is (reactions will be fetched separately if needed)
+            baseMessages
         } catch (e: Exception) {
             println("Error fetching messages: ${e.message}")
             emptyList()
@@ -120,7 +117,7 @@ class ChatRepository(
             val authToken = tokenStorage.getJwt() ?: return null
             val result = apiClient.getUserChats(currentUserId, authToken)
             result.getOrElse { emptyList() }
-                .firstOrNull { it.chat.id == chatId }
+                .firstOrNull { it.connection.id == chatId }
         } catch (e: Exception) {
             println("Error fetching chat with details: ${e.message}")
             null
