@@ -133,15 +133,17 @@ fun MapScreen(
                         }
                         is MapState.Success -> {
                             val locations = remember(state.connections) { state.connections.mapNotNull { parseConnectionLocation(it) } }
-                            val pins = remember(locations) { locations.map { MapPin(it.name, it.latitude, it.longitude, true) } }
+                            val pins = remember(locations, zoom) { locations.map { MapPin(it.name, it.latitude, it.longitude, true) } }
 
-                            // Platform map
-                            PlatformMap(
-                                modifier = Modifier.fillMaxSize(),
-                                pins = pins,
-                                zoom = zoom,
-                                onPinTapped = { }
-                            )
+                            // Platform map - key includes zoom to force recomposition
+                            key(zoom) {
+                                PlatformMap(
+                                    modifier = Modifier.fillMaxSize(),
+                                    pins = pins,
+                                    zoom = zoom,
+                                    onPinTapped = { }
+                                )
+                            }
 
                             // Zoom controls styled to match app theme
                             Column(

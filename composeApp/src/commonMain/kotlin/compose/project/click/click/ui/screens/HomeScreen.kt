@@ -3,6 +3,7 @@ package compose.project.click.click.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -27,124 +28,245 @@ import compose.project.click.click.ui.components.StatCard
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
+import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.viewmodel.HomeViewModel
+import compose.project.click.click.viewmodel.HomeState
+import compose.project.click.click.data.models.Connection
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    viewModel: HomeViewModel = viewModel { HomeViewModel() }
+) {
+    val homeState by viewModel.homeState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadHomeData()
+    }
+
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
-    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
-                PageHeader(title = "Home", subtitle = "Who are you clicking with today?")
-            }
-            Spacer(modifier = Modifier.height(6.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                item {
-                    // Online Friends - Click Prompts using AdaptiveCard
-                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    Icons.Filled.Phone,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        when (val state = homeState) {
+            is HomeState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            is HomeState.Error -> {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.ErrorOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Error loading home data",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Text(
+                        state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { viewModel.refresh() }) {
+                        Text("Retry")
+                    }
+                }
+            }
+            is HomeState.Success -> {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
+                        PageHeader(
+                            title = "Home",
+                            subtitle = "Welcome back, ${state.user.name ?: "User"}!"
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        // Recent Connections Section
+                        if (state.stats.recentConnections.isNotEmpty()) {
+                            item {
                                 Text(
-                                    "Online Friends",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    "Recent Connections",
+                                    style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
 
-                            // Online friends list
-                            OnlineFriendItem("Alice", "Available to click!")
-                            OnlineFriendItem("Charlie", "Free now")
-                            OnlineFriendItem("Diana", "Let's connect!")
+                            items(state.stats.recentConnections) { connection ->
+                                ConnectionCard(connection, state.user.id)
+                            }
+                        } else {
+                            item {
+                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(
+                                        modifier = Modifier.padding(32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.TouchApp,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(48.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            "No Connections Yet",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "Start making connections by tapping Add Click",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Your Stats",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        item {
+                            // Stats Grid
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                StatCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.Check,
+                                    value = state.stats.totalConnections.toString(),
+                                    label = "Total Clicks"
+                                )
+                                StatCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.LocationOn,
+                                    value = state.stats.uniqueLocations.toString(),
+                                    label = "Locations"
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+}
 
-                item {
-                    // Recent Clicks Section
+@Composable
+private fun ConnectionCard(connection: Connection, currentUserId: String) {
+    // Get the other user's ID
+    val otherUserId = connection.user_ids.firstOrNull { it != currentUserId }
+
+    val instant = Instant.fromEpochMilliseconds(connection.created)
+    val now = kotlinx.datetime.Clock.System.now()
+    val duration = (now.toEpochMilliseconds() - connection.created).milliseconds
+
+    val timeAgo = when {
+        duration.inWholeMinutes < 1 -> "Just now"
+        duration.inWholeMinutes < 60 -> "${duration.inWholeMinutes}m ago"
+        duration.inWholeHours < 24 -> "${duration.inWholeHours}h ago"
+        duration.inWholeDays < 7 -> "${duration.inWholeDays}d ago"
+        else -> {
+            val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+            "${dateTime.month.name.take(3)} ${dateTime.dayOfMonth}"
+        }
+    }
+
+    AdaptiveCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = { /* Navigate to connection details */ }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(PrimaryBlue, LightBlue)
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Content
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    connection.semantic_location ?: "Connection",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.AccessTime,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        "Recent Clicks",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        timeAgo,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-
-                items(3) { index ->
-                    RecentClickCard(
-                        name = listOf("Alice", "Charlie", "Diana")[index],
-                        time = listOf("2h ago", "Yesterday", "3d ago")[index],
-                        location = listOf("Coffee Shop", "Park", "Downtown")[index]
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Your Stats",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                item {
-                    // Stats Grid
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Filled.Check,
-                            value = "47",
-                            label = "Total Clicks"
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Filled.DateRange,
-                            value = "12",
-                            label = "This Week"
-                        )
-                    }
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Filled.LocationOn,
-                            value = "8",
-                            label = "Locations"
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Filled.Person,
-                            value = "15",
-                            label = "Connections"
-                        )
-                    }
                 }
             }
+
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = "View details",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -1,6 +1,7 @@
 package compose.project.click.click.data.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 @Serializable
 data class GeoLocation(
@@ -14,7 +15,9 @@ data class User(
     val name: String? = null,
     val email: String? = null,
     val image: String? = null,
+    @SerialName("created_at")
     val createdAt: Long,
+    @SerialName("last_polled")
     val lastPolled: Long? = null,
     val connections: List<String> = emptyList(),
     val paired_with: List<String> = emptyList(),
@@ -27,16 +30,22 @@ data class Message(
     val id: String,
     val user_id: String,
     val content: String,
+    @SerialName("time_created")
     val timeCreated: Long,
+    @SerialName("time_edited")
     val timeEdited: Long? = null
 )
 
 @Serializable
 data class MessageReaction(
     val id: String,
+    @SerialName("message_id")
     val messageId: String,
+    @SerialName("user_id")
     val userId: String,
+    @SerialName("reaction_type")
     val reactionType: String,
+    @SerialName("created_at")
     val createdAt: Long
 )
 
