@@ -187,9 +187,85 @@ CREATE TRIGGER trigger_create_chat_for_connection
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE chats;
 
+-- Add message status column (if not exists)
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'sent';
+CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status);
+
+-- Message reactions table
+CREATE TABLE IF NOT EXISTS message_reactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reaction_type VARCHAR(50) NOT NULL,
+    created_at BIGINT NOT NULL,
+    CONSTRAINT unique_reaction UNIQUE(message_id, user_id, reaction_type)
+);
+CREATE INDEX IF NOT EXISTS idx_reactions_message ON message_reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_reactions_user ON message_reactions(user_id);
+
+-- Typing events table (ephemeral typing indicators)
+CREATE TABLE IF NOT EXISTS typing_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    updated_at BIGINT NOT NULL,
+    CONSTRAINT unique_typing UNIQUE(chat_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_typing_chat ON typing_events(chat_id);
+CREATE INDEX IF NOT EXISTS idx_typing_updated ON typing_events(updated_at);
+
+-- RLS Policies for reactions
+ALTER TABLE message_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "Users can view reactions in their chats" ON message_reactions FOR SELECT USING (
+    message_id IN (
+        SELECT m.id FROM messages m
+        JOIN chats c ON m.chat_id = c.id
+        JOIN connections conn ON c.connection_id = conn.id
+        WHERE conn.user1_id = auth.uid() OR conn.user2_id = auth.uid()
+    )
+);
+CREATE POLICY IF NOT EXISTS "Users can add reactions to their chat messages" ON message_reactions FOR INSERT WITH CHECK (
+    user_id = auth.uid() AND message_id IN (
+        SELECT m.id FROM messages m
+        JOIN chats c ON m.chat_id = c.id
+        JOIN connections conn ON c.connection_id = conn.id
+        WHERE conn.user1_id = auth.uid() OR conn.user2_id = auth.uid()
+    )
+);
+CREATE POLICY IF NOT EXISTS "Users can remove their own reactions" ON message_reactions FOR DELETE USING (user_id = auth.uid());
+
+-- RLS Policies for typing events
+ALTER TABLE typing_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "Users can view typing events in their chats" ON typing_events FOR SELECT USING (
+    chat_id IN (
+        SELECT c.id FROM chats c
+        JOIN connections conn ON c.connection_id = conn.id
+        WHERE conn.user1_id = auth.uid() OR conn.user2_id = auth.uid()
+    )
+);
+CREATE POLICY IF NOT EXISTS "Users can create typing events in their chats" ON typing_events FOR INSERT WITH CHECK (
+    user_id = auth.uid() AND chat_id IN (
+        SELECT c.id FROM chats c
+        JOIN connections conn ON c.connection_id = conn.id
+        WHERE conn.user1_id = auth.uid() OR conn.user2_id = auth.uid()
+    )
+);
+CREATE POLICY IF NOT EXISTS "Users can update typing events in their chats" ON typing_events FOR UPDATE USING (
+    user_id = auth.uid() AND chat_id IN (
+        SELECT c.id FROM chats c
+        JOIN connections conn ON c.connection_id = conn.id
+        WHERE conn.user1_id = auth.uid() OR conn.user2_id = auth.uid()
+    )
+);
+
+-- Enable realtime for new tables
+ALTER PUBLICATION supabase_realtime ADD TABLE message_reactions;
+ALTER PUBLICATION supabase_realtime ADD TABLE typing_events;
+
 -- Grant permissions
 GRANT ALL ON users TO authenticated;
 GRANT ALL ON connections TO authenticated;
 GRANT ALL ON chats TO authenticated;
 GRANT ALL ON messages TO authenticated;
-
+GRANT ALL ON message_reactions TO authenticated;
+GRANT ALL ON typing_events TO authenticated;

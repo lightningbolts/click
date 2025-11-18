@@ -75,10 +75,11 @@ class Api(initialToken: String, initialRefresh: String) {
             parameter("email", email)
         }
         while (response.status.value == 401) {
-            if (!refreshToken()) return null
+            if (!refreshToken(email)) return null
             response = client.get(baseUrl + "poll/") {
                 parameter("id", id)
                 headers.append("Authorization", token)
+                parameter("email", email)
             }
         }
         if (response.status.value == 200) {
@@ -93,9 +94,10 @@ class Api(initialToken: String, initialRefresh: String) {
             parameter("email", email)
         }
         while (response.status.value == 401) {
-            if (!refreshToken()) return null
+            if (!refreshToken(email)) return null
             response = client.get(baseUrl + "user/$name") {
                 headers.append("Authorization", token)
+                parameter("email", email)
             }
         }
         if (response.status.value == 200) {
@@ -107,11 +109,13 @@ class Api(initialToken: String, initialRefresh: String) {
     suspend fun userByEmail(email: String): User? {
         var response = client.get(baseUrl + "user_with_email/$email") {
             headers.append("Authorization", token)
+            parameter("email", email)
         }
         while (response.status.value == 401) {
-            if (!refreshToken()) return null
+            if (!refreshToken(email)) return null
             response = client.get(baseUrl + "user_with_email/$email") {
                 headers.append("Authorization", token)
+                parameter("email", email)
             }
         }
 
@@ -129,9 +133,10 @@ class Api(initialToken: String, initialRefresh: String) {
             setBody(Json.encodeToString(ids))
         }
         while (response.status.value == 401) {
-            if (!refreshToken()) return null
+            if (!refreshToken(email)) return null
             response = client.post(baseUrl + "connections/") {
                 headers.append("Authorization", token)
+                parameter("email", email)
                 contentType(ContentType.Application.Json)
                 setBody(Json.encodeToString(ids))
             }
@@ -152,7 +157,7 @@ class Api(initialToken: String, initialRefresh: String) {
             parameter("email", email)
         }
         while (response.status.value == 401) {
-            if (!refreshToken()) return null
+            if (!refreshToken(email)) return null
             response = client.post(baseUrl + "connections/new") {
                 headers.append("Authorization", token)
                 parameter("id1", id1)

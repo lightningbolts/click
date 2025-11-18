@@ -21,7 +21,18 @@ data class Message(
     val content: String,
     val createdAt: Long,
     val updatedAt: Long? = null,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    val status: String = "sent",
+    val reactions: List<MessageReaction> = emptyList()
+)
+
+@Serializable
+data class MessageReaction(
+    val id: String,
+    val messageId: String,
+    val userId: String,
+    val reactionType: String,
+    val createdAt: Long
 )
 
 @Serializable
@@ -58,4 +69,3 @@ data class MessageWithUser(
     val user: User,
     val isSent: Boolean
 )
-

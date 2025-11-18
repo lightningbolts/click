@@ -41,9 +41,14 @@ class ChatRepository(
         return try {
             val authToken = tokenStorage.getJwt() ?: return emptyList()
             val result = apiClient.getChatMessages(chatId, authToken)
-            result.getOrElse {
+            val baseMessages = result.getOrElse {
                 println("Error fetching messages: ${it.message}")
                 emptyList()
+            }
+            // Fetch reactions for each message
+            baseMessages.map { msg ->
+                val reactions = apiClient.getMessageReactions(msg.id, authToken).getOrElse { emptyList() }
+                msg.copy(reactions = reactions)
             }
         } catch (e: Exception) {
             println("Error fetching messages: ${e.message}")
@@ -164,5 +169,53 @@ class ChatRepository(
             false
         }
     }
-}
 
+    suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return false
+            apiClient.addReaction(messageId, userId, reactionType, authToken).isSuccess
+        } catch (e: Exception) { println("Error adding reaction: ${e.message}"); false }
+    }
+
+    suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return false
+            apiClient.removeReaction(messageId, userId, reactionType, authToken).getOrElse { false }
+        } catch (e: Exception) { println("Error removing reaction: ${e.message}"); false }
+    }
+
+    suspend fun setTyping(chatId: String, userId: String) {
+        try {
+            val authToken = tokenStorage.getJwt() ?: return
+            apiClient.setTyping(chatId, userId, authToken)
+        } catch (e: Exception) { println("Error setting typing: ${e.message}") }
+    }
+
+    suspend fun getTypingUsers(chatId: String): List<String> {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return emptyList()
+            apiClient.getTypingUsers(chatId, authToken).getOrElse { emptyList() }
+        } catch (e: Exception) { println("Error getting typing users: ${e.message}"); emptyList() }
+    }
+
+    suspend fun updateMessageStatus(messageId: String, status: String): Boolean {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return false
+            apiClient.updateMessageStatus(messageId, status, authToken).getOrElse { false }
+        } catch (e: Exception) { println("Error updating status: ${e.message}"); false }
+    }
+
+    suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message? {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return null
+            apiClient.forwardMessage(messageId, targetChatId, userId, authToken).getOrElse { null }
+        } catch (e: Exception) { println("Error forwarding message: ${e.message}"); null }
+    }
+
+    suspend fun searchMessages(chatId: String, query: String): List<Message> {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return emptyList()
+            apiClient.searchMessages(chatId, query, authToken).getOrElse { emptyList() }
+        } catch (e: Exception) { println("Error searching messages: ${e.message}"); emptyList() }
+    }
+}
