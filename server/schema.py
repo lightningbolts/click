@@ -1,3 +1,4 @@
+import datetime
 import random
 import time
 import uuid
@@ -15,12 +16,13 @@ class User:
         self.name = name
         self.email = email
         self.image = image
-        self.createdAt = time.time()
+        self.createdAt = datetime.datetime.now().__str__()
         self.lastPolled = self.createdAt
         self.connections = []
         self.paired_with = []
         self.connection_today = -1
         self.last_paired = self.createdAt
+        self.lastSignedIn = self.createdAt
 
 class Message:
     def __init__(self, userid:str, content:str, timeEdited:float, setup_dict=None):
