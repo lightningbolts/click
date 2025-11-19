@@ -1,8 +1,6 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -18,8 +16,6 @@ import platform.MapKit.MKUserTrackingModeNone
 import kotlin.collections.filterIsInstance
 import kotlin.math.pow
 
-private data class RegionSnapshot(val lat: Double, val lon: Double, val meters: Double)
-
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun PlatformMap(
@@ -28,8 +24,6 @@ actual fun PlatformMap(
     zoom: Double,
     onPinTapped: (MapPin) -> Unit
 ) {
-    val lastRegion = remember { mutableStateOf<RegionSnapshot?>(null) }
-
     UIKitView(
         modifier = modifier,
         factory = {
@@ -57,19 +51,11 @@ actual fun PlatformMap(
                 map.addAnnotation(ann)
             }
 
-            // Update map region
+            // Update map region based on zoom
             val target = pins.firstOrNull()
-            if (target == null) {
-                lastRegion.value = null
-                return@UIKitView
-            }
-
-            val clampedZoom = zoom.coerceIn(2.0, 20.0)
-            val meters = metersForZoom(clampedZoom)
-            val snapshot = RegionSnapshot(target.latitude, target.longitude, meters)
-
-            if (lastRegion.value != snapshot) {
-                lastRegion.value = snapshot
+            if (target != null) {
+                val clampedZoom = zoom.coerceIn(2.0, 20.0)
+                val meters = metersForZoom(clampedZoom)
                 val center = CLLocationCoordinate2DMake(target.latitude, target.longitude)
                 val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
                 map.setRegion(map.regionThatFits(region), true)

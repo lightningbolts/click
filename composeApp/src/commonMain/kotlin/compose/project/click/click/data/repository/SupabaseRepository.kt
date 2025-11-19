@@ -17,15 +17,19 @@ class SupabaseRepository {
      */
     suspend fun fetchUserById(userId: String): User? {
         return try {
-            supabase.from("users")
+            println("Fetching user with ID: $userId")
+            val users = supabase.from("users")
                 .select {
                     filter {
                         eq("id", userId)
                     }
                 }
-                .decodeSingle<User>()
+                .decodeList<User>()
+            println("Found ${users.size} user(s)")
+            users.firstOrNull()
         } catch (e: Exception) {
-            println("Error fetching user: ${e.message}")
+            println("Error fetching user by ID '$userId': ${e.message}")
+            e.printStackTrace()
             null
         }
     }
@@ -55,13 +59,14 @@ class SupabaseRepository {
      */
     suspend fun fetchConnectionById(connectionId: String): Connection? {
         return try {
-            supabase.from("connections")
+            val connections = supabase.from("connections")
                 .select {
                     filter {
                         eq("id", connectionId)
                     }
                 }
-                .decodeSingle<Connection>()
+                .decodeList<Connection>()
+            connections.firstOrNull()
         } catch (e: Exception) {
             println("Error fetching connection: ${e.message}")
             null
