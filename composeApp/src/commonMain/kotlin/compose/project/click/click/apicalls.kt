@@ -1,5 +1,8 @@
 package compose.project.click.click
 
+import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.GeoLocation
 import io.ktor.client.HttpClient
 import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
@@ -8,6 +11,13 @@ import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+@Serializable
+data class LoginObject(
+    val jwt: String,
+    val refresh: String,
+    val user: User
+)
 
 
 class Api(initialToken: String, initialRefresh: String) {

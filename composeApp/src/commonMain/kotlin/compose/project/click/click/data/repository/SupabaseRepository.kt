@@ -4,118 +4,130 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.Columns
 
+/**
+ * Repository for Supabase operations
+ * Handles direct database queries for users and connections
+ */
 class SupabaseRepository {
     private val supabase = SupabaseConfig.client
 
-    suspend fun fetchUserByName(name: String): User? {
+    /**
+     * Fetch a user by their ID
+     */
+    suspend fun fetchUserById(userId: String): User? {
         return try {
-            val result = supabase.from("users")
+            supabase.from("users")
                 .select {
                     filter {
-                        eq("name", name)
+                        eq("id", userId)
                     }
                 }
                 .decodeSingle<User>()
-            result
         } catch (e: Exception) {
             println("Error fetching user: ${e.message}")
             null
         }
     }
 
-    suspend fun fetchUserById(id: String): User? {
+    /**
+     * Fetch all connections for a user
+     */
+    suspend fun fetchUserConnections(userId: String): List<Connection> {
         return try {
-            val result = supabase.from("users")
+            supabase.from("connections")
                 .select {
                     filter {
-                        eq("id", id)
+                        or {
+                            eq("user_ids", "cs.{$userId}")
+                        }
                     }
                 }
-                .decodeSingle<User>()
-            result
+                .decodeList<Connection>()
         } catch (e: Exception) {
-            println("Error fetching user: ${e.message}")
-            null
+            println("Error fetching connections: ${e.message}")
+            emptyList()
         }
     }
 
-    suspend fun createUser(user: User): User? {
+    /**
+     * Fetch a connection by ID
+     */
+    suspend fun fetchConnectionById(connectionId: String): Connection? {
         return try {
-            val result = supabase.from("users")
-                .insert(user) {
-                    select()
-                }
-                .decodeSingle<User>()
-            result
-        } catch (e: Exception) {
-            println("Error creating user: ${e.message}")
-            null
-        }
-    }
-
-    suspend fun fetchConnectionById(id: String): Connection? {
-        return try {
-            val result = supabase.from("connections")
+            supabase.from("connections")
                 .select {
                     filter {
-                        eq("id", id)
+                        eq("id", connectionId)
                     }
                 }
                 .decodeSingle<Connection>()
-            result
         } catch (e: Exception) {
             println("Error fetching connection: ${e.message}")
             null
         }
     }
 
-    suspend fun createConnection(connection: Connection): Connection? {
+    /**
+     * Fetch multiple users by their IDs
+     */
+    suspend fun fetchUsersByIds(userIds: List<String>): List<User> {
         return try {
-            val result = supabase.from("connections")
-                .insert(connection) {
-                    select()
+            if (userIds.isEmpty()) return emptyList()
+
+            supabase.from("users")
+                .select {
+                    filter {
+                        isIn("id", userIds)
+                    }
                 }
-                .decodeSingle<Connection>()
-            result
+                .decodeList<User>()
         } catch (e: Exception) {
-            println("Error creating connection: ${e.message}")
-            null
-        }
-    }
-
-    suspend fun fetchUserConnections(userId: String): List<Connection> {
-        return try {
-            // For now, fetch all connections and filter in-memory
-            // TODO: Update with proper PostgreSQL array query when supabase-kt supports it
-            val allConnections = supabase.from("connections")
-                .select()
-                .decodeList<Connection>()
-
-            allConnections.filter { connection ->
-                connection.user_ids.contains(userId)
-            }
-        } catch (e: Exception) {
-            println("Error fetching user connections: ${e.message}")
+            println("Error fetching users: ${e.message}")
             emptyList()
         }
     }
 
-    suspend fun updateConnection(id: String, connection: Connection): Connection? {
+    /**
+     * Update user's last polled timestamp
+     */
+    suspend fun updateUserLastPolled(userId: String, timestamp: Long): Boolean {
         return try {
-            val result = supabase.from("connections")
-                .update(connection) {
+            supabase.from("users")
+                .update({
+                    set("last_polled", timestamp)
+                }) {
                     filter {
-                        eq("id", id)
+                        eq("id", userId)
                     }
-                    select()
                 }
-                .decodeSingle<Connection>()
-            result
+            true
+        } catch (e: Exception) {
+            println("Error updating user: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Update connection should_continue status
+     */
+    suspend fun updateConnectionShouldContinue(
+        connectionId: String,
+        shouldContinue: List<Boolean>
+    ): Boolean {
+        return try {
+            supabase.from("connections")
+                .update({
+                    set("should_continue", shouldContinue)
+                }) {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
+            true
         } catch (e: Exception) {
             println("Error updating connection: ${e.message}")
-            null
+            false
         }
     }
 }
