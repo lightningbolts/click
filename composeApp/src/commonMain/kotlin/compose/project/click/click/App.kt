@@ -5,6 +5,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -46,9 +49,9 @@ import io.ktor.serialization.kotlinx.json.*
 @Composable
 @Preview
 fun App() {
-    // Initialize from system theme so dark mode applies on main page immediately
+    // Initialize from system theme but default to dark for cyber aesthetic
     val systemDark = isSystemInDarkTheme()
-    var isDarkMode by remember { mutableStateOf(systemDark) }
+    var isDarkMode by remember { mutableStateOf(true) }
 
     // Ktor client
     val client = remember {
@@ -72,8 +75,8 @@ fun App() {
             background = BackgroundDark,
             surface = SurfaceDark,
             onSurface = OnSurfaceDark,
-            primaryContainer = SoftBlue,
-            onPrimaryContainer = DeepBlue
+            primaryContainer = DeepBlue,
+            onPrimaryContainer = NeonPurple
         )
     } else {
         lightColorScheme(
@@ -88,8 +91,28 @@ fun App() {
     }
 
     MaterialTheme(colorScheme = scheme) {
-        // Show login/signup screens when not authenticated and not skipped
-        if (!authViewModel.isAuthenticated && !skipLogin) {
+        // Global background with subtle purple gradient (only in dark mode)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (isDarkMode) BackgroundDark else BackgroundLight)
+                .let { modifier ->
+                    if (isDarkMode) {
+                        modifier.background(
+                            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                                colors = listOf(
+                                    PrimaryBlue.copy(alpha = 0.15f),
+                                    Color.Transparent
+                                ),
+                                center = androidx.compose.ui.geometry.Offset(0f, 0f),
+                                radius = 1000f
+                            )
+                        )
+                    } else modifier
+                }
+        ) {
+            // Show login/signup screens when not authenticated and not skipped
+            if (!authViewModel.isAuthenticated && !skipLogin) {
             if (showSignUp) {
                 SignUpScreen(
                     onSignUpSuccess = {
@@ -151,8 +174,15 @@ fun App() {
             Scaffold(
                 bottomBar = {
                     NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                        tonalElevation = 8.dp
+                        modifier = Modifier.border(
+                            width = 1.dp,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
+                            ),
+                            shape = androidx.compose.ui.graphics.RectangleShape
+                        ),
+                        containerColor = GlassDark,
+                        tonalElevation = 0.dp
                     ) {
                         Row(
                             modifier = Modifier
@@ -280,9 +310,16 @@ fun App() {
                             .fillMaxWidth()
                     ) {
                         Surface(
-                            tonalElevation = 8.dp,
+                            modifier = Modifier.border(
+                                width = 1.dp,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            ),
+                            tonalElevation = 0.dp,
                             shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surface
+                            color = GlassDark
                         ) {
                             TextField(
                                 modifier = Modifier
@@ -303,9 +340,9 @@ fun App() {
                                     }
                                 },
                                 colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    disabledContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
                                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                     cursorColor = MaterialTheme.colorScheme.primary,
@@ -331,5 +368,6 @@ fun App() {
                 }
             }
         }
+        } // End of Global Background Box
     }
 }

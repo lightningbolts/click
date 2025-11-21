@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PlatformMap
 import compose.project.click.click.ui.components.MapPin
@@ -135,15 +136,13 @@ fun MapScreen(
                             val locations = remember(state.connections) { state.connections.mapNotNull { parseConnectionLocation(it) } }
                             val pins = remember(locations, zoom) { locations.map { MapPin(it.name, it.latitude, it.longitude, true) } }
 
-                            // Platform map - key includes zoom to force recomposition
-                            key(zoom) {
-                                PlatformMap(
-                                    modifier = Modifier.fillMaxSize(),
-                                    pins = pins,
-                                    zoom = zoom,
-                                    onPinTapped = { }
-                                )
-                            }
+                            // Platform map
+                            PlatformMap(
+                                modifier = Modifier.fillMaxSize(),
+                                pins = pins,
+                                zoom = zoom,
+                                onPinTapped = { }
+                            )
 
                             // Zoom controls styled to match app theme
                             Column(
@@ -152,23 +151,15 @@ fun MapScreen(
                                     .padding(end = 16.dp, bottom = 16.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                FilledIconButton(
+                                AdaptiveButton(
                                     onClick = { zoom = minOf(zoom + 1.0, 20.0) },
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(48.dp)
                                 ) {
                                     Icon(Icons.Filled.Add, contentDescription = "Zoom in")
                                 }
-                                FilledIconButton(
+                                AdaptiveButton(
                                     onClick = { zoom = maxOf(zoom - 1.0, 2.0) },
-                                    colors = IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(48.dp)
                                 ) {
                                     Icon(Icons.Filled.Remove, contentDescription = "Zoom out")
                                 }
