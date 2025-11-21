@@ -1,12 +1,13 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +25,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 
 @Composable
-fun AddClickScreen() {
+fun AddClickScreen(onNavigateToNfc: () -> Unit = {}) {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
 
@@ -49,10 +50,13 @@ fun AddClickScreen() {
                         contentAlignment = Alignment.Center
                     ) {
                         if (!isClicked) {
-                            AddClickContent(onClickSuccess = { userName ->
-                                isClicked = true
-                                clickedUserName = userName
-                            })
+                            AddClickContent(
+                                onClickSuccess = { userName ->
+                                    isClicked = true
+                                    clickedUserName = userName
+                                },
+                                onNavigateToNfc = onNavigateToNfc
+                            )
                         } else {
                             ClickedSuccessContent(userName = clickedUserName)
                         }
@@ -64,7 +68,7 @@ fun AddClickScreen() {
 }
 
 @Composable
-fun AddClickContent(onClickSuccess: (String) -> Unit) {
+fun AddClickContent(onClickSuccess: (String) -> Unit, onNavigateToNfc: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -136,9 +140,11 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // NFC Section
+        // NFC Section - Clickable card
         AdaptiveCard(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateToNfc() }
         ) {
             Row(
                 modifier = Modifier
@@ -148,14 +154,14 @@ fun AddClickContent(onClickSuccess: (String) -> Unit) {
                 horizontalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    Icons.Filled.Close,
+                    Icons.Filled.Nfc,
                     contentDescription = "NFC",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    "Hold devices together for NFC",
+                    "Tap to use NFC",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Medium

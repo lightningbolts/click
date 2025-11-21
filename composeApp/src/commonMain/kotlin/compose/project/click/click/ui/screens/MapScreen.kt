@@ -23,62 +23,38 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.AdaptiveSurface
 import compose.project.click.click.ui.components.PlatformMap
 import compose.project.click.click.ui.components.MapPin
 import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.components.Clicktivity
-import compose.project.click.click.ui.components.ClicktivityCard
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.ui.unit.coerceAtLeast
+import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.viewmodel.MapViewModel
+import compose.project.click.click.viewmodel.MapState
+import compose.project.click.click.data.models.Connection
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 data class MapLocation(
+    val id: String,
     val name: String,
-    val address: String,
-    val clickCount: Int,
-    val distance: String,
-    val isNearby: Boolean = false,
-    val friendsHere: List<String> = emptyList(),
+    val connectionId: String,
+    val timestamp: Long,
     val latitude: Double,
     val longitude: Double
 )
 
 @Composable
-fun MapScreen() {
-    var selectedFilter by remember { mutableStateOf("All") }
+fun MapScreen(
+    viewModel: MapViewModel = viewModel { MapViewModel() }
+) {
     var zoom by remember { mutableStateOf(12.0) }
+    val mapState by viewModel.mapState.collectAsState()
 
-    val locations = remember {
-        listOf(
-            MapLocation("Starbucks Coffee", "123 Main St", 12, "0.2 mi", true, listOf("Alice", "Charlie"), 40.7580, -73.9855),
-            MapLocation("Central Park", "Park Ave", 8, "0.5 mi", true, listOf("Diana"), 40.785091, -73.968285),
-            MapLocation("Tech Hub Coworking", "456 Tech Blvd", 15, "0.8 mi", false, emptyList(), 40.741895, -73.989308),
-            MapLocation("The Local Cafe", "789 Coffee Ln", 6, "1.2 mi", false, listOf("Eve"), 40.73061, -73.935242),
-            MapLocation("Downtown Mall", "Shopping District", 10, "1.5 mi", false, emptyList(), 40.7505, -73.9934),
-            MapLocation("Riverside Park", "River Rd", 5, "2.1 mi", false, emptyList(), 40.8007, -73.9700)
-        )
-    }
-
-    val filteredLocations = when (selectedFilter) {
-        "Nearby" -> locations.filter { it.isNearby }
-        "Friends" -> locations.filter { it.friendsHere.isNotEmpty() }
-        else -> locations
-    }
-
-    val pins = remember(filteredLocations) {
-        filteredLocations.map {
-            MapPin(title = it.name, latitude = it.latitude, longitude = it.longitude, isNearby = it.isNearby)
-        }
-    }
-
-    val clicktivities = remember {
-        listOf(
-            Clicktivity("Coffee Meetup", "Grab coffee at a recommended local spot", Icons.Filled.LocalCafe, "$5-15", "Food"),
-            Clicktivity("Movie Night", "Watch the latest movies together at nearby theaters", Icons.Filled.Movie, "$20-40", "Entertainment"),
-            Clicktivity("Concert Tickets", "AI-matched concerts based on your music taste", Icons.Filled.MusicNote, "$40-200", "Music")
-        )
+    LaunchedEffect(Unit) {
+        viewModel.loadConnections()
     }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -86,137 +62,255 @@ fun MapScreen() {
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header: topInset only, minimal spacer
+            // Header
             Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
-                PageHeader(title = "Map", subtitle = "Discover click spots near you")
+                when (val state = mapState) {
+                    is MapState.Success -> {
+                        PageHeader(
+                            title = "Map",
+                            subtitle = "${state.connections.size} ${if (state.connections.size == 1) "connection" else "connections"}"
+                        )
+                    }
+                    else -> {
+                        PageHeader(title = "Map", subtitle = "Loading...")
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Map container with rounded corners and border
+            // Map container - Larger size
             Box(modifier = Modifier.padding(horizontal = 20.dp)) {
                 val mapShape = RoundedCornerShape(20.dp)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(500.dp) // Increased from 300dp
                         .clip(mapShape)
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, mapShape)
                         .background(MaterialTheme.colorScheme.surface)
                 ) {
-                    PlatformMap(
-                        modifier = Modifier.fillMaxSize(),
-                        pins = pins,
-                        zoom = zoom,
-                        onPinTapped = { }
-                    )
+                    when (val state = mapState) {
+                        is MapState.Loading -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                        is MapState.Error -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.ErrorOutline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "Error loading map",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Text(
+                                        state.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(onClick = { viewModel.refresh() }) {
+                                        Text("Retry")
+                                    }
+                                }
+                            }
+                        }
+                        is MapState.Success -> {
+                            val locations = remember(state.connections) { state.connections.mapNotNull { parseConnectionLocation(it) } }
+                            val pins = remember(locations, zoom) { locations.map { MapPin(it.name, it.latitude, it.longitude, true) } }
 
-                    // Zoom controls: bottom-right, lifted above logo area
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 12.dp, bottom = 56.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilledTonalIconButton(
-                            onClick = { zoom = (zoom + 1) },
-                            modifier = Modifier.semantics { contentDescription = "Zoom in" }
-                        ) { Icon(Icons.Filled.Add, contentDescription = null) }
-                        FilledTonalIconButton(
-                            onClick = { zoom = (zoom - 1) },
-                            modifier = Modifier.semantics { contentDescription = "Zoom out" }
-                        ) { Icon(Icons.Filled.Remove, contentDescription = null) }
-                    }
+                            // Platform map - key includes zoom to force recomposition
+                            key(zoom) {
+                                PlatformMap(
+                                    modifier = Modifier.fillMaxSize(),
+                                    pins = pins,
+                                    zoom = zoom,
+                                    onPinTapped = { }
+                                )
+                            }
 
-                    // Stats overlay remains top-right
-                    AdaptiveCard(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "${locations.count { it.isNearby }} nearby",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            // Zoom controls styled to match app theme
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(end = 16.dp, bottom = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                FilledIconButton(
+                                    onClick = { zoom = minOf(zoom + 1.0, 20.0) },
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = "Zoom in")
+                                }
+                                FilledIconButton(
+                                    onClick = { zoom = maxOf(zoom - 1.0, 2.0) },
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Icon(Icons.Filled.Remove, contentDescription = "Zoom out")
+                                }
+                            }
+
+                            // Stats overlay
+                            AdaptiveCard(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.LocationOn,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "${locations.size} ${if (locations.size == 1) "location" else "locations"}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Locations list + integrated clicktivities
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    Text(
-                        "Click Locations",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                items(filteredLocations) { location ->
-                    LocationCard(location)
-                }
-
-                item { Spacer(modifier = Modifier.height(24.dp)) }
-                item {
-                    Text(
-                        "Clicktivities",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                items(clicktivities) { activity ->
-                    ClicktivityCard(activity)
-                }
-
-                if (filteredLocations.isEmpty()) {
-                    item {
+            // Connections list
+            when (val state = mapState) {
+                is MapState.Success -> {
+                    if (state.connections.isEmpty()) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
+                                .fillMaxSize()
+                                .padding(24.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Icon(
-                                    Icons.Filled.SearchOff,
+                                    Icons.Filled.LocationOff,
                                     contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
+                                    modifier = Modifier.size(64.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    "No Connections Yet",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    "No locations found",
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    "Make connections to see them on the map",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            item {
+                                Text(
+                                    "Connection Locations",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            items(state.connections) { connection ->
+                                ConnectionLocationCard(connection)
+                            }
+                        }
                     }
+                }
+                is MapState.Loading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is MapState.Error -> {
+                    // Error already shown in map area
                 }
             }
         }
     }
 }
 
+// Helper function to parse location from connection
+private fun parseConnectionLocation(connection: Connection): MapLocation? {
+    return try {
+        // Use geo_location from the connection (lat/lon pair)
+        val lat = connection.geo_location.lat
+        val lon = connection.geo_location.lon
+
+        // Use semantic_location as the display name if available
+        val locationName = connection.semantic_location ?: run {
+            val instant = Instant.fromEpochMilliseconds(connection.created)
+            val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+            "${dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${dateTime.dayOfMonth}, ${dateTime.year}"
+        }
+
+        MapLocation(
+            id = connection.id,
+            name = locationName,
+            connectionId = connection.id,
+            timestamp = connection.created,
+            latitude = lat,
+            longitude = lon
+        )
+    } catch (e: Exception) {
+        null
+    }
+}
+
 @Composable
-fun LocationCard(location: MapLocation) {
+fun ConnectionLocationCard(connection: Connection) {
+    val instant = Instant.fromEpochMilliseconds(connection.created)
+    val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val dateStr = "${dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${dateTime.dayOfMonth}, ${dateTime.year}"
+
     AdaptiveCard(
         modifier = Modifier.fillMaxWidth(),
-        onClick = { /* Navigate to location details */ }
+        onClick = { /* Navigate to connection details */ }
     ) {
         Row(
             modifier = Modifier
@@ -230,22 +324,16 @@ fun LocationCard(location: MapLocation) {
                     .size(56.dp)
                     .clip(RoundedCornerShape(28.dp))
                     .background(
-                        if (location.isNearby) {
-                            Brush.linearGradient(
-                                colors = listOf(PrimaryBlue, LightBlue)
-                            )
-                        } else {
-                            Brush.linearGradient(
-                                colors = listOf(SoftBlue, SoftBlue)
-                            )
-                        }
+                        Brush.linearGradient(
+                            colors = listOf(PrimaryBlue, LightBlue)
+                        )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Filled.LocationOn,
                     contentDescription = null,
-                    tint = if (location.isNearby) Color.White else PrimaryBlue,
+                    tint = Color.White,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -254,118 +342,53 @@ fun LocationCard(location: MapLocation) {
 
             // Location details
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            location.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Filled.Place,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                location.address,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Distance badge
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (location.isNearby) PrimaryBlue.copy(alpha = 0.1f) else SoftBlue
-                    ) {
-                        Text(
-                            location.distance,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = if (location.isNearby) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Text(
+                    connection.semantic_location ?: "Connection Location",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.CalendarToday,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        dateStr,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Click count and friends
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Connection status badge - connection is active if either user wants to continue
+                val isActive = connection.should_continue.contains(true)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isActive) PrimaryBlue.copy(alpha = 0.1f) else SoftBlue
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
-                            Icons.Filled.TouchApp,
+                            if (isActive) Icons.Filled.CheckCircle else Icons.Filled.TouchApp,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = PrimaryBlue
+                            modifier = Modifier.size(14.dp),
+                            tint = if (isActive) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            "${location.clickCount} clicks",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Medium
+                            if (isActive) "Active" else "Connected",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isActive) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-
-                    if (location.friendsHere.isNotEmpty()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy((-8).dp)
-                        ) {
-                            location.friendsHere.take(3).forEach { friend ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            Brush.linearGradient(
-                                                colors = listOf(LightBlue, PrimaryBlue)
-                                            )
-                                        )
-                                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        friend.first().toString(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                            if (location.friendsHere.size > 3) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.onSurfaceVariant)
-                                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "+${location.friendsHere.size - 3}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }

@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -30,6 +31,12 @@ kotlin {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             // WebView-based map needs no native Map SDK dependency
+
+            // Ktor Android engine
+            implementation("io.ktor:ktor-client-android:3.0.1")
+
+            // Security crypto for encrypted shared preferences
+            implementation("androidx.security:security-crypto:1.1.0-alpha06")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -41,11 +48,27 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
-            implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:VERSION"))
+
+            // Supabase dependencies
+            implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:3.0.2"))
             implementation("io.github.jan-tennert.supabase:postgrest-kt")
             implementation("io.github.jan-tennert.supabase:auth-kt")
             implementation("io.github.jan-tennert.supabase:realtime-kt")
-            implementation("io.ktor:ktor-client-[engine]:KTOR_VERSION")
+
+            // Ktor client dependencies
+            implementation("io.ktor:ktor-client-core:3.0.1")
+            implementation("io.ktor:ktor-client-content-negotiation:3.0.1")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
+
+            // DateTime library
+            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+
+            // Kotlinx Serialization
+            implementation(libs.kotlinx.serialization.json)
+        }
+        iosMain.dependencies {
+            // Ktor iOS engine
+            implementation("io.ktor:ktor-client-darwin:3.0.1")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

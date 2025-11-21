@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/.env">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/.env" />
+              <option name="originalContent" value="# Supabase Configuration&#10;SUPABASE_URL=your_supabase_url_here&#10;SUPABASE_KEY=your_supabase_anon_key_here&#10;&#10;# Google OAuth Configuration&#10;GOOGLE_CLIENT_ID=your_google_client_id_here&#10;GOOGLE_CLIENT_SECRET=your_google_client_secret_here&#10;" />
+              <option name="updatedContent" value="# Supabase Configuration&#10;SUPABASE_URL=your_supabase_url_here&#10;SUPABASE_KEY=your_supabase_anon_key_here&#10;&#10;# Google OAuth Configuration&#10;GOOGLE_CLIENT_ID=your_google_client_id_here&#10;GOOGLE_CLIENT_SECRET=your_google_client_secret_here&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
