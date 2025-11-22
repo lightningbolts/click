@@ -1,0 +1,30 @@
+Part 1: The Core Product (The MVP)
+The Problem
+The "Connection Graveyard": Students meet, exchange Instagrams, and never talk again.
+
+Passive Doomscrolling: Social media is designed for consumption, not connection.
+
+Performative Culture: Profiles are curated stages, creating FOMO and isolation.
+
+Misaligned Incentives: Users are the product; data is sold to advertisers.
+
+The Solution: Click
+A privacy-first utility that turns fleeting handshakes into lasting friendships.
+
+Core Features:
+
+NFC/QR Contact Exchange: The "Digital Handshake." Users tap phones or scan QR codes to exchange profiles instantly. No searching usernames.
+
+Contextual Tagging: Every connection is tagged with where and when you met (e.g., "Met at Dawg Daze," "Met at CSE 142").
+
+The "Vibe Check" (Timed Chat): The app initiates a 30-minute timed chat (text or video).
+
+Mutual Opt-In: At the end of 30 minutes, the chat is deleted by default unless both users click "Keep." This ensures mutual interest.
+
+No Feed: The app has no scrolling feed. It is a tool for active connection, not passive consumption.
+
+Visual Identity:
+
+Color: Vibrant, energetic Violet (#8338EC).
+
+Typography: Clean, modern sans-serif font.
