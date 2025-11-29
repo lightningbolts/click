@@ -113,7 +113,7 @@ fun HomeScreen(
                                     style = MaterialTheme.typography.headlineMedium.merge(
                                         TextStyle(
                                             brush = Brush.horizontalGradient(
-                                                colors = listOf(Color.White, LightBlue)
+                                                colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
                                             )
                                         )
                                     ),
@@ -161,7 +161,7 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.headlineMedium.merge(
                                     TextStyle(
                                         brush = Brush.horizontalGradient(
-                                            colors = listOf(Color.White, LightBlue)
+                                            colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
                                         )
                                     )
                                 ),
@@ -244,7 +244,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                 Icon(
                     Icons.Filled.Person,
                     contentDescription = null,
-                    tint = NeonPurple,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
             }

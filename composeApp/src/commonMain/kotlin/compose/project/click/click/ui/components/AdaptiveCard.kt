@@ -30,7 +30,7 @@ fun AdaptiveCard(
                 shape = RoundedCornerShape(getAdaptiveCornerRadius())
             ),
         shape = RoundedCornerShape(getAdaptiveCornerRadius()),
-        color = GlassDark, // Translucent background
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), // Translucent background adapted to theme
         shadowElevation = 0.dp, // Remove shadow for glass effect
         onClick = onClick ?: {}
     ) {
@@ -50,7 +50,7 @@ fun AdaptiveSurface(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
-        color = GlassDark,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
@@ -88,8 +88,8 @@ fun AdaptiveButton(
         ),
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
-            containerColor = PrimaryBlue.copy(alpha = 0.2f), // Translucent purple
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             disabledContainerColor = Color.Gray.copy(alpha = 0.1f),
             disabledContentColor = Color.Gray
         ),

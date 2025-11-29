@@ -693,7 +693,7 @@ fun ChatMessageBubble(
                     bottomEnd = if (isSent) 4.dp else 16.dp
                 ),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                    containerColor = if (isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                 ),
                 modifier = Modifier.widthIn(max = 300.dp)
             ) {

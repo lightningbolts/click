@@ -76,7 +76,8 @@ fun App() {
             surface = SurfaceDark,
             onSurface = OnSurfaceDark,
             primaryContainer = DeepBlue,
-            onPrimaryContainer = NeonPurple
+            onPrimaryContainer = NeonPurple,
+            surfaceVariant = Color(0xFF2C2C2C)
         )
     } else {
         lightColorScheme(
@@ -86,7 +87,8 @@ fun App() {
             surface = SurfaceLight,
             onSurface = OnSurfaceLight,
             primaryContainer = SoftBlue,
-            onPrimaryContainer = DeepBlue
+            onPrimaryContainer = DeepBlue,
+            surfaceVariant = Color(0xFFE0E0E0)
         )
     }
 
