@@ -3,12 +3,11 @@
   <component name="CopilotDiffPersistence">
     <option name="pendingDiffs">
       <map>
-        <entry key="$PROJECT_DIR$/.env">
+        <entry key="$PROJECT_DIR$/BUILD_FIX_POW_FUNCTION.md">
           <value>
             <PendingDiffInfo>
-              <option name="filePath" value="$PROJECT_DIR$/.env" />
-              <option name="originalContent" value="# Supabase Configuration&#10;SUPABASE_URL=your_supabase_url_here&#10;SUPABASE_KEY=your_supabase_anon_key_here&#10;&#10;# Google OAuth Configuration&#10;GOOGLE_CLIENT_ID=your_google_client_id_here&#10;GOOGLE_CLIENT_SECRET=your_google_client_secret_here&#10;" />
-              <option name="updatedContent" value="# Supabase Configuration&#10;SUPABASE_URL=your_supabase_url_here&#10;SUPABASE_KEY=your_supabase_anon_key_here&#10;&#10;# Google OAuth Configuration&#10;GOOGLE_CLIENT_ID=your_google_client_id_here&#10;GOOGLE_CLIENT_SECRET=your_google_client_secret_here&#10;" />
+              <option name="filePath" value="$PROJECT_DIR$/BUILD_FIX_POW_FUNCTION.md" />
+              <option name="updatedContent" value="# Build Fix - iOS pow Function&#10;&#10;## Issue&#10;Build failed with error:&#10;```&#10;Unresolved reference 'pow' in MapView.ios.kt&#10;```&#10;&#10;## Root Cause&#10;- Used `kotlin.math.pow` which doesn't exist on Kotlin/Native (iOS)&#10;- iOS uses platform-specific math functions from Foundation framework&#10;&#10;## Solution&#10;Import `pow` from `platform.Foundation` instead of using `kotlin.math.pow`&#10;&#10;### Changes Made&#10;&#10;**File:** `composeApp/src/iosMain/kotlin/.../MapView.ios.kt`&#10;&#10;**Added import:**&#10;```kotlin&#10;import platform.Foundation.pow&#10;```&#10;&#10;**Changed from:**&#10;```kotlin&#10;val spanDelta = kotlin.math.pow(1.5, (20.0 - clamped)) * 0.0001&#10;```&#10;&#10;**Changed to:**&#10;```kotlin&#10;val spanDelta = pow(1.5, (20.0 - clamped)) * 0.0001&#10;```&#10;&#10;## Build Status&#10;✅ **Fixed** - No compilation errors&#10;&#10;## Summary&#10;The map zoom calculation now uses the correct iOS Foundation framework's `pow` function, allowing the project to build successfully on iOS targets.&#10;&#10;---&#10;&#10;## Complete Solution Summary&#10;&#10;### 1. Database Migration ✅&#10;Run `database/migrate_to_python_schema.sql` in Supabase to fix serialization errors&#10;&#10;### 2. Map Zoom Functionality ✅&#10;- iOS now uses proper exponential zoom calculation&#10;- Uses platform-specific `pow` function&#10;- Zoom buttons will work correctly in iOS simulator&#10;&#10;### 3. Build Status ✅&#10;All platforms compile successfully&#10;" />
             </PendingDiffInfo>
           </value>
         </entry>

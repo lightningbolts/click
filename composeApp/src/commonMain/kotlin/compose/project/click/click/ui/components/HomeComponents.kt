@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.*
 
 @Composable
 fun OnlineFriendItem(name: String, status: String) {
@@ -31,8 +32,8 @@ fun OnlineFriendItem(name: String, status: String) {
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.primaryContainer
+                            PrimaryBlue.copy(alpha = 0.3f),
+                            Color.Transparent
                         )
                     )
                 ),
@@ -40,7 +41,7 @@ fun OnlineFriendItem(name: String, status: String) {
         ) {
             Text(
                 name.first().toString(),
-                color = Color.White,
+                color = NeonPurple,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
             )
@@ -77,16 +78,25 @@ fun RecentClickCard(name: String, time: String, location: String) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Glowing Icon Container
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .size(48.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // Glow effect
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(PrimaryBlue.copy(alpha = 0.4f), Color.Transparent)
+                            )
+                        )
+                )
                 Text(
                     name.first().toString(),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = NeonPurple,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -134,16 +144,30 @@ fun StatCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(24.dp), // Generous padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            androidx.compose.material3.Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            // Glowing Icon
+            Box(
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
+                            )
+                        )
+                )
+                androidx.compose.material3.Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = NeonPurple,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 value,
                 style = MaterialTheme.typography.headlineMedium,

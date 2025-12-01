@@ -31,14 +31,8 @@ actual fun PlatformMap(
     onPinTapped: (MapPin) -> Unit
 ) {
     val context = LocalContext.current
-    var lastKey by remember { mutableStateOf<String?>(null) }
-
-    fun buildKey(): String = buildString {
-        append("z=")
-        append(zoom)
-        append(";p=")
-        append(pins.hashCode())
-    }
+    var lastPinsHashCode by remember { mutableStateOf(pins.hashCode()) }
+    var lastZoom by remember { mutableStateOf(zoom) }
 
     AndroidView(
         modifier = modifier,
@@ -68,12 +62,13 @@ actual fun PlatformMap(
                 "UTF-8",
                 null
             )
-            lastKey = buildKey()
+
+            lastPinsHashCode = pins.hashCode()
+            lastZoom = zoom
             webView
         },
         update = { webView ->
-            val key = buildKey()
-            if (key != lastKey) {
+            if (pins.hashCode() != lastPinsHashCode) {
                 webView.loadDataWithBaseURL(
                     "https://demotiles.maplibre.org/",
                     htmlForPins(pins, zoom),
@@ -81,7 +76,11 @@ actual fun PlatformMap(
                     "UTF-8",
                     null
                 )
-                lastKey = key
+                lastPinsHashCode = pins.hashCode()
+                lastZoom = zoom
+            } else if (zoom != lastZoom) {
+                webView.evaluateJavascript("if(window.setZoom) window.setZoom($zoom)", null)
+                lastZoom = zoom
             }
         },
         onRelease = { webView ->
@@ -152,6 +151,10 @@ private fun htmlForPins(pins: List<MapPin>, zoom: Double): String {
                     .addTo(map);
                 });
               });
+
+              window.setZoom = (z) => {
+                map.flyTo({ zoom: z, duration: 300 });
+              };
             </script>
           </body>
         </html>

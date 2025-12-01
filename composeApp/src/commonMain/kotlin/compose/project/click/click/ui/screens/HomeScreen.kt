@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
@@ -97,21 +98,26 @@ fun HomeScreen(
                             subtitle = "Welcome back, ${state.user.name ?: "User"}!"
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                        verticalArrangement = Arrangement.spacedBy(24.dp) // Increased spacing
                     ) {
                         // Recent Connections Section
                         if (state.stats.recentConnections.isNotEmpty()) {
                             item {
                                 Text(
                                     "Recent Connections",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    style = MaterialTheme.typography.headlineMedium.merge(
+                                        TextStyle(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
+                                            )
+                                        )
+                                    ),
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
 
@@ -152,9 +158,14 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 "Your Stats",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                style = MaterialTheme.typography.headlineMedium.merge(
+                                    TextStyle(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
+                                        )
+                                    )
+                                ),
+                                fontWeight = FontWeight.Bold
                             )
                         }
 
@@ -215,22 +226,25 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon
+            // Glowing Icon
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(PrimaryBlue, LightBlue)
-                        )
-                    ),
+                    .size(56.dp),
                 contentAlignment = Alignment.Center
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(PrimaryBlue.copy(alpha = 0.4f), Color.Transparent)
+                            )
+                        )
+                )
                 Icon(
                     Icons.Filled.Person,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
             }

@@ -1,6 +1,6 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -24,6 +24,10 @@ actual fun PlatformMap(
     zoom: Double,
     onPinTapped: (MapPin) -> Unit
 ) {
+    var lastZoom by remember { mutableStateOf(zoom) }
+    var lastPinsHash by remember { mutableStateOf(pins.hashCode()) }
+    var hasCentered by remember { mutableStateOf(false) }
+
     UIKitView(
         modifier = modifier,
         factory = {
@@ -37,28 +41,39 @@ actual fun PlatformMap(
             }
         },
         update = { map ->
-            // Remove old annotations
-            val poiAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
-            if (poiAnnotations.isNotEmpty()) {
-                map.removeAnnotations(poiAnnotations)
+            // Handle Pins
+            if (pins.hashCode() != lastPinsHash || !hasCentered) {
+                val poiAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
+                if (poiAnnotations.isNotEmpty()) {
+                    map.removeAnnotations(poiAnnotations)
+                }
+
+                pins.forEach { pin ->
+                    val ann = MKPointAnnotation()
+                    ann.setTitle(pin.title)
+                    ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
+                    map.addAnnotation(ann)
+                }
+
+                // Initial centering on first pin
+                if (!hasCentered && pins.isNotEmpty()) {
+                    val target = pins.first()
+                    val meters = metersForZoom(zoom)
+                    val center = CLLocationCoordinate2DMake(target.latitude, target.longitude)
+                    val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
+                    map.setRegion(map.regionThatFits(region), false)
+                    hasCentered = true
+                }
+                lastPinsHash = pins.hashCode()
             }
 
-            // Add new annotations
-            pins.forEach { pin ->
-                val ann = MKPointAnnotation()
-                ann.setTitle(pin.title)
-                ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
-                map.addAnnotation(ann)
-            }
-
-            // Update map region based on zoom
-            val target = pins.firstOrNull()
-            if (target != null) {
-                val clampedZoom = zoom.coerceIn(2.0, 20.0)
-                val meters = metersForZoom(clampedZoom)
-                val center = CLLocationCoordinate2DMake(target.latitude, target.longitude)
+            // Handle Zoom
+            if (zoom != lastZoom) {
+                val meters = metersForZoom(zoom)
+                val center = map.centerCoordinate
                 val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
                 map.setRegion(map.regionThatFits(region), true)
+                lastZoom = zoom
             }
         }
     )

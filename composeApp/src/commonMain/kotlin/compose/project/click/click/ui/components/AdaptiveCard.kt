@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
@@ -18,12 +19,19 @@ fun AdaptiveCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // Use Material surface everywhere for consistency and dark mode support
+    // Glassmorphism Card with Glowing Border
     Surface(
-        modifier = modifier,
+        modifier = modifier
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
+                ),
+                shape = RoundedCornerShape(getAdaptiveCornerRadius())
+            ),
         shape = RoundedCornerShape(getAdaptiveCornerRadius()),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), // Translucent background adapted to theme
+        shadowElevation = 0.dp, // Remove shadow for glass effect
         onClick = onClick ?: {}
     ) {
         Column(
@@ -42,8 +50,8 @@ fun AdaptiveSurface(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
         Column(content = content)
@@ -56,7 +64,7 @@ fun AdaptiveBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
-        modifier = modifier.background(MaterialTheme.colorScheme.background),
+        modifier = modifier.background(Color.Transparent), // Background handled by App.kt
         content = content
     )
 }
@@ -68,14 +76,22 @@ fun AdaptiveButton(
     enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
-    // Derive from theme for dark mode
-    FilledTonalButton(
+    // Glassmorphic Button
+    Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.border(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(PrimaryBlue.copy(alpha = 0.8f), Color.Transparent)
+            ),
+            shape = RoundedCornerShape(20.dp)
+        ),
         enabled = enabled,
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.primary
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            disabledContainerColor = Color.Gray.copy(alpha = 0.1f),
+            disabledContentColor = Color.Gray
         ),
         shape = RoundedCornerShape(20.dp),
         content = content
