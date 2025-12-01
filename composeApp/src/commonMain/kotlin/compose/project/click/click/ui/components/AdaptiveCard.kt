@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,23 +21,39 @@ fun AdaptiveCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     // Glassmorphism Card with Glowing Border
-    Surface(
-        modifier = modifier
-            .border(
-                width = 1.dp,
-                brush = Brush.verticalGradient(
-                    colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
-                ),
-                shape = RoundedCornerShape(getAdaptiveCornerRadius())
-            ),
-        shape = RoundedCornerShape(getAdaptiveCornerRadius()),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), // Translucent background adapted to theme
-        shadowElevation = 0.dp, // Remove shadow for glass effect
-        onClick = onClick ?: {}
-    ) {
-        Column(
-            modifier = Modifier.padding(getAdaptivePadding()),
-            content = content
+    val cardModifier = modifier
+        .border(
+            width = 1.dp,
+            color = PrimaryBlue.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(getAdaptiveCornerRadius())
+        )
+
+    if (onClick != null) {
+        Surface(
+            modifier = cardModifier,
+            shape = RoundedCornerShape(getAdaptiveCornerRadius()),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+            shadowElevation = 0.dp,
+            onClick = onClick,
+            content = {
+                Column(
+                    modifier = Modifier.padding(getAdaptivePadding()),
+                    content = content
+                )
+            }
+        )
+    } else {
+        Surface(
+            modifier = cardModifier,
+            shape = RoundedCornerShape(getAdaptiveCornerRadius()),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+            shadowElevation = 0.dp,
+            content = {
+                Column(
+                    modifier = Modifier.padding(getAdaptivePadding()),
+                    content = content
+                )
+            }
         )
     }
 }
@@ -79,13 +96,7 @@ fun AdaptiveButton(
     // Glassmorphic Button
     Button(
         onClick = onClick,
-        modifier = modifier.border(
-            width = 1.dp,
-            brush = Brush.verticalGradient(
-                colors = listOf(PrimaryBlue.copy(alpha = 0.8f), Color.Transparent)
-            ),
-            shape = RoundedCornerShape(20.dp)
-        ),
+        modifier = modifier,
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
@@ -93,7 +104,11 @@ fun AdaptiveButton(
             disabledContainerColor = Color.Gray.copy(alpha = 0.1f),
             disabledContentColor = Color.Gray
         ),
-        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PrimaryBlue.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(getAdaptiveCornerRadius()),
         content = content
     )
 }

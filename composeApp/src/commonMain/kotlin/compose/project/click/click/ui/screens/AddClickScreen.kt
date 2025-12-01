@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,7 +26,14 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 
 @Composable
-fun AddClickScreen(onNavigateToNfc: () -> Unit = {}) {
+fun AddClickScreen(
+    currentUserId: String = "",
+    currentUsername: String? = null,
+    onNavigateToNfc: () -> Unit = {},
+    onShowMyQRCode: () -> Unit = {},
+    onScanQRCode: () -> Unit = {},
+    onStartChatting: () -> Unit = {}
+) {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
 
@@ -55,10 +63,15 @@ fun AddClickScreen(onNavigateToNfc: () -> Unit = {}) {
                                     isClicked = true
                                     clickedUserName = userName
                                 },
-                                onNavigateToNfc = onNavigateToNfc
+                                onNavigateToNfc = onNavigateToNfc,
+                                onShowMyQRCode = onShowMyQRCode,
+                                onScanQRCode = onScanQRCode
                             )
                         } else {
-                            ClickedSuccessContent(userName = clickedUserName)
+                            ClickedSuccessContent(
+                                userName = clickedUserName,
+                                onStartChatting = onStartChatting
+                            )
                         }
                     }
                 }
@@ -68,7 +81,12 @@ fun AddClickScreen(onNavigateToNfc: () -> Unit = {}) {
 }
 
 @Composable
-fun AddClickContent(onClickSuccess: (String) -> Unit, onNavigateToNfc: () -> Unit) {
+fun AddClickContent(
+    onClickSuccess: (String) -> Unit,
+    onNavigateToNfc: () -> Unit,
+    onShowMyQRCode: () -> Unit,
+    onScanQRCode: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -76,12 +94,7 @@ fun AddClickContent(onClickSuccess: (String) -> Unit, onNavigateToNfc: () -> Uni
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            "Add a Click",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -94,46 +107,52 @@ fun AddClickContent(onClickSuccess: (String) -> Unit, onNavigateToNfc: () -> Uni
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // QR Code Placeholder
-        AdaptiveCard(
-            modifier = Modifier.size(280.dp)
+        // QR Code Section
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Box(
+            AdaptiveCard(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center
+                    .weight(1f)
+                    .height(160.dp),
+                onClick = onShowMyQRCode
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(220.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                Icons.Filled.Check,
-                                contentDescription = "QR Code",
-                                modifier = Modifier.size(120.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "QR CODE",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                    Icon(
+                        Icons.Filled.Check, // Should use QR icon if available
+                        contentDescription = "My QR Code",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("My Code", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            AdaptiveCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(160.dp),
+                onClick = onScanQRCode
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Search, // Should use Camera/Scan icon
+                        contentDescription = "Scan QR",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Scan Code", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -143,8 +162,8 @@ fun AddClickContent(onClickSuccess: (String) -> Unit, onNavigateToNfc: () -> Uni
         // NFC Section - Clickable card
         AdaptiveCard(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onNavigateToNfc() }
+                .fillMaxWidth(),
+            onClick = onNavigateToNfc
         ) {
             Row(
                 modifier = Modifier
@@ -180,7 +199,10 @@ fun AddClickContent(onClickSuccess: (String) -> Unit, onNavigateToNfc: () -> Uni
 }
 
 @Composable
-fun ClickedSuccessContent(userName: String) {
+fun ClickedSuccessContent(
+    userName: String,
+    onStartChatting: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -226,7 +248,7 @@ fun ClickedSuccessContent(userName: String) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        AdaptiveButton(onClick = { /* go back or show chat */ }) {
+        AdaptiveButton(onClick = onStartChatting) {
             Text("Start Chatting")
         }
     }

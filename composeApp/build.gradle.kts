@@ -23,6 +23,7 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            freeCompilerArgs += listOf("-Xbinary=bundleId=compose.project.click.click")
         }
     }
 
@@ -37,6 +38,16 @@ kotlin {
 
             // Security crypto for encrypted shared preferences
             implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+            implementation("com.google.mlkit:barcode-scanning:17.2.0")
+            implementation("androidx.camera:camera-camera2:1.3.1")
+            implementation("androidx.camera:camera-lifecycle:1.3.1")
+            implementation("androidx.camera:camera-view:1.3.1")
+            implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+            // Google Maps
+            implementation("com.google.maps.android:maps-compose:4.3.3")
+            implementation("com.google.android.gms:play-services-maps:18.2.0")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -65,6 +76,8 @@ kotlin {
 
             // Kotlinx Serialization
             implementation(libs.kotlinx.serialization.json)
+
+            implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
         }
         iosMain.dependencies {
             // Ktor iOS engine
@@ -108,26 +121,7 @@ dependencies {
     debugImplementation(compose.uiTooling)
 }
 
-commonMain.dependencies {
-    implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
-}
 
-androidMain.dependencies {
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
-    implementation("androidx.camera:camera-camera2:1.3.1")
-    implementation("androidx.camera:camera-lifecycle:1.3.1")
-    implementation("androidx.camera:camera-view:1.3.1")
-    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
-
-    // Supabase
-    implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
-    implementation("io.github.jan-tennert.supabase:postgrest-kt")
-    implementation("io.github.jan-tennert.supabase:auth-kt")
-    implementation("io.github.jan-tennert.supabase:realtime-kt")
-
-    // Ktor client (choose one based on platform)
-    implementation("io.ktor:ktor-client-cio:3.0.0")
-}
 
 
 

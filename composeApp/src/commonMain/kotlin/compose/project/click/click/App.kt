@@ -44,6 +44,9 @@ import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 
+import compose.project.click.click.viewmodel.ConnectionViewModel
+import compose.project.click.click.data.models.User
+import compose.project.click.click.qr.toQrPayloadOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,44 +65,31 @@ fun App() {
         }
     }
 
-    // Navigation state
-    var showMyQRCode by remember { mutableStateOf(false) }
-    var showQRScanner by remember { mutableStateOf(false) }
+    // Auth ViewModel with TokenStorage
+    val tokenStorage = remember { createTokenStorage() }
+    val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
+    val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
 
-    when {
-        showMyQRCode -> {
-            MyQRCodeScreen(
-                userId = currentUser.id,
-                username = currentUser.username,
-                onNavigateBack = { showMyQRCode = false }
-            )
-        }
-        showQRScanner -> {
-            QRScannerScreen(
-                onQRCodeScanned = { qrData ->
-                    // Extract userId from "CLICK:USER:userId"
-                    val userId = qrData.removePrefix("CLICK:USER:")
-                    // Connect with this user
-                    connectWithUser(userId)
-                    showQRScanner = false
-                },
-                onNavigateBack = { showQRScanner = false }
-            )
-        }
-        else -> {
-            // Your main app UI
-            AddClickScreen(
-                currentUserId = currentUser.id,
-                currentUsername = currentUser.username,
-                onShowMyQRCode = { showMyQRCode = true },
-                onScanQRCode = { showQRScanner = true }
+    val currentUser = when (val state = authViewModel.authState) {
+        is AuthState.Success -> User(id = state.userId, name = state.name ?: state.email, createdAt = 0L)
+        else -> User(id = "", name = "", createdAt = 0L)
+    }
+
+    fun connectWithUser(userId: String) {
+        if (currentUser.id.isNotEmpty()) {
+            connectionViewModel.connectWithUser(
+                scannedUserId = userId,
+                currentUserId = currentUser.id
             )
         }
     }
 
-    // Auth ViewModel with TokenStorage
-    val tokenStorage = remember { createTokenStorage() }
-    val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
+    // Navigation state
+    var showMyQRCode by remember { mutableStateOf(false) }
+    var showQRScanner by remember { mutableStateOf(false) }
+
+
+
     var showSignUp by remember { mutableStateOf(false) }
     var skipLogin by remember { mutableStateOf(false) }  // For development/testing
 
@@ -228,13 +218,17 @@ fun App() {
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            bottomNavItems.forEach { item ->
+                                bottomNavItems.forEach { item ->
                                 NavigationBarItem(
                                     icon = { Icon(item.icon, contentDescription = item.title) },
                                     selected = currentRoute == item.route,
                                     onClick = {
                                         currentRoute = item.route
                                         isSearchOpen = false
+                                        // Reset overlay screens so we can navigate away
+                                        showMyQRCode = false
+                                        showQRScanner = false
+                                        showNfcScreen = false
                                         focusManager.clearFocus()
                                     },
                                     colors = NavigationBarItemDefaults.colors(
@@ -274,61 +268,92 @@ fun App() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        if (showNfcScreen) {
-                            // Get userId from AuthState and authToken from TokenStorage
-                            val userId = when (val state = authViewModel.authState) {
-                                is AuthState.Success -> state.userId
-                                else -> ""
-                            }
-                            val authToken by produceState(initialValue = "") {
-                                value = tokenStorage.getJwt() ?: ""
-                            }
-
-                            val nfcManager = rememberNfcManager()
-
-                            NfcScreen(
-                                userId = userId,
-                                authToken = authToken,
-                                nfcManager = nfcManager,
-                                onConnectionCreated = { connectionId ->
-                                    // Navigate to connections and show the new connection
-                                    showNfcScreen = false
-                                    currentRoute = NavigationItem.Connections.route
-                                },
-                                onBackPressed = {
-                                    showNfcScreen = false
-                                }
-                            )
-                        } else {
-                            when (currentRoute) {
-                                NavigationItem.Home.route -> HomeScreen()
-                                NavigationItem.AddClick.route -> AddClickScreen(
-                                    onNavigateToNfc = { showNfcScreen = true }
+                        when {
+                            showMyQRCode -> {
+                                MyQRCodeScreen(
+                                    userId = currentUser.id,
+                                    username = currentUser.name,
+                                    onNavigateBack = { showMyQRCode = false }
                                 )
-                                NavigationItem.Connections.route -> {
-                                    // Get userId from AuthState - use a placeholder for now
-                                    val userId = when (val state = authViewModel.authState) {
-                                        is AuthState.Success -> state.userId
-                                        else -> ""
+                            }
+                            showQRScanner -> {
+                                QRScannerScreen(
+                                    onQRCodeScanned = { qrData ->
+                                        try {
+                                            val payload = qrData.toQrPayloadOrNull()
+                                            if (payload != null) {
+                                                connectWithUser(payload.userId)
+                                            }
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                        showQRScanner = false
+                                    },
+                                    onNavigateBack = { showQRScanner = false }
+                                )
+                            }
+                            showNfcScreen -> {
+                                // Get userId from AuthState and authToken from TokenStorage
+                                val userId = when (val state = authViewModel.authState) {
+                                    is AuthState.Success -> state.userId
+                                    else -> ""
+                                }
+                                val authToken by produceState(initialValue = "") {
+                                    value = tokenStorage.getJwt() ?: ""
+                                }
+
+                                val nfcManager = rememberNfcManager()
+
+                                NfcScreen(
+                                    userId = userId,
+                                    authToken = authToken,
+                                    nfcManager = nfcManager,
+                                    onConnectionCreated = { connectionId ->
+                                        // Navigate to connections and show the new connection
+                                        showNfcScreen = false
+                                        currentRoute = NavigationItem.Connections.route
+                                    },
+                                    onBackPressed = {
+                                        showNfcScreen = false
                                     }
-                                    if (userId.isNotEmpty()) {
-                                        ConnectionsScreen(userId = userId)
-                                    } else {
-                                        // Show loading or login prompt
-                                        Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("Please log in to view connections")
+                                )
+                            }
+                            else -> {
+                                when (currentRoute) {
+                                    NavigationItem.Home.route -> HomeScreen()
+                                    NavigationItem.AddClick.route -> AddClickScreen(
+                                        currentUserId = currentUser.id,
+                                        currentUsername = currentUser.name,
+                                        onNavigateToNfc = { showNfcScreen = true },
+                                        onShowMyQRCode = { showMyQRCode = true },
+                                        onScanQRCode = { showQRScanner = true },
+                                        onStartChatting = { currentRoute = NavigationItem.Connections.route }
+                                    )
+                                    NavigationItem.Connections.route -> {
+                                        // Get userId from AuthState - use a placeholder for now
+                                        val userId = when (val state = authViewModel.authState) {
+                                            is AuthState.Success -> state.userId
+                                            else -> ""
+                                        }
+                                        if (userId.isNotEmpty()) {
+                                            ConnectionsScreen(userId = userId)
+                                        } else {
+                                            // Show loading or login prompt
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("Please log in to view connections")
+                                            }
                                         }
                                     }
+                                    NavigationItem.Map.route -> MapScreen()
+                                    NavigationItem.Settings.route -> SettingsScreen(
+                                        isDarkMode = isDarkMode,
+                                        onToggleDarkMode = { isDarkMode = !isDarkMode },
+                                        onSignOut = { authViewModel.signOut() }
+                                    )
                                 }
-                                NavigationItem.Map.route -> MapScreen()
-                                NavigationItem.Settings.route -> SettingsScreen(
-                                    isDarkMode = isDarkMode,
-                                    onToggleDarkMode = { isDarkMode = !isDarkMode },
-                                    onSignOut = { authViewModel.signOut() }
-                                )
                             }
                         }
                     }
