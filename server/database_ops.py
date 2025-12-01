@@ -41,7 +41,7 @@ def fetch_user(name: str) -> User:
     client = get_supabase_client()
     user = User(
         setup_dict=[
-            x for x in client.table("users").execute()["data"] if x["name"] == name
+            x for x in client.table("users").select("*").execute().data if x["name"] == name
         ][0]
     )
     # Iterate over a copy to avoid mutating the list while looping
@@ -55,7 +55,7 @@ def fetch_user_with_id(id: str) -> User:
     client = get_supabase_client()
     user = User(
         setup_dict=[
-            x for x in client.table("users").execute()["data"] if x["id"] == id
+            x for x in client.table("users").select("*").execute()["data"].data  if x["id"] == id
         ][0]
     )
     # Iterate over a copy to avoid mutating the list while looping
@@ -67,10 +67,12 @@ def fetch_user_with_id(id: str) -> User:
 
 def fetch_user_with_email(email: str) -> User:
     client = get_supabase_client()
+    thing = [
+            x for x in client.table("users").select("*").execute().data if x["email"] == email
+        ]
+    print(thing)
     user = User(
-        setup_dict=[
-            x for x in client.table("users").execute()["data"] if x["email"] == email
-        ][0]
+        setup_dict=thing[0]
     )
     # Iterate over a copy to avoid mutating the list while looping
     for conn_id in list(user.connections):
@@ -114,7 +116,7 @@ def fetch_connection(id: str) -> Connection:
     client = get_supabase_client()
     return Connection(
         setup_dict=[
-            x for x in client.table("connections").execute()["data"] if x["id"] == id
+            x for x in client.table("connections").select("*").execute()["data"].data  if x["id"] == id
         ][0]
     )
 

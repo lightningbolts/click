@@ -49,13 +49,9 @@ CORS(app, resources={
 def hello_world():  # put application's code here
     return 'Hello World!'
 
-@app.route('/create_account', methods=['POST'])
+@app.route('/create_account/', methods=['POST'])
 def create_account():
-    if validate(request.headers['Authorization']):
-        user_data = request.json
         return database_ops.create_user(request.args["name"], request.args["email"], request.args["image_src"])
-    else:
-        return "log in!"
 
 @app.route("/user/<name>", methods=['GET'])
 def user(name):
@@ -65,6 +61,11 @@ def user(name):
             return "user not found", 404
         return jsonify({user_fetched})
     return "log in", 405
+
+@app.route("/test", methods=['GET'])
+def test():
+    user_fetched = database_ops.fetch_user_with_email("test_1761762917@example.com")
+    return jsonify(user_fetched.id)
 
 @app.route("/user_with_email/<email>", methods=['GET'])
 def user_with_email(email):
