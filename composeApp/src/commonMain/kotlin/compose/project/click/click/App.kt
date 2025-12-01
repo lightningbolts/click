@@ -322,7 +322,8 @@ fun App() {
                                         currentUsername = currentUser.name,
                                         onNavigateToNfc = { showNfcScreen = true },
                                         onShowMyQRCode = { showMyQRCode = true },
-                                        onScanQRCode = { showQRScanner = true }
+                                        onScanQRCode = { showQRScanner = true },
+                                        onStartChatting = { currentRoute = NavigationItem.Connections.route }
                                     )
                                     NavigationItem.Connections.route -> {
                                         // Get userId from AuthState - use a placeholder for now

@@ -31,7 +31,8 @@ fun AddClickScreen(
     currentUsername: String? = null,
     onNavigateToNfc: () -> Unit = {},
     onShowMyQRCode: () -> Unit = {},
-    onScanQRCode: () -> Unit = {}
+    onScanQRCode: () -> Unit = {},
+    onStartChatting: () -> Unit = {}
 ) {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
@@ -67,7 +68,10 @@ fun AddClickScreen(
                                 onScanQRCode = onScanQRCode
                             )
                         } else {
-                            ClickedSuccessContent(userName = clickedUserName)
+                            ClickedSuccessContent(
+                                userName = clickedUserName,
+                                onStartChatting = onStartChatting
+                            )
                         }
                     }
                 }
@@ -116,8 +120,8 @@ fun AddClickContent(
             AdaptiveCard(
                 modifier = Modifier
                     .weight(1f)
-                    .height(160.dp)
-                    .clickable { onShowMyQRCode() }
+                    .height(160.dp),
+                onClick = onShowMyQRCode
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -138,8 +142,8 @@ fun AddClickContent(
             AdaptiveCard(
                 modifier = Modifier
                     .weight(1f)
-                    .height(160.dp)
-                    .clickable { onScanQRCode() }
+                    .height(160.dp),
+                onClick = onScanQRCode
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -163,8 +167,8 @@ fun AddClickContent(
         // NFC Section - Clickable card
         AdaptiveCard(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onNavigateToNfc() }
+                .fillMaxWidth(),
+            onClick = onNavigateToNfc
         ) {
             Row(
                 modifier = Modifier
@@ -200,7 +204,10 @@ fun AddClickContent(
 }
 
 @Composable
-fun ClickedSuccessContent(userName: String) {
+fun ClickedSuccessContent(
+    userName: String,
+    onStartChatting: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -246,7 +253,7 @@ fun ClickedSuccessContent(userName: String) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        AdaptiveButton(onClick = { /* go back or show chat */ }) {
+        AdaptiveButton(onClick = onStartChatting) {
             Text("Start Chatting")
         }
     }

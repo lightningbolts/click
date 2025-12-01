@@ -20,23 +20,41 @@ fun AdaptiveCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     // Glassmorphism Card with Glowing Border
-    Surface(
-        modifier = modifier
-            .border(
-                width = 1.dp,
-                brush = Brush.verticalGradient(
-                    colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
-                ),
-                shape = RoundedCornerShape(getAdaptiveCornerRadius())
+    val cardModifier = modifier
+        .border(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
             ),
-        shape = RoundedCornerShape(getAdaptiveCornerRadius()),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), // Translucent background adapted to theme
-        shadowElevation = 0.dp, // Remove shadow for glass effect
-        onClick = onClick ?: {}
-    ) {
-        Column(
-            modifier = Modifier.padding(getAdaptivePadding()),
-            content = content
+            shape = RoundedCornerShape(getAdaptiveCornerRadius())
+        )
+
+    if (onClick != null) {
+        Surface(
+            modifier = cardModifier,
+            shape = RoundedCornerShape(getAdaptiveCornerRadius()),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+            shadowElevation = 0.dp,
+            onClick = onClick,
+            content = {
+                Column(
+                    modifier = Modifier.padding(getAdaptivePadding()),
+                    content = content
+                )
+            }
+        )
+    } else {
+        Surface(
+            modifier = cardModifier,
+            shape = RoundedCornerShape(getAdaptiveCornerRadius()),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+            shadowElevation = 0.dp,
+            content = {
+                Column(
+                    modifier = Modifier.padding(getAdaptivePadding()),
+                    content = content
+                )
+            }
         )
     }
 }
@@ -81,9 +99,7 @@ fun AdaptiveButton(
         onClick = onClick,
         modifier = modifier.border(
             width = 1.dp,
-            brush = Brush.verticalGradient(
-                colors = listOf(PrimaryBlue.copy(alpha = 0.8f), Color.Transparent)
-            ),
+            color = PrimaryBlue.copy(alpha = 0.5f),
             shape = RoundedCornerShape(20.dp)
         ),
         enabled = enabled,
