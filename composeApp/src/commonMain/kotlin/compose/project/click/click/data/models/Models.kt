@@ -50,6 +50,14 @@ data class MessageReaction(
 )
 
 @Serializable
+data class ConnectionRequest(
+    val userId1: String,
+    val userId2: String,
+    val locationLat: Double? = null,
+    val locationLng: Double? = null
+)
+
+@Serializable
 data class Chat(
     val messages: List<Message> = emptyList()
 )
