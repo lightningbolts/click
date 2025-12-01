@@ -62,6 +62,41 @@ fun App() {
         }
     }
 
+    // Navigation state
+    var showMyQRCode by remember { mutableStateOf(false) }
+    var showQRScanner by remember { mutableStateOf(false) }
+
+    when {
+        showMyQRCode -> {
+            MyQRCodeScreen(
+                userId = currentUser.id,
+                username = currentUser.username,
+                onNavigateBack = { showMyQRCode = false }
+            )
+        }
+        showQRScanner -> {
+            QRScannerScreen(
+                onQRCodeScanned = { qrData ->
+                    // Extract userId from "CLICK:USER:userId"
+                    val userId = qrData.removePrefix("CLICK:USER:")
+                    // Connect with this user
+                    connectWithUser(userId)
+                    showQRScanner = false
+                },
+                onNavigateBack = { showQRScanner = false }
+            )
+        }
+        else -> {
+            // Your main app UI
+            AddClickScreen(
+                currentUserId = currentUser.id,
+                currentUsername = currentUser.username,
+                onShowMyQRCode = { showMyQRCode = true },
+                onScanQRCode = { showQRScanner = true }
+            )
+        }
+    }
+
     // Auth ViewModel with TokenStorage
     val tokenStorage = remember { createTokenStorage() }
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
