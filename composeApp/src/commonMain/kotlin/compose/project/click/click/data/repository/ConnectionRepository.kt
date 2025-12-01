@@ -1,18 +1,18 @@
 package compose.project.click.click.data.repository
 
-
+import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
-import compose.project.click.click.models.Connection
-import compose.project.click.click.models.ConnectionRequest
-import compose.project.click.click.models.User
-import io.github.jan.supabase.postgrest.query.Columns
+import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.*
-import io.github.jan.supabase.postgrest.decode.*
+import kotlinx.datetime.Clock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 class ConnectionRepository {
-    private val supabase = SupabaseClient.client
+    private val supabase = SupabaseConfig.client
 
     /**
      * Create a connection between two users
@@ -29,17 +29,26 @@ class ConnectionRepository {
                 return Result.failure(Exception("Connection already exists"))
             }
 
-            // Create new connection
-            val connection = Connection(
-                userId1 = request.userId1,
-                userId2 = request.userId2,
-                locationLat = request.locationLat,
-                locationLng = request.locationLng,
-                createdAt = System.currentTimeMillis()
+            val now = Clock.System.now().toEpochMilliseconds()
+            val expiry = now + (30L * 24 * 60 * 60 * 1000) // 30 days
+
+            // Use a map for insertion to let DB generate ID
+            val connectionData = mapOf(
+                "user_ids" to listOf(request.userId1, request.userId2),
+                "geo_location" to mapOf(
+                    "lat" to (request.locationLat ?: 0.0),
+                    "lon" to (request.locationLng ?: 0.0)
+                ),
+                "created" to now,
+                "expiry" to expiry,
+                "should_continue" to listOf(false, false),
+                "has_begun" to false
             )
 
             val result = supabase.from("connections")
-                .insert(connection)
+                .insert(connectionData) {
+                    select()
+                }
                 .decodeSingle<Connection>()
 
             Result.success(result)
@@ -56,23 +65,21 @@ class ConnectionRepository {
         userId2: String
     ): Connection? {
         return try {
-            val connections = supabase.from("connections")
+            supabase.from("connections")
                 .select {
-                    or {
-                        and {
-                            eq("userId1", userId1)
-                            eq("userId2", userId2)
-                        }
-                        and {
-                            eq("userId1", userId2)
-                            eq("userId2", userId1)
-                        }
+                    filter {
+                        // Check if user_ids array contains both users
+                        // Using 'cs' operator for array containment
+                        // The filter function expects column, operator, value
+                        // For array containment, we use "cs" (contains)
+                        // The value should be a string representation of the array: "{id1,id2}"
+                        filter("user_ids", io.github.jan.supabase.postgrest.query.filter.FilterOperator.CS, "{${userId1},${userId2}}")
                     }
                 }
-                .decodeList<Connection>()
-
-            connections.firstOrNull()
+                .decodeSingleOrNull<Connection>()
         } catch (e: Exception) {
+            // Log error if needed
+            println("Error checking connection: ${e.message}")
             null
         }
     }
@@ -82,17 +89,15 @@ class ConnectionRepository {
      */
     suspend fun getUserConnections(userId: String): Result<List<Connection>> {
         return try {
-            val connections = supabase.from("connections")
+            val result = supabase.from("connections")
                 .select {
-                    or {
-                        eq("userId1", userId)
-                        eq("userId2", userId)
+                    filter {
+                        filter("user_ids", io.github.jan.supabase.postgrest.query.filter.FilterOperator.CS, "{${userId}}")
                     }
-                    eq("status", "active")
                 }
                 .decodeList<Connection>()
-
-            Result.success(connections)
+            
+            Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -105,7 +110,9 @@ class ConnectionRepository {
         return try {
             val user = supabase.from("users")
                 .select {
-                    eq("id", userId)
+                    filter {
+                        eq("id", userId)
+                    }
                 }
                 .decodeSingle<User>()
 
@@ -122,7 +129,9 @@ class ConnectionRepository {
         return try {
             supabase.from("connections")
                 .delete {
-                    eq("id", connectionId)
+                    filter {
+                        eq("id", connectionId)
+                    }
                 }
 
             Result.success(Unit)

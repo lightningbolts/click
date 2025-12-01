@@ -1,18 +1,11 @@
 package compose.project.click.click.viewmodel
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ConnectionRepository
-
-package compose.project.click.click.viewmodels
-
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.ConnectionRepository
-import compose.project.click.click.models.Connection
-import compose.project.click.click.models.ConnectionRequest
-import compose.project.click.click.models.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 sealed class AuthState {
     object Idle : AuthState()
     object Loading : AuthState()
-    data class Success(val userId: String, val email: String) : AuthState()
+    data class Success(val userId: String, val email: String, val name: String? = null) : AuthState()
     data class Error(val message: String) : AuthState()
 }
 
@@ -38,7 +38,8 @@ class AuthViewModel(
                     isAuthenticated = true
                     authState = AuthState.Success(
                         userId = user.id,
-                        email = user.email ?: ""
+                        email = user.email ?: "",
+                        name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                     )
                 } else {
                     isAuthenticated = false
@@ -63,7 +64,8 @@ class AuthViewModel(
                         isAuthenticated = true
                         authState = AuthState.Success(
                             userId = user.id,
-                            email = user.email ?: email
+                            email = user.email ?: email,
+                            name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         )
                     },
                     onFailure = { error ->
@@ -88,7 +90,8 @@ class AuthViewModel(
                         isAuthenticated = true
                         authState = AuthState.Success(
                             userId = user.id,
-                            email = user.email ?: email
+                            email = user.email ?: email,
+                            name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         )
                     },
                     onFailure = { error ->

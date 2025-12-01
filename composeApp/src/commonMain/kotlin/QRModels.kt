@@ -1,41 +1,24 @@
 package compose.project.click.click.qr
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.jsonimport javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-import java.util.Base64
-import kotlinx.serialization.json
-
+import kotlinx.serialization.json.Json
 
 @Serializable
 data class QrPayload(
     val userId: String,
-    val shareKey: Long,
-    val expiryEpochSecs: Long // 有効期限を入れる
-)
-
-fun QrPayload.toJson(): String = Json.encodeToString(QrPayload.serializer(), this)
-
-fun String.toQrPayloadOrNull(): QrPayload? =
-    try {
-        Json.decodeFromString(QrPayload.serializer(), this)
-    } catch (e: Exception) {
-        null
-    }.Json
-
-@Serializable
-data class QrPayload(
-    val userId: String,
-    val shareKey: Long,
+    val shareKey: String? = null, // Changed to String? as User model has shareKey as String? or removed?
+    // User model in Models.kt doesn't have shareKey. It was removed in migration script.
+    // So maybe we don't need shareKey.
     val name: String? = null
 )
 
-fun QrPayload.toJson(): String = Json.encodeToString(QrPayload.serializer(), this)
+private val json = Json { ignoreUnknownKeys = true }
+
+fun QrPayload.toJson(): String = json.encodeToString(QrPayload.serializer(), this)
 
 fun String.toQrPayloadOrNull(): QrPayload? =
     try {
-        json.decodeFromString(QrPayload.Serializer(), this)
+        json.decodeFromString(QrPayload.serializer(), this)
     } catch (e: Exception) {
         null
     }
