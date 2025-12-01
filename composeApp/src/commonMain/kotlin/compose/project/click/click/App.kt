@@ -218,13 +218,17 @@ fun App() {
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            bottomNavItems.forEach { item ->
+                                bottomNavItems.forEach { item ->
                                 NavigationBarItem(
                                     icon = { Icon(item.icon, contentDescription = item.title) },
                                     selected = currentRoute == item.route,
                                     onClick = {
                                         currentRoute = item.route
                                         isSearchOpen = false
+                                        // Reset overlay screens so we can navigate away
+                                        showMyQRCode = false
+                                        showQRScanner = false
+                                        showNfcScreen = false
                                         focusManager.clearFocus()
                                     },
                                     colors = NavigationBarItemDefaults.colors(

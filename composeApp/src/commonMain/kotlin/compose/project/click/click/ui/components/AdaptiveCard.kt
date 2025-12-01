@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -23,9 +24,7 @@ fun AdaptiveCard(
     val cardModifier = modifier
         .border(
             width = 1.dp,
-            brush = Brush.verticalGradient(
-                colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
-            ),
+            color = PrimaryBlue.copy(alpha = 0.5f),
             shape = RoundedCornerShape(getAdaptiveCornerRadius())
         )
 
@@ -97,11 +96,7 @@ fun AdaptiveButton(
     // Glassmorphic Button
     Button(
         onClick = onClick,
-        modifier = modifier.border(
-            width = 1.dp,
-            color = PrimaryBlue.copy(alpha = 0.5f),
-            shape = RoundedCornerShape(20.dp)
-        ),
+        modifier = modifier,
         enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
@@ -109,7 +104,11 @@ fun AdaptiveButton(
             disabledContainerColor = Color.Gray.copy(alpha = 0.1f),
             disabledContentColor = Color.Gray
         ),
-        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = PrimaryBlue.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(getAdaptiveCornerRadius()),
         content = content
     )
 }

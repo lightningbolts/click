@@ -1,9 +1,9 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +19,8 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.QrPayload
 import compose.project.click.click.qr.toJson
 import qrcode.QRCode
+import compose.project.click.click.ui.components.AdaptiveButton
+import compose.project.click.click.utils.toImageBitmap
 
 @Composable
 fun UserQrCode(
@@ -34,15 +36,31 @@ fun UserQrCode(
             .build(payload)
     }
     
+    val qrImageBitmap = remember(qrCode) {
+        val sizePx = 512 // High resolution for display
+        val content = qrCode.renderToBytes()
+        content.toImageBitmap()
+    }
+    
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
-            // TODO: Implement actual QR code drawing using qrcode-kotlin
-            // val matrix = qrCode.rawData
-            Text("QR Code\n(Generated)")
+        Box(
+            modifier = Modifier
+                .size(size)
+                .background(Color.White, RoundedCornerShape(16.dp))
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.foundation.Image(
+                bitmap = qrImageBitmap,
+                contentDescription = "QR Code",
+                modifier = Modifier.fillMaxSize()
+            )
         }
         
-        Button(onClick = onShare) {
-            Text("Share")
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        AdaptiveButton(onClick = onShare) {
+            Text("Share QR Code")
         }
     }
 }

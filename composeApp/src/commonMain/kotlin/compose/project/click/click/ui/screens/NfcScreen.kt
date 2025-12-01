@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.nfc.NfcManager
 import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.viewmodel.NfcConnectionState
 import compose.project.click.click.viewmodel.NfcViewModel
@@ -52,6 +53,9 @@ fun NfcScreen(
         }
     }
 
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
+
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -62,31 +66,28 @@ fun NfcScreen(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBackPressed) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Text(
-                        text = "Tap to Connect",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    IconButton(onClick = { viewModel.openNfcSettings() }) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "NFC Settings",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                Box(modifier = Modifier.padding(top = headerTop)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBackPressed) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        PageHeader(title = "Tap to Connect", subtitle = "Hold near another phone")
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(onClick = { viewModel.openNfcSettings() }) {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = "NFC Settings",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 
