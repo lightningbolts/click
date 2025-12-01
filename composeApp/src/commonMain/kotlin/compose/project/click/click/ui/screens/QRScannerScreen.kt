@@ -28,20 +28,19 @@ fun QRScannerScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                PageHeader(
+                    title = "Scan QR Code",
+                    subtitle = "Point camera at a code",
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    PageHeader(title = "Scan QR Code", subtitle = "Point camera at a code")
-                }
+                )
             }
             
             Box(

@@ -44,6 +44,10 @@ kotlin {
             implementation("androidx.camera:camera-lifecycle:1.3.1")
             implementation("androidx.camera:camera-view:1.3.1")
             implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+            // Google Maps
+            implementation("com.google.maps.android:maps-compose:4.3.3")
+            implementation("com.google.android.gms:play-services-maps:18.2.0")
         }
         commonMain.dependencies {
             implementation(compose.runtime)

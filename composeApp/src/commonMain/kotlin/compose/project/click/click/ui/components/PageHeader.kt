@@ -2,6 +2,7 @@ package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,7 +23,8 @@ import compose.project.click.click.ui.components.getAdaptivePadding
 fun PageHeader(
     title: String,
     subtitle: String? = null,
-    navigationIcon: @Composable (() -> Unit)? = null
+    navigationIcon: @Composable (() -> Unit)? = null,
+    actions: @Composable (RowScope.() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier
@@ -41,7 +43,7 @@ fun PageHeader(
                 navigationIcon()
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineLarge,
@@ -56,6 +58,10 @@ fun PageHeader(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            if (actions != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                actions()
             }
         }
     }
