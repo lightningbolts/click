@@ -6,7 +6,7 @@ from utils import get_semantic_location
 
 class User:
     connections = []
-    def __init__(self, name:str=None, email:str=None, image:str=None, setup_dict=None):
+    def __init__(self, name:str=None, email:str=None, image:str=None, role:str="user", setup_dict=None):
         if(setup_dict is not None):
             #careful!
             for key, value in setup_dict.items():
@@ -15,6 +15,7 @@ class User:
         self.id = str(uuid.uuid4())
         self.name = name
         self.email = email
+        self.role = role
         self.image = image
         self.createdAt = datetime.datetime.now().__str__()
         self.lastPolled = self.createdAt
