@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-    <dict>
-        <key>CADisableMinimumFrameDurationOnPhone</key>
-        <true/>
-
-        <!-- NFC Permissions -->
-        <key>NFCReaderUsageDescription</key>
-        <string>Click uses NFC to quickly connect you with nearby users by tapping phones together.</string>
-
-        <key>com.apple.developer.nfc.readersession.formats</key>
-        <array>
-            <string>NDEF</string>
-            <string>TAG</string>
-        </array>
-
-        <!-- Location Permissions -->
-        <key>NSLocationWhenInUseUsageDescription</key>
-        <string>Click uses your location to show where you connected with others and display nearby connections on the map.</string>
-
-        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-        <string>Click uses your location to show where you connected with others and display nearby connections on the map.</string>
-    </dict>
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	
+	<!-- NFC Configuration -->
+	<key>NFCReaderUsageDescription</key>
+	<string>Click uses NFC to quickly connect you with nearby users by tapping phones together.</string>
+	<key>com.apple.developer.nfc.readersession.formats</key>
+	<array>
+		<string>NDEF</string>
+		<string>TAG</string>
+	</array>
+	
+	<!-- Camera Permission -->
+	<key>NSCameraUsageDescription</key>
+	<string>Click uses your camera to scan QR codes and connect with others.</string>
+	
+	<!-- Location Permissions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Click uses your location to show where you connected with others and display nearby connections on the map.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Click uses your location to show where you connected with others and display nearby connections on the map.</string>
+</dict>
 </plist>
