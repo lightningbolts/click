@@ -19,23 +19,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import kotlinx.cinterop.BetaInteropApi
-import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.useContents
+import kotlinx.cinterop.ObjCAction
 import platform.AVFoundation.*
-import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectMake
+import platform.Foundation.NSNumber
+import platform.Foundation.numberWithFloat
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.kCATransactionDisableActions
 import platform.UIKit.*
 import platform.darwin.NSObject
 import platform.darwin.dispatch_get_main_queue
+import platform.objc.sel_registerName
 
 /**
  * Custom UIView subclass that properly handles the camera preview layer layout
+ * and supports pinch-to-zoom gesture
  */
-@OptIn(ExperimentalForeignApi::class)
-private class CameraPreviewView : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0)) {
+@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+private class CameraPreviewView(
+    private val device: AVCaptureDevice?,
+    private val onQRCodeDetected: (String) -> Unit
+) : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0)) {
+    
     var previewLayer: AVCaptureVideoPreviewLayer? = null
         set(value) {
             field?.removeFromSuperlayer()
@@ -43,6 +49,49 @@ private class CameraPreviewView : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400
             value?.let { layer.addSublayer(it) }
             updatePreviewLayerFrame()
         }
+    
+    private var lastZoomFactor: Double = 1.0
+    
+    init {
+        // Add pinch gesture recognizer for zoom
+        val pinchGesture = UIPinchGestureRecognizer(
+            target = this,
+            action = sel_registerName("handlePinch:")
+        )
+        addGestureRecognizer(pinchGesture)
+        
+        // Enable user interaction
+        userInteractionEnabled = true
+    }
+    
+    @ObjCAction
+    fun handlePinch(gesture: UIPinchGestureRecognizer) {
+        val dev = device ?: return
+        
+        when (gesture.state) {
+            UIGestureRecognizerStateBegan -> {
+                lastZoomFactor = dev.videoZoomFactor
+            }
+            UIGestureRecognizerStateChanged -> {
+                val scale = gesture.scale
+                var newZoomFactor = lastZoomFactor * scale
+                
+                // Clamp zoom factor to device limits
+                val minZoom = 1.0
+                val maxZoom = minOf(dev.activeFormat?.videoMaxZoomFactor ?: 10.0, 10.0)
+                newZoomFactor = maxOf(minZoom, minOf(newZoomFactor, maxZoom))
+                
+                try {
+                    dev.lockForConfiguration(null)
+                    dev.videoZoomFactor = newZoomFactor
+                    dev.unlockForConfiguration()
+                } catch (e: Exception) {
+                    // Ignore lock errors
+                }
+            }
+            else -> {}
+        }
+    }
     
     override fun layoutSubviews() {
         super.layoutSubviews()
@@ -54,6 +103,11 @@ private class CameraPreviewView : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400
         CATransaction.setValue(true, kCATransactionDisableActions)
         previewLayer?.frame = bounds
         CATransaction.commit()
+    }
+    
+    // Method to trigger callback from delegate
+    fun notifyQRCodeDetected(value: String) {
+        onQRCodeDetected(value)
     }
 }
 
@@ -71,7 +125,16 @@ actual fun QRScanner(
     onResult: (String) -> Unit
 ) {
     var permissionState by remember { mutableStateOf<CameraPermissionState>(CameraPermissionState.Checking) }
-    var hasScanned by remember { mutableStateOf(false) }
+    
+    // Track scanned state and the actual scanned value
+    var scannedValue by remember { mutableStateOf<String?>(null) }
+    
+    // Process scanned value when it changes
+    LaunchedEffect(scannedValue) {
+        scannedValue?.let { value ->
+            onResult(value)
+        }
+    }
     
     // Check and request camera permission
     LaunchedEffect(Unit) {
@@ -150,9 +213,9 @@ actual fun QRScanner(
             CameraPreviewContent(
                 modifier = modifier,
                 onResult = { value ->
-                    if (!hasScanned) {
-                        hasScanned = true
-                        onResult(value)
+                    // Only process if we haven't scanned yet
+                    if (scannedValue == null) {
+                        scannedValue = value
                     }
                 }
             )
@@ -168,11 +231,37 @@ private fun CameraPreviewContent(
 ) {
     val device = remember { AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo) }
     
+    // Use state to track if a value has been detected
+    var detectedValue by remember { mutableStateOf<String?>(null) }
+    var hasProcessed by remember { mutableStateOf(false) }
+    
+    // Process detected value
+    LaunchedEffect(detectedValue) {
+        if (detectedValue != null && !hasProcessed) {
+            hasProcessed = true
+            onResult(detectedValue!!)
+        }
+    }
+    
     // Create capture session and related objects
     val captureSession = remember { AVCaptureSession() }
     val previewLayer = remember { 
         AVCaptureVideoPreviewLayer(session = captureSession).apply {
             videoGravity = AVLayerVideoGravityResizeAspectFill
+        }
+    }
+    
+    // Callback holder that can be updated
+    val callbackHolder = remember { 
+        object {
+            var onDetected: ((String) -> Unit)? = null
+        }
+    }
+    
+    // Update the callback when it changes
+    callbackHolder.onDetected = { value: String ->
+        if (detectedValue == null) {
+            detectedValue = value
         }
     }
     
@@ -187,7 +276,8 @@ private fun CameraPreviewContent(
                 didOutputMetadataObjects.firstOrNull()?.let { metadataObject ->
                     val readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
                     readableObject?.stringValue?.let { value ->
-                        onResult(value)
+                        // Use the callback holder to invoke the latest callback
+                        callbackHolder.onDetected?.invoke(value)
                     }
                 }
             }
@@ -287,10 +377,13 @@ private fun CameraPreviewContent(
             }
         }
     } else {
-        // Use the custom CameraPreviewView that handles layout properly
+        // Use the custom CameraPreviewView that handles layout and zoom properly
         UIKitView(
             factory = {
-                CameraPreviewView().apply {
+                CameraPreviewView(
+                    device = device,
+                    onQRCodeDetected = { /* Not used in this implementation */ }
+                ).apply {
                     backgroundColor = UIColor.blackColor
                     clipsToBounds = true
                     this.previewLayer = previewLayer

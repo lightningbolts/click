@@ -279,15 +279,25 @@ fun App() {
                             showQRScanner -> {
                                 QRScannerScreen(
                                     onQRCodeScanned = { qrData ->
+                                        showQRScanner = false
                                         try {
                                             val payload = qrData.toQrPayloadOrNull()
                                             if (payload != null) {
-                                                connectWithUser(payload.userId)
+                                                if (currentUser.id.isNotEmpty()) {
+                                                    connectWithUser(payload.userId)
+                                                    // Navigate to connections to see the result
+                                                    currentRoute = NavigationItem.Connections.route
+                                                } else {
+                                                    // User not logged in
+                                                    println("QR Scan: User not logged in, cannot connect")
+                                                }
+                                            } else {
+                                                // Invalid QR code format
+                                                println("QR Scan: Invalid QR code format - $qrData")
                                             }
                                         } catch (e: Exception) {
-                                            // ignore
+                                            println("QR Scan: Error processing QR code - ${e.message}")
                                         }
-                                        showQRScanner = false
                                     },
                                     onNavigateBack = { showQRScanner = false }
                                 )

@@ -48,31 +48,34 @@ class IosNfcManager : NfcManager {
         // Create delegate that handles NFC tag session callbacks
         tagReaderDelegate = NfcTagReaderDelegate(
             onTagRead = { payload ->
-                // Parse the payload - expecting format "click:user:<userId>"
-                val prefix = "click:user:"
-                if (payload.startsWith(prefix)) {
-                    val scannedUserId = payload.removePrefix(prefix)
-                    _nfcState.value = NfcState.DataReceived(scannedUserId, null)
+                // Try to parse as JSON first (QR code format)
+                val parsedUserId = parsePayload(payload)
+                if (parsedUserId != null) {
+                    _nfcState.value = NfcState.DataReceived(parsedUserId, null)
                 } else {
-                    _nfcState.value = NfcState.Error("Invalid QR/NFC code format")
+                    _nfcState.value = NfcState.Error("Invalid NFC data format. Expected Click user data.")
                 }
             },
             onError = { errorMessage ->
+                println("NFC Error: $errorMessage") // Debug logging
                 when {
                     errorMessage.contains("Session invalidated") || 
                     errorMessage.contains("Session is invalidated") ||
+                    errorMessage.contains("invalidated by user") ||
                     errorMessage.contains("User canceled") ||
                     errorMessage.contains("cancelled") -> {
                         // User dismissed the NFC sheet - return to idle
                         _nfcState.value = NfcState.Idle
                     }
-                    errorMessage.contains("entitlement") ||
-                    errorMessage.contains("Missing required") -> {
-                        // Missing NFC entitlement - suggest using QR code
-                        _nfcState.value = NfcState.Error("NFC is not configured for this app. Please use QR code scanning to connect with others.")
+                    errorMessage.contains("Feature not supported") -> {
+                        _nfcState.value = NfcState.Error("NFC Tag Reading is not supported. Please use QR code to connect.")
+                    }
+                    errorMessage.contains("System resource unavailable") -> {
+                        _nfcState.value = NfcState.Error("NFC is currently busy. Please try again.")
                     }
                     else -> {
-                        _nfcState.value = NfcState.Error(errorMessage)
+                        // Show the full error for debugging
+                        _nfcState.value = NfcState.Error("NFC Error: $errorMessage")
                     }
                 }
             },
@@ -81,16 +84,54 @@ class IosNfcManager : NfcManager {
             }
         )
 
-        // Create and start the NFC tag reader session
-        // Use ISO14443 which covers most NFC tags including those formatted with NDEF
-        tagReaderSession = NFCTagReaderSession(
-            pollingOption = NFCPollingISO14443 or NFCPollingISO15693 or NFCPollingISO18092,
-            delegate = tagReaderDelegate!!,
-            queue = null
-        )
+        try {
+            // Create and start the NFC tag reader session
+            // Use ISO14443 which covers most NFC tags including those formatted with NDEF
+            // Note: Only use ISO14443 for maximum compatibility
+            tagReaderSession = NFCTagReaderSession(
+                pollingOption = NFCPollingISO14443,
+                delegate = tagReaderDelegate!!,
+                queue = null
+            )
+            
+            tagReaderSession?.alertMessage = "Hold your iPhone near an NFC tag to connect"
+            tagReaderSession?.beginSession()
+        } catch (e: Exception) {
+            println("NFC Session creation failed: ${e.message}")
+            _nfcState.value = NfcState.Error("Failed to start NFC: ${e.message ?: "Unknown error"}")
+        }
+    }
+    
+    /**
+     * Parse payload from NFC tag
+     * Supports both JSON format (from QR codes) and click:user: prefix format
+     */
+    private fun parsePayload(payload: String): String? {
+        // Try JSON format first: {"userId":"xxx","name":"xxx"}
+        if (payload.startsWith("{")) {
+            try {
+                // Simple JSON parsing for userId field
+                val userIdMatch = Regex(""""userId"\s*:\s*"([^"]+)"""").find(payload)
+                if (userIdMatch != null) {
+                    return userIdMatch.groupValues[1]
+                }
+            } catch (e: Exception) {
+                // Fall through to try other formats
+            }
+        }
         
-        tagReaderSession?.alertMessage = "Hold your iPhone near another device or NFC tag to connect"
-        tagReaderSession?.beginSession()
+        // Try click:user: prefix format
+        val prefix = "click:user:"
+        if (payload.startsWith(prefix)) {
+            return payload.removePrefix(prefix)
+        }
+        
+        // If it looks like a UUID, return it directly
+        if (payload.matches(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))) {
+            return payload
+        }
+        
+        return null
     }
 
     override fun stopNfcReader() {
@@ -108,11 +149,9 @@ class IosNfcManager : NfcManager {
             return
         }
 
-        // On iOS, NFC tag writing requires using NFCNDEFTag interface
-        // For phone-to-phone connection, QR code is recommended
-        _nfcState.value = NfcState.Sending
-        
-        _nfcState.value = NfcState.Error("For phone-to-phone connection, please use QR code scanning instead. NFC can be used to read NFC tags with Click data.")
+        // iOS cannot do peer-to-peer NFC like Android
+        // For phone-to-phone connection, QR code is the recommended method
+        _nfcState.value = NfcState.Error("For phone-to-phone connection, please use QR code scanning. NFC is for reading NFC tags only.")
     }
 
     override fun stopNfcWriter() {
@@ -149,6 +188,9 @@ private class NfcTagReaderDelegate(
     
     override fun tagReaderSession(session: NFCTagReaderSession, didInvalidateWithError: NSError) {
         val errorMessage = didInvalidateWithError.localizedDescription
+        val errorCode = didInvalidateWithError.code
+        val domain = didInvalidateWithError.domain
+        println("NFC Session invalidated - Domain: $domain, Code: $errorCode, Message: $errorMessage")
         onError(errorMessage)
     }
     
@@ -170,31 +212,13 @@ private class NfcTagReaderDelegate(
             }
             
             // Try to read NDEF data from the tag
-            val ndefTag = when {
-                (tag as? NFCTagProtocol)?.asNFCISO7816Tag() != null -> {
-                    // ISO7816 tag (credit cards, passports, etc.)
-                    null // These don't typically have NDEF data we want
-                }
-                (tag as? NFCTagProtocol)?.asNFCMiFareTag() != null -> {
-                    tag.asNFCMiFareTag()
-                }
-                (tag as? NFCTagProtocol)?.asNFCISO15693Tag() != null -> {
-                    tag.asNFCISO15693Tag()
-                }
-                (tag as? NFCTagProtocol)?.asNFCFeliCaTag() != null -> {
-                    tag.asNFCFeliCaTag()
-                }
-                else -> null
-            }
-            
-            // For MiFare tags, we can try to query NDEF
             val mifareTag = (tag as? NFCTagProtocol)?.asNFCMiFareTag()
             if (mifareTag != null) {
                 // Query NDEF status for NDEF formatted tags
-                mifareTag.queryNDEFStatusWithCompletionHandler { status, capacity, error ->
-                    if (error != null || status == NFCNDEFStatusNotSupported) {
+                mifareTag.queryNDEFStatusWithCompletionHandler { status, capacity, queryError ->
+                    if (queryError != null || status == NFCNDEFStatusNotSupported) {
                         platform.darwin.dispatch_async(dispatch_get_main_queue()) {
-                            onError("This NFC tag doesn't contain readable Click data")
+                            onError("This NFC tag doesn't contain readable data")
                         }
                         session.invalidateSession()
                         return@queryNDEFStatusWithCompletionHandler
@@ -215,9 +239,9 @@ private class NfcTagReaderDelegate(
                     }
                 }
             } else {
-                // For other tag types, inform user
+                // For other tag types, try to get identifier or other data
                 platform.darwin.dispatch_async(dispatch_get_main_queue()) {
-                    onError("This NFC tag type is not supported for Click data")
+                    onError("This NFC tag type is not supported")
                 }
                 session.invalidateSession()
             }
@@ -251,7 +275,7 @@ private class NfcTagReaderDelegate(
                 platform.darwin.dispatch_async(dispatch_get_main_queue()) {
                     onTagRead(cleanPayload)
                 }
-                session.alertMessage = "Connection data read successfully!"
+                session.alertMessage = "Tag read successfully!"
                 session.invalidateSession()
                 return
             }
