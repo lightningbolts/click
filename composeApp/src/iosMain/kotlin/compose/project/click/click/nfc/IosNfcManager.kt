@@ -58,14 +58,22 @@ class IosNfcManager : NfcManager {
                 }
             },
             onError = { errorMessage ->
-                if (errorMessage.contains("Session invalidated") || 
+                when {
+                    errorMessage.contains("Session invalidated") || 
                     errorMessage.contains("Session is invalidated") ||
                     errorMessage.contains("User canceled") ||
-                    errorMessage.contains("cancelled")) {
-                    // User dismissed the NFC sheet - return to idle
-                    _nfcState.value = NfcState.Idle
-                } else {
-                    _nfcState.value = NfcState.Error(errorMessage)
+                    errorMessage.contains("cancelled") -> {
+                        // User dismissed the NFC sheet - return to idle
+                        _nfcState.value = NfcState.Idle
+                    }
+                    errorMessage.contains("entitlement") ||
+                    errorMessage.contains("Missing required") -> {
+                        // Missing NFC entitlement - suggest using QR code
+                        _nfcState.value = NfcState.Error("NFC is not configured for this app. Please use QR code scanning to connect with others.")
+                    }
+                    else -> {
+                        _nfcState.value = NfcState.Error(errorMessage)
+                    }
                 }
             },
             onSessionStarted = {

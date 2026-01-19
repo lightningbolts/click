@@ -15,23 +15,47 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.interop.UIKitView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.UIKitInteropProperties
+import androidx.compose.ui.viewinterop.UIKitView
 import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.useContents
 import platform.AVFoundation.*
+import platform.CoreGraphics.CGRect
+import platform.CoreGraphics.CGRectMake
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.kCATransactionDisableActions
 import platform.UIKit.*
 import platform.darwin.NSObject
 import platform.darwin.dispatch_get_main_queue
 
-// Helper class to hold references that need to be retained
-private class QRScannerState(
-    val captureSession: AVCaptureSession,
-    val previewLayer: AVCaptureVideoPreviewLayer,
-    val delegate: NSObject
-)
+/**
+ * Custom UIView subclass that properly handles the camera preview layer layout
+ */
+@OptIn(ExperimentalForeignApi::class)
+private class CameraPreviewView : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0)) {
+    var previewLayer: AVCaptureVideoPreviewLayer? = null
+        set(value) {
+            field?.removeFromSuperlayer()
+            field = value
+            value?.let { layer.addSublayer(it) }
+            updatePreviewLayerFrame()
+        }
+    
+    override fun layoutSubviews() {
+        super.layoutSubviews()
+        updatePreviewLayerFrame()
+    }
+    
+    private fun updatePreviewLayerFrame() {
+        CATransaction.begin()
+        CATransaction.setValue(true, kCATransactionDisableActions)
+        previewLayer?.frame = bounds
+        CATransaction.commit()
+    }
+}
 
 private sealed class CameraPermissionState {
     object Checking : CameraPermissionState()
@@ -123,141 +147,164 @@ actual fun QRScanner(
         }
         
         is CameraPermissionState.Granted -> {
-            // Show camera
-            val device = AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo)
-            
-            // Remember the callback to use in the delegate
-            val onResultCallback = remember { 
-                { value: String -> 
+            CameraPreviewContent(
+                modifier = modifier,
+                onResult = { value ->
                     if (!hasScanned) {
                         hasScanned = true
-                        onResult(value) 
-                    }
-                } 
-            }
-            
-            // Remember scanner state to prevent garbage collection
-            val scannerState = remember(device) {
-                if (device == null) return@remember null
-                
-                val captureSession = AVCaptureSession()
-                captureSession.sessionPreset = AVCaptureSessionPresetHigh
-                
-                // Input
-                val input = AVCaptureDeviceInput.deviceInputWithDevice(device, null)
-                if (input != null && captureSession.canAddInput(input)) {
-                    captureSession.addInput(input)
-                } else {
-                    return@remember null
-                }
-                
-                // Output
-                val metadataOutput = AVCaptureMetadataOutput()
-                var delegateRef: NSObject? = null
-                
-                if (captureSession.canAddOutput(metadataOutput)) {
-                    captureSession.addOutput(metadataOutput)
-                    
-                    delegateRef = object : NSObject(), AVCaptureMetadataOutputObjectsDelegateProtocol {
-                        override fun captureOutput(
-                            output: AVCaptureOutput,
-                            didOutputMetadataObjects: List<*>,
-                            fromConnection: AVCaptureConnection
-                        ) {
-                            didOutputMetadataObjects.firstOrNull()?.let { metadataObject ->
-                                val readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
-                                readableObject?.stringValue?.let { value ->
-                                    onResultCallback(value)
-                                }
-                            }
-                        }
-                    }
-                    
-                    metadataOutput.setMetadataObjectsDelegate(delegateRef, dispatch_get_main_queue())
-                    
-                    // Set supported types after adding output
-                    if (metadataOutput.availableMetadataObjectTypes.contains(AVMetadataObjectTypeQRCode)) {
-                        metadataOutput.setMetadataObjectTypes(listOf(AVMetadataObjectTypeQRCode))
-                    }
-                } else {
-                    return@remember null
-                }
-                
-                // Preview Layer
-                val previewLayer = AVCaptureVideoPreviewLayer(session = captureSession)
-                previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill
-                
-                QRScannerState(captureSession, previewLayer, delegateRef ?: object : NSObject() {})
-            }
-            
-            // Start/stop capture session
-            DisposableEffect(scannerState) {
-                if (scannerState != null) {
-                    platform.darwin.dispatch_async(platform.darwin.dispatch_get_global_queue(platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
-                        if (!scannerState.captureSession.isRunning()) {
-                            scannerState.captureSession.startRunning()
-                        }
+                        onResult(value)
                     }
                 }
-                onDispose {
-                    if (scannerState != null) {
-                        platform.darwin.dispatch_async(platform.darwin.dispatch_get_global_queue(platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
-                            if (scannerState.captureSession.isRunning()) {
-                                scannerState.captureSession.stopRunning()
-                            }
-                        }
-                    }
-                }
-            }
+            )
+        }
+    }
+}
 
-            if (scannerState != null) {
-                UIKitView(
-                    factory = {
-                        val cameraContainer = UIView()
-                        cameraContainer.backgroundColor = UIColor.blackColor
-                        cameraContainer.clipsToBounds = true
-                        
-                        // Add preview layer
-                        cameraContainer.layer.addSublayer(scannerState.previewLayer)
-                        
-                        cameraContainer
-                    },
-                    modifier = modifier.fillMaxSize(),
-                    update = { view: UIView ->
-                        // Update layer frame when view updates
-                        CATransaction.begin()
-                        CATransaction.setValue(true, kCATransactionDisableActions)
-                        scannerState.previewLayer.frame = view.bounds
-                        CATransaction.commit()
-                    },
-                    onResize = { view: UIView, rect: kotlinx.cinterop.CValue<platform.CoreGraphics.CGRect> ->
-                        CATransaction.begin()
-                        CATransaction.setValue(true, kCATransactionDisableActions)
-                        scannerState.previewLayer.frame = rect
-                        CATransaction.commit()
-                    }
-                )
-            } else {
-                // Camera setup failed
-                Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "Camera Setup Failed",
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "Unable to initialize camera. Please try again.",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@Composable
+private fun CameraPreviewContent(
+    modifier: Modifier,
+    onResult: (String) -> Unit
+) {
+    val device = remember { AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo) }
+    
+    // Create capture session and related objects
+    val captureSession = remember { AVCaptureSession() }
+    val previewLayer = remember { 
+        AVCaptureVideoPreviewLayer(session = captureSession).apply {
+            videoGravity = AVLayerVideoGravityResizeAspectFill
+        }
+    }
+    
+    // Remember the delegate to prevent garbage collection
+    val metadataDelegate = remember {
+        object : NSObject(), AVCaptureMetadataOutputObjectsDelegateProtocol {
+            override fun captureOutput(
+                output: AVCaptureOutput,
+                didOutputMetadataObjects: List<*>,
+                fromConnection: AVCaptureConnection
+            ) {
+                didOutputMetadataObjects.firstOrNull()?.let { metadataObject ->
+                    val readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
+                    readableObject?.stringValue?.let { value ->
+                        onResult(value)
                     }
                 }
             }
         }
+    }
+    
+    // Setup capture session
+    var setupComplete by remember { mutableStateOf(false) }
+    var setupError by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(device) {
+        if (device == null) {
+            setupError = "Camera not available"
+            return@LaunchedEffect
+        }
+        
+        try {
+            captureSession.beginConfiguration()
+            captureSession.sessionPreset = AVCaptureSessionPresetHigh
+            
+            // Add input
+            val input = AVCaptureDeviceInput.deviceInputWithDevice(device, null)
+            if (input != null && captureSession.canAddInput(input)) {
+                captureSession.addInput(input)
+            } else {
+                setupError = "Could not add camera input"
+                captureSession.commitConfiguration()
+                return@LaunchedEffect
+            }
+            
+            // Add output
+            val metadataOutput = AVCaptureMetadataOutput()
+            if (captureSession.canAddOutput(metadataOutput)) {
+                captureSession.addOutput(metadataOutput)
+                metadataOutput.setMetadataObjectsDelegate(metadataDelegate, dispatch_get_main_queue())
+                
+                // Must set metadata types AFTER adding output
+                if (metadataOutput.availableMetadataObjectTypes.contains(AVMetadataObjectTypeQRCode)) {
+                    metadataOutput.metadataObjectTypes = listOf(AVMetadataObjectTypeQRCode)
+                }
+            } else {
+                setupError = "Could not add metadata output"
+                captureSession.commitConfiguration()
+                return@LaunchedEffect
+            }
+            
+            captureSession.commitConfiguration()
+            setupComplete = true
+        } catch (e: Exception) {
+            setupError = "Camera setup failed: ${e.message}"
+        }
+    }
+    
+    // Start/stop capture session
+    DisposableEffect(setupComplete) {
+        if (setupComplete) {
+            platform.darwin.dispatch_async(
+                platform.darwin.dispatch_get_global_queue(
+                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 
+                    0u
+                )
+            ) {
+                captureSession.startRunning()
+            }
+        }
+        onDispose {
+            platform.darwin.dispatch_async(
+                platform.darwin.dispatch_get_global_queue(
+                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 
+                    0u
+                )
+            ) {
+                if (captureSession.isRunning()) {
+                    captureSession.stopRunning()
+                }
+            }
+        }
+    }
+
+    if (setupError != null) {
+        Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+            Column(
+                modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Camera Setup Failed",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    setupError ?: "Unknown error",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    } else {
+        // Use the custom CameraPreviewView that handles layout properly
+        UIKitView(
+            factory = {
+                CameraPreviewView().apply {
+                    backgroundColor = UIColor.blackColor
+                    clipsToBounds = true
+                    this.previewLayer = previewLayer
+                }
+            },
+            modifier = modifier.fillMaxSize(),
+            update = { view ->
+                // Force layout update
+                (view as? CameraPreviewView)?.setNeedsLayout()
+            },
+            properties = UIKitInteropProperties(
+                isInteractive = true,
+                isNativeAccessibilityEnabled = false
+            )
+        )
     }
 }
