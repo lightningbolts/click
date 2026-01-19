@@ -9,10 +9,12 @@ import platform.CoreNFC.*
 import platform.Foundation.*
 import platform.UIKit.UIApplication
 import platform.darwin.NSObject
+import platform.darwin.dispatch_get_main_queue
 
 /**
- * iOS NFC Manager implementation using Core NFC
- * Requires iPhone 7 or later running iOS 11+
+ * iOS NFC Manager implementation using Core NFC Tag Reader Session
+ * Uses NFCTagReaderSession for iOS 18.2+ compatibility
+ * Requires iPhone 7 or later running iOS 13+
  */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 class IosNfcManager : NfcManager {
@@ -20,12 +22,12 @@ class IosNfcManager : NfcManager {
     override val nfcState: StateFlow<NfcState> = _nfcState.asStateFlow()
 
     private var currentUserId: String? = null
-    private var readerSession: NFCNDEFReaderSession? = null
-    private var readerDelegate: NfcReaderDelegate? = null
+    private var tagReaderSession: NFCTagReaderSession? = null
+    private var tagReaderDelegate: NfcTagReaderDelegate? = null
 
     override fun isNfcAvailable(): Boolean {
-        // Check if device supports NFC reading
-        return NFCNDEFReaderSession.readingAvailable
+        // Check if device supports NFC tag reading
+        return NFCTagReaderSession.readingAvailable
     }
 
     override fun isNfcEnabled(): Boolean {
@@ -43,8 +45,8 @@ class IosNfcManager : NfcManager {
 
         _nfcState.value = NfcState.Scanning
 
-        // Create delegate that handles NFC session callbacks
-        readerDelegate = NfcReaderDelegate(
+        // Create delegate that handles NFC tag session callbacks
+        tagReaderDelegate = NfcTagReaderDelegate(
             onTagRead = { payload ->
                 // Parse the payload - expecting format "click:user:<userId>"
                 val prefix = "click:user:"
@@ -58,7 +60,8 @@ class IosNfcManager : NfcManager {
             onError = { errorMessage ->
                 if (errorMessage.contains("Session invalidated") || 
                     errorMessage.contains("Session is invalidated") ||
-                    errorMessage.contains("User canceled")) {
+                    errorMessage.contains("User canceled") ||
+                    errorMessage.contains("cancelled")) {
                     // User dismissed the NFC sheet - return to idle
                     _nfcState.value = NfcState.Idle
                 } else {
@@ -70,21 +73,22 @@ class IosNfcManager : NfcManager {
             }
         )
 
-        // Create and start the NFC reader session
-        readerSession = NFCNDEFReaderSession(
-            delegate = readerDelegate!!,
-            queue = null,
-            invalidateAfterFirstRead = false
+        // Create and start the NFC tag reader session
+        // Use ISO14443 which covers most NFC tags including those formatted with NDEF
+        tagReaderSession = NFCTagReaderSession(
+            pollingOption = NFCPollingISO14443 or NFCPollingISO15693 or NFCPollingISO18092,
+            delegate = tagReaderDelegate!!,
+            queue = null
         )
         
-        readerSession?.alertMessage = "Hold your iPhone near another device to connect"
-        readerSession?.beginSession()
+        tagReaderSession?.alertMessage = "Hold your iPhone near another device or NFC tag to connect"
+        tagReaderSession?.beginSession()
     }
 
     override fun stopNfcReader() {
-        readerSession?.invalidateSession()
-        readerSession = null
-        readerDelegate = null
+        tagReaderSession?.invalidateSession()
+        tagReaderSession = null
+        tagReaderDelegate = null
         _nfcState.value = NfcState.Idle
     }
 
@@ -96,18 +100,11 @@ class IosNfcManager : NfcManager {
             return
         }
 
-        // On iOS, NFC tag writing requires specific hardware (iPhone 7+, iOS 13+)
-        // For now, we use the reader mode which can also detect and read tags
-        // True peer-to-peer NFC (like Android Beam) is not supported on iOS
-        // Instead, we'll display the user's info as a QR code for the other device to scan
-        
+        // On iOS, NFC tag writing requires using NFCNDEFTag interface
+        // For phone-to-phone connection, QR code is recommended
         _nfcState.value = NfcState.Sending
         
-        // Note: For iOS-to-iOS NFC connection, we need to use a different approach:
-        // One device shows QR code, the other scans it
-        // Or use Core NFC to write to an NFC tag that the other device reads
-        
-        _nfcState.value = NfcState.Error("iOS NFC writing requires writing to an NFC tag. Use QR code for direct phone-to-phone connection.")
+        _nfcState.value = NfcState.Error("For phone-to-phone connection, please use QR code scanning instead. NFC can be used to read NFC tags with Click data.")
     }
 
     override fun stopNfcWriter() {
@@ -117,7 +114,7 @@ class IosNfcManager : NfcManager {
     override fun openNfcSettings() {
         // On iOS, there's no dedicated NFC settings page
         // NFC is always on if the hardware supports it
-        // We can open the general Settings app
+        // Open the general Settings app
         val settingsUrl = NSURL.URLWithString("App-Prefs:root=General")
             ?: NSURL.URLWithString("app-settings:")
             ?: return
@@ -129,63 +126,134 @@ class IosNfcManager : NfcManager {
 }
 
 /**
- * Delegate class for handling NFC reader session callbacks
+ * Delegate class for handling NFC tag reader session callbacks
  */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private class NfcReaderDelegate(
+private class NfcTagReaderDelegate(
     private val onTagRead: (String) -> Unit,
     private val onError: (String) -> Unit,
     private val onSessionStarted: () -> Unit
-) : NSObject(), NFCNDEFReaderSessionDelegateProtocol {
+) : NSObject(), NFCTagReaderSessionDelegateProtocol {
     
-    override fun readerSessionDidBecomeActive(session: NFCNDEFReaderSession) {
+    override fun tagReaderSessionDidBecomeActive(session: NFCTagReaderSession) {
         onSessionStarted()
     }
     
-    override fun readerSession(session: NFCNDEFReaderSession, didInvalidateWithError: NSError) {
+    override fun tagReaderSession(session: NFCTagReaderSession, didInvalidateWithError: NSError) {
         val errorMessage = didInvalidateWithError.localizedDescription
         onError(errorMessage)
     }
     
-    override fun readerSession(session: NFCNDEFReaderSession, didDetectNDEFs: List<*>) {
-        // Process NDEF messages
-        for (message in didDetectNDEFs) {
-            val ndefMessage = message as? NFCNDEFMessage ?: continue
+    override fun tagReaderSession(session: NFCTagReaderSession, didDetectTags: List<*>) {
+        // Process detected tags
+        val tag = didDetectTags.firstOrNull() ?: run {
+            session.alertMessage = "No NFC tag detected. Try again."
+            return
+        }
+        
+        // Connect to the tag
+        @Suppress("UNCHECKED_CAST")
+        session.connectToTag(tag as NFCTagProtocol) { error ->
+            if (error != null) {
+                platform.darwin.dispatch_async(dispatch_get_main_queue()) {
+                    onError("Failed to connect to NFC tag: ${error.localizedDescription}")
+                }
+                return@connectToTag
+            }
             
-            for (record in ndefMessage.records) {
-                val ndefRecord = record as? NFCNDEFPayload ?: continue
-                
-                // Try to get the payload as text
-                val payload = ndefRecord.payload ?: continue
-                
-                // For text records, the first byte is the language code length
-                // Skip the language code prefix to get the actual text
-                @Suppress("UNCHECKED_CAST")
-                val payloadString = NSString.create(
-                    data = payload,
-                    encoding = NSUTF8StringEncoding
-                ) as? String
-                
-                if (payloadString != null) {
-                    // Remove any language code prefix (for well-known text records)
-                    val cleanPayload = if (payloadString.length > 3 && 
-                        payloadString[0].code < 32) {
-                        // Text record with language code - skip prefix
-                        val langCodeLen = payloadString[0].code
-                        payloadString.substring(langCodeLen + 1)
-                    } else {
-                        payloadString
+            // Try to read NDEF data from the tag
+            val ndefTag = when {
+                (tag as? NFCTagProtocol)?.asNFCISO7816Tag() != null -> {
+                    // ISO7816 tag (credit cards, passports, etc.)
+                    null // These don't typically have NDEF data we want
+                }
+                (tag as? NFCTagProtocol)?.asNFCMiFareTag() != null -> {
+                    tag.asNFCMiFareTag()
+                }
+                (tag as? NFCTagProtocol)?.asNFCISO15693Tag() != null -> {
+                    tag.asNFCISO15693Tag()
+                }
+                (tag as? NFCTagProtocol)?.asNFCFeliCaTag() != null -> {
+                    tag.asNFCFeliCaTag()
+                }
+                else -> null
+            }
+            
+            // For MiFare tags, we can try to query NDEF
+            val mifareTag = (tag as? NFCTagProtocol)?.asNFCMiFareTag()
+            if (mifareTag != null) {
+                // Query NDEF status for NDEF formatted tags
+                mifareTag.queryNDEFStatusWithCompletionHandler { status, capacity, error ->
+                    if (error != null || status == NFCNDEFStatusNotSupported) {
+                        platform.darwin.dispatch_async(dispatch_get_main_queue()) {
+                            onError("This NFC tag doesn't contain readable Click data")
+                        }
+                        session.invalidateSession()
+                        return@queryNDEFStatusWithCompletionHandler
                     }
                     
-                    onTagRead(cleanPayload)
-                    session.invalidateSession()
-                    return
+                    // Read NDEF message
+                    mifareTag.readNDEFWithCompletionHandler { message, readError ->
+                        if (readError != null || message == null) {
+                            platform.darwin.dispatch_async(dispatch_get_main_queue()) {
+                                onError("Failed to read NFC tag data")
+                            }
+                            session.invalidateSession()
+                            return@readNDEFWithCompletionHandler
+                        }
+                        
+                        // Process NDEF message
+                        processNdefMessage(message, session)
+                    }
                 }
+            } else {
+                // For other tag types, inform user
+                platform.darwin.dispatch_async(dispatch_get_main_queue()) {
+                    onError("This NFC tag type is not supported for Click data")
+                }
+                session.invalidateSession()
+            }
+        }
+    }
+    
+    private fun processNdefMessage(message: NFCNDEFMessage, session: NFCTagReaderSession) {
+        for (record in message.records) {
+            val ndefRecord = record as? NFCNDEFPayload ?: continue
+            
+            // Try to get the payload as text
+            val payload = ndefRecord.payload ?: continue
+            
+            @Suppress("UNCHECKED_CAST")
+            val payloadString = NSString.create(
+                data = payload,
+                encoding = NSUTF8StringEncoding
+            ) as? String
+            
+            if (payloadString != null) {
+                // Remove any language code prefix (for well-known text records)
+                val cleanPayload = if (payloadString.length > 3 && 
+                    payloadString[0].code < 32) {
+                    // Text record with language code - skip prefix
+                    val langCodeLen = payloadString[0].code
+                    payloadString.substring(langCodeLen + 1)
+                } else {
+                    payloadString
+                }
+                
+                platform.darwin.dispatch_async(dispatch_get_main_queue()) {
+                    onTagRead(cleanPayload)
+                }
+                session.alertMessage = "Connection data read successfully!"
+                session.invalidateSession()
+                return
             }
         }
         
         // No valid payload found
-        session.alertMessage = "No valid Click data found. Try again."
+        platform.darwin.dispatch_async(dispatch_get_main_queue()) {
+            onError("No valid Click data found on this NFC tag")
+        }
+        session.invalidateSession()
     }
 }
 
