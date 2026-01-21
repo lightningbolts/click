@@ -42,8 +42,10 @@ bin/
 ### VS Code ###
 .vscode/
 
+**/local.properties
 local.properties
 .env
 .env.*
 *.pycache/
 .DS_Store
+local.properties
