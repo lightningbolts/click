@@ -35,9 +35,7 @@ import compose.project.click.click.ui.theme.*
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onSignUpClick: () -> Unit,
-    onGoogleSignIn: () -> Unit,
     onEmailSignIn: (email: String, password: String) -> Unit,
-    onSkipLogin: () -> Unit = {},
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -217,67 +215,6 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Divider with "OR"
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                )
-                Text(
-                    text = "OR",
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Google Sign In Button
-            OutlinedButton(
-                onClick = onGoogleSignIn,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                ),
-                enabled = !isLoading
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountCircle, // Using AccountCircle as placeholder for Google icon
-                        contentDescription = "Google",
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Continue with Google",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.height(32.dp))
 
             // Sign Up Link
@@ -300,21 +237,6 @@ fun LoginScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Skip Login Button (for development/testing)
-            TextButton(
-                onClick = onSkipLogin,
-                enabled = !isLoading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Skip for Now",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
             }
         }
     }

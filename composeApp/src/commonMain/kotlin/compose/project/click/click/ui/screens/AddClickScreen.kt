@@ -188,13 +188,6 @@ fun AddClickContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        AdaptiveButton(
-            onClick = { onClickSuccess("Alice") },
-        ) {
-            Text("Demo: Simulate Click", fontWeight = FontWeight.Medium)
-        }
     }
 }
 

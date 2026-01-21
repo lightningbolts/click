@@ -37,7 +37,6 @@ import androidx.compose.ui.zIndex
 fun SignUpScreen(
     onSignUpSuccess: () -> Unit,
     onLoginClick: () -> Unit,
-    onGoogleSignUp: () -> Unit,
     onEmailSignUp: (name: String, email: String, password: String) -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null
@@ -298,68 +297,6 @@ fun SignUpScreen(
                         text = "Create Account",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Divider with "OR"
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                )
-                Text(
-                    text = "OR",
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                HorizontalDivider(
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Google Sign Up Button
-            OutlinedButton(
-                onClick = onGoogleSignUp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.Transparent
-                ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                ),
-                enabled = !isLoading
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountCircle,
-                        contentDescription = "Google",
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Continue with Google",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

@@ -91,7 +91,6 @@ fun App() {
 
 
     var showSignUp by remember { mutableStateOf(false) }
-    var skipLogin by remember { mutableStateOf(false) }  // For development/testing
 
     val scheme = if (isDarkMode) {
         darkColorScheme(
@@ -138,8 +137,8 @@ fun App() {
                     } else modifier
                 }
         ) {
-            // Show login/signup screens when not authenticated and not skipped
-            if (!authViewModel.isAuthenticated && !skipLogin) {
+            // Show login/signup screens when not authenticated
+            if (!authViewModel.isAuthenticated) {
             if (showSignUp) {
                 SignUpScreen(
                     onSignUpSuccess = {
@@ -148,11 +147,6 @@ fun App() {
                     onLoginClick = {
                         showSignUp = false
                         authViewModel.resetAuthState()
-                    },
-                    onGoogleSignUp = {
-                        // TODO: Implement platform-specific Google Sign-In to get token
-                        // For now, this is a placeholder
-                        // authViewModel.signInWithGoogle(googleToken)
                     },
                     onEmailSignUp = { name, email, password ->
                         authViewModel.signUpWithEmail(name, email, password)
@@ -171,16 +165,8 @@ fun App() {
                         showSignUp = true
                         authViewModel.resetAuthState()
                     },
-                    onGoogleSignIn = {
-                        // TODO: Implement platform-specific Google Sign-In to get token
-                        // For now, this is a placeholder
-                        // authViewModel.signInWithGoogle(googleToken)
-                    },
                     onEmailSignIn = { email, password ->
                         authViewModel.signInWithEmail(email, password)
-                    },
-                    onSkipLogin = {
-                        skipLogin = true  // Skip authentication for development
                     },
                     isLoading = authViewModel.authState is AuthState.Loading,
                     errorMessage = if (authViewModel.authState is AuthState.Error) {

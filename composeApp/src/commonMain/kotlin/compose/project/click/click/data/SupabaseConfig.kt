@@ -20,6 +20,8 @@ object SupabaseConfig {
             install(Auth) {
                 scheme = "click"
                 host = "login"
+                autoLoadFromStorage = true
+                autoSaveToStorage = true
             }
             install(Postgrest)
             install(Realtime)
