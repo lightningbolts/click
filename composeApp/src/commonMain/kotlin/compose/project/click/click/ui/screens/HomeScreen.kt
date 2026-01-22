@@ -44,9 +44,9 @@ fun HomeScreen(
 ) {
     val homeState by viewModel.homeState.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadHomeData()
-    }
+    // Data loading is initiated by HomeViewModel.init{}
+    // LaunchedEffect(Unit) removed to avoid double loading
+
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp

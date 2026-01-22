@@ -19,10 +19,12 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    override suspend fun saveTokens(jwt: String, refreshToken: String) {
+    override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
         sharedPreferences.edit().apply {
             putString(KEY_JWT, jwt)
             putString(KEY_REFRESH_TOKEN, refreshToken)
+            if (expiresAt != null) putLong(KEY_EXPIRES_AT, expiresAt) else remove(KEY_EXPIRES_AT)
+            if (tokenType != null) putString(KEY_TOKEN_TYPE, tokenType) else remove(KEY_TOKEN_TYPE)
             apply()
         }
     }
@@ -35,6 +37,15 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         return sharedPreferences.getString(KEY_REFRESH_TOKEN, null)
     }
 
+    override suspend fun getExpiresAt(): Long? {
+        val expiry = sharedPreferences.getLong(KEY_EXPIRES_AT, -1L)
+        return if (expiry != -1L) expiry else null
+    }
+
+    override suspend fun getTokenType(): String? {
+        return sharedPreferences.getString(KEY_TOKEN_TYPE, null)
+    }
+
     override suspend fun clearTokens() {
         sharedPreferences.edit().clear().apply()
     }
@@ -42,6 +53,8 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     companion object {
         private const val KEY_JWT = "jwt"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_TOKEN_TYPE = "token_type"
     }
 }
 

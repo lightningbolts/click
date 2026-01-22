@@ -8,6 +8,8 @@ package compose.project.click.click.data.api
  * - Use 127.0.0.1 or your Mac's local IP address
  * - For iOS simulator, you can also use the special host
  */
+import compose.project.click.click.getPlatform
+
 object ApiConfig {
     // Change this to match your environment
     private const val USE_LOCAL_SERVER = true
@@ -21,14 +23,22 @@ object ApiConfig {
 
     /**
      * Base URL for the Flask API
-     *
-     * For iOS Simulator: Use your Mac's local IP address
-     * For Android Emulator: Use 10.0.2.2 (special alias for host machine)
-     * For Physical Device: Use your Mac's local network IP
+     * 
+     * IMPORTANT: 
+     * - Android Emulator: use 10.0.2.2
+     * - iOS Simulator: use 127.0.0.1 or Local IP
+     * - Physical Device: use your machine's network IP
+     */
+
+
+    /**
+     * Base URL for the Flask API
      */
     val BASE_URL: String
         get() = if (USE_LOCAL_SERVER) {
-            "http://$LOCAL_IP:$LOCAL_PORT"
+            val isAndroid = getPlatform().name.contains("Android", ignoreCase = true)
+            val host = if (isAndroid) "10.0.2.2" else LOCAL_IP 
+            "http://$host:$LOCAL_PORT"
         } else {
             PRODUCTION_URL
         }

@@ -8,8 +8,15 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.decodeRecord
+import io.github.jan.supabase.realtime.broadcastFlow
+import io.github.jan.supabase.realtime.broadcast
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.decodeFromJsonElement
+import io.github.jan.supabase.realtime.RealtimeChannel
 
 /**
  * Repository for chat operations
@@ -124,13 +131,29 @@ class ChatRepository(
         }
     }
 
+    // Get participants for a chat via API
+    suspend fun fetchChatParticipants(chatId: String): List<User> {
+        return try {
+            val authToken = tokenStorage.getJwt() ?: return emptyList()
+            val result = apiClient.getChatParticipants(chatId, authToken)
+            result.getOrElse {
+                println("Error fetching participants: ${it.message}")
+                emptyList()
+            }
+        } catch (e: Exception) {
+            println("Error fetching participants: ${e.message}")
+            emptyList()
+        }
+    }
+
     // Get user by ID - helper method for getting user details
     suspend fun getUserById(userId: String): User? {
+        // This is still needed for single lookups, but fetchChatParticipants should be used for the list
         return try {
             val authToken = tokenStorage.getJwt() ?: return null
-            val result = apiClient.getChatParticipants("", authToken) // This needs improvement
-            result.getOrElse { emptyList() }
-                .firstOrNull { it.id == userId }
+            // We use a dummy chatId or improve the API to support single user lookup
+            val result = apiClient.getUser(userId, authToken)
+            result.getOrNull()
         } catch (e: Exception) {
             println("Error fetching user: ${e.message}")
             null
@@ -181,14 +204,40 @@ class ChatRepository(
         } catch (e: Exception) { println("Error removing reaction: ${e.message}"); false }
     }
 
-    suspend fun setTyping(chatId: String, userId: String) {
+    private val typingChannels = mutableMapOf<String, RealtimeChannel>()
+
+    suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean) {
         try {
-            val authToken = tokenStorage.getJwt() ?: return
-            apiClient.setTyping(chatId, userId, authToken)
-        } catch (e: Exception) { println("Error setting typing: ${e.message}") }
+            var channel = typingChannels[chatId]
+            if (channel == null) {
+                channel = supabase.channel("typing:$chatId")
+                channel.subscribe()
+                typingChannels[chatId] = channel
+            }
+            channel.broadcast(
+                event = "typing",
+                message = buildJsonObject {
+                    put("userId", userId)
+                    put("isTyping", isTyping)
+                }
+            )
+        } catch (e: Exception) {
+            println("Error sending typing status: ${e.message}")
+        }
     }
 
+    fun observeTypingStatus(chatId: String): Flow<TypingStatus> {
+        val channel = typingChannels.getOrPut(chatId) {
+            supabase.channel("typing:$chatId")
+        }
+        return channel.broadcastFlow<TypingStatus>("typing")
+    }
+
+    @Serializable
+    data class TypingStatus(val userId: String, val isTyping: Boolean)
+
     suspend fun getTypingUsers(chatId: String): List<String> {
+        // This can be kept as a fallback or removed if using observeTypingStatus exclusively
         return try {
             val authToken = tokenStorage.getJwt() ?: return emptyList()
             apiClient.getTypingUsers(chatId, authToken).getOrElse { emptyList() }

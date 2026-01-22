@@ -35,9 +35,13 @@ class SupabaseRepository {
     }
 
     /**
-     * Fetch all connections for a user
+     * Fetch connections for a user with pagination
      */
-    suspend fun fetchUserConnections(userId: String): List<Connection> {
+    suspend fun fetchUserConnections(
+        userId: String, 
+        page: Int = 0, 
+        pageSize: Int = 20
+    ): List<Connection> {
         return try {
             supabase.from("connections")
                 .select {
@@ -46,6 +50,8 @@ class SupabaseRepository {
                             eq("user_ids", "cs.{$userId}")
                         }
                     }
+                    order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
                 }
                 .decodeList<Connection>()
         } catch (e: Exception) {

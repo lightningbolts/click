@@ -28,7 +28,9 @@ class AuthRepository(
             if (user != null && session != null) {
                 tokenStorage.saveTokens(
                     jwt = session.accessToken,
-                    refreshToken = session.refreshToken
+                    refreshToken = session.refreshToken,
+                    expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                    tokenType = session.tokenType
                 )
                 Result.success(user)
             } else {
@@ -57,7 +59,9 @@ class AuthRepository(
             if (user != null && session != null) {
                 tokenStorage.saveTokens(
                     jwt = session.accessToken,
-                    refreshToken = session.refreshToken
+                    refreshToken = session.refreshToken,
+                    expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                    tokenType = session.tokenType
                 )
                 Result.success(user)
             } else if (user != null) {
@@ -89,11 +93,20 @@ class AuthRepository(
             val refreshToken = tokenStorage.getRefreshToken()
 
             if (!accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()) {
+                val expiresAt = tokenStorage.getExpiresAt()
+                val tokenType = tokenStorage.getTokenType() ?: "bearer"
+                
+                // Calculate expiresIn based on stored expiresAt
+                val expiresIn = if (expiresAt != null) {
+                    val remaining = (expiresAt - kotlinx.datetime.Clock.System.now().toEpochMilliseconds()) / 1000
+                    if (remaining > 0) remaining else 0L
+                } else 3600L
+
                 val session = UserSession(
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    expiresIn = 3600,
-                    tokenType = "bearer",
+                    expiresIn = expiresIn,
+                    tokenType = tokenType,
                     user = null
                 )
                 supabase.auth.importSession(session)
@@ -127,7 +140,9 @@ class AuthRepository(
             if (session != null) {
                 tokenStorage.saveTokens(
                     jwt = session.accessToken,
-                    refreshToken = session.refreshToken
+                    refreshToken = session.refreshToken,
+                    expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                    tokenType = session.tokenType
                 )
             }
             Result.success(Unit)

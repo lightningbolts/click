@@ -160,7 +160,28 @@ class ChatApiClient(
     }
 
     /**
-     * Get a specific chat by ID
+     * Get a specific user by ID
+     */
+    suspend fun getUser(userId: String, authToken: String): Result<User> {
+        return try {
+            val response = client.get("$baseUrl/api/users/$userId") {
+                header("Authorization", authToken)
+            }
+
+            if (response.status.value in 200..299) {
+                val userApiModel = response.body<UserApiModel>()
+                Result.success(userApiModel.toUser())
+            } else {
+                Result.failure(Exception("Failed to fetch user: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            println("Error fetching user: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get a specific user by ID
      */
     suspend fun getChat(chatId: String, authToken: String): Result<Chat> {
         return try {

@@ -91,16 +91,18 @@ class ChatViewModel(
                 // Get messages
                 val messages = chatRepository.fetchMessagesForChat(chatId)
 
-                // Get user details for each message
-                val messagesWithUsers = messages.mapNotNull { message ->
-                    val user = chatRepository.getUserById(message.user_id)
-                    if (user != null) {
-                        MessageWithUser(
-                            message = message,
-                            user = user,
-                            isSent = message.user_id == userId
-                        )
-                    } else null
+                // Get all users for this chat in one go
+                val participants = chatRepository.fetchChatParticipants(chatId)
+                val userMap = participants.associateBy { it.id }
+
+                // Map messages to include user info
+                val messagesWithUsers = messages.map { message ->
+                    val user = userMap[message.user_id] ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
+                    MessageWithUser(
+                        message = message,
+                        user = user,
+                        isSent = message.user_id == userId
+                    )
                 }
 
                 _chatMessagesState.value = ChatMessagesState.Success(messagesWithUsers, chatDetails)
@@ -110,6 +112,9 @@ class ChatViewModel(
 
                 // Subscribe to new messages
                 subscribeToNewMessages(chatId, userId)
+                
+                // Monitor typing status
+                startTypingMonitoring(chatId)
             } catch (e: Exception) {
                 _chatMessagesState.value = ChatMessagesState.Error(e.message ?: "Failed to load messages")
             }
@@ -160,6 +165,9 @@ class ChatViewModel(
 
         if (content.isEmpty()) return
 
+        // Notify that we stopped typing when message is sent
+        onUserStoppedTyping(chatId)
+
         viewModelScope.launch {
             try {
                 val message = chatRepository.sendMessage(chatId, userId, content)
@@ -179,12 +187,20 @@ class ChatViewModel(
     // Update message input
     fun updateMessageInput(text: String) {
         _messageInput.value = text
+        currentChatId?.let { onUserTyping(it) }
     }
 
     // Clean up when leaving chat
     fun leaveChatRoom() {
+        val chatId = currentChatId
+        val userId = _currentUserId.value
+        if (chatId != null && userId != null) {
+             onUserStoppedTyping(chatId)
+        }
         realtimeJob?.cancel()
         realtimeJob = null
+        typingPollingJob?.cancel()
+        typingPollingJob = null
         currentChatId = null
         _chatMessagesState.value = ChatMessagesState.Loading
     }
@@ -192,15 +208,18 @@ class ChatViewModel(
     fun startTypingMonitoring(chatId: String) {
         typingPollingJob?.cancel()
         typingPollingJob = viewModelScope.launch {
-            while (true) {
-                try {
-                    val users = chatRepository.getTypingUsers(chatId)
-                    val currentUser = _currentUserId.value
-                    _typingUsers.value = users.filter { it != currentUser }
-                } catch (e: Exception) {
-                    // ignore transient errors
+            chatRepository.observeTypingStatus(chatId).collect { status ->
+                val currentUser = _currentUserId.value
+                if (status.userId != currentUser) {
+                    val currentTyping = _typingUsers.value.toMutableList()
+                    if (status.isTyping) {
+                        if (status.userId !in currentTyping) {
+                            _typingUsers.value = currentTyping + status.userId
+                        }
+                    } else {
+                        _typingUsers.value = currentTyping - status.userId
+                    }
                 }
-                kotlinx.coroutines.delay(1000)
             }
         }
     }
@@ -208,10 +227,23 @@ class ChatViewModel(
     fun onUserTyping(chatId: String) {
         val userId = _currentUserId.value ?: return
         val now = Clock.System.now().toEpochMilliseconds()
-        if (now - lastTypingSent > 800L) { // debounce
+        if (now - lastTypingSent > 2000L) { // Debounce sending typing status
             lastTypingSent = now
-            viewModelScope.launch { chatRepository.setTyping(chatId, userId) }
+            viewModelScope.launch { 
+                chatRepository.sendTypingStatus(chatId, userId, true) 
+                // Auto stop typing after 3 seconds of inactivity
+                kotlinx.coroutines.delay(3000)
+                if (Clock.System.now().toEpochMilliseconds() - lastTypingSent >= 3000L) {
+                    onUserStoppedTyping(chatId)
+                }
+            }
         }
+    }
+    
+    fun onUserStoppedTyping(chatId: String) {
+        val userId = _currentUserId.value ?: return
+        lastTypingSent = 0L 
+        viewModelScope.launch { chatRepository.sendTypingStatus(chatId, userId, false) }
     }
 
     fun addReaction(messageId: String, reactionType: String) {
