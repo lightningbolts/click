@@ -4,10 +4,15 @@ import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.user.UserInfo
+import io.github.jan.supabase.auth.user.UserSession
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.data.storage.createTokenStorage
 
-class AuthRepository {
+class AuthRepository(
+    private val tokenStorage: TokenStorage = createTokenStorage()
+) {
     private val supabase = SupabaseConfig.client
 
     suspend fun signInWithEmail(email: String, password: String): Result<UserInfo> {
@@ -17,8 +22,14 @@ class AuthRepository {
                 this.password = password
             }
 
-            val user = supabase.auth.currentUserOrNull()
-            if (user != null) {
+            val session = supabase.auth.currentSessionOrNull()
+            val user = session?.user
+
+            if (user != null && session != null) {
+                tokenStorage.saveTokens(
+                    jwt = session.accessToken,
+                    refreshToken = session.refreshToken
+                )
                 Result.success(user)
             } else {
                 Result.failure(Exception("Failed to get user info after sign in"))
@@ -39,15 +50,20 @@ class AuthRepository {
                 }
             }
 
-            // Get the current session - it should be created even if email confirmation is pending
+            // Get the current session
             val session = supabase.auth.currentSessionOrNull()
             val user = session?.user
 
-            if (user != null) {
+            if (user != null && session != null) {
+                tokenStorage.saveTokens(
+                    jwt = session.accessToken,
+                    refreshToken = session.refreshToken
+                )
+                Result.success(user)
+            } else if (user != null) {
+                // User created but no session (e.g. confirm email), strictly shouldn't happen with implicit login unless configured otherwise
                 Result.success(user)
             } else {
-                // If no session but sign up succeeded, it means email confirmation is required
-                // Create a temporary UserInfo-like result
                 Result.failure(Exception("Sign up successful! Please check your email to confirm your account, then sign in."))
             }
         } catch (e: Exception) {
@@ -58,8 +74,40 @@ class AuthRepository {
     suspend fun signOut(): Result<Unit> {
         return try {
             supabase.auth.signOut()
+            tokenStorage.clearTokens()
             Result.success(Unit)
         } catch (e: Exception) {
+            // Ensure tokens are cleared even if Supabase signout fails (e.g. network error)
+            tokenStorage.clearTokens()
+            Result.failure(e)
+        }
+    }
+
+    suspend fun restoreSession(): Result<UserInfo> {
+        return try {
+            val accessToken = tokenStorage.getJwt()
+            val refreshToken = tokenStorage.getRefreshToken()
+
+            if (!accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()) {
+                val session = UserSession(
+                    accessToken = accessToken,
+                    refreshToken = refreshToken,
+                    expiresIn = 3600,
+                    tokenType = "bearer",
+                    user = null
+                )
+                supabase.auth.importSession(session)
+                val user = supabase.auth.currentUserOrNull()
+                if (user != null) {
+                    Result.success(user)
+                } else {
+                    Result.failure(Exception("Session expired"))
+                }
+            } else {
+                Result.failure(Exception("No tokens found"))
+            }
+        } catch (e: Exception) {
+            tokenStorage.clearTokens()
             Result.failure(e)
         }
     }
@@ -75,6 +123,13 @@ class AuthRepository {
     suspend fun refreshSession(): Result<Unit> {
         return try {
             supabase.auth.refreshCurrentSession()
+            val session = supabase.auth.currentSessionOrNull()
+            if (session != null) {
+                tokenStorage.saveTokens(
+                    jwt = session.accessToken,
+                    refreshToken = session.refreshToken
+                )
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

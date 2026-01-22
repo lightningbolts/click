@@ -17,8 +17,8 @@ sealed class AuthState {
 }
 
 class AuthViewModel(
-    private val authRepository: AuthRepository = AuthRepository(),
-    private val tokenStorage: TokenStorage
+    private val tokenStorage: TokenStorage,
+    private val authRepository: AuthRepository = AuthRepository(tokenStorage)
 ) : ViewModel() {
     var authState by mutableStateOf<AuthState>(AuthState.Idle)
         private set
@@ -33,18 +33,28 @@ class AuthViewModel(
     private fun checkAuthStatus() {
         viewModelScope.launch {
             try {
-                val user = authRepository.getCurrentUser()
-                if (user != null) {
-                    isAuthenticated = true
-                    authState = AuthState.Success(
-                        userId = user.id,
-                        email = user.email ?: "",
-                        name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
-                    )
+                // Try to restore session from storage if not already authenticated in memory
+                val userResult = if (authRepository.isAuthenticated()) {
+                    val user = authRepository.getCurrentUser()
+                    if (user != null) Result.success(user) else Result.failure(Exception("No user"))
                 } else {
-                    isAuthenticated = false
-                    authState = AuthState.Idle
+                    authRepository.restoreSession()
                 }
+
+                userResult.fold(
+                    onSuccess = { user ->
+                        isAuthenticated = true
+                        authState = AuthState.Success(
+                            userId = user.id,
+                            email = user.email ?: "",
+                            name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+                        )
+                    },
+                    onFailure = {
+                        isAuthenticated = false
+                        authState = AuthState.Idle
+                    }
+                )
             } catch (e: Exception) {
                 isAuthenticated = false
                 authState = AuthState.Idle
@@ -127,12 +137,11 @@ class AuthViewModel(
         viewModelScope.launch {
             try {
                 authRepository.signOut()
-                tokenStorage.clearTokens()
+                // tokenStorage clearing is now handled in repository
                 isAuthenticated = false
                 authState = AuthState.Idle
             } catch (e: Exception) {
-                // Even if logout fails, clear local state
-                tokenStorage.clearTokens()
+                // If repo logout fails, we still want to clear UI state
                 isAuthenticated = false
                 authState = AuthState.Idle
             }
