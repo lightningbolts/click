@@ -9,16 +9,21 @@ echo "Starting Xcode Cloud Post-Clone Script..."
 echo "Installing OpenJDK 17..."
 brew install openjdk@17
 
-# 2. Symlink Java so the system can find it
-# This creates a link in the system Java folder pointing to the brew installation
-sudo ln -sfn /usr/local/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk
+# 2. Create the local JavaVirtualMachines directory if it doesn't exist
+# We use $HOME because we don't have sudo access to the system /Library
+mkdir -p "$HOME/Library/Java/JavaVirtualMachines"
 
-# 3. Export JAVA_HOME just in case (optional but safe)
-export JAVA_HOME="/usr/local/opt/openjdk@17"
-export PATH="$JAVA_HOME/bin:$PATH"
+# 3. Symlink the installed Java to the user's local JVM folder
+# This makes it discoverable by the system Java wrappers without needing sudo
+echo "Linking OpenJDK 17 to user library..."
+ln -sfn /usr/local/opt/openjdk@17/libexec/openjdk.jdk "$HOME/Library/Java/JavaVirtualMachines/openjdk-17.jdk"
 
-# 4. Verify Java is accessible
-echo "Verifying Java installation:"
-java -version
-
-echo "Post-clone setup complete. Ready to build!"
+# 4. Verify installation
+echo "Verifying Java installation..."
+if [ -x "$HOME/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home/bin/java" ]; then
+    "$HOME/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home/bin/java" -version
+    echo "Java 17 installed and linked successfully."
+else
+    echo "Error: Java binary not found after linking."
+    exit 1
+fi
