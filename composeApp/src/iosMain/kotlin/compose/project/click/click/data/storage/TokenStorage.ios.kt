@@ -4,7 +4,7 @@ import platform.Foundation.NSUserDefaults
 
 class IosTokenStorage : TokenStorage {
 
-    private val userDefaults = NSUserDefaults.standardUserDefaults
+    private val userDefaults = NSUserDefaults(suiteName = "click_auth_prefs") ?: NSUserDefaults.standardUserDefaults
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
         userDefaults.setObject(jwt, KEY_JWT)

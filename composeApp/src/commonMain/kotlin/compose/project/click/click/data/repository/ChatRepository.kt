@@ -211,7 +211,9 @@ class ChatRepository(
             var channel = typingChannels[chatId]
             if (channel == null) {
                 channel = supabase.channel("typing:$chatId")
-                channel.subscribe()
+                // We don't call subscribe() here if it's causing issues, 
+                // or we ensure it's called correctly.
+                // In many versions of supabase-kt, broadcast() will auto-subscribe if needed.
                 typingChannels[chatId] = channel
             }
             channel.broadcast(

@@ -97,8 +97,9 @@ class AuthRepository(
                 val tokenType = tokenStorage.getTokenType() ?: "bearer"
                 
                 // Calculate expiresIn based on stored expiresAt
+                val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 val expiresIn = if (expiresAt != null) {
-                    val remaining = (expiresAt - kotlinx.datetime.Clock.System.now().toEpochMilliseconds()) / 1000
+                    val remaining = (expiresAt - now) / 1000
                     if (remaining > 0) remaining else 0L
                 } else 3600L
 
@@ -109,18 +110,47 @@ class AuthRepository(
                     tokenType = tokenType,
                     user = null
                 )
+                
+                // Import the session into Supabase
                 supabase.auth.importSession(session)
+                
+                // If the session is expired, try to refresh it
+                var user = supabase.auth.currentUserOrNull()
+                if (user == null || (expiresAt != null && now >= expiresAt)) {
+                    try {
+                        supabase.auth.refreshCurrentSession()
+                        user = supabase.auth.currentUserOrNull()
+                    } catch (e: Exception) {
+                        println("Failed to refresh session: ${e.message}")
+                    }
+                }
+
+                if (user != null) {
+                    // Update stored tokens with newly refreshed ones
+                    val currentSession = supabase.auth.currentSessionOrNull()
+                    if (currentSession != null) {
+                        tokenStorage.saveTokens(
+                            jwt = currentSession.accessToken,
+                            refreshToken = currentSession.refreshToken,
+                            expiresAt = currentSession.expiresAt?.toEpochMilliseconds(),
+                            tokenType = currentSession.tokenType
+                        )
+                    }
+                    Result.success(user)
+                } else {
+                    Result.failure(Exception("Session expired and could not be refreshed"))
+                }
+            } else {
+                // If no tokens in TokenStorage, check if Supabase already has a session (from SettingsSessionManager)
                 val user = supabase.auth.currentUserOrNull()
                 if (user != null) {
                     Result.success(user)
                 } else {
-                    Result.failure(Exception("Session expired"))
+                    Result.failure(Exception("No saved session found"))
                 }
-            } else {
-                Result.failure(Exception("No tokens found"))
             }
         } catch (e: Exception) {
-            tokenStorage.clearTokens()
+            println("Error restoring session: ${e.message}")
             Result.failure(e)
         }
     }

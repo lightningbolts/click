@@ -137,8 +137,15 @@ fun App() {
                     } else modifier
                 }
         ) {
-            // Show login/signup screens when not authenticated
-            if (!authViewModel.isAuthenticated) {
+        // Show login/signup screens when not authenticated
+        if (authViewModel.authState is AuthState.Loading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else if (!authViewModel.isAuthenticated) {
             if (showSignUp) {
                 SignUpScreen(
                     onSignUpSuccess = {

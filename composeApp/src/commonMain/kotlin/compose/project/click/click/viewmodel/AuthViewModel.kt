@@ -20,7 +20,7 @@ class AuthViewModel(
     private val tokenStorage: TokenStorage,
     private val authRepository: AuthRepository = AuthRepository(tokenStorage)
 ) : ViewModel() {
-    var authState by mutableStateOf<AuthState>(AuthState.Idle)
+    var authState by mutableStateOf<AuthState>(AuthState.Loading)
         private set
 
     var isAuthenticated by mutableStateOf(false)
@@ -33,7 +33,7 @@ class AuthViewModel(
     private fun checkAuthStatus() {
         viewModelScope.launch {
             try {
-                // Try to restore session from storage if not already authenticated in memory
+                // Try to restore session from storage
                 val userResult = if (authRepository.isAuthenticated()) {
                     val user = authRepository.getCurrentUser()
                     if (user != null) Result.success(user) else Result.failure(Exception("No user"))
