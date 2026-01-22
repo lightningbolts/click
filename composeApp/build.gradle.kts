@@ -79,6 +79,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
 
             implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
+
+            // Multiplatform Settings for persistent session storage
+            implementation("com.russhwolf:multiplatform-settings-no-arg:1.2.0")
         }
         iosMain.dependencies {
             // Ktor iOS engine
