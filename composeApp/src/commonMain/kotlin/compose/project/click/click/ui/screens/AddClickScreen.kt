@@ -163,7 +163,7 @@ fun AddClickContent(
         AdaptiveCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp),
+                .height(180.dp),
             onClick = onNavigateToNfc
         ) {
             Column(
@@ -177,19 +177,19 @@ fun AddClickContent(
                     Icons.Filled.Nfc,
                     contentDescription = "NFC",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(64.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     "Tap to use NFC",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Hold phones together to connect",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

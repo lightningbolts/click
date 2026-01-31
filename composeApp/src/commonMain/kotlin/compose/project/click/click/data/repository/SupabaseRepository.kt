@@ -272,16 +272,44 @@ class SupabaseRepository {
     
     /**
      * Update user's availability (upsert)
+     * Uses manual field setting to avoid issues with empty ID
      */
     suspend fun updateUserAvailability(availability: compose.project.click.click.data.models.UserAvailability): Boolean {
         return try {
-            supabase.from("user_availability")
-                .upsert(availability) {
-                    onConflict = "user_id"
-                }
+            // Check if record exists first
+            val existing = fetchUserAvailability(availability.userId)
+            
+            if (existing != null) {
+                // Update existing record
+                supabase.from("user_availability")
+                    .update({
+                        set("is_free_this_week", availability.isFreeThisWeek)
+                        set("available_days", availability.availableDays)
+                        set("preferred_activities", availability.preferredActivities)
+                        set("custom_status", availability.customStatus)
+                        set("last_updated", availability.lastUpdated)
+                    }) {
+                        filter {
+                            eq("user_id", availability.userId)
+                        }
+                    }
+            } else {
+                // Insert new record (let Supabase generate ID)
+                supabase.from("user_availability")
+                    .insert(mapOf(
+                        "user_id" to availability.userId,
+                        "is_free_this_week" to availability.isFreeThisWeek,
+                        "available_days" to availability.availableDays,
+                        "preferred_activities" to availability.preferredActivities,
+                        "custom_status" to availability.customStatus,
+                        "last_updated" to availability.lastUpdated
+                    ))
+            }
+            println("Successfully updated availability for user ${availability.userId}: isFreeThisWeek=${availability.isFreeThisWeek}")
             true
         } catch (e: Exception) {
             println("Error updating availability: ${e.message}")
+            e.printStackTrace()
             false
         }
     }
@@ -300,9 +328,12 @@ class SupabaseRepository {
                 isFreeThisWeek = isFree,
                 lastUpdated = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             )
-            updateUserAvailability(availability)
+            val result = updateUserAvailability(availability)
+            println("setFreeThisWeek for $userId: isFree=$isFree, result=$result")
+            result
         } catch (e: Exception) {
             println("Error setting free this week: ${e.message}")
+            e.printStackTrace()
             false
         }
     }
@@ -312,6 +343,7 @@ class SupabaseRepository {
      */
     suspend fun updateUserName(userId: String, name: String): Boolean {
         return try {
+            println("Updating user name for $userId to: $name")
             supabase.from("users")
                 .update({
                     set("name", name)
@@ -320,9 +352,61 @@ class SupabaseRepository {
                         eq("id", userId)
                     }
                 }
+            println("Successfully updated user name for $userId to: $name")
             true
         } catch (e: Exception) {
             println("Error updating user name: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+    
+    /**
+     * Upsert a user record in the users table.
+     * This ensures the user exists and is properly synchronized with Supabase Auth.
+     */
+    suspend fun upsertUser(user: compose.project.click.click.data.models.User): Boolean {
+        return try {
+            println("Upserting user: ${user.id}, name: ${user.name}")
+            
+            // Check if user exists
+            val existing = fetchUserById(user.id)
+            
+            if (existing != null) {
+                // Update existing user if name changed
+                if (existing.name != user.name && user.name != null) {
+                    supabase.from("users")
+                        .update({
+                            set("name", user.name)
+                        }) {
+                            filter {
+                                eq("id", user.id)
+                            }
+                        }
+                    println("Updated existing user name: ${user.name}")
+                }
+                true
+            } else {
+                // Insert new user
+                supabase.from("users")
+                    .insert(mapOf(
+                        "id" to user.id,
+                        "name" to user.name,
+                        "email" to user.email,
+                        "image" to user.image,
+                        "created_at" to user.createdAt,
+                        "last_polled" to user.lastPolled,
+                        "connections" to user.connections,
+                        "paired_with" to user.paired_with,
+                        "connection_today" to user.connection_today,
+                        "last_paired" to user.last_paired
+                    ))
+                println("Inserted new user: ${user.id}")
+                true
+            }
+        } catch (e: Exception) {
+            println("Error upserting user: ${e.message}")
+            e.printStackTrace()
             false
         }
     }

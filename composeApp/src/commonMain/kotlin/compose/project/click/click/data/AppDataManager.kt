@@ -81,17 +81,26 @@ object AppDataManager {
             // Get current user from auth
             val authUser = authRepository.getCurrentUser()
             if (authUser == null) {
+                println("AppDataManager: No auth user found")
                 _isLoading.value = false
                 return
             }
             
+            println("AppDataManager: Loading data for user ${authUser.id}")
+            
+            // Extract name from auth metadata (set during signup)
+            val authName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+            println("AppDataManager: Auth metadata name: $authName")
+            
             // Fetch user data from database
             var user = supabaseRepository.fetchUserById(authUser.id)
+            println("AppDataManager: Fetched user from DB: ${user?.name}")
+            
             if (user == null) {
-                // Create fallback user if not in database
-                user = User(
+                // Create user in database if not exists
+                val newUser = User(
                     id = authUser.id,
-                    name = authUser.email?.substringBefore('@') ?: "User",
+                    name = authName ?: authUser.email?.substringBefore('@') ?: "User",
                     email = authUser.email,
                     image = null,
                     createdAt = Clock.System.now().toEpochMilliseconds(),
@@ -101,11 +110,22 @@ object AppDataManager {
                     connection_today = 0,
                     last_paired = null
                 )
+                println("AppDataManager: Creating new user in DB: ${newUser.name}")
+                supabaseRepository.upsertUser(newUser)
+                user = newUser
+            } else if (user.name == null && authName != null) {
+                // Update user name from auth metadata if DB name is null
+                println("AppDataManager: Updating user name from auth metadata: $authName")
+                supabaseRepository.updateUserName(user.id, authName)
+                user = user.copy(name = authName)
             }
+            
             _currentUser.value = user
+            println("AppDataManager: Current user set to: ${user.name}")
             
             // Fetch availability
             val availability = supabaseRepository.fetchUserAvailability(user.id)
+            println("AppDataManager: Fetched availability: isFreeThisWeek=${availability?.isFreeThisWeek}")
             _userAvailability.value = availability
             
             // Fetch connections
@@ -124,6 +144,7 @@ object AppDataManager {
             
         } catch (e: Exception) {
             println("Error loading app data: ${e.message}")
+            e.printStackTrace()
             _error.value = e.message
         } finally {
             _isLoading.value = false
@@ -182,9 +203,14 @@ object AppDataManager {
      * Toggle free this week status
      */
     fun toggleFreeThisWeek() {
-        val user = _currentUser.value ?: return
+        val user = _currentUser.value ?: run {
+            println("toggleFreeThisWeek: No current user")
+            return
+        }
         val current = _userAvailability.value
         val newStatus = !(current?.isFreeThisWeek ?: false)
+        
+        println("toggleFreeThisWeek: Toggling from ${current?.isFreeThisWeek} to $newStatus for user ${user.id}")
         
         val updated = current?.copy(
             isFreeThisWeek = newStatus,
@@ -198,7 +224,13 @@ object AppDataManager {
         _userAvailability.value = updated
         
         scope.launch {
-            supabaseRepository.setFreeThisWeek(user.id, newStatus)
+            try {
+                val result = supabaseRepository.setFreeThisWeek(user.id, newStatus)
+                println("toggleFreeThisWeek: Supabase update result: $result")
+            } catch (e: Exception) {
+                println("toggleFreeThisWeek: Error updating Supabase: ${e.message}")
+                e.printStackTrace()
+            }
         }
     }
     
@@ -219,15 +251,40 @@ object AppDataManager {
     }
     
     /**
-     * Update the current user's username
+     * Update the current user's full name
+     * Updates local state immediately and syncs with Supabase
      */
-    fun updateUsername(newUsername: String) {
-        val user = _currentUser.value ?: return
-        val updatedUser = user.copy(name = newUsername)
+    fun updateUsername(newName: String) {
+        val user = _currentUser.value ?: run {
+            println("updateUsername: No current user")
+            return
+        }
+        
+        println("updateUsername: Changing name from '${user.name}' to '$newName' for user ${user.id}")
+        
+        val previousName = user.name
+        val updatedUser = user.copy(name = newName)
         _currentUser.value = updatedUser
         
         scope.launch {
-            supabaseRepository.updateUserName(user.id, newUsername)
+            try {
+                // Ensure user exists in database first
+                supabaseRepository.upsertUser(updatedUser)
+                
+                val success = supabaseRepository.updateUserName(user.id, newName)
+                if (!success) {
+                    // Revert to previous name if update failed
+                    println("updateUsername: Failed to update name in database, reverting to: $previousName")
+                    _currentUser.value = user.copy(name = previousName)
+                } else {
+                    println("updateUsername: Successfully updated full name to: $newName")
+                }
+            } catch (e: Exception) {
+                println("updateUsername: Error updating name: ${e.message}")
+                e.printStackTrace()
+                _currentUser.value = user.copy(name = previousName)
+            }
         }
     }
 }
+
