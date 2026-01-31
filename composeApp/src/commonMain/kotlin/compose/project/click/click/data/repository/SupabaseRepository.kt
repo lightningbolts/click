@@ -141,5 +141,91 @@ class SupabaseRepository {
             false
         }
     }
+    
+    /**
+     * Update connection has_begun status when chat starts (Vibe Check begins)
+     */
+    suspend fun updateConnectionHasBegun(
+        connectionId: String,
+        hasBegun: Boolean
+    ): Boolean {
+        return try {
+            supabase.from("connections")
+                .update({
+                    set("has_begun", hasBegun)
+                }) {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating connection has_begun: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Update a specific user's keep decision for a connection.
+     * @param connectionId The connection ID
+     * @param userId The user making the decision
+     * @param keepConnection Whether the user wants to keep the connection
+     * @param currentShouldContinue The current should_continue list
+     * @param userIds The user_ids list from the connection to determine index
+     */
+    suspend fun updateUserKeepDecision(
+        connectionId: String,
+        userId: String,
+        keepConnection: Boolean,
+        currentShouldContinue: List<Boolean>,
+        userIds: List<String>
+    ): Boolean {
+        return try {
+            val userIndex = userIds.indexOf(userId)
+            if (userIndex < 0 || userIndex >= 2) {
+                println("User not found in connection")
+                return false
+            }
+            
+            // Create new should_continue list with updated value
+            val newShouldContinue = currentShouldContinue.toMutableList()
+            // Ensure the list has at least 2 elements
+            while (newShouldContinue.size < 2) {
+                newShouldContinue.add(false)
+            }
+            newShouldContinue[userIndex] = keepConnection
+            
+            supabase.from("connections")
+                .update({
+                    set("should_continue", newShouldContinue.toList())
+                }) {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating user keep decision: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Delete a connection (used when Vibe Check expires without mutual keep)
+     */
+    suspend fun deleteConnection(connectionId: String): Boolean {
+        return try {
+            supabase.from("connections")
+                .delete {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error deleting connection: ${e.message}")
+            false
+        }
+    }
 }
 

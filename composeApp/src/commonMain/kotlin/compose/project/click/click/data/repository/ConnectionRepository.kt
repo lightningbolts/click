@@ -33,7 +33,7 @@ class ConnectionRepository {
             val expiry = now + (30L * 24 * 60 * 60 * 1000) // 30 days
 
             // Use a map for insertion to let DB generate ID
-            val connectionData = mapOf(
+            val connectionData = mutableMapOf<String, Any>(
                 "user_ids" to listOf(request.userId1, request.userId2),
                 "geo_location" to mapOf(
                     "lat" to (request.locationLat ?: 0.0),
@@ -44,6 +44,11 @@ class ConnectionRepository {
                 "should_continue" to listOf(false, false),
                 "has_begun" to false
             )
+            
+            // Add context_tag if provided
+            request.contextTag?.let { tag ->
+                connectionData["context_tag"] = tag
+            }
 
             val result = supabase.from("connections")
                 .insert(connectionData) {

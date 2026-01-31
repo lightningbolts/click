@@ -54,7 +54,8 @@ data class ConnectionRequest(
     val userId1: String,
     val userId2: String,
     val locationLat: Double? = null,
-    val locationLng: Double? = null
+    val locationLng: Double? = null,
+    val contextTag: String? = null // User-defined tag like "Met at Dawg Daze"
 )
 
 @Serializable
@@ -77,11 +78,48 @@ data class Connection(
     val full_location: Map<String, String>? = null,
     // Display name from the semantic location lookup (e.g., "Red Square")
     val semantic_location: String? = null,
+    // User-defined context tag (e.g., "Met at Dawg Daze", "CSE 142")
+    val context_tag: String? = null,
     val user_ids: List<String>,
     val chat: Chat = Chat(),
     val should_continue: List<Boolean> = listOf(false, false),
     val has_begun: Boolean = false
-)
+) {
+    companion object {
+        // 30 minutes in milliseconds for the Vibe Check timer
+        const val VIBE_CHECK_DURATION_MS = 30L * 60 * 1000
+    }
+    
+    /**
+     * Calculate the remaining time for the Vibe Check.
+     * Returns remaining milliseconds, or 0 if time has expired.
+     */
+    fun getVibeCheckRemainingMs(currentTimeMs: Long): Long {
+        val endTime = created + VIBE_CHECK_DURATION_MS
+        return maxOf(0L, endTime - currentTimeMs)
+    }
+    
+    /**
+     * Check if the Vibe Check timer has expired.
+     */
+    fun isVibeCheckExpired(currentTimeMs: Long): Boolean {
+        return getVibeCheckRemainingMs(currentTimeMs) == 0L
+    }
+    
+    /**
+     * Check if both users have opted to keep the connection.
+     */
+    fun isMutuallyKept(): Boolean {
+        return should_continue.size >= 2 && should_continue[0] && should_continue[1]
+    }
+    
+    /**
+     * Get the index for a user in the should_continue list based on their position in user_ids.
+     */
+    fun getUserIndex(userId: String): Int? {
+        return user_ids.indexOf(userId).takeIf { it >= 0 }
+    }
+}
 
 // UI models for chat functionality
 data class ChatWithDetails(

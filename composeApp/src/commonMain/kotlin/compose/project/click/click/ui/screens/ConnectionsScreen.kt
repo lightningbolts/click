@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
@@ -31,6 +33,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.ChatListState
@@ -303,6 +306,13 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val messageInput by viewModel.messageInput.collectAsState()
     val typingUsers by viewModel.typingUsers.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
+    
+    // Vibe Check state
+    val vibeCheckRemainingMs by viewModel.vibeCheckRemainingMs.collectAsState()
+    val currentUserHasKept by viewModel.currentUserHasKept.collectAsState()
+    val otherUserHasKept by viewModel.otherUserHasKept.collectAsState()
+    val vibeCheckExpired by viewModel.vibeCheckExpired.collectAsState()
+    val connectionKept by viewModel.connectionKept.collectAsState()
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -485,6 +495,23 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 }
                             }
                         }
+                    }
+                    
+                    // Vibe Check Banner
+                    if (!connectionKept || vibeCheckRemainingMs > 0) {
+                        VibeCheckBanner(
+                            connection = chatDetails.connection,
+                            remainingMs = vibeCheckRemainingMs,
+                            currentUserHasKept = currentUserHasKept,
+                            otherUserHasKept = otherUserHasKept,
+                            vibeCheckExpired = vibeCheckExpired,
+                            connectionKept = connectionKept,
+                            onKeepClick = { viewModel.keepConnection() },
+                            onExpiredDismiss = {
+                                viewModel.deleteExpiredConnection()
+                                onBackPressed()
+                            }
+                        )
                     }
 
                     // Messages
@@ -756,4 +783,289 @@ private fun formatMessageTime(timestamp: Long): String {
     }
 
     return "$displayHour:$minute $amPm"
+}
+
+/**
+ * Format remaining milliseconds as MM:SS for the Vibe Check timer.
+ */
+private fun formatVibeCheckTime(remainingMs: Long): String {
+    val totalSeconds = remainingMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+}
+
+/**
+ * Vibe Check Banner - Shows the countdown timer, context tag, and keep button.
+ * Displays different states based on timer status and user decisions.
+ */
+@Composable
+fun VibeCheckBanner(
+    connection: Connection,
+    remainingMs: Long,
+    currentUserHasKept: Boolean,
+    otherUserHasKept: Boolean,
+    vibeCheckExpired: Boolean,
+    connectionKept: Boolean,
+    onKeepClick: () -> Unit,
+    onExpiredDismiss: () -> Unit
+) {
+    val isTimerActive = remainingMs > 0 && !connectionKept
+    val isWarning = remainingMs in 1..300_000 // Last 5 minutes
+    
+    // Determine banner color
+    val bannerColor = when {
+        connectionKept -> PrimaryBlue.copy(alpha = 0.15f)
+        vibeCheckExpired && !connectionKept -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+        isWarning -> MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+        else -> PrimaryBlue.copy(alpha = 0.1f)
+    }
+    
+    val bannerBorderColor = when {
+        connectionKept -> PrimaryBlue
+        vibeCheckExpired && !connectionKept -> MaterialTheme.colorScheme.error
+        isWarning -> MaterialTheme.colorScheme.error
+        else -> PrimaryBlue.copy(alpha = 0.5f)
+    }
+    
+    // Show expiry dialog
+    if (vibeCheckExpired && !connectionKept) {
+        AlertDialog(
+            onDismissRequest = { },
+            icon = {
+                Icon(
+                    Icons.Filled.Timer,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Vibe Check Complete",
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (currentUserHasKept && !otherUserHasKept) {
+                            "Unfortunately, the other person didn't choose to keep this connection. The chat will be deleted."
+                        } else if (!currentUserHasKept && otherUserHasKept) {
+                            "You didn't choose to keep this connection. The chat will be deleted."
+                        } else {
+                            "Neither of you chose to keep this connection. The chat will be deleted."
+                        },
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = onExpiredDismiss,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+    
+    // Show mutual keep celebration dialog
+    if (connectionKept && !vibeCheckExpired) {
+        // This is shown briefly - the banner will show "Connection Kept!" instead
+    }
+    
+    // Banner
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = bannerColor,
+        border = BorderStroke(1.dp, bannerBorderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Context tag (if available)
+            connection.context_tag?.let { tag ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        tag,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            when {
+                connectionKept -> {
+                    // Connection kept! 
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Connection Kept!",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryBlue
+                        )
+                    }
+                    Text(
+                        "You both chose to continue this connection",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                
+                isTimerActive -> {
+                    // Active timer
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Timer display
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Timer,
+                                contentDescription = null,
+                                tint = if (isWarning) MaterialTheme.colorScheme.error else PrimaryBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text(
+                                    "Vibe Check",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    formatVibeCheckTime(remainingMs),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        
+                        // Keep button and status
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Other user status indicator
+                            if (otherUserHasKept) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = PrimaryBlue.copy(alpha = 0.1f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = PrimaryBlue
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "They want to keep!",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = PrimaryBlue,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Keep button
+                            Button(
+                                onClick = onKeepClick,
+                                enabled = !currentUserHasKept,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (currentUserHasKept) PrimaryBlue.copy(alpha = 0.5f) else PrimaryBlue,
+                                    disabledContainerColor = PrimaryBlue.copy(alpha = 0.3f)
+                                ),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                if (currentUserHasKept) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Kept!")
+                                } else {
+                                    Icon(
+                                        Icons.Filled.Favorite,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Keep")
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Help text
+                    Text(
+                        if (currentUserHasKept) {
+                            "Waiting for ${if (otherUserHasKept) "mutual confirmation" else "them to decide"}..."
+                        } else {
+                            "Click 'Keep' if you want to continue this connection"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                
+                else -> {
+                    // Expired state (dialog handles main interaction)
+                    Text(
+                        "Time's up!",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
 }

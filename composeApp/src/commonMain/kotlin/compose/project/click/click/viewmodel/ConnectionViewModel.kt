@@ -29,12 +29,18 @@ class ConnectionViewModel : ViewModel() {
 
     /**
      * Connect with a user via QR code
+     * @param scannedUserId The ID of the user being connected with
+     * @param currentUserId The current user's ID
+     * @param latitude Optional latitude of the connection location
+     * @param longitude Optional longitude of the connection location
+     * @param contextTag Optional user-defined tag like "Met at Dawg Daze"
      */
     fun connectWithUser(
         scannedUserId: String,
         currentUserId: String,
         latitude: Double? = null,
-        longitude: Double? = null
+        longitude: Double? = null,
+        contextTag: String? = null
     ) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
@@ -54,12 +60,13 @@ class ConnectionViewModel : ViewModel() {
                 }
                 val scannedUser = userResult.getOrNull()!!
 
-                // Create connection request
+                // Create connection request with context tag
                 val request = ConnectionRequest(
                     userId1 = currentUserId,
                     userId2 = scannedUserId,
                     locationLat = latitude,
-                    locationLng = longitude
+                    locationLng = longitude,
+                    contextTag = contextTag
                 )
 
                 // Create the connection
