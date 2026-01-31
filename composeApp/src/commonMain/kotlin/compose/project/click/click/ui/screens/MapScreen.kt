@@ -54,10 +54,6 @@ fun MapScreen(
     var zoom by remember { mutableStateOf(12.0) }
     val mapState by viewModel.mapState.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadConnections()
-    }
-
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 

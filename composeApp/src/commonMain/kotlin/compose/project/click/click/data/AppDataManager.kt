@@ -2,6 +2,7 @@ package compose.project.click.click.data
 
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -37,8 +38,12 @@ object AppDataManager {
     // Connected users info
     private val _connectedUsers = MutableStateFlow<Map<String, User>>(emptyMap())
     val connectedUsers: StateFlow<Map<String, User>> = _connectedUsers.asStateFlow()
+
+    // Current user's availability
+    private val _userAvailability = MutableStateFlow<UserAvailability?>(null)
+    val userAvailability: StateFlow<UserAvailability?> = _userAvailability.asStateFlow()
     
-    // Loading state
+    // Loading state - start as false, set to true in initializeData
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
@@ -58,7 +63,7 @@ object AppDataManager {
      * Initialize app data - call this once when the app starts
      */
     fun initializeData() {
-        if (_isDataLoaded.value) return // Already loaded
+        if (_isDataLoaded.value || _isLoading.value) return // Already loaded or loading
         
         scope.launch {
             loadAllData()
@@ -98,6 +103,10 @@ object AppDataManager {
                 )
             }
             _currentUser.value = user
+            
+            // Fetch availability
+            val availability = supabaseRepository.fetchUserAvailability(user.id)
+            _userAvailability.value = availability
             
             // Fetch connections
             val userConnections = supabaseRepository.fetchUserConnections(user.id)
@@ -143,6 +152,7 @@ object AppDataManager {
         _currentUser.value = null
         _connections.value = emptyList()
         _connectedUsers.value = emptyMap()
+        _userAvailability.value = null
         _isDataLoaded.value = false
         _error.value = null
     }
@@ -159,6 +169,37 @@ object AppDataManager {
      */
     fun removeConnection(connectionId: String) {
         _connections.value = _connections.value.filter { it.id != connectionId }
+    }
+    
+    /**
+     * Update user availability
+     */
+    fun updateUserAvailability(availability: UserAvailability) {
+        _userAvailability.value = availability
+    }
+
+    /**
+     * Toggle free this week status
+     */
+    fun toggleFreeThisWeek() {
+        val user = _currentUser.value ?: return
+        val current = _userAvailability.value
+        val newStatus = !(current?.isFreeThisWeek ?: false)
+        
+        val updated = current?.copy(
+            isFreeThisWeek = newStatus,
+            lastUpdated = Clock.System.now().toEpochMilliseconds()
+        ) ?: UserAvailability(
+            userId = user.id,
+            isFreeThisWeek = newStatus,
+            lastUpdated = Clock.System.now().toEpochMilliseconds()
+        )
+        
+        _userAvailability.value = updated
+        
+        scope.launch {
+            supabaseRepository.setFreeThisWeek(user.id, newStatus)
+        }
     }
     
     /**

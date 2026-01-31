@@ -31,6 +31,8 @@ import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
+import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.rememberNfcManager
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -40,6 +42,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.layout.WindowInsets
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -195,9 +198,12 @@ fun App() {
             var searchQuery by remember { mutableStateOf("") }
 
             val focusManager = LocalFocusManager.current
+            val mapViewModel: MapViewModel = viewModel { MapViewModel() }
+            val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             val focusRequester = remember { FocusRequester() }
 
             Scaffold(
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
                     NavigationBar(
                         modifier = Modifier.border(
@@ -347,7 +353,8 @@ fun App() {
                                         if (userId.isNotEmpty()) {
                                             ConnectionsScreen(
                                                 userId = userId,
-                                                searchQuery = searchQuery
+                                                searchQuery = searchQuery,
+                                                viewModel = chatViewModel
                                             )
                                         } else {
                                             // Show loading or login prompt
@@ -359,7 +366,7 @@ fun App() {
                                             }
                                         }
                                     }
-                                    NavigationItem.Map.route -> MapScreen()
+                                    NavigationItem.Map.route -> MapScreen(viewModel = mapViewModel)
                                     NavigationItem.Settings.route -> SettingsScreen(
                                         isDarkMode = isDarkMode,
                                         onToggleDarkMode = { isDarkMode = !isDarkMode },

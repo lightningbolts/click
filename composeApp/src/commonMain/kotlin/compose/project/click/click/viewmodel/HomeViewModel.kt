@@ -72,9 +72,6 @@ class HomeViewModel(
                 val (user, connections) = data
                 
                 when {
-                    isLoading && !isDataLoaded -> {
-                        _homeState.value = HomeState.Loading
-                    }
                     user != null && isDataLoaded -> {
                         // Calculate stats
                         val recentConnections = connections
@@ -101,8 +98,11 @@ class HomeViewModel(
                             loadConnectionInsights(user.id, connections)
                         }
                     }
-                    !isLoading && !isDataLoaded -> {
-                        _homeState.value = HomeState.Error("Not logged in")
+                    !isDataLoaded || isLoading -> {
+                        _homeState.value = HomeState.Loading
+                    }
+                    else -> {
+                        _homeState.value = HomeState.Error("Session expired. Please log in again.")
                     }
                 }
             }
