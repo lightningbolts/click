@@ -1,9 +1,7 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -40,73 +38,58 @@ fun AddClickScreen(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            Box(modifier = Modifier.padding(top = topInset)) {
                 PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect")
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!isClicked) {
-                            AddClickContent(
-                                onClickSuccess = { userName ->
-                                    isClicked = true
-                                    clickedUserName = userName
-                                },
-                                onNavigateToNfc = onNavigateToNfc,
-                                onShowMyQRCode = onShowMyQRCode,
-                                onScanQRCode = onScanQRCode
-                            )
-                        } else {
-                            ClickedSuccessContent(
-                                userName = clickedUserName,
-                                onStartChatting = onStartChatting
-                            )
-                        }
-                    }
-                }
+            if (!isClicked) {
+                AddClickContent(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(bottom = 20.dp),
+                    onClickSuccess = { userName ->
+                        isClicked = true
+                        clickedUserName = userName
+                    },
+                    onNavigateToNfc = onNavigateToNfc,
+                    onShowMyQRCode = onShowMyQRCode,
+                    onScanQRCode = onScanQRCode
+                )
+            } else {
+                ClickedSuccessContent(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    userName = clickedUserName,
+                    onStartChatting = onStartChatting
+                )
             }
         }
     }
 }
 
+
 @Composable
 fun AddClickContent(
+    modifier: Modifier = Modifier,
     onClickSuccess: (String) -> Unit,
     onNavigateToNfc: () -> Unit,
     onShowMyQRCode: () -> Unit,
     onScanQRCode: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            "Scan QR code or tap NFC to connect",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // QR Code Section
+        // QR Code Section - Two cards side by side
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -114,7 +97,7 @@ fun AddClickContent(
             AdaptiveCard(
                 modifier = Modifier
                     .weight(1f)
-                    .height(160.dp),
+                    .aspectRatio(0.85f),
                 onClick = onShowMyQRCode
             ) {
                 Column(
@@ -125,18 +108,28 @@ fun AddClickContent(
                     Icon(
                         Icons.Filled.Check, // Should use QR icon if available
                         contentDescription = "My QR Code",
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("My Code", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "My Code",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Share your QR",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
             AdaptiveCard(
                 modifier = Modifier
                     .weight(1f)
-                    .height(160.dp),
+                    .aspectRatio(0.85f),
                 onClick = onScanQRCode
             ) {
                 Column(
@@ -147,57 +140,72 @@ fun AddClickContent(
                     Icon(
                         Icons.Filled.Search, // Should use Camera/Scan icon
                         contentDescription = "Scan QR",
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Scan Code", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Scan Code",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Scan a friend's QR",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // NFC Section - Clickable card
+        // NFC Section - Full width card matching header width
         AdaptiveCard(
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .height(140.dp),
             onClick = onNavigateToNfc
         ) {
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Icon(
                     Icons.Filled.Nfc,
                     contentDescription = "NFC",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(56.dp)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "Tap to use NFC",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Hold phones together to connect",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-
     }
 }
 
+
 @Composable
 fun ClickedSuccessContent(
+    modifier: Modifier = Modifier,
     userName: String,
     onStartChatting: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center

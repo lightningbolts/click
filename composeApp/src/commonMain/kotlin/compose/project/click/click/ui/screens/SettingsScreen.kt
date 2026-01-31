@@ -51,9 +51,9 @@ fun SettingsScreen(
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     
-    // Username change dialog state
-    var showUsernameDialog by remember { mutableStateOf(false) }
-    var newUsername by remember { mutableStateOf("") }
+    // Full name change dialog state
+    var showNameDialog by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
     
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     // Use full status bar inset to prevent overlap with phone hardware
@@ -158,7 +158,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        "Username",
+                                        "Full Name",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -170,13 +170,13 @@ fun SettingsScreen(
                                 }
                                 IconButton(
                                     onClick = {
-                                        newUsername = currentUser?.name ?: ""
-                                        showUsernameDialog = true
+                                        newName = currentUser?.name ?: ""
+                                        showNameDialog = true
                                     }
                                 ) {
                                     Icon(
                                         Icons.Default.Edit,
-                                        contentDescription = "Edit username",
+                                        contentDescription = "Edit full name",
                                         tint = PrimaryBlue
                                     )
                                 }
@@ -206,16 +206,16 @@ fun SettingsScreen(
             }
         }
         
-        // Username change dialog
-        if (showUsernameDialog) {
+        // Full name change dialog
+        if (showNameDialog) {
             AlertDialog(
-                onDismissRequest = { showUsernameDialog = false },
-                title = { Text("Change Username") },
+                onDismissRequest = { showNameDialog = false },
+                title = { Text("Change Full Name") },
                 text = {
                     OutlinedTextField(
-                        value = newUsername,
-                        onValueChange = { newUsername = it },
-                        label = { Text("New username") },
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Full name") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -223,9 +223,9 @@ fun SettingsScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            if (newUsername.isNotBlank()) {
-                                AppDataManager.updateUsername(newUsername.trim())
-                                showUsernameDialog = false
+                            if (newName.isNotBlank()) {
+                                AppDataManager.updateUsername(newName.trim())
+                                showNameDialog = false
                             }
                         }
                     ) {
@@ -233,7 +233,7 @@ fun SettingsScreen(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showUsernameDialog = false }) {
+                    TextButton(onClick = { showNameDialog = false }) {
                         Text("Cancel")
                     }
                 }
