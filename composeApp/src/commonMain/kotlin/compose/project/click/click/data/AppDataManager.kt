@@ -88,9 +88,11 @@ object AppDataManager {
             
             println("AppDataManager: Loading data for user ${authUser.id}")
             
-            // Extract name from auth metadata (set during signup)
-            val authName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
-            println("AppDataManager: Auth metadata name: $authName")
+            // Extract name from auth metadata (prefer full_name over name, set during signup/update)
+            val fullName = authUser.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
+            val legacyName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+            val authName = fullName ?: legacyName
+            println("AppDataManager: Auth metadata - full_name: $fullName, name: $legacyName, using: $authName")
             
             // Fetch user data from database
             var user = supabaseRepository.fetchUserById(authUser.id)
@@ -252,7 +254,7 @@ object AppDataManager {
     
     /**
      * Update the current user's full name
-     * Updates local state immediately and syncs with Supabase
+     * Updates local state immediately, syncs with Supabase Auth metadata AND database
      */
     fun updateUsername(newName: String) {
         val user = _currentUser.value ?: run {
@@ -268,20 +270,27 @@ object AppDataManager {
         
         scope.launch {
             try {
-                // Ensure user exists in database first
-                supabaseRepository.upsertUser(updatedUser)
+                // 1. Update auth metadata (this persists after app restart)
+                val authResult = authRepository.updateUserMetadata(newName)
+                if (authResult.isFailure) {
+                    println("updateUsername: Warning - failed to update auth metadata")
+                }
                 
+                // 2. Ensure user exists in database
+                val upsertResult = supabaseRepository.upsertUser(updatedUser)
+                println("updateUsername: Upsert user result: $upsertResult")
+                
+                // 3. Update user name in database  
                 val success = supabaseRepository.updateUserName(user.id, newName)
                 if (!success) {
-                    // Revert to previous name if update failed
-                    println("updateUsername: Failed to update name in database, reverting to: $previousName")
-                    _currentUser.value = user.copy(name = previousName)
+                    println("updateUsername: Failed to update name in database, but auth metadata was updated")
                 } else {
                     println("updateUsername: Successfully updated full name to: $newName")
                 }
             } catch (e: Exception) {
                 println("updateUsername: Error updating name: ${e.message}")
                 e.printStackTrace()
+                // Only revert if we couldn't update auth metadata either
                 _currentUser.value = user.copy(name = previousName)
             }
         }

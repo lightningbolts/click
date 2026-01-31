@@ -180,5 +180,25 @@ class AuthRepository(
             Result.failure(e)
         }
     }
+    
+    /**
+     * Update user metadata (like full_name)
+     */
+    suspend fun updateUserMetadata(fullName: String): Result<Unit> {
+        return try {
+            println("AuthRepository: Updating user metadata with full_name: $fullName")
+            supabase.auth.updateUser {
+                data = kotlinx.serialization.json.buildJsonObject {
+                    put("full_name", kotlinx.serialization.json.JsonPrimitive(fullName))
+                }
+            }
+            println("AuthRepository: Successfully updated user metadata")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("AuthRepository: Error updating user metadata: ${e.message}")
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
 }
 

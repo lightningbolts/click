@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.UserCore
 import io.github.jan.supabase.postgrest.from
 
 /**
@@ -14,19 +15,21 @@ class SupabaseRepository {
 
     /**
      * Fetch a user by their ID
+     * Only fetches core columns that definitely exist
      */
     suspend fun fetchUserById(userId: String): User? {
         return try {
             println("Fetching user with ID: $userId")
-            val users = supabase.from("users")
-                .select {
+            // Select only essential columns that are guaranteed to exist
+            val result = supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
                     filter {
                         eq("id", userId)
                     }
                 }
-                .decodeList<User>()
-            println("Found ${users.size} user(s)")
-            users.firstOrNull()
+                .decodeList<UserCore>()
+            println("Found ${result.size} user(s)")
+            result.firstOrNull()?.toUser()
         } catch (e: Exception) {
             println("Error fetching user by ID '$userId': ${e.message}")
             e.printStackTrace()
@@ -87,12 +90,13 @@ class SupabaseRepository {
             if (userIds.isEmpty()) return emptyList()
 
             supabase.from("users")
-                .select {
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
                     filter {
                         isIn("id", userIds)
                     }
                 }
-                .decodeList<User>()
+                .decodeList<UserCore>()
+                .map { it.toUser() }
         } catch (e: Exception) {
             println("Error fetching users: ${e.message}")
             emptyList()

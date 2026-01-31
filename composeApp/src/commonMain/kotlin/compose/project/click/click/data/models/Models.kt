@@ -16,7 +16,7 @@ data class User(
     val email: String? = null,
     val image: String? = null,
     @SerialName("created_at")
-    val createdAt: Long,
+    val createdAt: Long = 0L,  // Made optional with default for schema compatibility
     @SerialName("last_polled")
     val lastPolled: Long? = null,
     val connections: List<String> = emptyList(),
@@ -25,40 +25,53 @@ data class User(
     val last_paired: Long? = null
 ) {
     /**
-     * Convert to insert DTO for Supabase
+     * Convert to insert DTO for Supabase (minimal - only required columns)
      */
-    fun toInsertDto() = UserInsert(
+    fun toInsertDto() = UserInsertMinimal(
         id = id,
-        name = name,
-        email = email,
-        image = image,
-        createdAt = createdAt,
-        lastPolled = lastPolled,
-        connections = connections,
-        paired_with = paired_with,
-        connection_today = connection_today,
-        last_paired = last_paired
+        name = name ?: "User",
+        email = email ?: ""
     )
 }
 
 /**
- * DTO for inserting user records into Supabase
+ * Minimal DTO for inserting user records into Supabase
+ * Only includes columns that definitely exist in the table
  */
 @Serializable
-data class UserInsert(
+data class UserInsertMinimal(
+    val id: String,
+    val name: String,
+    val email: String
+)
+
+/**
+ * Core user data for fetching from database
+ * Only includes columns guaranteed to exist in the users table
+ */
+@Serializable
+data class UserCore(
     val id: String,
     val name: String? = null,
     val email: String? = null,
-    val image: String? = null,
-    @SerialName("created_at")
-    val createdAt: Long,
-    @SerialName("last_polled")
-    val lastPolled: Long? = null,
-    val connections: List<String> = emptyList(),
-    val paired_with: List<String> = emptyList(),
-    val connection_today: Int = -1,
-    val last_paired: Long? = null
-)
+    val image: String? = null
+) {
+    /**
+     * Convert to full User model with defaults for missing fields
+     */
+    fun toUser() = User(
+        id = id,
+        name = name,
+        email = email,
+        image = image,
+        createdAt = 0L,
+        lastPolled = null,
+        connections = emptyList(),
+        paired_with = emptyList(),
+        connection_today = -1,
+        last_paired = null
+    )
+}
 
 @Serializable
 data class Message(
