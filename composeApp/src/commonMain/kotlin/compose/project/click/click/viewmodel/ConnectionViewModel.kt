@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.User
@@ -24,8 +25,8 @@ class ConnectionViewModel : ViewModel() {
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    private val _userConnections = MutableStateFlow<List<Connection>>(emptyList())
-    val userConnections: StateFlow<List<Connection>> = _userConnections.asStateFlow()
+    // Use AppDataManager for connections to avoid reloading
+    val userConnections: StateFlow<List<Connection>> = AppDataManager.connections
 
     /**
      * Connect with a user via QR code
@@ -76,8 +77,8 @@ class ConnectionViewModel : ViewModel() {
                     val connection = result.getOrNull()!!
                     _connectionState.value = ConnectionState.Success(connection, scannedUser)
 
-                    // Refresh user's connections list
-                    loadUserConnections(currentUserId)
+                    // Add to AppDataManager to update all screens
+                    AppDataManager.addConnection(connection)
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Failed to create connection"
                     _connectionState.value = ConnectionState.Error(error)
@@ -85,18 +86,6 @@ class ConnectionViewModel : ViewModel() {
 
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
-            }
-        }
-    }
-
-    /**
-     * Load all connections for a user
-     */
-    fun loadUserConnections(userId: String) {
-        viewModelScope.launch {
-            val result = repository.getUserConnections(userId)
-            if (result.isSuccess) {
-                _userConnections.value = result.getOrNull() ?: emptyList()
             }
         }
     }

@@ -47,6 +47,7 @@ import io.ktor.serialization.kotlinx.json.*
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.toQrPayloadOrNull
+import compose.project.click.click.data.AppDataManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,6 +184,11 @@ fun App() {
             }
         } else {
             // Main app content when authenticated
+            // Initialize app data once when authenticated
+            LaunchedEffect(Unit) {
+                AppDataManager.initializeData()
+            }
+            
             var currentRoute by remember { mutableStateOf("home") }
             var showNfcScreen by remember { mutableStateOf(false) }
             var isSearchOpen by remember { mutableStateOf(false) }
@@ -339,7 +345,10 @@ fun App() {
                                             else -> ""
                                         }
                                         if (userId.isNotEmpty()) {
-                                            ConnectionsScreen(userId = userId)
+                                            ConnectionsScreen(
+                                                userId = userId,
+                                                searchQuery = searchQuery
+                                            )
                                         } else {
                                             // Show loading or login prompt
                                             Box(
@@ -389,6 +398,7 @@ fun App() {
                             TextField(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .height(56.dp) // Fixed height to prevent shrinking
                                     .focusRequester(focusRequester),
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },

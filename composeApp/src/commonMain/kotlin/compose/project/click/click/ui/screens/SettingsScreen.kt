@@ -3,6 +3,7 @@ package compose.project.click.click.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -12,6 +13,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -19,20 +22,24 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.viewmodel.AvailabilityViewModel
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun SettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: () -> Unit,
-    onSignOut: () -> Unit = {}
+    onSignOut: () -> Unit = {},
+    availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
 ) {
+    val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
+    
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
@@ -47,6 +54,45 @@ fun SettingsScreen(
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Availability Section
+                item {
+                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "Availability",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.EventAvailable,
+                                    contentDescription = null,
+                                    tint = if (currentAvailability?.isFreeThisWeek == true) 
+                                        PrimaryBlue else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Free this week",
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Switch(
+                                    checked = currentAvailability?.isFreeThisWeek ?: false,
+                                    onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = PrimaryBlue,
+                                        checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Appearance Section
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -73,6 +119,7 @@ fun SettingsScreen(
                     }
                 }
 
+                // Account Section
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.fillMaxWidth()) {

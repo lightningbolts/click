@@ -75,21 +75,36 @@ class AvailabilityViewModel(
      */
     fun toggleFreeThisWeek() {
         viewModelScope.launch {
-            _isLoading.value = true
             try {
                 val currentUser = authRepository.getCurrentUser() ?: return@launch
                 val currentStatus = _currentAvailability.value?.isFreeThisWeek ?: false
                 val newStatus = !currentStatus
                 
+                // Update local state optimistically
+                val updatedAvailability = _currentAvailability.value?.copy(
+                    isFreeThisWeek = newStatus,
+                    lastUpdated = Clock.System.now().toEpochMilliseconds()
+                ) ?: UserAvailability(
+                    userId = currentUser.id,
+                    isFreeThisWeek = newStatus,
+                    lastUpdated = Clock.System.now().toEpochMilliseconds()
+                )
+                _currentAvailability.value = updatedAvailability
+                _availabilityStatus.value = AvailabilityHelper.getAvailabilityStatus(updatedAvailability)
+                
+                // Persist to database in background
                 val success = supabaseRepository.setFreeThisWeek(currentUser.id, newStatus)
-                if (success) {
-                    loadCurrentUserAvailability()
+                if (!success) {
+                    // Revert on failure
+                    _currentAvailability.value = updatedAvailability.copy(isFreeThisWeek = currentStatus)
+                    _availabilityStatus.value = AvailabilityHelper.getAvailabilityStatus(
+                        _currentAvailability.value
+                    )
+                    _error.value = "Failed to update availability"
                 }
             } catch (e: Exception) {
                 println("Error toggling availability: ${e.message}")
                 _error.value = e.message
-            } finally {
-                _isLoading.value = false
             }
         }
     }

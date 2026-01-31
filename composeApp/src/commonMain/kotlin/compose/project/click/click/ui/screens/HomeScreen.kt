@@ -38,10 +38,6 @@ import compose.project.click.click.viewmodel.HomeState
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsights
 import compose.project.click.click.data.models.ReconnectReminder
-import compose.project.click.click.data.models.MutualAvailability
-import compose.project.click.click.ui.components.AvailabilityToggle
-import compose.project.click.click.ui.components.MutualAvailabilityCard
-import compose.project.click.click.viewmodel.AvailabilityViewModel
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -50,31 +46,14 @@ import kotlin.time.Duration.Companion.milliseconds
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel { HomeViewModel() },
-    availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() },
     onNavigateToChat: (String) -> Unit = {}
 ) {
     val homeState by viewModel.homeState.collectAsState()
     val reconnectReminders by viewModel.reconnectReminders.collectAsState()
     val connectionInsights by viewModel.connectionInsights.collectAsState()
     val showInsightsPanel by viewModel.showInsightsPanel.collectAsState()
-    
-    // Availability state
-    val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
-    val isAvailabilityLoading by availabilityViewModel.isLoading.collectAsState()
-    val mutualAvailabilities by availabilityViewModel.mutualAvailabilities.collectAsState()
-    
-    // Load mutual availabilities when home loads
-    LaunchedEffect(homeState) {
-        if (homeState is HomeState.Success) {
-            availabilityViewModel.loadMutualAvailabilities()
-        }
-    }
 
     // Data loading is initiated by HomeViewModel.init{}
-    // LaunchedEffect(Unit) removed to avoid double loading
-
-
-
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
@@ -132,47 +111,6 @@ fun HomeScreen(
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(24.dp) // Increased spacing
                     ) {
-                        // Availability Toggle
-                        item {
-                            AvailabilityToggle(
-                                isFreeThisWeek = currentAvailability?.isFreeThisWeek ?: false,
-                                isLoading = isAvailabilityLoading,
-                                onToggle = { availabilityViewModel.toggleFreeThisWeek() }
-                            )
-                        }
-                        
-                        // Mutual Availabilities Section
-                        if (mutualAvailabilities.isNotEmpty()) {
-                            item {
-                                Text(
-                                    "Both Free",
-                                    style = MaterialTheme.typography.headlineMedium.merge(
-                                        TextStyle(
-                                            brush = Brush.horizontalGradient(
-                                                colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
-                                            )
-                                        )
-                                    ),
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Connections who are also free this week",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            
-                            items(mutualAvailabilities.take(3)) { mutual ->
-                                MutualAvailabilityCard(
-                                    mutualAvailability = mutual,
-                                    onSendMessage = { message ->
-                                        // TODO: Navigate to chat with pre-filled message
-                                        onNavigateToChat(mutual.connectionId)
-                                    }
-                                )
-                            }
-                        }
-                        
                         // Recent Connections Section
                         if (state.stats.recentConnections.isNotEmpty()) {
                             item {

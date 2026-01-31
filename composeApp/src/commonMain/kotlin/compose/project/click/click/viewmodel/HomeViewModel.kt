@@ -2,20 +2,20 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsights
 import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ReconnectReminder
 import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 
 data class UserStats(
     val totalConnections: Int,
@@ -30,8 +30,6 @@ sealed class HomeState {
 }
 
 class HomeViewModel(
-    private val authRepository: AuthRepository = AuthRepository(),
-    private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
     private val chatRepository: ChatRepository = ChatRepository(tokenStorage = createTokenStorage())
 ) : ViewModel() {
 
@@ -49,73 +47,64 @@ class HomeViewModel(
     // Show/hide insights panel
     private val _showInsightsPanel = MutableStateFlow(false)
     val showInsightsPanel: StateFlow<Boolean> = _showInsightsPanel.asStateFlow()
+    
+    // Track if data has been loaded already
+    private var dataLoaded = false
 
     init {
-        loadHomeData()
+        observeAppData()
     }
-
-    fun loadHomeData() {
+    
+    /**
+     * Observe the shared app data instead of loading independently
+     */
+    private fun observeAppData() {
         viewModelScope.launch {
-            try {
-                _homeState.value = HomeState.Loading
-
-                val currentUserAuth = authRepository.getCurrentUser()
-                if (currentUserAuth != null) {
-                    println("Current user from auth: ${currentUserAuth.id}, email: ${currentUserAuth.email}")
-
-                    // Fetch full user data from Supabase
-                    var user = supabaseRepository.fetchUserById(currentUserAuth.id)
-
-                    // If user doesn't exist in database, create a fallback user object
-                    if (user == null) {
-                        println("User not found in database, creating fallback user")
-                        user = User(
-                            id = currentUserAuth.id,
-                            name = currentUserAuth.email?.substringBefore('@') ?: "User",
-                            email = currentUserAuth.email,
-                            image = null,
-                            createdAt = Clock.System.now().toEpochMilliseconds(),
-                            lastPolled = null,
-                            connections = emptyList(),
-                            paired_with = emptyList(),
-                            connection_today = 0,
-                            last_paired = null
-                        )
+            // Combine user and connections data from AppDataManager
+            combine(
+                AppDataManager.currentUser,
+                AppDataManager.connections,
+                AppDataManager.isLoading,
+                AppDataManager.isDataLoaded
+            ) { user, connections, isLoading, isDataLoaded ->
+                Triple(user to connections, isLoading, isDataLoaded)
+            }.collectLatest { (data, isLoading, isDataLoaded) ->
+                val (user, connections) = data
+                
+                when {
+                    isLoading && !isDataLoaded -> {
+                        _homeState.value = HomeState.Loading
                     }
-
-                    // Fetch all user connections
-                    val connections = supabaseRepository.fetchUserConnections(user.id)
-
-                    // Calculate stats
-                    val recentConnections = connections
-                        .sortedByDescending { it.created }
-                        .take(3)
-
-                    val uniqueLocations = connections
-                        .mapNotNull { it.semantic_location }
-                        .distinct()
-                        .size
-
-                    val stats = UserStats(
-                        totalConnections = connections.size,
-                        recentConnections = recentConnections,
-                        uniqueLocations = uniqueLocations
-                    )
-
-                    _homeState.value = HomeState.Success(user, stats)
-                    
-                    // Load reconnect reminders and insights
-                    loadReconnectReminders(user.id, connections)
-                    loadConnectionInsights(user.id, connections)
-                } else {
-                    _homeState.value = HomeState.Error("Not logged in")
+                    user != null && isDataLoaded -> {
+                        // Calculate stats
+                        val recentConnections = connections
+                            .sortedByDescending { it.created }
+                            .take(3)
+                        
+                        val uniqueLocations = connections
+                            .mapNotNull { it.semantic_location }
+                            .distinct()
+                            .size
+                        
+                        val stats = UserStats(
+                            totalConnections = connections.size,
+                            recentConnections = recentConnections,
+                            uniqueLocations = uniqueLocations
+                        )
+                        
+                        _homeState.value = HomeState.Success(user, stats)
+                        
+                        // Load additional data only once
+                        if (!dataLoaded) {
+                            dataLoaded = true
+                            loadReconnectReminders(user.id, connections)
+                            loadConnectionInsights(user.id, connections)
+                        }
+                    }
+                    !isLoading && !isDataLoaded -> {
+                        _homeState.value = HomeState.Error("Not logged in")
+                    }
                 }
-            } catch (e: Exception) {
-                println("Error in loadHomeData: ${e.message}")
-                e.printStackTrace()
-                _homeState.value = HomeState.Error(
-                    e.message ?: "Failed to load home data"
-                )
             }
         }
     }
@@ -125,16 +114,10 @@ class HomeViewModel(
      */
     private suspend fun loadReconnectReminders(userId: String, connections: List<Connection>) {
         try {
-            // Get all other user IDs from connections
-            val otherUserIds = connections.flatMap { it.user_ids }.filter { it != userId }.distinct()
-            
-            // Fetch user info for all connected users
-            val users = supabaseRepository.fetchUsersByIds(otherUserIds)
-            val usersMap = users.associateBy { it.id }
+            val usersMap = AppDataManager.connectedUsers.value
             
             // Get last message time for each connection
             val connectionsWithLastMessage = connections.map { connection ->
-                // Get the chat messages to find the last message time
                 val chats = chatRepository.fetchUserChatsWithDetails(userId)
                 val lastMessageTime = chats
                     .find { it.connection.id == connection.id }
@@ -164,10 +147,7 @@ class HomeViewModel(
      */
     private suspend fun loadConnectionInsights(userId: String, connections: List<Connection>) {
         try {
-            // Get all other user IDs from connections
-            val otherUserIds = connections.flatMap { it.user_ids }.filter { it != userId }.distinct()
-            val users = supabaseRepository.fetchUsersByIds(otherUserIds)
-            val usersMap = users.associateBy { it.id }
+            val usersMap = AppDataManager.connectedUsers.value
             
             // Get last message times
             val chats = chatRepository.fetchUserChatsWithDetails(userId)
@@ -210,8 +190,11 @@ class HomeViewModel(
         _showInsightsPanel.value = false
     }
 
+    /**
+     * Force refresh (only when user explicitly requests)
+     */
     fun refresh() {
-        loadHomeData()
+        dataLoaded = false
+        AppDataManager.refresh(force = true)
     }
 }
-

@@ -48,6 +48,7 @@ import kotlin.math.absoluteValue
 @Composable
 fun ConnectionsScreen(
     userId: String,
+    searchQuery: String = "",
     viewModel: ChatViewModel = viewModel { ChatViewModel() }
 ) {
     var selectedChatId by remember { mutableStateOf<String?>(null) }
@@ -65,6 +66,7 @@ fun ConnectionsScreen(
     if (selectedChatId == null) {
         ConnectionsListView(
             viewModel = viewModel,
+            searchQuery = searchQuery,
             onChatSelected = { chatId ->
                 selectedChatId = chatId
                 viewModel.loadChatMessages(chatId)
@@ -87,6 +89,7 @@ fun ConnectionsScreen(
 @Composable
 fun ConnectionsListView(
     viewModel: ChatViewModel,
+    searchQuery: String = "",
     onChatSelected: (String) -> Unit
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
@@ -98,9 +101,20 @@ fun ConnectionsListView(
             Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
                 when (val state = chatListState) {
                     is ChatListState.Success -> {
+                        val filteredCount = if (searchQuery.isBlank()) {
+                            state.chats.size
+                        } else {
+                            state.chats.count { chat ->
+                                chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
+                            }
+                        }
                         PageHeader(
                             title = "Clicks",
-                            subtitle = "${state.chats.size} ${if (state.chats.size == 1) "connection" else "connections"}"
+                            subtitle = if (searchQuery.isNotBlank()) {
+                                "$filteredCount result${if (filteredCount == 1) "" else "s"} for \"$searchQuery\""
+                            } else {
+                                "${state.chats.size} ${if (state.chats.size == 1) "connection" else "connections"}"
+                            }
                         )
                     }
                     else -> {
@@ -144,27 +158,36 @@ fun ConnectionsListView(
                     }
                 }
                 is ChatListState.Success -> {
-                    if (state.chats.isEmpty()) {
+                    // Filter chats based on search query
+                    val filteredChats = if (searchQuery.isBlank()) {
+                        state.chats
+                    } else {
+                        state.chats.filter { chat ->
+                            chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
+                        }
+                    }
+                    
+                    if (filteredChats.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    Icons.Filled.ChatBubbleOutline,
+                                    if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
                                     contentDescription = null,
                                     modifier = Modifier.size(64.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    "No connections yet",
+                                    if (searchQuery.isNotBlank()) "No matches found" else "No connections yet",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    "Start clicking with people nearby!",
+                                    if (searchQuery.isNotBlank()) "Try a different search term" else "Start clicking with people nearby!",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -176,12 +199,12 @@ fun ConnectionsListView(
                             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(state.chats, key = { it.connection.id }) { chatDetails ->
+                            items(filteredChats, key = { it.connection.id }) { chatDetails ->
                                 ConnectionItem(
                                     chatDetails = chatDetails,
                                     onClick = { onChatSelected(chatDetails.connection.id) }
                                 )
-                                if (chatDetails != state.chats.last()) {
+                                if (chatDetails != filteredChats.last()) {
                                     HorizontalDivider(
                                         modifier = Modifier.padding(start = 72.dp),
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
