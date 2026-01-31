@@ -38,11 +38,10 @@ fun AddClickScreen(
     var clickedUserName by remember { mutableStateOf("") }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect")
             }
             Spacer(modifier = Modifier.height(6.dp))

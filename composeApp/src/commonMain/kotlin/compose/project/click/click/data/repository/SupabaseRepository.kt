@@ -306,5 +306,25 @@ class SupabaseRepository {
             false
         }
     }
+    
+    /**
+     * Update user's name
+     */
+    suspend fun updateUserName(userId: String, name: String): Boolean {
+        return try {
+            supabase.from("users")
+                .update({
+                    set("name", name)
+                }) {
+                    filter {
+                        eq("id", userId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating user name: ${e.message}")
+            false
+        }
+    }
 }
 

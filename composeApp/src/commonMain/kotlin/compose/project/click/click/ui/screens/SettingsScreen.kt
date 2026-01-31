@@ -3,18 +3,27 @@ package compose.project.click.click.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +33,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
+import compose.project.click.click.data.AppDataManager
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -39,12 +49,17 @@ fun SettingsScreen(
     availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    
+    // Username change dialog state
+    var showUsernameDialog by remember { mutableStateOf(false) }
+    var newUsername by remember { mutableStateOf("") }
     
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
+    // Use full status bar inset to prevent overlap with phone hardware
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 PageHeader(title = "Settings")
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -76,7 +91,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "Free this week",
+                                    "Free currently",
                                     modifier = Modifier.weight(1f)
                                 )
                                 Switch(
@@ -129,6 +144,46 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Username row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Username",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        currentUser?.name ?: "Not set",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        newUsername = currentUser?.name ?: ""
+                                        showUsernameDialog = true
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit username",
+                                        tint = PrimaryBlue
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
                             Button(
                                 onClick = onSignOut,
                                 modifier = Modifier.fillMaxWidth(),
@@ -149,6 +204,40 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+        
+        // Username change dialog
+        if (showUsernameDialog) {
+            AlertDialog(
+                onDismissRequest = { showUsernameDialog = false },
+                title = { Text("Change Username") },
+                text = {
+                    OutlinedTextField(
+                        value = newUsername,
+                        onValueChange = { newUsername = it },
+                        label = { Text("New username") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newUsername.isNotBlank()) {
+                                AppDataManager.updateUsername(newUsername.trim())
+                                showUsernameDialog = false
+                            }
+                        }
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUsernameDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

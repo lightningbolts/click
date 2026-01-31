@@ -54,7 +54,6 @@ fun NfcScreen(
     }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -66,7 +65,7 @@ fun NfcScreen(
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Header
-                Box(modifier = Modifier.padding(top = headerTop)) {
+                Box(modifier = Modifier.padding(top = topInset)) {
                     PageHeader(
                         title = "Tap to Connect",
                         subtitle = "Hold near another phone",

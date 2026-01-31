@@ -1,6 +1,9 @@
 package compose.project.click.click
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -43,6 +46,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -379,10 +383,22 @@ fun App() {
 
                     AnimatedVisibility(
                         visible = isSearchOpen,
-                        enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-                        exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+                        enter = fadeIn(animationSpec = tween(200)) + 
+                                slideInVertically(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    ),
+                                    initialOffsetY = { it }
+                                ),
+                        exit = fadeOut(animationSpec = tween(150)) + 
+                               slideOutVertically(
+                                   animationSpec = tween(200),
+                                   targetOffsetY = { it }
+                               ),
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
+                            .imePadding() // Move up when keyboard appears
                             .padding(
                                 start = 16.dp,
                                 end = 16.dp,

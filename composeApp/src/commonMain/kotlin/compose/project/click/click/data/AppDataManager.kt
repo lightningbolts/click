@@ -217,4 +217,17 @@ object AppDataManager {
         val otherUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: return null
         return _connectedUsers.value[otherUserId]
     }
+    
+    /**
+     * Update the current user's username
+     */
+    fun updateUsername(newUsername: String) {
+        val user = _currentUser.value ?: return
+        val updatedUser = user.copy(name = newUsername)
+        _currentUser.value = updatedUser
+        
+        scope.launch {
+            supabaseRepository.updateUserName(user.id, newUsername)
+        }
+    }
 }

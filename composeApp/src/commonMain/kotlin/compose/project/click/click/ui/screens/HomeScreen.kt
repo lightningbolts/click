@@ -55,7 +55,6 @@ fun HomeScreen(
 
     // Data loading is initiated by HomeViewModel.init{}
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val headerTop = if (topInset > 32.dp) topInset - 32.dp else 0.dp
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         when (val state = homeState) {
@@ -98,7 +97,7 @@ fun HomeScreen(
             }
             is HomeState.Success -> {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.padding(start = 20.dp, top = headerTop, end = 20.dp)) {
+                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                         PageHeader(
                             title = "Home",
                             subtitle = "Welcome back, ${state.user.name ?: "User"}!"
