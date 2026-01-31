@@ -3,16 +3,20 @@ package compose.project.click.click.ui.components
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
+import compose.project.click.click.ui.utils.TimeState
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.CoreLocation.CLLocationCoordinate2DMake
 import platform.MapKit.MKAnnotationProtocol
 import platform.MapKit.MKAnnotationView
+import platform.MapKit.MKCircle
 import platform.MapKit.MKCoordinateRegionMakeWithDistance
 import platform.MapKit.MKMapView
+import platform.MapKit.MKMapViewDelegateProtocol
 import platform.MapKit.MKMarkerAnnotationView
 import platform.MapKit.MKPointAnnotation
 import platform.MapKit.MKUserLocation
 import platform.MapKit.MKUserTrackingModeNone
+import platform.UIKit.UIColor
 import kotlin.collections.filterIsInstance
 import kotlin.math.pow
 
@@ -21,11 +25,17 @@ import kotlin.math.pow
 actual fun PlatformMap(
     modifier: Modifier,
     pins: List<MapPin>,
+    clusters: List<MapClusterPin>,
     zoom: Double,
-    onPinTapped: (MapPin) -> Unit
+    centerLat: Double?,
+    centerLon: Double?,
+    ghostMode: Boolean,
+    onPinTapped: (MapPin) -> Unit,
+    onClusterTapped: (MapClusterPin) -> Unit,
+    onZoomChanged: (Double) -> Unit
 ) {
     var lastZoom by remember { mutableStateOf(zoom) }
-    var lastPinsHash by remember { mutableStateOf(pins.hashCode()) }
+    var lastPinsHash by remember { mutableStateOf(pins.hashCode() + clusters.hashCode()) }
     var hasCentered by remember { mutableStateOf(false) }
 
     UIKitView(
@@ -36,39 +46,70 @@ actual fun PlatformMap(
                 showsScale = false
                 zoomEnabled = true
                 scrollEnabled = true
-                showsUserLocation = true
+                showsUserLocation = !ghostMode
                 userTrackingMode = MKUserTrackingModeNone
             }
         },
         update = { map ->
-            // Handle Pins
-            if (pins.hashCode() != lastPinsHash || !hasCentered) {
-                val poiAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
-                if (poiAnnotations.isNotEmpty()) {
-                    map.removeAnnotations(poiAnnotations)
+            // Update user location visibility based on ghost mode
+            map.showsUserLocation = !ghostMode
+            
+            val currentHash = pins.hashCode() + clusters.hashCode()
+            
+            // Handle Pins and Clusters
+            if (currentHash != lastPinsHash || !hasCentered) {
+                // Remove existing annotations (except user location)
+                val existingAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
+                if (existingAnnotations.isNotEmpty()) {
+                    map.removeAnnotations(existingAnnotations)
                 }
 
+                // Add individual pins with color based on time state
                 pins.forEach { pin ->
                     val ann = MKPointAnnotation()
-                    ann.setTitle(pin.title)
+                    val displayTitle = when (pin.timeState) {
+                        TimeState.LIVE -> "🔵 ${pin.title}"
+                        TimeState.RECENT -> "💠 ${pin.title}"
+                        TimeState.ARCHIVE -> "⚪ ${pin.title}"
+                    }
+                    ann.setTitle(displayTitle)
                     ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
                     map.addAnnotation(ann)
                 }
 
-                // Initial centering on first pin
-                if (!hasCentered && pins.isNotEmpty()) {
-                    val target = pins.first()
-                    val meters = metersForZoom(zoom)
-                    val center = CLLocationCoordinate2DMake(target.latitude, target.longitude)
-                    val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
-                    map.setRegion(map.regionThatFits(region), false)
-                    hasCentered = true
+                // Add cluster pins
+                clusters.forEach { cluster ->
+                    val ann = MKPointAnnotation()
+                    val icon = if (cluster.hasLiveConnections) "🔵" else "⭕"
+                    ann.setTitle("$icon ${cluster.count} memories")
+                    ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
+                    map.addAnnotation(ann)
                 }
-                lastPinsHash = pins.hashCode()
+
+                // Initial centering
+                if (!hasCentered) {
+                    val target = pins.firstOrNull() ?: clusters.firstOrNull()?.let { 
+                        MapPin(it.id, "", it.latitude, it.longitude)
+                    }
+                    if (target != null) {
+                        val meters = metersForZoom(zoom)
+                        val center = CLLocationCoordinate2DMake(target.latitude, target.longitude)
+                        val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
+                        map.setRegion(map.regionThatFits(region), false)
+                        hasCentered = true
+                    }
+                }
+                lastPinsHash = currentHash
             }
 
-            // Handle Zoom
-            if (zoom != lastZoom) {
+            // Handle camera target animation
+            if (centerLat != null && centerLon != null) {
+                val meters = metersForZoom(zoom)
+                val center = CLLocationCoordinate2DMake(centerLat, centerLon)
+                val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
+                map.setRegion(map.regionThatFits(region), true)
+            } else if (zoom != lastZoom) {
+                // Handle Zoom only (no position change)
                 val meters = metersForZoom(zoom)
                 val center = map.centerCoordinate
                 val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)

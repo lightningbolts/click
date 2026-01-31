@@ -59,6 +59,14 @@ object AppDataManager {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
+    // Ghost Mode state - privacy toggle to stop sharing location
+    private val _ghostModeEnabled = MutableStateFlow(false)
+    val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
+    
+    fun toggleGhostMode() {
+        _ghostModeEnabled.value = !_ghostModeEnabled.value
+    }
+    
     /**
      * Initialize app data - call this once when the app starts
      */
@@ -192,6 +200,13 @@ object AppDataManager {
      */
     fun removeConnection(connectionId: String) {
         _connections.value = _connections.value.filter { it.id != connectionId }
+    }
+    
+    /**
+     * Get a connected user by their ID
+     */
+    fun getConnectedUser(userId: String): User? {
+        return _connectedUsers.value[userId]
     }
     
     /**

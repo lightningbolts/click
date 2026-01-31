@@ -200,6 +200,7 @@ fun App() {
             var showNfcScreen by remember { mutableStateOf(false) }
             var isSearchOpen by remember { mutableStateOf(false) }
             var searchQuery by remember { mutableStateOf("") }
+            var pendingChatId by remember { mutableStateOf<String?>(null) }
 
             val focusManager = LocalFocusManager.current
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
@@ -358,6 +359,8 @@ fun App() {
                                             ConnectionsScreen(
                                                 userId = userId,
                                                 searchQuery = searchQuery,
+                                                initialChatId = pendingChatId,
+                                                onChatDismissed = { pendingChatId = null },
                                                 viewModel = chatViewModel
                                             )
                                         } else {
@@ -370,7 +373,13 @@ fun App() {
                                             }
                                         }
                                     }
-                                    NavigationItem.Map.route -> MapScreen(viewModel = mapViewModel)
+                                    NavigationItem.Map.route -> MapScreen(
+                                        viewModel = mapViewModel,
+                                        onNavigateToChat = { connectionId ->
+                                            pendingChatId = connectionId
+                                            currentRoute = NavigationItem.Connections.route
+                                        }
+                                    )
                                     NavigationItem.Settings.route -> SettingsScreen(
                                         isDarkMode = isDarkMode,
                                         onToggleDarkMode = { isDarkMode = !isDarkMode },

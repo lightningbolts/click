@@ -49,9 +49,18 @@ import kotlin.math.absoluteValue
 fun ConnectionsScreen(
     userId: String,
     searchQuery: String = "",
+    initialChatId: String? = null,
+    onChatDismissed: (() -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() }
 ) {
-    var selectedChatId by remember { mutableStateOf<String?>(null) }
+    var selectedChatId by remember { mutableStateOf(initialChatId) }
+
+    LaunchedEffect(initialChatId) {
+        if (initialChatId != null) {
+            selectedChatId = initialChatId
+            viewModel.loadChatMessages(initialChatId)
+        }
+    }
 
     LaunchedEffect(userId) {
         viewModel.setCurrentUser(userId)
@@ -80,6 +89,7 @@ fun ConnectionsScreen(
                 selectedChatId = null
                 viewModel.leaveChatRoom()
                 viewModel.loadChats() // Refresh chat list
+                onChatDismissed?.invoke()
             }
         )
     }
