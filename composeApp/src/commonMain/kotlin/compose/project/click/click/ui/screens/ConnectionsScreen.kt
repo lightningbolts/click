@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.coerceAtLeast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.IcebreakerPrompt
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.ChatListState
@@ -313,6 +314,10 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val otherUserHasKept by viewModel.otherUserHasKept.collectAsState()
     val vibeCheckExpired by viewModel.vibeCheckExpired.collectAsState()
     val connectionKept by viewModel.connectionKept.collectAsState()
+    
+    // Icebreaker prompts state
+    val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
+    val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -511,6 +516,16 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 viewModel.deleteExpiredConnection()
                                 onBackPressed()
                             }
+                        )
+                    }
+                    
+                    // Icebreaker Prompts Panel
+                    if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
+                        IcebreakerPanel(
+                            prompts = icebreakerPrompts,
+                            onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
+                            onRefresh = { viewModel.refreshIcebreakerPrompts() },
+                            onDismiss = { viewModel.dismissIcebreakerPanel() }
                         )
                     }
 
@@ -1066,6 +1081,124 @@ fun VibeCheckBanner(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Icebreaker Panel - Shows conversation starters to help break the ice.
+ * Displays tappable prompts that users can click to auto-fill the message input.
+ */
+@Composable
+fun IcebreakerPanel(
+    prompts: List<IcebreakerPrompt>,
+    onPromptClick: (IcebreakerPrompt) -> Unit,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            // Header row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Lightbulb,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Conversation Starters",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                
+                Row {
+                    IconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = "Get new prompts",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Dismiss",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Prompt chips
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                prompts.forEach { prompt ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPromptClick(prompt) },
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 1.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.ChatBubbleOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                prompt.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                "Tap a prompt to use it",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
         }
     }
 }

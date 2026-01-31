@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.IcebreakerPrompt
+import compose.project.click.click.data.models.IcebreakerRepository
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.User
@@ -68,6 +70,13 @@ class ChatViewModel(
     
     private val _connectionKept = MutableStateFlow(false)
     val connectionKept: StateFlow<Boolean> = _connectionKept.asStateFlow()
+    
+    // Icebreaker Prompts State
+    private val _icebreakerPrompts = MutableStateFlow<List<IcebreakerPrompt>>(emptyList())
+    val icebreakerPrompts: StateFlow<List<IcebreakerPrompt>> = _icebreakerPrompts.asStateFlow()
+    
+    private val _showIcebreakerPanel = MutableStateFlow(true)
+    val showIcebreakerPanel: StateFlow<Boolean> = _showIcebreakerPanel.asStateFlow()
 
     private var currentChatId: String? = null
     private var realtimeJob: Job? = null
@@ -145,6 +154,14 @@ class ChatViewModel(
                 // Mark chat as begun if this is the first time
                 if (!chatDetails.connection.has_begun) {
                     supabaseRepository.updateConnectionHasBegun(chatId, true)
+                }
+                
+                // Load icebreaker prompts for new conversations (show only if few messages)
+                if (messagesWithUsers.size < 5) {
+                    loadIcebreakerPrompts(chatDetails.connection.context_tag)
+                    _showIcebreakerPanel.value = true
+                } else {
+                    _showIcebreakerPanel.value = false
                 }
             } catch (e: Exception) {
                 _chatMessagesState.value = ChatMessagesState.Error(e.message ?: "Failed to load messages")
@@ -235,6 +252,7 @@ class ChatViewModel(
         currentChatId = null
         _chatMessagesState.value = ChatMessagesState.Loading
         resetVibeCheckState()
+        resetIcebreakerState()
     }
 
     fun startTypingMonitoring(chatId: String) {
@@ -469,6 +487,48 @@ class ChatViewModel(
         _otherUserHasKept.value = false
         _vibeCheckExpired.value = false
         _connectionKept.value = false
+    }
+    
+    // ==================== Icebreaker Prompts Methods ====================
+    
+    /**
+     * Load icebreaker prompts based on connection context.
+     */
+    private fun loadIcebreakerPrompts(contextTag: String?) {
+        _icebreakerPrompts.value = IcebreakerRepository.getPromptsForContext(contextTag, count = 3)
+    }
+    
+    /**
+     * Get new/refreshed icebreaker prompts.
+     */
+    fun refreshIcebreakerPrompts() {
+        val currentState = _chatMessagesState.value
+        if (currentState is ChatMessagesState.Success) {
+            loadIcebreakerPrompts(currentState.chatDetails.connection.context_tag)
+        }
+    }
+    
+    /**
+     * Use an icebreaker prompt - copies it to the message input.
+     */
+    fun useIcebreakerPrompt(prompt: IcebreakerPrompt) {
+        _messageInput.value = prompt.text
+        _showIcebreakerPanel.value = false
+    }
+    
+    /**
+     * Dismiss the icebreaker panel.
+     */
+    fun dismissIcebreakerPanel() {
+        _showIcebreakerPanel.value = false
+    }
+    
+    /**
+     * Reset icebreaker state when leaving chat.
+     */
+    private fun resetIcebreakerState() {
+        _icebreakerPrompts.value = emptyList()
+        _showIcebreakerPanel.value = true
     }
 
     override fun onCleared() {

@@ -227,5 +227,84 @@ class SupabaseRepository {
             false
         }
     }
+    
+    // ==================== Availability Methods ====================
+    
+    /**
+     * Fetch a user's availability
+     */
+    suspend fun fetchUserAvailability(userId: String): compose.project.click.click.data.models.UserAvailability? {
+        return try {
+            val availabilities = supabase.from("user_availability")
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
+                .decodeList<compose.project.click.click.data.models.UserAvailability>()
+            availabilities.firstOrNull()
+        } catch (e: Exception) {
+            println("Error fetching user availability: ${e.message}")
+            null
+        }
+    }
+    
+    /**
+     * Fetch availability for multiple users
+     */
+    suspend fun fetchAvailabilityForUsers(userIds: List<String>): Map<String, compose.project.click.click.data.models.UserAvailability> {
+        if (userIds.isEmpty()) return emptyMap()
+        
+        return try {
+            val availabilities = supabase.from("user_availability")
+                .select {
+                    filter {
+                        isIn("user_id", userIds)
+                    }
+                }
+                .decodeList<compose.project.click.click.data.models.UserAvailability>()
+            availabilities.associateBy { it.userId }
+        } catch (e: Exception) {
+            println("Error fetching availabilities: ${e.message}")
+            emptyMap()
+        }
+    }
+    
+    /**
+     * Update user's availability (upsert)
+     */
+    suspend fun updateUserAvailability(availability: compose.project.click.click.data.models.UserAvailability): Boolean {
+        return try {
+            supabase.from("user_availability")
+                .upsert(availability) {
+                    onConflict = "user_id"
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating availability: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Set user's "I'm free this week" status
+     */
+    suspend fun setFreeThisWeek(userId: String, isFree: Boolean): Boolean {
+        return try {
+            val existing = fetchUserAvailability(userId)
+            val availability = existing?.copy(
+                isFreeThisWeek = isFree,
+                lastUpdated = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            ) ?: compose.project.click.click.data.models.UserAvailability(
+                userId = userId,
+                isFreeThisWeek = isFree,
+                lastUpdated = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            )
+            updateUserAvailability(availability)
+        } catch (e: Exception) {
+            println("Error setting free this week: ${e.message}")
+            false
+        }
+    }
 }
 
