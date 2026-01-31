@@ -21,6 +21,37 @@ data class UserAvailability(
     val customStatus: String? = null, // e.g., "Free after 3pm most days"
     @SerialName("last_updated")
     val lastUpdated: Long = 0
+) {
+    /**
+     * Convert to insert DTO (excludes auto-generated ID)
+     */
+    fun toInsertDto() = UserAvailabilityInsert(
+        userId = userId,
+        isFreeThisWeek = isFreeThisWeek,
+        availableDays = availableDays,
+        preferredActivities = preferredActivities,
+        customStatus = customStatus,
+        lastUpdated = lastUpdated
+    )
+}
+
+/**
+ * DTO for inserting user availability (excludes auto-generated ID)
+ */
+@Serializable
+data class UserAvailabilityInsert(
+    @SerialName("user_id")
+    val userId: String,
+    @SerialName("is_free_this_week")
+    val isFreeThisWeek: Boolean = false,
+    @SerialName("available_days")
+    val availableDays: List<String> = emptyList(),
+    @SerialName("preferred_activities")
+    val preferredActivities: List<String> = emptyList(),
+    @SerialName("custom_status")
+    val customStatus: String? = null,
+    @SerialName("last_updated")
+    val lastUpdated: Long = 0
 )
 
 /**

@@ -23,6 +23,41 @@ data class User(
     val paired_with: List<String> = emptyList(),
     val connection_today: Int = -1,
     val last_paired: Long? = null
+) {
+    /**
+     * Convert to insert DTO for Supabase
+     */
+    fun toInsertDto() = UserInsert(
+        id = id,
+        name = name,
+        email = email,
+        image = image,
+        createdAt = createdAt,
+        lastPolled = lastPolled,
+        connections = connections,
+        paired_with = paired_with,
+        connection_today = connection_today,
+        last_paired = last_paired
+    )
+}
+
+/**
+ * DTO for inserting user records into Supabase
+ */
+@Serializable
+data class UserInsert(
+    val id: String,
+    val name: String? = null,
+    val email: String? = null,
+    val image: String? = null,
+    @SerialName("created_at")
+    val createdAt: Long,
+    @SerialName("last_polled")
+    val lastPolled: Long? = null,
+    val connections: List<String> = emptyList(),
+    val paired_with: List<String> = emptyList(),
+    val connection_today: Int = -1,
+    val last_paired: Long? = null
 )
 
 @Serializable

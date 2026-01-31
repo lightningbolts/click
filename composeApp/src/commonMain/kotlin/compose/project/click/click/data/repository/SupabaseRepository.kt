@@ -294,16 +294,9 @@ class SupabaseRepository {
                         }
                     }
             } else {
-                // Insert new record (let Supabase generate ID)
+                // Insert new record using serializable DTO (let Supabase generate ID)
                 supabase.from("user_availability")
-                    .insert(mapOf(
-                        "user_id" to availability.userId,
-                        "is_free_this_week" to availability.isFreeThisWeek,
-                        "available_days" to availability.availableDays,
-                        "preferred_activities" to availability.preferredActivities,
-                        "custom_status" to availability.customStatus,
-                        "last_updated" to availability.lastUpdated
-                    ))
+                    .insert(availability.toInsertDto())
             }
             println("Successfully updated availability for user ${availability.userId}: isFreeThisWeek=${availability.isFreeThisWeek}")
             true
@@ -387,20 +380,9 @@ class SupabaseRepository {
                 }
                 true
             } else {
-                // Insert new user
+                // Insert new user using serializable DTO
                 supabase.from("users")
-                    .insert(mapOf(
-                        "id" to user.id,
-                        "name" to user.name,
-                        "email" to user.email,
-                        "image" to user.image,
-                        "created_at" to user.createdAt,
-                        "last_polled" to user.lastPolled,
-                        "connections" to user.connections,
-                        "paired_with" to user.paired_with,
-                        "connection_today" to user.connection_today,
-                        "last_paired" to user.last_paired
-                    ))
+                    .insert(user.toInsertDto())
                 println("Inserted new user: ${user.id}")
                 true
             }
