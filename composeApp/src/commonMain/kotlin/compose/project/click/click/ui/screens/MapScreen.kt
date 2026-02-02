@@ -187,11 +187,11 @@ fun MapScreen(
                                     onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() }
                                 )
 
-                                // Zoom controls
+                                // Zoom controls - extra bottom padding to avoid overlap with Ghost Mode FAB
                                 ZoomControls(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .padding(end = 16.dp, bottom = 16.dp),
+                                        .padding(end = 16.dp, bottom = 80.dp),
                                     onZoomIn = { viewModel.zoomIn() },
                                     onZoomOut = { viewModel.zoomOut() }
                                 )

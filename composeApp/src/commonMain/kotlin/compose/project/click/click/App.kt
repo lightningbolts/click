@@ -410,8 +410,8 @@ fun App() {
                             .imePadding() // Move up when keyboard appears
                             .padding(
                                 start = 16.dp,
-                                end = 16.dp,
-                                bottom = 12.dp // already above bottom bar due to Scaffold padding
+                                end = 16.dp
+                                // Removed bottom padding - search bar should sit directly above keyboard via imePadding
                             )
                             .fillMaxWidth()
                     ) {

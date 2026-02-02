@@ -44,10 +44,13 @@ class AuthViewModel(
                 userResult.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
+                        // Prefer full_name over name (full_name is updated by user, name is legacy)
+                        val fullName = user.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
+                        val legacyName = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         authState = AuthState.Success(
                             userId = user.id,
                             email = user.email ?: "",
-                            name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+                            name = fullName ?: legacyName
                         )
                     },
                     onFailure = {
@@ -72,10 +75,12 @@ class AuthViewModel(
                 result.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
+                        val fullName = user.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
+                        val legacyName = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         authState = AuthState.Success(
                             userId = user.id,
                             email = user.email ?: email,
-                            name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+                            name = fullName ?: legacyName
                         )
                     },
                     onFailure = { error ->
@@ -98,10 +103,12 @@ class AuthViewModel(
                 result.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
+                        val fullName = user.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
+                        val legacyName = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         authState = AuthState.Success(
                             userId = user.id,
                             email = user.email ?: email,
-                            name = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+                            name = fullName ?: legacyName
                         )
                     },
                     onFailure = { error ->

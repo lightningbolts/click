@@ -112,14 +112,38 @@ class ChatViewModel(
         if (!isForced && _chatListState.value is ChatListState.Success) return
         
         viewModelScope.launch {
-            if (isForced || _chatListState.value !is ChatListState.Success) {
+            // Show cached data immediately if available
+            val cachedConnections = AppDataManager.connections.value
+            val cachedUsers = AppDataManager.connectedUsers.value
+            
+            if (cachedConnections.isNotEmpty()) {
+                // Build ChatWithDetails from cached data for instant display
+                val cachedChats = cachedConnections.mapNotNull { connection ->
+                    val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+                    val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "User", createdAt = 0L)
+                    ChatWithDetails(
+                        chat = connection.chat,
+                        connection = connection,
+                        otherUser = otherUser,
+                        lastMessage = connection.chat.messages.lastOrNull(),
+                        unreadCount = 0 // Will be updated from API
+                    )
+                }
+                _chatListState.value = ChatListState.Success(cachedChats)
+            } else if (isForced || _chatListState.value !is ChatListState.Success) {
                 _chatListState.value = ChatListState.Loading
             }
+            
+            // Fetch fresh data from API in background
             try {
                 val chats = chatRepository.fetchUserChatsWithDetails(userId)
                 _chatListState.value = ChatListState.Success(chats)
             } catch (e: Exception) {
-                _chatListState.value = ChatListState.Error(e.message ?: "Failed to load chats")
+                // Only show error if we don't have cached data
+                if (cachedConnections.isEmpty()) {
+                    _chatListState.value = ChatListState.Error(e.message ?: "Failed to load chats")
+                }
+                // Otherwise keep showing cached data
             }
         }
     }

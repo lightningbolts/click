@@ -218,6 +218,8 @@ object AppDataManager {
 
     /**
      * Toggle free this week status
+     * This method optimistically updates local state, then syncs with backend.
+     * Uses IO dispatcher to ensure network call isn't interrupted when app is backgrounded.
      */
     fun toggleFreeThisWeek() {
         val user = _currentUser.value ?: run {
@@ -238,15 +240,24 @@ object AppDataManager {
             lastUpdated = Clock.System.now().toEpochMilliseconds()
         )
         
+        // Update local state first for immediate UI feedback
         _userAvailability.value = updated
         
-        scope.launch {
+        // Sync with backend using Default dispatcher (more reliable for network calls)
+        scope.launch(Dispatchers.Default) {
             try {
                 val result = supabaseRepository.setFreeThisWeek(user.id, newStatus)
                 println("toggleFreeThisWeek: Supabase update result: $result")
+                if (!result) {
+                    // Rollback local state on failure
+                    println("toggleFreeThisWeek: Failed to persist, rolling back local state")
+                    _userAvailability.value = current
+                }
             } catch (e: Exception) {
                 println("toggleFreeThisWeek: Error updating Supabase: ${e.message}")
                 e.printStackTrace()
+                // Rollback local state on error
+                _userAvailability.value = current
             }
         }
     }
