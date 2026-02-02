@@ -55,6 +55,22 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
+        private const val KEY_FREE_THIS_WEEK = "free_this_week"
+    }
+    
+    override suspend fun saveFreeThisWeek(isFree: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_FREE_THIS_WEEK, isFree)
+            apply()
+        }
+    }
+    
+    override suspend fun getFreeThisWeek(): Boolean? {
+        return if (sharedPreferences.contains(KEY_FREE_THIS_WEEK)) {
+            sharedPreferences.getBoolean(KEY_FREE_THIS_WEEK, false)
+        } else {
+            null
+        }
     }
 }
 

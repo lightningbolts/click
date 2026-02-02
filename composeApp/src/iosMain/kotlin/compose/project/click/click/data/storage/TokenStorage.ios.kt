@@ -44,6 +44,21 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
+        private const val KEY_FREE_THIS_WEEK = "free_this_week"
+    }
+    
+    override suspend fun saveFreeThisWeek(isFree: Boolean) {
+        userDefaults.setBool(isFree, KEY_FREE_THIS_WEEK)
+        userDefaults.synchronize()
+    }
+    
+    override suspend fun getFreeThisWeek(): Boolean? {
+        // Check if the key exists first
+        return if (userDefaults.objectForKey(KEY_FREE_THIS_WEEK) != null) {
+            userDefaults.boolForKey(KEY_FREE_THIS_WEEK)
+        } else {
+            null
+        }
     }
 }
 

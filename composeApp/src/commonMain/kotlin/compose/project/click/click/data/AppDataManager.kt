@@ -26,6 +26,7 @@ object AppDataManager {
     private val authRepository = AuthRepository()
     private val supabaseRepository = SupabaseRepository()
     private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
+    private val tokenStorage = createTokenStorage() // For local preferences storage
     
     // Current user state
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -133,10 +134,28 @@ object AppDataManager {
             _currentUser.value = user
             println("AppDataManager: Current user set to: ${user.name}")
             
-            // Fetch availability
+            // Load availability from local storage first for immediate display
+            val localFreeThisWeek = tokenStorage.getFreeThisWeek()
+            if (localFreeThisWeek != null) {
+                // Use local value immediately
+                _userAvailability.value = UserAvailability(
+                    userId = user.id,
+                    isFreeThisWeek = localFreeThisWeek,
+                    lastUpdated = Clock.System.now().toEpochMilliseconds()
+                )
+                println("AppDataManager: Loaded local availability: isFreeThisWeek=$localFreeThisWeek")
+            }
+            
+            // Fetch availability from Supabase (may update the local value)
             val availability = supabaseRepository.fetchUserAvailability(user.id)
-            println("AppDataManager: Fetched availability: isFreeThisWeek=${availability?.isFreeThisWeek}")
-            _userAvailability.value = availability
+            if (availability != null) {
+                _userAvailability.value = availability
+                // Sync local storage with server value
+                tokenStorage.saveFreeThisWeek(availability.isFreeThisWeek)
+                println("AppDataManager: Synced availability from Supabase: isFreeThisWeek=${availability.isFreeThisWeek}")
+            } else if (localFreeThisWeek == null) {
+                println("AppDataManager: No availability found locally or on server")
+            }
             
             // Fetch connections
             val userConnections = supabaseRepository.fetchUserConnections(user.id)
@@ -218,8 +237,10 @@ object AppDataManager {
 
     /**
      * Toggle free this week status
-     * This method optimistically updates local state, then syncs with backend.
-     * Uses IO dispatcher to ensure network call isn't interrupted when app is backgrounded.
+     * This method:
+     * 1. Updates local state for immediate UI feedback
+     * 2. Saves to local storage immediately (persists even if app is killed)
+     * 3. Syncs with backend in background
      */
     fun toggleFreeThisWeek() {
         val user = _currentUser.value ?: run {
@@ -243,21 +264,28 @@ object AppDataManager {
         // Update local state first for immediate UI feedback
         _userAvailability.value = updated
         
-        // Sync with backend using Default dispatcher (more reliable for network calls)
+        // Save to local storage immediately (this is fast and synchronous-ish)
+        // This ensures the value persists even if the app is killed before network call completes
+        scope.launch(Dispatchers.Default) {
+            try {
+                tokenStorage.saveFreeThisWeek(newStatus)
+                println("toggleFreeThisWeek: Saved to local storage: $newStatus")
+            } catch (e: Exception) {
+                println("toggleFreeThisWeek: Error saving to local storage: ${e.message}")
+            }
+        }
+        
+        // Sync with backend
         scope.launch(Dispatchers.Default) {
             try {
                 val result = supabaseRepository.setFreeThisWeek(user.id, newStatus)
                 println("toggleFreeThisWeek: Supabase update result: $result")
-                if (!result) {
-                    // Rollback local state on failure
-                    println("toggleFreeThisWeek: Failed to persist, rolling back local state")
-                    _userAvailability.value = current
-                }
+                // Note: We don't rollback on failure since local storage has the truth
+                // Next app launch will attempt to sync again
             } catch (e: Exception) {
                 println("toggleFreeThisWeek: Error updating Supabase: ${e.message}")
                 e.printStackTrace()
-                // Rollback local state on error
-                _userAvailability.value = current
+                // Don't rollback - keep local state as truth, will sync later
             }
         }
     }

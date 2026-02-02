@@ -7,6 +7,10 @@ interface TokenStorage {
     suspend fun getExpiresAt(): Long?
     suspend fun getTokenType(): String?
     suspend fun clearTokens()
+    
+    // Availability persistence for immediate local storage
+    suspend fun saveFreeThisWeek(isFree: Boolean)
+    suspend fun getFreeThisWeek(): Boolean?
 }
 
 expect fun createTokenStorage(): TokenStorage

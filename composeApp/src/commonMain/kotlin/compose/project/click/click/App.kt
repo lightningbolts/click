@@ -207,6 +207,8 @@ fun App() {
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             val focusRequester = remember { FocusRequester() }
 
+            // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
+            Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 bottomBar = {
@@ -389,85 +391,83 @@ fun App() {
                             }
                         }
                     }
-
-                    AnimatedVisibility(
-                        visible = isSearchOpen,
-                        enter = fadeIn(animationSpec = tween(200)) + 
-                                slideInVertically(
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessMedium
-                                    ),
-                                    initialOffsetY = { it }
-                                ),
-                        exit = fadeOut(animationSpec = tween(150)) + 
-                               slideOutVertically(
-                                   animationSpec = tween(200),
-                                   targetOffsetY = { it }
-                               ),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .imePadding() // Move up when keyboard appears
-                            .padding(
-                                start = 16.dp,
-                                end = 16.dp
-                                // Removed bottom padding - search bar should sit directly above keyboard via imePadding
-                            )
-                            .fillMaxWidth()
-                    ) {
-                        Surface(
-                            modifier = Modifier.border(
-                                width = 1.dp,
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
-                                ),
-                                shape = RoundedCornerShape(16.dp)
-                            ),
-                            tonalElevation = 0.dp,
-                            shape = RoundedCornerShape(16.dp),
-                            color = GlassDark
-                        ) {
-                            TextField(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp) // Fixed height to prevent shrinking
-                                    .focusRequester(focusRequester),
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                singleLine = true,
-                                placeholder = { Text("Search") },
-                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                                trailingIcon = {
-                                    IconButton(onClick = {
-                                        isSearchOpen = false
-                                        searchQuery = ""
-                                        focusManager.clearFocus()
-                                    }) {
-                                        Icon(Icons.Filled.Close, contentDescription = "Close search")
-                                    }
-                                },
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
-                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    cursorColor = MaterialTheme.colorScheme.primary,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent
-                                ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(
-                                    onSearch = {
-                                        focusManager.clearFocus()
-                                        isSearchOpen = false
-                                    }
-                                )
-                            )
-                        }
-                    }
                 }
             }
+            
+            // Search bar overlay - positioned at true screen bottom, outside Scaffold padding
+            AnimatedVisibility(
+                visible = isSearchOpen,
+                enter = fadeIn(animationSpec = tween(200)) + 
+                        slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            ),
+                            initialOffsetY = { it }
+                        ),
+                exit = fadeOut(animationSpec = tween(150)) + 
+                       slideOutVertically(
+                           animationSpec = tween(200),
+                           targetOffsetY = { it }
+                       ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .imePadding() // Move up when keyboard appears - now works relative to true screen bottom
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+            ) {
+                Surface(
+                    modifier = Modifier.border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                    tonalElevation = 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    color = GlassDark
+                ) {
+                    TextField(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp) // Fixed height to prevent shrinking
+                            .focusRequester(focusRequester),
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        placeholder = { Text("Search") },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                isSearchOpen = false
+                                searchQuery = ""
+                                focusManager.clearFocus()
+                            }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Close search")
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            cursorColor = MaterialTheme.colorScheme.primary,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                focusManager.clearFocus()
+                                isSearchOpen = false
+                            }
+                        )
+                    )
+                }
+            }
+            } // End of Scaffold wrapper Box
 
             LaunchedEffect(isSearchOpen) {
                 if (isSearchOpen) {
