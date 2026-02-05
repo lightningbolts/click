@@ -6,21 +6,21 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
 import platform.CoreFoundation.CFDictionaryRef
-import platform.CoreFoundation.CFStringRef
-import platform.CoreFoundation.CFTypeRef
 import platform.CoreFoundation.CFTypeRefVar
 import platform.Foundation.CFBridgingRelease
 import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
-import platform.Foundation.NSNumber
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.create
 import platform.Foundation.dataUsingEncoding
+import platform.Foundation.NSUserDefaults
 import platform.Security.*
 
 /**
- * iOS Keychain-backed TokenStorage for persistence across app updates and reinstalls.
+ * iOS TokenStorage that uses Keychain for auth tokens (persists across app updates/reinstalls)
+ * and NSUserDefaults for non-sensitive preferences.
+ * 
  * Keychain data survives:
  * - App updates (TestFlight, App Store)
  * - App reinstalls (data persists if same team ID)
@@ -28,7 +28,7 @@ import platform.Security.*
  * This is critical for maintaining user sessions across TestFlight updates.
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-class IosKeychainTokenStorage : TokenStorage {
+class IosTokenStorage : TokenStorage {
 
     companion object {
         private const val SERVICE_NAME = "com.click.auth"
@@ -39,7 +39,11 @@ class IosKeychainTokenStorage : TokenStorage {
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
     }
 
+    // NSUserDefaults for non-sensitive preferences (backup and quick access)
+    private val userDefaults = NSUserDefaults.standardUserDefaults
+
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
+        // Save to Keychain for persistence across app updates
         setKeychainItem(KEY_JWT, jwt)
         setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
         if (expiresAt != null) {
@@ -54,13 +58,21 @@ class IosKeychainTokenStorage : TokenStorage {
         }
     }
 
-    override suspend fun getJwt(): String? = getKeychainItem(KEY_JWT)
+    override suspend fun getJwt(): String? {
+        return getKeychainItem(KEY_JWT)
+    }
 
-    override suspend fun getRefreshToken(): String? = getKeychainItem(KEY_REFRESH_TOKEN)
+    override suspend fun getRefreshToken(): String? {
+        return getKeychainItem(KEY_REFRESH_TOKEN)
+    }
 
-    override suspend fun getExpiresAt(): Long? = getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()
+    override suspend fun getExpiresAt(): Long? {
+        return getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()
+    }
 
-    override suspend fun getTokenType(): String? = getKeychainItem(KEY_TOKEN_TYPE)
+    override suspend fun getTokenType(): String? {
+        return getKeychainItem(KEY_TOKEN_TYPE)
+    }
 
     override suspend fun clearTokens() {
         deleteKeychainItem(KEY_JWT)
@@ -71,23 +83,31 @@ class IosKeychainTokenStorage : TokenStorage {
     }
 
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
-        setKeychainItem(KEY_FREE_THIS_WEEK, if (isFree) "true" else "false")
+        // Use NSUserDefaults for preferences (not sensitive)
+        userDefaults.setBool(isFree, KEY_FREE_THIS_WEEK)
+        userDefaults.synchronize()
     }
 
     override suspend fun getFreeThisWeek(): Boolean? {
-        return getKeychainItem(KEY_FREE_THIS_WEEK)?.let { it == "true" }
+        return if (userDefaults.objectForKey(KEY_FREE_THIS_WEEK) != null) {
+            userDefaults.boolForKey(KEY_FREE_THIS_WEEK)
+        } else {
+            null
+        }
     }
 
     /**
      * Store a string value in Keychain
      */
     private fun setKeychainItem(key: String, value: String): Boolean {
-        // First attempt to delete existing item
+        // First delete any existing item
         deleteKeychainItem(key)
 
-        val valueData = (value as NSString).dataUsingEncoding(NSUTF8StringEncoding) ?: return false
+        // Convert Kotlin String to NSData via NSString
+        val nsString = NSString.create(string = value)
+        val valueData = nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: return false
 
-        val query = mapOf(
+        val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to SERVICE_NAME,
             kSecAttrAccount to key,
@@ -101,14 +121,18 @@ class IosKeychainTokenStorage : TokenStorage {
         val status = SecItemAdd(cfQuery, null)
         CFBridgingRelease(cfQuery)
 
-        return status == errSecSuccess
+        val success = status == errSecSuccess
+        if (!success) {
+            println("Keychain setItem failed for key '$key' with status: $status")
+        }
+        return success
     }
 
     /**
      * Retrieve a string value from Keychain
      */
     private fun getKeychainItem(key: String): String? = memScoped {
-        val query = mapOf(
+        val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to SERVICE_NAME,
             kSecAttrAccount to key,
@@ -129,6 +153,9 @@ class IosKeychainTokenStorage : TokenStorage {
                 NSString.create(data = it, encoding = NSUTF8StringEncoding) as? String
             }
         } else {
+            if (status != errSecItemNotFound) {
+                println("Keychain getItem failed for key '$key' with status: $status")
+            }
             null
         }
     }
@@ -137,7 +164,7 @@ class IosKeychainTokenStorage : TokenStorage {
      * Delete an item from Keychain
      */
     private fun deleteKeychainItem(key: String): Boolean {
-        val query = mapOf(
+        val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to SERVICE_NAME,
             kSecAttrAccount to key
@@ -153,4 +180,4 @@ class IosKeychainTokenStorage : TokenStorage {
     }
 }
 
-actual fun createTokenStorage(): TokenStorage = IosKeychainTokenStorage()
+actual fun createTokenStorage(): TokenStorage = IosTokenStorage()
