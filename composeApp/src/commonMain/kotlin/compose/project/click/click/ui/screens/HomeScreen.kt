@@ -24,7 +24,8 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
-import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.GlassCard
+import compose.project.click.click.ui.components.GlassCardCompact
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.OnlineFriendItem
 import compose.project.click.click.ui.components.RecentClickCard
@@ -43,6 +44,19 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
 
+// Spacing constants matching web's px-6 md:px-12 (converted to dp)
+private val ScreenPaddingHorizontal = 24.dp
+private val CardSpacing = 24.dp
+
+/**
+ * Creates a gradient brush for section headers
+ * Matches web's text-gradient effect (White to Zinc-400)
+ */
+@Composable
+private fun headerGradientBrush() = Brush.horizontalGradient(
+    colors = listOf(GradientTextStart, GradientTextEnd)
+)
+
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel { HomeViewModel() },
@@ -53,22 +67,28 @@ fun HomeScreen(
     val connectionInsights by viewModel.connectionInsights.collectAsState()
     val showInsightsPanel by viewModel.showInsightsPanel.collectAsState()
 
-    // Data loading is initiated by HomeViewModel.init{}
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+    // Apply deep dark background (Zinc-950)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BackgroundDark)
+    ) {
         when (val state = homeState) {
             is HomeState.Loading -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = PrimaryBlue)
                 }
             }
             is HomeState.Error -> {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(ScreenPaddingHorizontal),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -87,43 +107,48 @@ fun HomeScreen(
                     Text(
                         state.message,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = OnSurfaceDark.copy(alpha = 0.7f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { viewModel.refresh() }) {
+                    Button(
+                        onClick = { viewModel.refresh() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryBlue
+                        )
+                    ) {
                         Text("Retry")
                     }
                 }
             }
             is HomeState.Success -> {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                    Box(
+                        modifier = Modifier.padding(
+                            start = ScreenPaddingHorizontal,
+                            top = topInset,
+                            end = ScreenPaddingHorizontal
+                        )
+                    ) {
                         PageHeader(
                             title = "Home",
                             subtitle = "Welcome back, ${state.user.name ?: "User"}!"
                         )
                     }
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(CardSpacing))
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp) // Increased spacing
+                        contentPadding = PaddingValues(
+                            start = ScreenPaddingHorizontal,
+                            end = ScreenPaddingHorizontal,
+                            bottom = ScreenPaddingHorizontal
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(CardSpacing)
                     ) {
                         // Recent Connections Section
                         if (state.stats.recentConnections.isNotEmpty()) {
                             item {
-                                Text(
-                                    "Recent Connections",
-                                    style = MaterialTheme.typography.headlineMedium.merge(
-                                        TextStyle(
-                                            brush = Brush.horizontalGradient(
-                                                colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
-                                            )
-                                        )
-                                    ),
-                                    fontWeight = FontWeight.Bold
-                                )
+                                GradientSectionHeader(text = "Recent Connections")
                             }
 
                             items(state.stats.recentConnections) { connection ->
@@ -131,28 +156,29 @@ fun HomeScreen(
                             }
                         } else {
                             item {
-                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                GlassCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(
-                                        modifier = Modifier.padding(32.dp),
+                                        modifier = Modifier.padding(16.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Icon(
                                             Icons.Filled.TouchApp,
                                             contentDescription = null,
                                             modifier = Modifier.size(48.dp),
-                                            tint = MaterialTheme.colorScheme.primary
+                                            tint = PrimaryBlue
                                         )
                                         Spacer(modifier = Modifier.height(16.dp))
                                         Text(
                                             "No Connections Yet",
                                             style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.Bold,
+                                            color = OnSurfaceDark
                                         )
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
                                             "Start making connections by tapping Add Click",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = OnSurfaceDark.copy(alpha = 0.7f)
                                         )
                                     }
                                 }
@@ -163,21 +189,11 @@ fun HomeScreen(
                         if (reconnectReminders.isNotEmpty()) {
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    "Reconnect",
-                                    style = MaterialTheme.typography.headlineMedium.merge(
-                                        TextStyle(
-                                            brush = Brush.horizontalGradient(
-                                                colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
-                                            )
-                                        )
-                                    ),
-                                    fontWeight = FontWeight.Bold
-                                )
+                                GradientSectionHeader(text = "Reconnect")
                                 Text(
                                     "Connections you haven't talked to in a while",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = OnSurfaceDark.copy(alpha = 0.6f)
                                 )
                             }
                             
@@ -204,32 +220,22 @@ fun HomeScreen(
 
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Your Stats",
-                                style = MaterialTheme.typography.headlineMedium.merge(
-                                    TextStyle(
-                                        brush = Brush.horizontalGradient(
-                                            colors = listOf(MaterialTheme.colorScheme.onSurface, LightBlue)
-                                        )
-                                    )
-                                ),
-                                fontWeight = FontWeight.Bold
-                            )
+                            GradientSectionHeader(text = "Your Stats")
                         }
 
                         item {
-                            // Stats Grid
+                            // Stats Grid using Glass Cards
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                StatCard(
+                                GlassStatCard(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Filled.Check,
                                     value = state.stats.totalConnections.toString(),
                                     label = "Total Clicks"
                                 )
-                                StatCard(
+                                GlassStatCard(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Filled.LocationOn,
                                     value = state.stats.uniqueLocations.toString(),
@@ -244,9 +250,63 @@ fun HomeScreen(
     }
 }
 
+/**
+ * Section header with gradient text effect
+ * Matches web's text-gradient (White to Zinc-400)
+ */
+@Composable
+private fun GradientSectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.headlineMedium.merge(
+            TextStyle(brush = headerGradientBrush())
+        ),
+        fontWeight = FontWeight.Bold
+    )
+}
+
+/**
+ * Stat card using glass aesthetic
+ */
+@Composable
+private fun GlassStatCard(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    value: String,
+    label: String
+) {
+    GlassCard(
+        modifier = modifier,
+        usePrimaryBorder = true
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = PrimaryBlue
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = OnSurfaceDark
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceDark.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
 @Composable
 private fun ConnectionCard(connection: Connection, currentUserId: String) {
-    // Get the other user's ID
     val otherUserId = connection.user_ids.firstOrNull { it != currentUserId }
 
     val instant = Instant.fromEpochMilliseconds(connection.created)
@@ -264,20 +324,17 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
         }
     }
 
-    AdaptiveCard(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = { /* Navigate to connection details */ }
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Glowing Icon
+            // Glowing Icon with radial gradient
             Box(
-                modifier = Modifier
-                    .size(56.dp),
+                modifier = Modifier.size(56.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -292,7 +349,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                 Icon(
                     Icons.Filled.Person,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = PrimaryBlue,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -305,7 +362,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                     connection.semantic_location ?: "Connection",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = OnSurfaceDark
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -313,13 +370,13 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                         Icons.Filled.AccessTime,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = OnSurfaceDark.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         timeAgo,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = OnSurfaceDark.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -327,14 +384,14 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = "View details",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = OnSurfaceDark.copy(alpha = 0.6f)
             )
         }
     }
 }
 
 /**
- * Card for displaying a reconnect reminder
+ * Card for displaying a reconnect reminder - Glass styled
  */
 @Composable
 fun ReconnectReminderCard(
@@ -342,30 +399,27 @@ fun ReconnectReminderCard(
     onReconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Surface(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
+        usePrimaryBorder = true,
+        contentPadding = 12.dp
     ) {
         Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // User avatar placeholder
             Surface(
                 modifier = Modifier.size(40.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)
+                color = PrimaryBlue.copy(alpha = 0.3f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         reminder.userName?.firstOrNull()?.uppercase() ?: "?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.tertiary
+                        color = LightBlue
                     )
                 }
             }
@@ -377,12 +431,13 @@ fun ReconnectReminderCard(
                 Text(
                     reminder.userName ?: "Someone",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnSurfaceDark
                 )
                 Text(
                     "${reminder.daysSinceContact} days since last chat",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = OnSurfaceDark.copy(alpha = 0.6f)
                 )
             }
             
@@ -396,13 +451,13 @@ fun ReconnectReminderCard(
                         Icons.Filled.Close,
                         contentDescription = "Dismiss",
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = OnSurfaceDark.copy(alpha = 0.6f)
                     )
                 }
                 Button(
                     onClick = onReconnect,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.tertiary
+                        containerColor = PrimaryBlue
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
@@ -420,7 +475,7 @@ fun ReconnectReminderCard(
 }
 
 /**
- * Expandable card for displaying connection insights
+ * Expandable card for displaying connection insights - Glass styled
  */
 @Composable
 fun ConnectionInsightsCard(
@@ -428,15 +483,12 @@ fun ConnectionInsightsCard(
     expanded: Boolean,
     onToggle: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle() },
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onToggle,
+        usePrimaryBorder = true
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -448,20 +500,20 @@ fun ConnectionInsightsCard(
                         Icons.Filled.Analytics,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = PrimaryBlue
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Connection Insights",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = OnSurfaceDark
                     )
                 }
                 Icon(
                     if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    tint = OnSurfaceDark.copy(alpha = 0.7f)
                 )
             }
             
@@ -488,25 +540,22 @@ fun ConnectionInsightsCard(
             // Expanded details
             if (expanded) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                HorizontalDivider(color = GlassBorder)
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Total connections
                     InsightRow(
                         icon = Icons.Filled.Group,
                         label = "Total Connections",
                         value = insights.totalConnections.toString()
                     )
                     
-                    // Connections kept
                     InsightRow(
                         icon = Icons.Filled.Favorite,
                         label = "Connections Kept",
                         value = insights.keptConnections.toString()
                     )
                     
-                    // Longest connection
                     if (insights.longestConnectionDays > 0) {
                         InsightRow(
                             icon = Icons.Filled.AccessTime,
@@ -515,14 +564,12 @@ fun ConnectionInsightsCard(
                         )
                     }
                     
-                    // This week
                     InsightRow(
                         icon = Icons.Filled.CalendarToday,
                         label = "New This Week",
                         value = insights.connectionsThisWeek.toString()
                     )
                     
-                    // This month
                     InsightRow(
                         icon = Icons.Filled.DateRange,
                         label = "New This Month",
@@ -544,12 +591,12 @@ private fun InsightStat(
             value,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            color = PrimaryBlue
         )
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = OnSurfaceDark.copy(alpha = 0.7f)
         )
     }
 }
@@ -570,20 +617,20 @@ private fun InsightRow(
                 icon,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = PrimaryBlue
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = OnSurfaceDark.copy(alpha = 0.8f)
             )
         }
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = OnSurfaceDark
         )
     }
 }
