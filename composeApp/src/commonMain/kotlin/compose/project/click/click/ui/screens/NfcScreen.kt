@@ -58,14 +58,11 @@ fun NfcScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header
-                Box(modifier = Modifier.padding(top = topInset)) {
+                // Header - consistent with MyQRCodeScreen and QRScannerScreen
+                Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                     PageHeader(
                         title = "Tap to Connect",
                         subtitle = "Hold near another phone",
@@ -94,7 +91,8 @@ fun NfcScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     when (val state = connectionState) {
@@ -150,7 +148,7 @@ fun NfcScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
