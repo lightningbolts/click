@@ -291,21 +291,15 @@ fun App() {
                             showQRScanner -> {
                                 QRScannerScreen(
                                     onQRCodeScanned = { qrData ->
+                                        // QRScannerScreen now handles validation internally
+                                        // and only calls back for valid Click QR codes
                                         showQRScanner = false
                                         try {
                                             val payload = qrData.toQrPayloadOrNull()
-                                            if (payload != null) {
-                                                if (currentUser.id.isNotEmpty()) {
-                                                    connectWithUser(payload.userId)
-                                                    // Navigate to connections to see the result
-                                                    currentRoute = NavigationItem.Connections.route
-                                                } else {
-                                                    // User not logged in
-                                                    println("QR Scan: User not logged in, cannot connect")
-                                                }
-                                            } else {
-                                                // Invalid QR code format
-                                                println("QR Scan: Invalid QR code format - $qrData")
+                                            if (payload != null && currentUser.id.isNotEmpty()) {
+                                                connectWithUser(payload.userId)
+                                                // Navigate to connections to see the result
+                                                currentRoute = NavigationItem.Connections.route
                                             }
                                         } catch (e: Exception) {
                                             println("QR Scan: Error processing QR code - ${e.message}")
