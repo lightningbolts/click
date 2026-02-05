@@ -18,20 +18,22 @@ import platform.Foundation.NSUserDefaults
 import platform.Security.*
 
 /**
- * iOS TokenStorage that uses Keychain for auth tokens (persists across app updates/reinstalls)
- * and NSUserDefaults for non-sensitive preferences.
+ * iOS TokenStorage that uses BOTH NSUserDefaults AND Keychain for redundancy.
  * 
- * Keychain data survives:
- * - App updates (TestFlight, App Store)
- * - App reinstalls (data persists if same team ID)
+ * Strategy:
+ * - WRITE: Save to both NSUserDefaults and Keychain
+ * - READ: Try Keychain first, fall back to NSUserDefaults
  * 
- * This is critical for maintaining user sessions across TestFlight updates.
+ * This ensures:
+ * - NSUserDefaults: Works reliably for normal app lifecycle (app switcher removal)
+ * - Keychain: Persists across app updates/reinstalls (TestFlight, App Store)
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 class IosTokenStorage : TokenStorage {
 
     companion object {
         private const val SERVICE_NAME = "com.click.auth"
+        private const val PREFS_SUITE_NAME = "click_auth_prefs"
         private const val KEY_JWT = "jwt"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
@@ -39,51 +41,111 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
     }
 
-    // NSUserDefaults for non-sensitive preferences (backup and quick access)
-    private val userDefaults = NSUserDefaults.standardUserDefaults
+    // NSUserDefaults - reliable for normal app lifecycle
+    private val userDefaults = NSUserDefaults(suiteName = PREFS_SUITE_NAME) ?: NSUserDefaults.standardUserDefaults
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
-        // Save to Keychain for persistence across app updates
-        setKeychainItem(KEY_JWT, jwt)
-        setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
+        println("IosTokenStorage: Saving tokens...")
+        
+        // Save to NSUserDefaults (primary - always works)
+        userDefaults.setObject(jwt, KEY_JWT)
+        userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
+        if (expiresAt != null) {
+            userDefaults.setDouble(expiresAt.toDouble(), KEY_EXPIRES_AT)
+        } else {
+            userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
+        }
+        if (tokenType != null) {
+            userDefaults.setObject(tokenType, KEY_TOKEN_TYPE)
+        } else {
+            userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
+        }
+        userDefaults.synchronize()
+        println("IosTokenStorage: Saved to NSUserDefaults")
+        
+        // Also save to Keychain (for update persistence)
+        val jwtSaved = setKeychainItem(KEY_JWT, jwt)
+        val refreshSaved = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
+        println("IosTokenStorage: Keychain save - jwt: $jwtSaved, refresh: $refreshSaved")
+        
         if (expiresAt != null) {
             setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
-        } else {
-            deleteKeychainItem(KEY_EXPIRES_AT)
         }
         if (tokenType != null) {
             setKeychainItem(KEY_TOKEN_TYPE, tokenType)
-        } else {
-            deleteKeychainItem(KEY_TOKEN_TYPE)
         }
     }
 
     override suspend fun getJwt(): String? {
-        return getKeychainItem(KEY_JWT)
+        // Try Keychain first (survives updates), then NSUserDefaults
+        val keychainValue = getKeychainItem(KEY_JWT)
+        if (!keychainValue.isNullOrBlank()) {
+            println("IosTokenStorage: Got JWT from Keychain")
+            return keychainValue
+        }
+        
+        val defaultsValue = userDefaults.stringForKey(KEY_JWT)
+        if (!defaultsValue.isNullOrBlank()) {
+            println("IosTokenStorage: Got JWT from NSUserDefaults")
+            // Sync to Keychain for future updates
+            setKeychainItem(KEY_JWT, defaultsValue)
+        }
+        return defaultsValue
     }
 
     override suspend fun getRefreshToken(): String? {
-        return getKeychainItem(KEY_REFRESH_TOKEN)
+        val keychainValue = getKeychainItem(KEY_REFRESH_TOKEN)
+        if (!keychainValue.isNullOrBlank()) {
+            println("IosTokenStorage: Got refresh token from Keychain")
+            return keychainValue
+        }
+        
+        val defaultsValue = userDefaults.stringForKey(KEY_REFRESH_TOKEN)
+        if (!defaultsValue.isNullOrBlank()) {
+            println("IosTokenStorage: Got refresh token from NSUserDefaults")
+            setKeychainItem(KEY_REFRESH_TOKEN, defaultsValue)
+        }
+        return defaultsValue
     }
 
     override suspend fun getExpiresAt(): Long? {
-        return getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()
+        val keychainValue = getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()
+        if (keychainValue != null) {
+            return keychainValue
+        }
+        
+        val expiry = userDefaults.doubleForKey(KEY_EXPIRES_AT)
+        return if (expiry > 0) expiry.toLong() else null
     }
 
     override suspend fun getTokenType(): String? {
-        return getKeychainItem(KEY_TOKEN_TYPE)
+        val keychainValue = getKeychainItem(KEY_TOKEN_TYPE)
+        if (!keychainValue.isNullOrBlank()) {
+            return keychainValue
+        }
+        return userDefaults.stringForKey(KEY_TOKEN_TYPE)
     }
 
     override suspend fun clearTokens() {
+        println("IosTokenStorage: Clearing tokens...")
+        
+        // Clear NSUserDefaults
+        userDefaults.removeObjectForKey(KEY_JWT)
+        userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
+        userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
+        userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
+        userDefaults.synchronize()
+        
+        // Clear Keychain
         deleteKeychainItem(KEY_JWT)
         deleteKeychainItem(KEY_REFRESH_TOKEN)
         deleteKeychainItem(KEY_EXPIRES_AT)
         deleteKeychainItem(KEY_TOKEN_TYPE)
-        // Note: We intentionally do NOT clear free_this_week preference on logout
+        
+        println("IosTokenStorage: Tokens cleared from both storages")
     }
 
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
-        // Use NSUserDefaults for preferences (not sensitive)
         userDefaults.setBool(isFree, KEY_FREE_THIS_WEEK)
         userDefaults.synchronize()
     }
@@ -96,16 +158,17 @@ class IosTokenStorage : TokenStorage {
         }
     }
 
-    /**
-     * Store a string value in Keychain
-     */
+    // ============ Keychain Helpers ============
+
     private fun setKeychainItem(key: String, value: String): Boolean {
         // First delete any existing item
         deleteKeychainItem(key)
 
-        // Convert Kotlin String to NSData via NSString
         val nsString = NSString.create(string = value)
-        val valueData = nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: return false
+        val valueData = nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
+            println("IosTokenStorage: Failed to encode value for key '$key'")
+            return false
+        }
 
         val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
@@ -121,16 +184,12 @@ class IosTokenStorage : TokenStorage {
         val status = SecItemAdd(cfQuery, null)
         CFBridgingRelease(cfQuery)
 
-        val success = status == errSecSuccess
-        if (!success) {
-            println("Keychain setItem failed for key '$key' with status: $status")
+        if (status != errSecSuccess) {
+            println("IosTokenStorage: Keychain set failed for '$key', status: $status")
         }
-        return success
+        return status == errSecSuccess
     }
 
-    /**
-     * Retrieve a string value from Keychain
-     */
     private fun getKeychainItem(key: String): String? = memScoped {
         val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
@@ -149,20 +208,15 @@ class IosTokenStorage : TokenStorage {
 
         if (status == errSecSuccess) {
             val data = CFBridgingRelease(result.value) as? NSData
-            data?.let {
+            val stringValue = data?.let {
                 NSString.create(data = it, encoding = NSUTF8StringEncoding) as? String
             }
+            stringValue
         } else {
-            if (status != errSecItemNotFound) {
-                println("Keychain getItem failed for key '$key' with status: $status")
-            }
             null
         }
     }
 
-    /**
-     * Delete an item from Keychain
-     */
     private fun deleteKeychainItem(key: String): Boolean {
         val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
