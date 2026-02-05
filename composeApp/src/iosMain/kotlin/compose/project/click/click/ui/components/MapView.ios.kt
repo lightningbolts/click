@@ -16,7 +16,10 @@ import platform.MapKit.MKMarkerAnnotationView
 import platform.MapKit.MKPointAnnotation
 import platform.MapKit.MKUserLocation
 import platform.MapKit.MKUserTrackingModeNone
+import platform.MapKit.MKStandardMapConfiguration
+import platform.MapKit.MKMapElevationStyleFlat
 import platform.UIKit.UIColor
+import platform.UIKit.UIUserInterfaceStyle
 import kotlin.collections.filterIsInstance
 import kotlin.math.pow
 
@@ -48,6 +51,14 @@ actual fun PlatformMap(
                 scrollEnabled = true
                 showsUserLocation = !ghostMode
                 userTrackingMode = MKUserTrackingModeNone
+                
+                // Enable dark mode for the map
+                overrideUserInterfaceStyle = UIUserInterfaceStyle.UIUserInterfaceStyleDark
+                
+                // Use flat elevation for cleaner dark appearance
+                preferredConfiguration = MKStandardMapConfiguration().apply {
+                    elevationStyle = MKMapElevationStyleFlat
+                }
             }
         },
         update = { map ->

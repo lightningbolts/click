@@ -151,12 +151,12 @@ actual fun PlatformMap(
     }
 }
 
-// Dark map style JSON for normal mode
+// Dark map style JSON matching the Glass & Neon aesthetic (Zinc-950 base)
 private const val DARK_MAP_STYLE = """
 [
   {
     "elementType": "geometry",
-    "stylers": [{"color": "#212121"}]
+    "stylers": [{"color": "#09090b"}]
   },
   {
     "elementType": "labels.icon",
@@ -164,21 +164,36 @@ private const val DARK_MAP_STYLE = """
   },
   {
     "elementType": "labels.text.fill",
-    "stylers": [{"color": "#757575"}]
+    "stylers": [{"color": "#71717a"}]
   },
   {
     "elementType": "labels.text.stroke",
-    "stylers": [{"color": "#212121"}]
+    "stylers": [{"color": "#09090b"}]
   },
   {
     "featureType": "road",
     "elementType": "geometry",
-    "stylers": [{"color": "#2c2c2c"}]
+    "stylers": [{"color": "#18181b"}]
+  },
+  {
+    "featureType": "road.highway",
+    "elementType": "geometry",
+    "stylers": [{"color": "#27272a"}]
   },
   {
     "featureType": "water",
     "elementType": "geometry",
-    "stylers": [{"color": "#000000"}]
+    "stylers": [{"color": "#0c0c0e"}]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "geometry",
+    "stylers": [{"color": "#18181b"}]
+  },
+  {
+    "featureType": "transit",
+    "elementType": "geometry",
+    "stylers": [{"color": "#18181b"}]
   }
 ]
 """
