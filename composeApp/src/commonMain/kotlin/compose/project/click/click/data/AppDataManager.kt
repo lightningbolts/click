@@ -60,12 +60,23 @@ object AppDataManager {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
-    // Ghost Mode state - privacy toggle to stop sharing location
+    // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
     private val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
     
+    /**
+     * Toggle Ghost Mode on/off.
+     * When Ghost Mode is enabled:
+     * - Background data refresh is halted
+     * - No new location data is sent to the server
+     * - Existing cached data remains visible but stale
+     * 
+     * Ghost mode intentionally resets on app restart for safer privacy defaults.
+     */
     fun toggleGhostMode() {
-        _ghostModeEnabled.value = !_ghostModeEnabled.value
+        val newValue = !_ghostModeEnabled.value
+        _ghostModeEnabled.value = newValue
+        println("AppDataManager: Ghost Mode ${if (newValue) "ENABLED - halting background sync" else "DISABLED - resuming background sync"}")
     }
     
     /**
@@ -184,6 +195,12 @@ object AppDataManager {
      * Refresh data - respects cooldown to prevent excessive API calls
      */
     fun refresh(force: Boolean = false) {
+        // Block all background refresh when Ghost Mode is active
+        if (_ghostModeEnabled.value) {
+            println("AppDataManager: Skipping refresh - Ghost Mode is active")
+            return
+        }
+        
         val now = Clock.System.now().toEpochMilliseconds()
         if (!force && now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
             println("Skipping refresh - cooldown not elapsed")

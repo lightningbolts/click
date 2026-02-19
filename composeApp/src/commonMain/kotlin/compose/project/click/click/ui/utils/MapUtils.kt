@@ -39,6 +39,41 @@ data class ConnectionMapPoint(
 )
 
 /**
+ * Semantic icon types for cluster rendering.
+ * Maps semantic_location strings to specific icons.
+ */
+enum class SemanticIcon {
+    COFFEE,    // café, coffee shop, starbucks
+    BOOK,      // library, bookstore
+    MUSIC,     // concert, music venue, bar
+    FOOD,      // restaurant, dining
+    SCHOOL,    // university, school, campus
+    PARK,      // park, garden, outdoor
+    GYM,       // gym, fitness
+    SHOPPING,  // mall, store, shop
+    DEFAULT    // fallback for unknown locations
+}
+
+/**
+ * Parse a semantic_location string to a SemanticIcon.
+ */
+fun parseSemanticIcon(semanticLocation: String?): SemanticIcon {
+    if (semanticLocation == null) return SemanticIcon.DEFAULT
+    val lower = semanticLocation.lowercase()
+    return when {
+        lower.contains("coffee") || lower.contains("café") || lower.contains("cafe") || lower.contains("starbucks") -> SemanticIcon.COFFEE
+        lower.contains("library") || lower.contains("book") -> SemanticIcon.BOOK
+        lower.contains("concert") || lower.contains("music") || lower.contains("bar") || lower.contains("club") -> SemanticIcon.MUSIC
+        lower.contains("restaurant") || lower.contains("dining") || lower.contains("food") || lower.contains("eat") -> SemanticIcon.FOOD
+        lower.contains("university") || lower.contains("school") || lower.contains("campus") || lower.contains("college") -> SemanticIcon.SCHOOL
+        lower.contains("park") || lower.contains("garden") || lower.contains("trail") || lower.contains("outdoor") -> SemanticIcon.PARK
+        lower.contains("gym") || lower.contains("fitness") || lower.contains("sport") -> SemanticIcon.GYM
+        lower.contains("mall") || lower.contains("store") || lower.contains("shop") || lower.contains("market") -> SemanticIcon.SHOPPING
+        else -> SemanticIcon.DEFAULT
+    }
+}
+
+/**
  * Represents a cluster of nearby connections (Hub)
  */
 data class MapCluster(
@@ -46,7 +81,8 @@ data class MapCluster(
     val centerLat: Double,
     val centerLon: Double,
     val points: List<ConnectionMapPoint>,
-    val count: Int = points.size
+    val count: Int = points.size,
+    val semanticIcon: SemanticIcon = SemanticIcon.DEFAULT
 ) {
     val boundingBox: BoundingBox
         get() {
@@ -184,12 +220,20 @@ fun clusterPoints(
         val centerLat = nearbyPoints.map { it.latitude }.average()
         val centerLon = nearbyPoints.map { it.longitude }.average()
         
+        // Determine the dominant semantic icon for this cluster
+        val iconCounts = nearbyPoints
+            .map { parseSemanticIcon(it.connection.semantic_location) }
+            .groupBy { it }
+            .mapValues { it.value.size }
+        val dominantIcon = iconCounts.maxByOrNull { it.value }?.key ?: SemanticIcon.DEFAULT
+
         clusters.add(
             MapCluster(
                 id = "cluster_${clusters.size}",
                 centerLat = centerLat,
                 centerLon = centerLon,
-                points = nearbyPoints
+                points = nearbyPoints,
+                semanticIcon = dominantIcon
             )
         )
     }

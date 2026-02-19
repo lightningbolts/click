@@ -135,6 +135,35 @@ fun MapScreen(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
 
+                // Tribe filter chips
+                val selectedFilter by viewModel.selectedFilter.collectAsState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    viewModel.availableFilters.forEach { filter ->
+                        FilterChip(
+                            selected = selectedFilter == filter,
+                            onClick = { viewModel.setFilter(filter) },
+                            label = { Text(filter, style = MaterialTheme.typography.labelMedium) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryBlue.copy(alpha = 0.2f),
+                                selectedLabelColor = PrimaryBlue
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = PrimaryBlue,
+                                enabled = true,
+                                selected = selectedFilter == filter
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 // Map container
                 Box(modifier = Modifier.padding(horizontal = 20.dp)) {
                     val mapShape = RoundedCornerShape(20.dp)
@@ -222,9 +251,10 @@ fun MapScreen(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                 )
 
-                // Connections list
+                // Connections list - filtered by viewport
                 ConnectionsList(
                     mapState = mapState,
+                    visibleBounds = viewModel.visibleBounds.collectAsState().value,
                     onConnectionClick = { point ->
                         viewModel.onConnectionTapped(point)
                     },
@@ -576,6 +606,7 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
 @Composable
 private fun ConnectionsList(
     mapState: MapState,
+    visibleBounds: BoundingBox?,
     onConnectionClick: (ConnectionMapPoint) -> Unit,
     onRefresh: () -> Unit
 ) {
@@ -584,9 +615,21 @@ private fun ConnectionsList(
             if (mapState.connections.isEmpty()) {
                 EmptyConnectionsState()
             } else {
-                val points = mapState.connections.mapNotNull {
+                val allPoints = mapState.connections.mapNotNull {
                     try { it.toMapPoint() } catch (e: Exception) { null }
                 }
+                
+                // Filter to only connections visible in the current viewport
+                val visiblePoints = if (visibleBounds != null) {
+                    allPoints.filter { point ->
+                        point.latitude in visibleBounds.minLat..visibleBounds.maxLat &&
+                        point.longitude in visibleBounds.minLon..visibleBounds.maxLon
+                    }
+                } else {
+                    allPoints
+                }
+                
+                val sortedPoints = visiblePoints.sortedByDescending { it.connection.created }
                 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -594,16 +637,29 @@ private fun ConnectionsList(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Text(
-                            "Your Memories",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Your Memories",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (visibleBounds != null && visiblePoints.size != allPoints.size) {
+                                Text(
+                                    "${visiblePoints.size} of ${allPoints.size} in view",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    items(points.sortedByDescending { it.connection.created }) { point ->
+                    items(sortedPoints) { point ->
                         ConnectionLocationCard(
                             point = point,
                             onClick = { onConnectionClick(point) }

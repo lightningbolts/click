@@ -98,13 +98,14 @@ def new_connection():
         id2 = request.args.get("id2")
         lat = request.args.get("lat")
         long = request.args.get("long")
+        context_tag = request.args.get("context_tag")
         if not (isinstance(lat, float)):
             lat = 0.0
         if not (isinstance(long, float)):
             long = 0.0
         user1 = database_ops.fetch_user_with_id(id1)
         user2 = database_ops.fetch_user_with_id(id2)
-        return database_ops.create_connection(user1, user2, (lat, long))
+        return database_ops.create_connection(user1, user2, (lat, long), context_tag=context_tag)
     return "log in", 405
 
 

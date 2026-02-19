@@ -2,37 +2,42 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.nfc.NfcManager
 import compose.project.click.click.nfc.NfcState
+import compose.project.click.click.utils.LocationResult
+import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 sealed class NfcConnectionState {
     object Idle : NfcConnectionState()
+    object FetchingLocation : NfcConnectionState()
     object Scanning : NfcConnectionState()
     object Sending : NfcConnectionState()
     data class UserDetected(val userId: String, val userName: String?) : NfcConnectionState()
     data class CreatingConnection(val otherUserId: String) : NfcConnectionState()
-    data class Success(val connection: Connection) : NfcConnectionState()
+    data class Success(val connection: Connection, val connectedUser: User?) : NfcConnectionState()
     data class Error(val message: String) : NfcConnectionState()
 }
 
 class NfcViewModel(
     private val nfcManager: NfcManager,
-    private val apiClient: ApiClient = ApiClient()
+    private val locationService: LocationService = LocationService(),
+    private val repository: ConnectionRepository = ConnectionRepository()
 ) : ViewModel() {
 
     private val _connectionState = MutableStateFlow<NfcConnectionState>(NfcConnectionState.Idle)
     val connectionState: StateFlow<NfcConnectionState> = _connectionState.asStateFlow()
 
-    private val _currentLocation = MutableStateFlow<Pair<Double, Double>?>(null)
-    val currentLocation: StateFlow<Pair<Double, Double>?> = _currentLocation.asStateFlow()
+    private val _currentLocation = MutableStateFlow<LocationResult?>(null)
+    val currentLocation: StateFlow<LocationResult?> = _currentLocation.asStateFlow()
 
     private var currentUserId: String? = null
-    private var authToken: String? = null
 
     init {
         // Observe NFC state changes
@@ -43,13 +48,8 @@ class NfcViewModel(
         }
     }
 
-    fun setCurrentUser(userId: String, token: String) {
+    fun setCurrentUser(userId: String) {
         currentUserId = userId
-        authToken = token
-    }
-
-    fun setCurrentLocation(latitude: Double, longitude: Double) {
-        _currentLocation.value = Pair(latitude, longitude)
     }
 
     fun isNfcAvailable(): Boolean {
@@ -60,6 +60,10 @@ class NfcViewModel(
         return nfcManager.isNfcEnabled()
     }
 
+    /**
+     * Fetch the device's real GPS coordinates, then start NFC scanning.
+     * Shows a "Fetching Location..." state while resolving GPS.
+     */
     fun startScanning() {
         val userId = currentUserId
         if (userId == null) {
@@ -77,8 +81,34 @@ class NfcViewModel(
             return
         }
 
-        _connectionState.value = NfcConnectionState.Scanning
-        nfcManager.startNfcReader(userId)
+        // First, fetch the real location
+        _connectionState.value = NfcConnectionState.FetchingLocation
+
+        viewModelScope.launch {
+            try {
+                if (!locationService.hasLocationPermission()) {
+                    locationService.requestLocationPermission()
+                    // Give a moment for permission dialog, then try fetching
+                    kotlinx.coroutines.delay(1000)
+                }
+
+                val location = locationService.getCurrentLocation()
+                _currentLocation.value = location
+
+                if (location == null) {
+                    println("NfcViewModel: Could not get GPS, proceeding with null location")
+                }
+
+                // Now start the NFC scan regardless of location result
+                _connectionState.value = NfcConnectionState.Scanning
+                nfcManager.startNfcReader(userId)
+            } catch (e: Exception) {
+                println("NfcViewModel: Location error: ${e.message}")
+                // Don't block on location failure — proceed without location
+                _connectionState.value = NfcConnectionState.Scanning
+                nfcManager.startNfcReader(userId)
+            }
+        }
     }
 
     fun stopScanning() {
@@ -90,13 +120,20 @@ class NfcViewModel(
         nfcManager.openNfcSettings()
     }
 
-    fun createConnection(otherUserId: String) {
+    /**
+     * Create a connection using the Supabase ConnectionRepository directly.
+     * This ensures the contextTag, location, and all fields are persisted correctly.
+     */
+    fun createConnection(otherUserId: String, contextTag: String? = null) {
         val userId = currentUserId
-        val token = authToken
-        val location = _currentLocation.value
 
-        if (userId == null || token == null) {
+        if (userId == null) {
             _connectionState.value = NfcConnectionState.Error("User not logged in")
+            return
+        }
+
+        if (userId == otherUserId) {
+            _connectionState.value = NfcConnectionState.Error("You cannot connect with yourself!")
             return
         }
 
@@ -104,17 +141,28 @@ class NfcViewModel(
 
         viewModelScope.launch {
             try {
-                val result = apiClient.createConnection(
-                    authToken = token,
-                    user1Id = userId,
-                    user2Id = otherUserId,
-                    latitude = location?.first ?: 0.0,
-                    longitude = location?.second ?: 0.0
+                val location = _currentLocation.value
+
+                // Get the other user's info
+                val userResult = repository.getUserById(otherUserId)
+                val otherUser = userResult.getOrNull()
+
+                // Create connection request
+                val request = ConnectionRequest(
+                    userId1 = userId,
+                    userId2 = otherUserId,
+                    locationLat = location?.latitude,
+                    locationLng = location?.longitude,
+                    contextTag = contextTag
                 )
+
+                val result = repository.createConnection(request)
 
                 result.fold(
                     onSuccess = { connection ->
-                        _connectionState.value = NfcConnectionState.Success(connection)
+                        _connectionState.value = NfcConnectionState.Success(connection, otherUser)
+                        // Add to AppDataManager to update all screens
+                        AppDataManager.addConnection(connection)
                         stopScanning()
                     },
                     onFailure = { error ->
@@ -167,7 +215,5 @@ class NfcViewModel(
     override fun onCleared() {
         super.onCleared()
         nfcManager.stopNfcReader()
-        apiClient.close()
     }
 }
-

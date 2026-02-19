@@ -2,10 +2,13 @@ package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -41,10 +44,8 @@ fun NfcScreen(
     val viewModel: NfcViewModel = viewModel { NfcViewModel(nfcManager) }
     val connectionState by viewModel.connectionState.collectAsState()
 
-    LaunchedEffect(userId, authToken) {
-        viewModel.setCurrentUser(userId, authToken)
-        // TODO: Get actual location from platform-specific location service
-        viewModel.setCurrentLocation(47.6062, -122.3321) // Default to Seattle
+    LaunchedEffect(userId) {
+        viewModel.setCurrentUser(userId)
     }
 
     DisposableEffect(Unit) {
@@ -104,6 +105,9 @@ fun NfcScreen(
                                 onOpenSettings = { viewModel.openNfcSettings() }
                             )
                         }
+                        is NfcConnectionState.FetchingLocation -> {
+                            NfcFetchingLocationContent()
+                        }
                         is NfcConnectionState.Scanning -> {
                             NfcScanningContent()
                         }
@@ -124,6 +128,7 @@ fun NfcScreen(
                         is NfcConnectionState.Success -> {
                             NfcSuccessContent(
                                 connection = state.connection,
+                                connectedUser = state.connectedUser,
                                 onViewConnection = {
                                     onConnectionCreated(state.connection.id)
                                 },
@@ -263,6 +268,60 @@ private fun NfcIdleContent(
                 Text("Open Settings", fontSize = 18.sp)
             }
         }
+    }
+}
+
+@Composable
+private fun NfcFetchingLocationContent() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Animated GPS icon
+        val infiniteTransition = rememberInfiniteTransition()
+        val alpha by infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            )
+        )
+
+        Icon(
+            Icons.Default.LocationOn,
+            contentDescription = null,
+            modifier = Modifier
+                .size(100.dp)
+                .alpha(alpha),
+            tint = PrimaryBlue
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Fetching Location...",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Getting your GPS coordinates for this connection",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        CircularProgressIndicator(
+            modifier = Modifier.size(32.dp),
+            color = PrimaryBlue,
+            strokeWidth = 3.dp
+        )
     }
 }
 
@@ -492,6 +551,7 @@ private fun NfcCreatingConnectionContent() {
 @Composable
 private fun NfcSuccessContent(
     connection: compose.project.click.click.data.models.Connection,
+    connectedUser: compose.project.click.click.data.models.User?,
     onViewConnection: () -> Unit,
     onCreateAnother: () -> Unit
 ) {
@@ -505,7 +565,9 @@ private fun NfcSuccessContent(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier.padding(32.dp)
+        modifier = Modifier
+            .padding(32.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         Icon(
             Icons.Default.CheckCircle,
@@ -523,7 +585,19 @@ private fun NfcSuccessContent(
             color = Color(0xFF4CAF50)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Show connected user's name if available
+        if (connectedUser?.name != null) {
+            Text(
+                text = "Connected with ${connectedUser.name}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         Text(
             text = "You're now connected and can start chatting",
@@ -531,6 +605,43 @@ private fun NfcSuccessContent(
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
+
+        // ---- Common Ground Section ----
+        // Show overlapping interest tags between the two users
+        if (connectedUser != null && connectedUser.tags.isNotEmpty()) {
+            // In a real implementation, we'd also have the current user's tags.
+            // For now, display the connected user's tags as conversation starters.
+            Spacer(modifier = Modifier.height(24.dp))
+
+            CommonGroundSection(tags = connectedUser.tags)
+        }
+
+        // ---- Context Tag / Location Info ----
+        if (connection.semantic_location != null || connection.context_tag != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = PrimaryBlue
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = connection.context_tag ?: connection.semantic_location ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -563,6 +674,60 @@ private fun NfcSuccessContent(
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Connect Another", fontSize = 18.sp)
+            }
+        }
+    }
+}
+
+/**
+ * "Common Ground" section — displays overlapping interest tags
+ * in vibrant neon-highlighted chips for immediate conversation starters.
+ */
+@Composable
+private fun CommonGroundSection(tags: List<String>) {
+    if (tags.isEmpty()) return
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Favorite,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = NeonPurple
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "Common Ground",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = NeonPurple
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Display up to 3 tags as neon chips
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tags.take(3).forEach { tag ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = PrimaryBlue.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, NeonPurple.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = tag,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = NeonPurple
+                    )
+                }
             }
         }
     }

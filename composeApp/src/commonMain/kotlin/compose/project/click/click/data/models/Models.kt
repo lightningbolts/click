@@ -22,7 +22,9 @@ data class User(
     val connections: List<String> = emptyList(),
     val paired_with: List<String> = emptyList(),
     val connection_today: Int = -1,
-    val last_paired: Long? = null
+    val last_paired: Long? = null,
+    // Interest tags for Common Ground feature (e.g., "music", "coding", "hiking")
+    val tags: List<String> = emptyList()
 ) {
     /**
      * Convert to insert DTO for Supabase (minimal - only required columns)

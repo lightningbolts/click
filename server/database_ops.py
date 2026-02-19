@@ -129,13 +129,14 @@ def create_user(name: str, email: str, image: str) -> User:
 
 
 def create_connection(
-    user1: User, user2: User, location: tuple[float, float]
+    user1: User, user2: User, location: tuple[float, float], context_tag: str = None
 ) -> Connection:
     # Pass geo_location to match schema.Connection signature
     connection = Connection(
         user1=user1,
         user2=user2,
         geo_location=location,
+        context_tag=context_tag,
     )
     client = get_supabase_client()
     client.table("connections").insert(vars(connection)).execute()

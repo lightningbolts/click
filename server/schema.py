@@ -46,7 +46,7 @@ class Chat:
 class Connection:
     should_continue = (False, False)
     has_begun = False
-    def __init__(self, user1: User, user2: User, geo_location:tuple[float, float], setup_dict=None):
+    def __init__(self, user1: User, user2: User, geo_location:tuple[float, float], context_tag:str=None, setup_dict=None):
         if setup_dict is not None:
             # careful!
             for key, value in setup_dict.items():
@@ -59,6 +59,7 @@ class Connection:
         self.geo_location = geo_location
         self.full_location = get_semantic_location(geo_location)
         self.semantic_location = get_semantic_location(geo_location).get("display_name")
+        self.context_tag = context_tag
         self.user_ids = (user1.id, user2.id)
         #todo: is this right?
         self.chat = Chat()

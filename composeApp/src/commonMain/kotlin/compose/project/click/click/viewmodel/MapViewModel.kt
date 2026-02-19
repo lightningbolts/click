@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlin.math.pow
 
 /**
  * State representing the map loading/error status
@@ -66,6 +67,15 @@ class MapViewModel : ViewModel() {
     private val _cameraTarget = MutableStateFlow<CameraTarget?>(null)
     val cameraTarget: StateFlow<CameraTarget?> = _cameraTarget.asStateFlow()
 
+    // Visible bounds for viewport-based filtering in ConnectionsList
+    private val _visibleBounds = MutableStateFlow<BoundingBox?>(null)
+    val visibleBounds: StateFlow<BoundingBox?> = _visibleBounds.asStateFlow()
+
+    // Tribe filter for categorizing connections
+    private val _selectedFilter = MutableStateFlow("All")
+    val selectedFilter: StateFlow<String> = _selectedFilter.asStateFlow()
+    val availableFilters = listOf("All", "Study", "Party", "Coffee", "Outdoors")
+
     // Cluster threshold - zoom level above which individual pins are shown
     private val clusterThreshold = 12.0
 
@@ -79,14 +89,22 @@ class MapViewModel : ViewModel() {
                 AppDataManager.connections,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
-                _zoomLevel
-            ) { connections, isDataLoaded, isLoading, zoom ->
-                Quadruple(connections, isDataLoaded, isLoading, zoom)
-            }.collectLatest { (connections, isDataLoaded, isLoading, zoom) ->
+                _zoomLevel,
+                _selectedFilter
+            ) { values ->
+                // Using array-based combine for 5+ flows
+                @Suppress("UNCHECKED_CAST")
+                val connections = values[0] as List<Connection>
+                val isDataLoaded = values[1] as Boolean
+                val isLoading = values[2] as Boolean
+                val zoom = values[3] as Double
+                val filter = values[4] as String
+                Quintuple(connections, isDataLoaded, isLoading, zoom, filter)
+            }.collectLatest { (connections, isDataLoaded, isLoading, zoom, filter) ->
                 when {
                     isDataLoaded -> {
                         _mapState.value = MapState.Success(connections)
-                        updateRenderData(connections, zoom)
+                        updateRenderData(connections, zoom, filter)
                     }
                     isLoading -> {
                         _mapState.value = MapState.Loading
@@ -101,10 +119,27 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * Update render data based on connections and zoom level
+     * Update render data based on connections, zoom level, and active filter
      */
-    private fun updateRenderData(connections: List<Connection>, zoom: Double) {
-        _renderData.value = determineMapRenderData(connections, zoom, clusterThreshold)
+    private fun updateRenderData(connections: List<Connection>, zoom: Double, filter: String = "All") {
+        val filtered = if (filter == "All") {
+            connections
+        } else {
+            connections.filter { conn ->
+                val location = conn.semantic_location?.lowercase() ?: ""
+                val tag = conn.context_tag?.lowercase() ?: ""
+                val searchTerm = filter.lowercase()
+                location.contains(searchTerm) || tag.contains(searchTerm)
+            }
+        }
+        _renderData.value = determineMapRenderData(filtered, zoom, clusterThreshold)
+    }
+
+    /**
+     * Set the active tribe filter
+     */
+    fun setFilter(filter: String) {
+        _selectedFilter.value = filter
     }
 
     /**
@@ -112,6 +147,47 @@ class MapViewModel : ViewModel() {
      */
     fun setZoomLevel(zoom: Double) {
         _zoomLevel.value = zoom
+        estimateVisibleBounds()
+    }
+
+    /**
+     * Update visible bounds from outside (e.g., the platform map callback)
+     */
+    fun updateVisibleBounds(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) {
+        _visibleBounds.value = BoundingBox(minLat, maxLat, minLon, maxLon)
+    }
+
+    /**
+     * Estimate visible bounds from zoom level and camera target.
+     * This is used as a fallback when the platform map doesn't report bounds.
+     */
+    private fun estimateVisibleBounds() {
+        val center = _cameraTarget.value
+        val centerLat = center?.latitude ?: run {
+            // Estimate from connections
+            val state = _mapState.value
+            if (state is MapState.Success && state.connections.isNotEmpty()) {
+                state.connections.map { it.geo_location.lat }.average()
+            } else return
+        }
+        val centerLon = center?.longitude ?: run {
+            val state = _mapState.value
+            if (state is MapState.Success && state.connections.isNotEmpty()) {
+                state.connections.map { it.geo_location.lon }.average()
+            } else return
+        }
+
+        // Estimate viewport span based on zoom level
+        // At zoom 10, ~30 miles visible; at zoom 16, ~0.5 miles
+        val latSpan = 180.0 / 2.0.pow(_zoomLevel.value - 1)
+        val lonSpan = 360.0 / 2.0.pow(_zoomLevel.value - 1)
+
+        _visibleBounds.value = BoundingBox(
+            minLat = centerLat - latSpan / 2,
+            maxLat = centerLat + latSpan / 2,
+            minLon = centerLon - lonSpan / 2,
+            maxLon = centerLon + lonSpan / 2
+        )
     }
 
     /**
@@ -119,6 +195,7 @@ class MapViewModel : ViewModel() {
      */
     fun zoomIn() {
         _zoomLevel.value = minOf(_zoomLevel.value + 1.0, 20.0)
+        estimateVisibleBounds()
     }
 
     /**
@@ -126,6 +203,7 @@ class MapViewModel : ViewModel() {
      */
     fun zoomOut() {
         _zoomLevel.value = maxOf(_zoomLevel.value - 1.0, 2.0)
+        estimateVisibleBounds()
     }
 
     /**
@@ -250,4 +328,15 @@ private data class Quadruple<A, B, C, D>(
     val second: B,
     val third: C,
     val fourth: D
+)
+
+/**
+ * Helper for combining 5 flows
+ */
+private data class Quintuple<A, B, C, D, E>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E
 )

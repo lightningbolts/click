@@ -128,15 +128,18 @@ class ApiClient(private val baseUrl: String = "http://localhost:5000") {
         user1Id: String,
         user2Id: String,
         latitude: Double,
-        longitude: Double
+        longitude: Double,
+        contextTag: String? = null
     ): Result<Connection> {
         return try {
             val response = client.post("$baseUrl/connection/new/") {
                 header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
                 parameter("id1", user1Id)
                 parameter("id2", user2Id)
                 parameter("lat", latitude)
                 parameter("long", longitude)
+                contextTag?.let { parameter("context_tag", it) }
             }
 
             if (response.status.value in 200..299) {
