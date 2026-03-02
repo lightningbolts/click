@@ -142,8 +142,28 @@ data class Connection(
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer
         const val VIBE_CHECK_DURATION_MS = 30L * 60 * 1000
+        // 48 hours in milliseconds for the pending "Say Hi" window
+        const val PENDING_DURATION_MS = 48L * 60 * 60 * 1000
     }
     
+    /** Connection is awaiting first message (48h window). */
+    fun isPending(): Boolean = expiry_state == "pending"
+
+    /** Connection is active — messages flowing, 7-day rolling window. */
+    fun isActive(): Boolean = expiry_state == "active"
+
+    /** Connection permanently kept via mutual opt-in. */
+    fun isKept(): Boolean = expiry_state == "kept"
+
+    /**
+     * Calculate remaining time in the 48-hour pending window.
+     * Returns remaining milliseconds, or 0 if time has expired.
+     */
+    fun getPendingRemainingMs(currentTimeMs: Long): Long {
+        val endTime = created + PENDING_DURATION_MS
+        return maxOf(0L, endTime - currentTimeMs)
+    }
+
     /**
      * Calculate the remaining time for the Vibe Check.
      * Returns remaining milliseconds, or 0 if time has expired.

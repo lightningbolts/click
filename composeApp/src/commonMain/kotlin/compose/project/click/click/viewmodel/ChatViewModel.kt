@@ -266,11 +266,27 @@ class ChatViewModel(
                 val message = chatRepository.sendMessage(chatId, userId, content)
                 if (message != null) {
                     _messageInput.value = ""
+                    // Activate connection on first message (pending → active)
+                    activateConnectionIfPending(chatId)
                 } else {
                     println("Failed to send message")
                 }
             } catch (e: Exception) {
                 println("Error sending message: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Transition a pending connection to active when the first message is sent.
+     * This sets expiry_state = 'active' server-side, starting the 7-day rolling window.
+     */
+    private suspend fun activateConnectionIfPending(connectionId: String) {
+        val currentState = _chatMessagesState.value
+        if (currentState is ChatMessagesState.Success) {
+            val connection = currentState.chatDetails.connection
+            if (connection.isPending()) {
+                supabaseRepository.updateConnectionExpiryState(connectionId, "active")
             }
         }
     }
@@ -431,6 +447,8 @@ class ChatViewModel(
                 if (connection.should_continue.getOrNull(otherUserIndex) == true) {
                     _connectionKept.value = true
                     vibeCheckTimerJob?.cancel()
+                    // Mutual keep → permanent connection
+                    supabaseRepository.updateConnectionExpiryState(chatId, "kept")
                 }
                 refreshConnectionState(chatId, userId)
             }

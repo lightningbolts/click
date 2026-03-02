@@ -997,7 +997,8 @@ fun VibeCheckBanner(
                 }
                 
                 isTimerActive -> {
-                    // Active timer
+                    // Active timer — show pending or vibe check timer
+                    val isPending = connection.isPending()
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1006,7 +1007,7 @@ fun VibeCheckBanner(
                         // Timer display
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Filled.Timer,
+                                if (isPending) Icons.Filled.EmojiPeople else Icons.Filled.Timer,
                                 contentDescription = null,
                                 tint = if (isWarning) MaterialTheme.colorScheme.error else PrimaryBlue,
                                 modifier = Modifier.size(20.dp)
@@ -1014,7 +1015,7 @@ fun VibeCheckBanner(
                             Spacer(modifier = Modifier.width(6.dp))
                             Column {
                                 Text(
-                                    "Vibe Check",
+                                    if (isPending) "Say Hi" else "Vibe Check",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

@@ -556,6 +556,8 @@ private fun NfcSuccessContent(
     onCreateAnother: () -> Unit
 ) {
     var showConfetti by remember { mutableStateOf(true) }
+    var sayHiMessage by remember { mutableStateOf("") }
+    var messageSent by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(3000)
@@ -572,11 +574,11 @@ private fun NfcSuccessContent(
         Icon(
             Icons.Default.CheckCircle,
             contentDescription = null,
-            modifier = Modifier.size(120.dp),
+            modifier = Modifier.size(100.dp),
             tint = Color(0xFF4CAF50)
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = "Connection Created!",
@@ -590,41 +592,23 @@ private fun NfcSuccessContent(
         // Show connected user's name if available
         if (connectedUser?.name != null) {
             Text(
-                text = "Connected with ${connectedUser.name}",
+                text = "You met ${connectedUser.name}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        Text(
-            text = "You're now connected and can start chatting",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        )
-
-        // ---- Common Ground Section ----
-        // Show overlapping interest tags between the two users
-        if (connectedUser != null && connectedUser.tags.isNotEmpty()) {
-            // In a real implementation, we'd also have the current user's tags.
-            // For now, display the connected user's tags as conversation starters.
-            Spacer(modifier = Modifier.height(24.dp))
-
-            CommonGroundSection(tags = connectedUser.tags)
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         // ---- Context Tag / Location Info ----
         if (connection.semantic_location != null || connection.context_tag != null) {
-            Spacer(modifier = Modifier.height(16.dp))
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -641,10 +625,106 @@ private fun NfcSuccessContent(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        // 48-hour async prompt
+        Text(
+            text = "Say hi within 48 hours to keep this connection alive",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ---- Common Ground Section ----
+        if (connectedUser != null && connectedUser.tags.isNotEmpty()) {
+            CommonGroundSection(tags = connectedUser.tags)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // ---- "Say Hi" message input ----
+        if (!messageSent) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.TextField(
+                        value = sayHiMessage,
+                        onValueChange = { sayHiMessage = it },
+                        placeholder = {
+                            Text(
+                                "Say hi! 👋",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            cursorColor = PrimaryBlue
+                        ),
+                        singleLine = true
+                    )
+                    IconButton(
+                        onClick = {
+                            if (sayHiMessage.trim().isNotEmpty()) {
+                                messageSent = true
+                                // Navigate to the connection chat where the message will be sent
+                                onViewConnection()
+                            }
+                        },
+                        enabled = sayHiMessage.trim().isNotEmpty()
+                    ) {
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "Send",
+                            tint = if (sayHiMessage.trim().isNotEmpty()) PrimaryBlue 
+                                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+                }
+            }
+        } else {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF4CAF50).copy(alpha = 0.15f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color(0xFF4CAF50)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Message sent!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF4CAF50)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Action buttons
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)

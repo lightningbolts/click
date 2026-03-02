@@ -168,6 +168,30 @@ class SupabaseRepository {
             false
         }
     }
+
+    /**
+     * Update connection expiry_state lifecycle.
+     * Valid states: 'pending', 'active', 'kept', 'expired'
+     */
+    suspend fun updateConnectionExpiryState(
+        connectionId: String,
+        state: String
+    ): Boolean {
+        return try {
+            supabase.from("connections")
+                .update({
+                    set("expiry_state", state)
+                }) {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating connection expiry_state: ${e.message}")
+            false
+        }
+    }
     
     /**
      * Update a specific user's keep decision for a connection.
