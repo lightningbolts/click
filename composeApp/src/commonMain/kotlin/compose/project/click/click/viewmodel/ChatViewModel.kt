@@ -517,6 +517,43 @@ class ChatViewModel(
     fun dismissIcebreakerPanel() {
         _showIcebreakerPanel.value = false
     }
+
+    // ==================== Safety Actions ====================
+
+    /**
+     * Block the other user in the current chat.
+     * Inserts into user_blocks and leaves the chat.
+     */
+    fun blockUser(onBlocked: () -> Unit) {
+        val userId = _currentUserId.value ?: return
+        val currentState = _chatMessagesState.value
+        if (currentState !is ChatMessagesState.Success) return
+        val connection = currentState.chatDetails.connection
+        val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return
+
+        viewModelScope.launch {
+            val success = supabaseRepository.blockUser(userId, otherUserId)
+            if (success) {
+                leaveChatRoom()
+                loadChats(isForced = true)
+                onBlocked()
+            }
+        }
+    }
+
+    /**
+     * Report the current connection for safety review.
+     */
+    fun reportConnection(reason: String, onReported: () -> Unit) {
+        val userId = _currentUserId.value ?: return
+        val chatId = currentChatId ?: return
+        viewModelScope.launch {
+            val success = supabaseRepository.reportConnection(chatId, userId, reason)
+            if (success) {
+                onReported()
+            }
+        }
+    }
     
     private fun resetIcebreakerState() {
         _icebreakerPrompts.value = emptyList()

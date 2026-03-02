@@ -5,6 +5,8 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import io.github.jan.supabase.postgrest.from
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Repository for Supabase operations
@@ -417,6 +419,76 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("Error upserting user: ${e.message}")
             e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Update a user's interest tags.
+     */
+    suspend fun updateUserTags(userId: String, tags: List<String>): Boolean {
+        return try {
+            supabase.from("users")
+                .update({
+                    set("tags", tags)
+                }) {
+                    filter {
+                        eq("id", userId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating user tags: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Fetch a user's interest tags. Returns empty list if none set.
+     */
+    suspend fun fetchUserTags(userId: String): List<String> {
+        return try {
+            val user = fetchUserById(userId)
+            user?.tags ?: emptyList()
+        } catch (e: Exception) {
+            println("Error fetching user tags: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // ==================== Safety Methods ====================
+
+    /**
+     * Block a user. Inserts into user_blocks table.
+     */
+    suspend fun blockUser(blockerId: String, blockedId: String): Boolean {
+        return try {
+            supabase.from("user_blocks")
+                .insert(buildJsonObject {
+                    put("blocker_id", blockerId)
+                    put("blocked_id", blockedId)
+                })
+            true
+        } catch (e: Exception) {
+            println("Error blocking user: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Report a connection for safety review.
+     */
+    suspend fun reportConnection(connectionId: String, reporterId: String, reason: String): Boolean {
+        return try {
+            supabase.from("connection_reports")
+                .insert(buildJsonObject {
+                    put("connection_id", connectionId)
+                    put("reporter_id", reporterId)
+                    put("reason", reason)
+                })
+            true
+        } catch (e: Exception) {
+            println("Error reporting connection: ${e.message}")
             false
         }
     }

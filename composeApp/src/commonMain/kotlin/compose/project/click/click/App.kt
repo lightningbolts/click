@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.imePadding
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.launch
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.data.models.User
@@ -195,6 +196,42 @@ fun App() {
             LaunchedEffect(Unit) {
                 AppDataManager.initializeData()
             }
+
+            // --- Interest tagging onboarding gate ---
+            val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
+            var needsTagging by remember { mutableStateOf<Boolean?>(null) }
+            var taggingSkipped by remember { mutableStateOf(false) }
+
+            LaunchedEffect(currentUser.id) {
+                if (currentUser.id.isNotEmpty()) {
+                    val tags = supabaseRepo.fetchUserTags(currentUser.id)
+                    needsTagging = tags.isEmpty()
+                }
+            }
+
+            // Show tagging screen if user has no tags and hasn't skipped
+            if (needsTagging == true && !taggingSkipped) {
+                val scope = rememberCoroutineScope()
+                InterestTaggingScreen(
+                    onTagsSelected = { tags ->
+                        scope.launch {
+                            supabaseRepo.updateUserTags(currentUser.id, tags)
+                            needsTagging = false
+                        }
+                    },
+                    onSkip = { taggingSkipped = true },
+                    canSkip = true
+                )
+            } else if (needsTagging == null) {
+                // Still loading tag check
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = PrimaryBlue)
+                }
+            } else {
+            // --- End onboarding gate ---
             
             var currentRoute by remember { mutableStateOf("home") }
             var showNfcScreen by remember { mutableStateOf(false) }
@@ -468,6 +505,7 @@ fun App() {
                     focusRequester.requestFocus()
                 }
             }
+            } // End of onboarding gate
         }
         } // End of Global Background Box
     }
