@@ -42,7 +42,8 @@ class ConnectionRepository {
                 "created" to now,
                 "expiry" to expiry,
                 "should_continue" to listOf(false, false),
-                "has_begun" to false
+                "has_begun" to false,
+                "expiry_state" to "pending"
             )
             
             // Add context_tag if provided

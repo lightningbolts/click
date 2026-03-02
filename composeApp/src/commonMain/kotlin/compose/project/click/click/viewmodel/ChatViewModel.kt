@@ -456,10 +456,17 @@ class ChatViewModel(
         }
     }
     
-    fun deleteExpiredConnection() {
-        val chatId = currentChatId ?: return
+    /**
+     * Handle dismissal of an expired connection.
+     * Server-side Edge Function owns actual deletion via pg_cron schedule.
+     * Client just refreshes local state so the connection disappears from the list.
+     */
+    fun handleExpiredConnectionDismiss() {
+        val userId = _currentUserId.value ?: return
         viewModelScope.launch {
-            supabaseRepository.deleteConnection(chatId)
+            // Refresh connections list from server — expired connections
+            // will have been deleted or marked by the Edge Function
+            loadChats(isForced = true)
         }
     }
     

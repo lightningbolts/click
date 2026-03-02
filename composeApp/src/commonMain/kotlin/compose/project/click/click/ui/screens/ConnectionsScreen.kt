@@ -545,7 +545,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             connectionKept = connectionKept,
                             onKeepClick = { viewModel.keepConnection() },
                             onExpiredDismiss = {
-                                viewModel.deleteExpiredConnection()
+                                viewModel.handleExpiredConnectionDismiss()
                                 onBackPressed()
                             }
                         )

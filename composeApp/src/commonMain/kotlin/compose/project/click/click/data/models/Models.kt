@@ -133,7 +133,11 @@ data class Connection(
     val user_ids: List<String>,
     val chat: Chat = Chat(),
     val should_continue: List<Boolean> = listOf(false, false),
-    val has_begun: Boolean = false
+    val has_begun: Boolean = false,
+    // Server-side expiry lifecycle: 'pending' | 'active' | 'kept' | 'expired'
+    val expiry_state: String = "pending",
+    // Timestamp (ms) of the most recent message in this connection's chat
+    val last_message_at: Long? = null
 ) {
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer
