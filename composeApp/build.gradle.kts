@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
-    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -64,7 +63,6 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
 
             // Kotlinx Serialization
-            implementation(libs.kotlinx.serialization.json)
         }
         iosMain.dependencies {
             // Ktor iOS engine
