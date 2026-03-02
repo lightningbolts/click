@@ -8,7 +8,8 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS last_polled BIGINT,
     ADD COLUMN IF NOT EXISTS paired_with TEXT[] DEFAULT '{}',
     ADD COLUMN IF NOT EXISTS connection_today INTEGER DEFAULT -1,
-    ADD COLUMN IF NOT EXISTS last_paired BIGINT;
+    ADD COLUMN IF NOT EXISTS last_paired BIGINT,
+    ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
 
 -- Drop and recreate connections table with new structure
 DROP TABLE IF EXISTS connections CASCADE;
