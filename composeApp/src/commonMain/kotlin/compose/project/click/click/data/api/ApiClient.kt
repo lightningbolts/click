@@ -20,7 +20,20 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
-class ApiClient(private val baseUrl: String = "http://localhost:5000") {
+class ApiClient(private val baseUrl: String = BASE_URL) {
+
+    companion object {
+        /**
+         * Base URL for the Click Python/Flask backend.
+         *
+         * • Local dev (iOS simulator): http://localhost:5000
+         * • Local dev (Android emulator): http://10.0.2.2:5000
+         *   (Android emulator maps 10.0.2.2 → host machine's localhost)
+         * • Production: replace with your deployed server URL
+         *   e.g. https://api.your-domain.com
+         */
+        const val BASE_URL = "http://localhost:5000"
+    }
 
     private val client = HttpClient {
         install(ContentNegotiation) {

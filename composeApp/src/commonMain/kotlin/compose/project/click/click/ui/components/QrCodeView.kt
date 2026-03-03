@@ -28,7 +28,7 @@ fun UserQrCode(
     onShare: () -> Unit = {}
 ) {
     // Encode as a URL so both the iOS app scanner and web browser can handle it.
-    // Format: https://clickapp.com/connect/{userId}
+    // Format: click-us.vercel.app/connect/{userId}
     val payload = remember(user) { "$CLICK_WEB_BASE_URL/connect/${user.id}" }
     
     // Generate QR Code matrix
