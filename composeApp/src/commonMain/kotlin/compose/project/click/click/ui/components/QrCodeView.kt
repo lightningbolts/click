@@ -16,8 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.User
-import compose.project.click.click.qr.QrPayload
-import compose.project.click.click.qr.toJson
+import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import qrcode.QRCode
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.utils.toImageBitmap
@@ -28,7 +27,9 @@ fun UserQrCode(
     size: Dp = 200.dp,
     onShare: () -> Unit = {}
 ) {
-    val payload = remember(user) { QrPayload(userId = user.id, name = user.name).toJson() }
+    // Encode as a URL so both the iOS app scanner and web browser can handle it.
+    // Format: https://clickapp.com/connect/{userId}
+    val payload = remember(user) { "$CLICK_WEB_BASE_URL/connect/${user.id}" }
     
     // Generate QR Code matrix
     val qrCode = remember(payload) {

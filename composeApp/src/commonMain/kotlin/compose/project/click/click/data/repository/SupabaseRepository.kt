@@ -5,6 +5,8 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import io.github.jan.supabase.postgrest.from
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -443,7 +445,7 @@ class SupabaseRepository {
         }
     }
 
-    /**
+/**
      * Fetch a user's interest tags. Returns empty list if none set.
      */
     suspend fun fetchUserTags(userId: String): List<String> {
@@ -453,6 +455,50 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("Error fetching user tags: ${e.message}")
             emptyList()
+        }
+    }
+
+    /**
+     * DTO for reading only the tags_initialized column.
+     */
+    @Serializable
+    private data class TagsInitializedDto(
+        @SerialName("tags_initialized")
+        val tagsInitialized: Boolean = false
+    )
+
+    /**
+     * Check whether a user has completed or skipped the interest-tagging onboarding screen.
+     * Returns false on any error so the caller can decide how to handle it gracefully.
+     */
+    suspend fun fetchTagsInitialized(userId: String): Boolean {
+        return try {
+            val result = supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("tags_initialized")) {
+                    filter { eq("id", userId) }
+                }
+                .decodeList<TagsInitializedDto>()
+            result.firstOrNull()?.tagsInitialized ?: false
+        } catch (e: Exception) {
+            println("Error fetching tags_initialized: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Mark the user's interest-tagging onboarding as complete (or skipped).
+     * This prevents the tagging screen from re-appearing on subsequent app launches.
+     */
+    suspend fun setTagsInitialized(userId: String): Boolean {
+        return try {
+            supabase.from("users")
+                .update({ set("tags_initialized", true) }) {
+                    filter { eq("id", userId) }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error setting tags_initialized: ${e.message}")
+            false
         }
     }
 

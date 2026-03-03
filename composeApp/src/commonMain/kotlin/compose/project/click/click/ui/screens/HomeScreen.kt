@@ -44,8 +44,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
 
-// Spacing constants matching web's px-6 md:px-12 (converted to dp)
-private val ScreenPaddingHorizontal = 24.dp
+// Spacing constants matching app's consistent 20.dp horizontal padding
+private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
 
 /**

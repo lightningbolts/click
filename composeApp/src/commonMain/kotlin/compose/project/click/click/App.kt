@@ -53,8 +53,8 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.launch
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
+import compose.project.click.click.viewmodel.ConnectionState
 import compose.project.click.click.data.models.User
-import compose.project.click.click.qr.toQrPayloadOrNull
 import compose.project.click.click.data.AppDataManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -198,28 +198,34 @@ fun App() {
             }
 
             // --- Interest tagging onboarding gate ---
+            // Uses tags_initialized DB column for persistent cross-device skip/complete state.
             val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
             var needsTagging by remember { mutableStateOf<Boolean?>(null) }
-            var taggingSkipped by remember { mutableStateOf(false) }
+            // Hoist scope outside the conditional so it's always called at the same composable depth
+            val onboardingScope = rememberCoroutineScope()
 
             LaunchedEffect(currentUser.id) {
                 if (currentUser.id.isNotEmpty()) {
-                    val tags = supabaseRepo.fetchUserTags(currentUser.id)
-                    needsTagging = tags.isEmpty()
+                    val initialized = supabaseRepo.fetchTagsInitialized(currentUser.id)
+                    needsTagging = !initialized
                 }
             }
 
-            // Show tagging screen if user has no tags and hasn't skipped
-            if (needsTagging == true && !taggingSkipped) {
-                val scope = rememberCoroutineScope()
+            // Show tagging screen if the user hasn't completed or skipped onboarding
+            if (needsTagging == true) {
                 InterestTaggingScreen(
                     onTagsSelected = { tags ->
-                        scope.launch {
+                        onboardingScope.launch {
                             supabaseRepo.updateUserTags(currentUser.id, tags)
+                            supabaseRepo.setTagsInitialized(currentUser.id)
                             needsTagging = false
                         }
                     },
-                    onSkip = { taggingSkipped = true },
+                    onSkip = {
+                        // Immediately hide the screen; persist the skip in the background
+                        needsTagging = false
+                        onboardingScope.launch { supabaseRepo.setTagsInitialized(currentUser.id) }
+                    },
                     canSkip = true
                 )
             } else if (needsTagging == null) {
@@ -244,10 +250,28 @@ fun App() {
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             val focusRequester = remember { FocusRequester() }
 
+            // Snackbar for connection success/error feedback
+            val snackbarHostState = remember { SnackbarHostState() }
+            val connectionState by connectionViewModel.connectionState.collectAsState()
+            LaunchedEffect(connectionState) {
+                when (val state = connectionState) {
+                    is ConnectionState.Success ->  {
+                        snackbarHostState.showSnackbar("Connected with ${state.connectedUser.name ?: "user"}!")
+                        connectionViewModel.resetConnectionState()
+                    }
+                    is ConnectionState.Error -> {
+                        snackbarHostState.showSnackbar(state.message)
+                        connectionViewModel.resetConnectionState()
+                    }
+                    else -> {}
+                }
+            }
+
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
                     NavigationBar(
                         modifier = Modifier.border(
@@ -327,19 +351,13 @@ fun App() {
                             }
                             showQRScanner -> {
                                 QRScannerScreen(
-                                    onQRCodeScanned = { qrData ->
-                                        // QRScannerScreen now handles validation internally
-                                        // and only calls back for valid Click QR codes
+                                    onQRCodeScanned = { userId ->
+                                        // QRScannerScreen extracts the userId from both URL and
+                                        // JSON QR formats and passes it here directly
                                         showQRScanner = false
-                                        try {
-                                            val payload = qrData.toQrPayloadOrNull()
-                                            if (payload != null && currentUser.id.isNotEmpty()) {
-                                                connectWithUser(payload.userId)
-                                                // Navigate to connections to see the result
-                                                currentRoute = NavigationItem.Connections.route
-                                            }
-                                        } catch (e: Exception) {
-                                            println("QR Scan: Error processing QR code - ${e.message}")
+                                        if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
+                                            connectWithUser(userId)
+                                            currentRoute = NavigationItem.Connections.route
                                         }
                                     },
                                     onNavigateBack = { showQRScanner = false }

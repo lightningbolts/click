@@ -4,8 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -106,7 +107,7 @@ fun AddClickContent(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        Icons.Filled.Check, // Should use QR icon if available
+                        Icons.Filled.QrCode,
                         contentDescription = "My QR Code",
                         modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -138,7 +139,7 @@ fun AddClickContent(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        Icons.Filled.Search, // Should use Camera/Scan icon
+                        Icons.Filled.QrCodeScanner,
                         contentDescription = "Scan QR",
                         modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.primary

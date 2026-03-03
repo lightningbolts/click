@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.qr.toQrPayloadOrNull
+import compose.project.click.click.qr.toUserIdFromClickUrl
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.QRScanner
@@ -63,13 +64,17 @@ fun QRScannerScreen(
     fun handleQRResult(qrData: String) {
         // Prevent duplicate scans of the same invalid QR
         if (qrData == lastScannedRaw && showError) return
-        
-        val payload = qrData.toQrPayloadOrNull()
-        if (payload != null && payload.userId.isNotBlank()) {
-            // Valid Click QR code - pass through to parent
-            onQRCodeScanned(qrData)
+
+        // Try URL format first (website QR codes: https://.../connect/{uuid})
+        // then fall back to legacy JSON format ({"userId":"...","name":"..."})
+        val userId = qrData.toUserIdFromClickUrl()
+            ?: qrData.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }
+
+        if (userId != null) {
+            // Valid Click QR code — pass the extracted userId to parent
+            onQRCodeScanned(userId)
         } else {
-            // Invalid format - show error
+            // Neither format matched — show error
             lastScannedRaw = qrData
             errorMessage = "This QR code isn't a Click profile. Please scan a valid Click QR code."
             showError = true
