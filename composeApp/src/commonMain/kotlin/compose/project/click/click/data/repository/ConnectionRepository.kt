@@ -2,14 +2,12 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
+import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
 import kotlinx.datetime.Clock
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 
 class ConnectionRepository {
     private val supabase = SupabaseConfig.client
@@ -32,27 +30,22 @@ class ConnectionRepository {
             val now = Clock.System.now().toEpochMilliseconds()
             val expiry = now + (30L * 24 * 60 * 60 * 1000) // 30 days
 
-            // Use a map for insertion to let DB generate ID
-            val connectionData = mutableMapOf<String, Any>(
-                "user_ids" to listOf(request.userId1, request.userId2),
-                "geo_location" to mapOf(
-                    "lat" to (request.locationLat ?: 0.0),
-                    "lon" to (request.locationLng ?: 0.0)
+            val connectionInsert = ConnectionInsert(
+                user_ids = listOf(request.userId1, request.userId2),
+                geo_location = GeoLocationInsert(
+                    lat = request.locationLat ?: 0.0,
+                    lon = request.locationLng ?: 0.0
                 ),
-                "created" to now,
-                "expiry" to expiry,
-                "should_continue" to listOf(false, false),
-                "has_begun" to false,
-                "expiry_state" to "pending"
+                created = now,
+                expiry = expiry,
+                should_continue = listOf(false, false),
+                has_begun = false,
+                expiry_state = "pending",
+                context_tag = request.contextTag
             )
-            
-            // Add context_tag if provided
-            request.contextTag?.let { tag ->
-                connectionData["context_tag"] = tag
-            }
 
             val result = supabase.from("connections")
-                .insert(connectionData) {
+                .insert(connectionInsert) {
                     select()
                 }
                 .decodeSingle<Connection>()

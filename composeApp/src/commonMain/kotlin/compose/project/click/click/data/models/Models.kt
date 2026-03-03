@@ -9,6 +9,33 @@ data class GeoLocation(
     val lon: Double
 )
 
+/**
+ * Insert DTO for the geo_location JSON column.
+ * Identical to GeoLocation but kept separate so the insert schema is self-documenting.
+ */
+@Serializable
+data class GeoLocationInsert(
+    val lat: Double,
+    val lon: Double
+)
+
+/**
+ * Insert DTO for the `connections` table.
+ * Using a typed data class instead of Map<String, Any> so that
+ * kotlinx.serialization can handle it on Kotlin/Native (iOS).
+ */
+@Serializable
+data class ConnectionInsert(
+    val user_ids: List<String>,
+    val geo_location: GeoLocationInsert,
+    val created: Long,
+    val expiry: Long,
+    val should_continue: List<Boolean>,
+    val has_begun: Boolean,
+    val expiry_state: String,
+    val context_tag: String? = null
+)
+
 @Serializable
 data class User(
     val id: String,
