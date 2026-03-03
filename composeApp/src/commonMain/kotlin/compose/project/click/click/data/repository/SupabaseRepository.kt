@@ -469,9 +469,9 @@ class SupabaseRepository {
 
     /**
      * Check whether a user has completed or skipped the interest-tagging onboarding screen.
-     * Returns false on any error so the caller can decide how to handle it gracefully.
+     * Returns null on network/other errors so the caller can distinguish errors from "not initialized".
      */
-    suspend fun fetchTagsInitialized(userId: String): Boolean {
+    suspend fun fetchTagsInitialized(userId: String): Boolean? {
         return try {
             val result = supabase.from("users")
                 .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("tags_initialized")) {
@@ -481,7 +481,7 @@ class SupabaseRepository {
             result.firstOrNull()?.tagsInitialized ?: false
         } catch (e: Exception) {
             println("Error fetching tags_initialized: ${e.message}")
-            false
+            null  // Return null on error — callers should not treat errors as "needs tagging"
         }
     }
 

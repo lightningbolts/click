@@ -39,6 +39,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
+        private const val KEY_TAGS_INITIALIZED = "tags_initialized"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -134,6 +135,7 @@ class IosTokenStorage : TokenStorage {
         userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
         userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
         userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
+        userDefaults.removeObjectForKey(KEY_TAGS_INITIALIZED)
         userDefaults.synchronize()
         
         // Clear Keychain
@@ -153,6 +155,19 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getFreeThisWeek(): Boolean? {
         return if (userDefaults.objectForKey(KEY_FREE_THIS_WEEK) != null) {
             userDefaults.boolForKey(KEY_FREE_THIS_WEEK)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveTagsInitialized(initialized: Boolean) {
+        userDefaults.setBool(initialized, KEY_TAGS_INITIALIZED)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getTagsInitialized(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_TAGS_INITIALIZED) != null) {
+            userDefaults.boolForKey(KEY_TAGS_INITIALIZED)
         } else {
             null
         }

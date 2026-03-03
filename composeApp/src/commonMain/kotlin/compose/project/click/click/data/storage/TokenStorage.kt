@@ -11,6 +11,10 @@ interface TokenStorage {
     // Availability persistence for immediate local storage
     suspend fun saveFreeThisWeek(isFree: Boolean)
     suspend fun getFreeThisWeek(): Boolean?
+
+    // Tags/onboarding local cache to avoid re-showing the tagging screen on app resume
+    suspend fun saveTagsInitialized(initialized: Boolean)
+    suspend fun getTagsInitialized(): Boolean?
 }
 
 expect fun createTokenStorage(): TokenStorage

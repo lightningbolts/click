@@ -198,7 +198,8 @@ fun App() {
             }
 
             // --- Interest tagging onboarding gate ---
-            // Uses tags_initialized DB column for persistent cross-device skip/complete state.
+            // Uses local cache (TokenStorage) + DB column for persistent state.
+            // Local cache prevents re-showing the tagging screen on app resume / process recreation.
             val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
             var needsTagging by remember { mutableStateOf<Boolean?>(null) }
             // Hoist scope outside the conditional so it's always called at the same composable depth
@@ -206,8 +207,24 @@ fun App() {
 
             LaunchedEffect(currentUser.id) {
                 if (currentUser.id.isNotEmpty()) {
+                    // 1. Check local cache first — avoids network call on app resume
+                    val localCached = tokenStorage.getTagsInitialized()
+                    if (localCached == true) {
+                        needsTagging = false
+                        return@LaunchedEffect
+                    }
+
+                    // 2. Fall back to network check
                     val initialized = supabaseRepo.fetchTagsInitialized(currentUser.id)
-                    needsTagging = !initialized
+                    if (initialized != null) {
+                        // Got a definitive answer from the server
+                        if (initialized) tokenStorage.saveTagsInitialized(true)
+                        needsTagging = !initialized
+                    } else {
+                        // Network error — keep null (show spinner), don't show tags screen
+                        // The user can retry by reopening the app
+                        needsTagging = null
+                    }
                 }
             }
 
@@ -218,13 +235,17 @@ fun App() {
                         onboardingScope.launch {
                             supabaseRepo.updateUserTags(currentUser.id, tags)
                             supabaseRepo.setTagsInitialized(currentUser.id)
+                            tokenStorage.saveTagsInitialized(true)
                             needsTagging = false
                         }
                     },
                     onSkip = {
                         // Immediately hide the screen; persist the skip in the background
                         needsTagging = false
-                        onboardingScope.launch { supabaseRepo.setTagsInitialized(currentUser.id) }
+                        onboardingScope.launch {
+                            supabaseRepo.setTagsInitialized(currentUser.id)
+                            tokenStorage.saveTagsInitialized(true)
+                        }
                     },
                     canSkip = true
                 )

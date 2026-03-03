@@ -56,6 +56,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
+        private const val KEY_TAGS_INITIALIZED = "tags_initialized"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -68,6 +69,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     override suspend fun getFreeThisWeek(): Boolean? {
         return if (sharedPreferences.contains(KEY_FREE_THIS_WEEK)) {
             sharedPreferences.getBoolean(KEY_FREE_THIS_WEEK, false)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveTagsInitialized(initialized: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_TAGS_INITIALIZED, initialized)
+            apply()
+        }
+    }
+
+    override suspend fun getTagsInitialized(): Boolean? {
+        return if (sharedPreferences.contains(KEY_TAGS_INITIALIZED)) {
+            sharedPreferences.getBoolean(KEY_TAGS_INITIALIZED, false)
         } else {
             null
         }
