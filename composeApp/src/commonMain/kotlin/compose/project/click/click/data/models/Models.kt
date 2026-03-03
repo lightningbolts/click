@@ -132,7 +132,9 @@ data class ConnectionRequest(
     val userId2: String,
     val locationLat: Double? = null,
     val locationLng: Double? = null,
-    val contextTag: String? = null // User-defined tag like "Met at Dawg Daze"
+    val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
+    val connectionMethod: String = "qr", // "qr" or "nfc"
+    val tokenAgeMs: Long? = null // Milliseconds since QR token was created (null for NFC/legacy)
 )
 
 @Serializable
@@ -164,7 +166,12 @@ data class Connection(
     // Server-side expiry lifecycle: 'pending' | 'active' | 'kept' | 'expired'
     val expiry_state: String = "pending",
     // Timestamp (ms) of the most recent message in this connection's chat
-    val last_message_at: Long? = null
+    val last_message_at: Long? = null,
+    // Proximity verification fields
+    val proximity_confidence: Int = 100,
+    val proximity_signals: Map<String, kotlinx.serialization.json.JsonElement>? = null,
+    val connection_method: String = "qr",
+    val flagged: Boolean = false
 ) {
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer

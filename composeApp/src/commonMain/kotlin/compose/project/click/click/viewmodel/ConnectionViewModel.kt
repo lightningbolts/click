@@ -29,19 +29,24 @@ class ConnectionViewModel : ViewModel() {
     val userConnections: StateFlow<List<Connection>> = AppDataManager.connections
 
     /**
-     * Connect with a user via QR code
+     * Connect with a user via QR code scan.
+     *
      * @param scannedUserId The ID of the user being connected with
      * @param currentUserId The current user's ID
      * @param latitude Optional latitude of the connection location
      * @param longitude Optional longitude of the connection location
      * @param contextTag Optional user-defined tag like "Met at Dawg Daze"
+     * @param connectionMethod "qr" or "nfc"
+     * @param tokenAgeMs Milliseconds since QR token was created (null for NFC/legacy)
      */
     fun connectWithUser(
         scannedUserId: String,
         currentUserId: String,
         latitude: Double? = null,
         longitude: Double? = null,
-        contextTag: String? = null
+        contextTag: String? = null,
+        connectionMethod: String = "qr",
+        tokenAgeMs: Long? = null
     ) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
@@ -61,13 +66,15 @@ class ConnectionViewModel : ViewModel() {
                 }
                 val scannedUser = userResult.getOrNull()!!
 
-                // Create connection request with context tag
+                // Create connection request with proximity signals
                 val request = ConnectionRequest(
                     userId1 = currentUserId,
                     userId2 = scannedUserId,
                     locationLat = latitude,
                     locationLng = longitude,
-                    contextTag = contextTag
+                    contextTag = contextTag,
+                    connectionMethod = connectionMethod,
+                    tokenAgeMs = tokenAgeMs
                 )
 
                 // Create the connection
@@ -77,8 +84,12 @@ class ConnectionViewModel : ViewModel() {
                     val connection = result.getOrNull()!!
                     _connectionState.value = ConnectionState.Success(connection, scannedUser)
 
-                    // Add to AppDataManager to update all screens
+                    // Add to AppDataManager to update all screens immediately
                     AppDataManager.addConnection(connection)
+
+                    // Force a full refresh so connections screen picks up the new connection
+                    // This also updates the connected users map
+                    AppDataManager.refresh(force = true)
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Failed to create connection"
                     _connectionState.value = ConnectionState.Error(error)

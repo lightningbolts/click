@@ -22,26 +22,35 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.qr.toQrPayloadOrNull
-import compose.project.click.click.qr.toUserIdFromClickUrl
+import compose.project.click.click.qr.QrParseResult
+import compose.project.click.click.qr.parseQrCode
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.QRScanner
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 
 /**
- * Result types for QR code scanning
+ * Result types for QR code scanning.
+ * Now supports both token-based (new) and userId-only (legacy) results.
  */
 sealed class QRScanResult {
-    data class Success(val userId: String) : QRScanResult()
+    /** Token-based scan — includes tokenAgeMs for proximity confidence scoring. */
+    data class TokenSuccess(val userId: String, val tokenAgeMs: Long) : QRScanResult()
+    /** Legacy scan — userId only, no token timing data. */
+    data class LegacySuccess(val userId: String) : QRScanResult()
+    /** Invalid QR format. */
     data class InvalidFormat(val rawData: String) : QRScanResult()
+    /** Expired token. */
+    data class Expired(val rawData: String) : QRScanResult()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QRScannerScreen(
     onQRCodeScanned: (String) -> Unit,
+    onQRCodeScannedWithToken: ((userId: String, tokenAgeMs: Long) -> Unit)? = null,
     onNavigateBack: () -> Unit
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -65,19 +74,38 @@ fun QRScannerScreen(
         // Prevent duplicate scans of the same invalid QR
         if (qrData == lastScannedRaw && showError) return
 
-        // Try URL format first (website QR codes: https://.../connect/{uuid})
-        // then fall back to legacy JSON format ({"userId":"...","name":"..."})
-        val userId = qrData.toUserIdFromClickUrl()
-            ?: qrData.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }
-
-        if (userId != null) {
-            // Valid Click QR code — pass the extracted userId to parent
-            onQRCodeScanned(userId)
-        } else {
-            // Neither format matched — show error
-            lastScannedRaw = qrData
-            errorMessage = "This QR code isn't a Click profile. Please scan a valid Click QR code."
-            showError = true
+        when (val result = parseQrCode(qrData)) {
+            is QrParseResult.TokenBased -> {
+                val now = Clock.System.now().toEpochMilliseconds()
+                
+                // Check expiry client-side for immediate feedback
+                if (now > result.payload.exp) {
+                    lastScannedRaw = qrData
+                    errorMessage = "This QR code has expired. Ask them to generate a new one."
+                    showError = true
+                    return
+                }
+                
+                // Calculate token age: token was created at (exp - 90000)
+                val tokenCreatedAt = result.payload.exp - 90_000L
+                val tokenAgeMs = now - tokenCreatedAt
+                
+                // Use token-aware callback if available, otherwise fall back to legacy
+                if (onQRCodeScannedWithToken != null) {
+                    onQRCodeScannedWithToken(result.payload.userId, tokenAgeMs)
+                } else {
+                    onQRCodeScanned(result.payload.userId)
+                }
+            }
+            is QrParseResult.Legacy -> {
+                // Legacy format — no token timing data
+                onQRCodeScanned(result.userId)
+            }
+            is QrParseResult.Invalid -> {
+                lastScannedRaw = qrData
+                errorMessage = "This QR code isn't a Click profile. Please scan a valid Click QR code."
+                showError = true
+            }
         }
     }
 

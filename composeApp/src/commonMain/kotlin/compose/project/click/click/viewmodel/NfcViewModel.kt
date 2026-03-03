@@ -147,13 +147,14 @@ class NfcViewModel(
                 val userResult = repository.getUserById(otherUserId)
                 val otherUser = userResult.getOrNull()
 
-                // Create connection request
+                // Create connection request — NFC is highest-trust method
                 val request = ConnectionRequest(
                     userId1 = userId,
                     userId2 = otherUserId,
                     locationLat = location?.latitude,
                     locationLng = location?.longitude,
-                    contextTag = contextTag
+                    contextTag = contextTag,
+                    connectionMethod = "nfc"
                 )
 
                 val result = repository.createConnection(request)
