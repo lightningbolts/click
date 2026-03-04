@@ -8,11 +8,19 @@ import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.rpc
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.statement.bodyAsText
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.math.*
 
@@ -128,6 +136,35 @@ class ConnectionRepository {
                 // Non-fatal — connection was created
             }
 
+            // Resolve semantic location from GPS coordinates via Nominatim
+            if (loc1Valid) {
+                try {
+                    val semanticResult = resolveSemanticLocation(
+                        lat = request.locationLat!!,
+                        lon = request.locationLng!!
+                    )
+                    if (semanticResult != null) {
+                        supabase.from("connections")
+                            .update(buildJsonObject {
+                                put("semantic_location", semanticResult.first)
+                                put("full_location", kotlinx.serialization.json.JsonObject(
+                                    semanticResult.second.mapValues { (_, v) ->
+                                        kotlinx.serialization.json.JsonPrimitive(v)
+                                    }
+                                ))
+                            }) {
+                                filter {
+                                    eq("id", result.id)
+                                }
+                            }
+                        println("ConnectionRepository: Semantic location set to '${semanticResult.first}'")
+                    }
+                } catch (e: Exception) {
+                    println("ConnectionRepository: Failed to resolve semantic location: ${e.message}")
+                    // Non-fatal — connection was created
+                }
+            }
+
             // Create chat row for this connection
             try {
                 supabase.from("chats")
@@ -188,6 +225,58 @@ class ConnectionRepository {
 
         return score.coerceIn(0, 100)
     }
+
+    /**
+     * Reverse geocode GPS coordinates to a semantic location name
+     * using the OpenStreetMap Nominatim API.
+     *
+     * @return Pair of (display_name, full_address_map) or null on failure.
+     */
+    private suspend fun resolveSemanticLocation(lat: Double, lon: Double): Pair<String, Map<String, String>>? {
+        return try {
+            val url = "https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json"
+            val client = io.ktor.client.HttpClient()
+            val response = client.get(url) {
+                headers {
+                    append("User-Agent", "ClickApp/1.0")
+                }
+            }
+            val body = response.bodyAsText()
+            client.close()
+
+            val jsonObj = kotlinx.serialization.json.Json.parseToJsonElement(body)
+                .jsonObject
+
+            val displayName = jsonObj["display_name"]?.jsonPrimitive?.contentOrNull
+            val addressObj = jsonObj["address"]?.jsonObject
+
+            // Build a flat map of address components
+            val addressMap = addressObj?.mapValues { (_, v) ->
+                v.jsonPrimitive.contentOrNull ?: ""
+            } ?: emptyMap()
+
+            // Use a short display name: prefer building/amenity, then road, then full display_name
+            val shortName = addressMap["building"]
+                ?: addressMap["amenity"]
+                ?: addressMap["leisure"]
+                ?: addressMap["tourism"]
+                ?: listOfNotNull(
+                    addressMap["road"],
+                    addressMap["neighbourhood"] ?: addressMap["suburb"]
+                ).joinToString(", ").ifEmpty { null }
+                ?: displayName
+
+            if (shortName != null) {
+                Pair(shortName, addressMap)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            println("ConnectionRepository: Nominatim reverse geocode failed: ${e.message}")
+            null
+        }
+    }
+
 
     /**
      * Check if a connection already exists between two users

@@ -79,17 +79,36 @@ fun App() {
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
 
+    // Location service for capturing GPS during QR scans
+    val locationService = remember { compose.project.click.click.utils.LocationService() }
+
     val currentUser = when (val state = authViewModel.authState) {
         is AuthState.Success -> User(id = state.userId, name = state.name ?: state.email, createdAt = 0L)
         else -> User(id = "", name = "", createdAt = 0L)
     }
 
-    fun connectWithUser(userId: String) {
+    // Coroutine scope for location-aware connection
+    val connectionScope = rememberCoroutineScope()
+
+    fun connectWithUser(userId: String, tokenAgeMs: Long? = null) {
         if (currentUser.id.isNotEmpty()) {
-            connectionViewModel.connectWithUser(
-                scannedUserId = userId,
-                currentUserId = currentUser.id
-            )
+            connectionScope.launch {
+                // Attempt to capture location for proximity verification + semantic location
+                val location = try {
+                    locationService.getCurrentLocation()
+                } catch (e: Exception) {
+                    println("App: Failed to get location: ${e.message}")
+                    null
+                }
+                connectionViewModel.connectWithUser(
+                    scannedUserId = userId,
+                    currentUserId = currentUser.id,
+                    latitude = location?.latitude,
+                    longitude = location?.longitude,
+                    connectionMethod = "qr",
+                    tokenAgeMs = tokenAgeMs
+                )
+            }
         }
     }
 
@@ -373,11 +392,18 @@ fun App() {
                             showQRScanner -> {
                                 QRScannerScreen(
                                     onQRCodeScanned = { userId ->
-                                        // QRScannerScreen extracts the userId from both URL and
-                                        // JSON QR formats and passes it here directly
+                                        // Legacy QR format — no token timing data
                                         showQRScanner = false
                                         if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
                                             connectWithUser(userId)
+                                            currentRoute = NavigationItem.Connections.route
+                                        }
+                                    },
+                                    onQRCodeScannedWithToken = { userId, tokenAgeMs ->
+                                        // Token-based QR — includes timing for proximity scoring
+                                        showQRScanner = false
+                                        if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
+                                            connectWithUser(userId, tokenAgeMs)
                                             currentRoute = NavigationItem.Connections.route
                                         }
                                     },

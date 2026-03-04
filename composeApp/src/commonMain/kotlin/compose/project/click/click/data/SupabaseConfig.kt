@@ -5,8 +5,15 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.SettingsSessionManager
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
+import compose.project.click.click.data.storage.TokenStorage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 
 object SupabaseConfig {
@@ -15,6 +22,8 @@ object SupabaseConfig {
 
     // Create a persistent Settings instance for session storage
     private val settings: Settings by lazy { Settings() }
+
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val client: SupabaseClient by lazy {
         createSupabaseClient(
@@ -26,9 +35,46 @@ object SupabaseConfig {
                 host = "login"
                 // Use SettingsSessionManager for persistent session storage
                 sessionManager = SettingsSessionManager(settings)
+                // Ensure tokens are auto-refreshed and auto-loaded
+                alwaysAutoRefresh = true
+                autoLoadFromStorage = true
             }
             install(Postgrest)
             install(Realtime)
+        }
+    }
+
+    /**
+     * Start observing session status changes from the Supabase SDK and
+     * sync every refreshed token into our dual-storage TokenStorage.
+     *
+     * This eliminates the root cause of "random logouts": the SDK refreshes
+     * tokens into SettingsSessionManager but our Keychain / EncryptedPrefs
+     * (TokenStorage) would go stale. Now they stay in sync.
+     */
+    fun startSessionSync(tokenStorage: TokenStorage) {
+        syncScope.launch {
+            client.auth.sessionStatus.collect { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> {
+                        val session = status.session
+                        println("SupabaseConfig: Session authenticated/refreshed — syncing to TokenStorage")
+                        tokenStorage.saveTokens(
+                            jwt = session.accessToken,
+                            refreshToken = session.refreshToken,
+                            expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                            tokenType = session.tokenType
+                        )
+                    }
+                    is SessionStatus.NotAuthenticated -> {
+                        println("SupabaseConfig: Session not authenticated")
+                        // Don't clear tokens here — let explicit sign-out handle that
+                    }
+                    else -> {
+                        println("SupabaseConfig: Session status: $status")
+                    }
+                }
+            }
         }
     }
 }

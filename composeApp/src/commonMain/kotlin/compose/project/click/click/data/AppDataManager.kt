@@ -221,7 +221,20 @@ object AppDataManager {
         _connectedUsers.value = emptyMap()
         _userAvailability.value = null
         _isDataLoaded.value = false
+        _isLoading.value = false
         _error.value = null
+    }
+
+    /**
+     * Reset all cached data and reload from server.
+     * Used after login/signup to ensure connection counts,
+     * chats, and other data are fetched fresh.
+     */
+    fun resetAndReload() {
+        clearData()
+        scope.launch {
+            loadAllData()
+        }
     }
     
     /**

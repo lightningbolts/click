@@ -5,8 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 sealed class AuthState {
@@ -27,7 +30,13 @@ class AuthViewModel(
         private set
 
     init {
+        // Start syncing SDK session refreshes → TokenStorage (Keychain/EncryptedPrefs).
+        // This is the primary fix for "random logouts" — without this, the SDK
+        // auto-refreshes its tokens but our Keychain/EncryptedPrefs storage goes stale.
+        SupabaseConfig.startSessionSync(tokenStorage)
+
         checkAuthStatus()
+        startBackgroundTokenRefresh()
     }
 
     private fun checkAuthStatus() {
@@ -65,6 +74,27 @@ class AuthViewModel(
         }
     }
 
+    /**
+     * Background coroutine that proactively refreshes the session every 45 minutes.
+     * Supabase tokens expire after ~1 hour by default. By refreshing at 45 min,
+     * we ensure the user is never logged out during active app use.
+     */
+    private fun startBackgroundTokenRefresh() {
+        viewModelScope.launch {
+            while (true) {
+                delay(45 * 60 * 1000L) // 45 minutes
+                if (isAuthenticated) {
+                    try {
+                        authRepository.refreshSession()
+                        println("AuthViewModel: Background token refresh successful")
+                    } catch (e: Exception) {
+                        println("AuthViewModel: Background token refresh failed: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             try {
@@ -82,6 +112,8 @@ class AuthViewModel(
                             email = user.email ?: email,
                             name = fullName ?: legacyName
                         )
+                        // Trigger data load for the newly logged-in user
+                        AppDataManager.resetAndReload()
                     },
                     onFailure = { error ->
                         authState = AuthState.Error(error.message ?: "Failed to sign in")
@@ -110,6 +142,8 @@ class AuthViewModel(
                             email = user.email ?: email,
                             name = fullName ?: legacyName
                         )
+                        // Trigger data load for the newly signed-up user
+                        AppDataManager.resetAndReload()
                     },
                     onFailure = { error ->
                         authState = AuthState.Error(error.message ?: "Failed to create account")
@@ -143,12 +177,14 @@ class AuthViewModel(
     fun signOut() {
         viewModelScope.launch {
             try {
+                // Clear AppDataManager FIRST so all screens go to loading/empty
+                AppDataManager.clearData()
                 authRepository.signOut()
-                // tokenStorage clearing is now handled in repository
                 isAuthenticated = false
                 authState = AuthState.Idle
             } catch (e: Exception) {
                 // If repo logout fails, we still want to clear UI state
+                AppDataManager.clearData()
                 isAuthenticated = false
                 authState = AuthState.Idle
             }
@@ -159,4 +195,3 @@ class AuthViewModel(
         authState = AuthState.Idle
     }
 }
-

@@ -89,10 +89,36 @@ class AuthRepository(
 
     suspend fun restoreSession(): Result<UserInfo> {
         return try {
+            // ── Strategy ──
+            // 1. First check if the Supabase SDK already has a valid session
+            //    (auto-loaded from SettingsSessionManager on startup).
+            //    This is the most reliable path since the SDK auto-refreshes.
+            // 2. If the SDK has no session, try reconstructing from TokenStorage
+            //    (Keychain/EncryptedPrefs) — this covers app reinstall scenarios.
+
+            // Step 1: Check SDK's built-in session (auto-loaded from SettingsSessionManager)
+            var user = supabase.auth.currentUserOrNull()
+            if (user != null) {
+                println("AuthRepository: Restored session from SDK (SettingsSessionManager)")
+                // Sync to our TokenStorage so Keychain/EncryptedPrefs stay current
+                val currentSession = supabase.auth.currentSessionOrNull()
+                if (currentSession != null) {
+                    tokenStorage.saveTokens(
+                        jwt = currentSession.accessToken,
+                        refreshToken = currentSession.refreshToken,
+                        expiresAt = currentSession.expiresAt?.toEpochMilliseconds(),
+                        tokenType = currentSession.tokenType
+                    )
+                }
+                return Result.success(user)
+            }
+
+            // Step 2: SDK has no session — try TokenStorage (for reinstall/update scenarios)
             val accessToken = tokenStorage.getJwt()
             val refreshToken = tokenStorage.getRefreshToken()
 
             if (!accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()) {
+                println("AuthRepository: Attempting restore from TokenStorage (Keychain/EncryptedPrefs)")
                 val expiresAt = tokenStorage.getExpiresAt()
                 val tokenType = tokenStorage.getTokenType() ?: "bearer"
                 
@@ -114,16 +140,16 @@ class AuthRepository(
                 // Import the session into Supabase
                 supabase.auth.importSession(session)
                 
-                // If the session is expired, try to refresh it
-                var user = supabase.auth.currentUserOrNull()
-                if (user == null || (expiresAt != null && now >= expiresAt)) {
-                    try {
-                        supabase.auth.refreshCurrentSession()
-                        user = supabase.auth.currentUserOrNull()
-                    } catch (e: Exception) {
-                        println("Failed to refresh session: ${e.message}")
-                    }
+                // Always try to refresh when restoring from TokenStorage
+                // since these tokens may be stale
+                try {
+                    supabase.auth.refreshCurrentSession()
+                    println("AuthRepository: Successfully refreshed session from TokenStorage")
+                } catch (e: Exception) {
+                    println("AuthRepository: Failed to refresh session from TokenStorage: ${e.message}")
                 }
+
+                user = supabase.auth.currentUserOrNull()
 
                 if (user != null) {
                     // Update stored tokens with newly refreshed ones
@@ -138,16 +164,13 @@ class AuthRepository(
                     }
                     Result.success(user)
                 } else {
+                    // Tokens were invalid, clear them to avoid retrying stale tokens
+                    println("AuthRepository: TokenStorage tokens invalid, clearing")
+                    tokenStorage.clearTokens()
                     Result.failure(Exception("Session expired and could not be refreshed"))
                 }
             } else {
-                // If no tokens in TokenStorage, check if Supabase already has a session (from SettingsSessionManager)
-                val user = supabase.auth.currentUserOrNull()
-                if (user != null) {
-                    Result.success(user)
-                } else {
-                    Result.failure(Exception("No saved session found"))
-                }
+                Result.failure(Exception("No saved session found"))
             }
         } catch (e: Exception) {
             println("Error restoring session: ${e.message}")
