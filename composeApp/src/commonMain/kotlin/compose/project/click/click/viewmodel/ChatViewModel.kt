@@ -88,10 +88,10 @@ class ChatViewModel(
     init {
         // Observe AppDataManager connections to stay in sync
         viewModelScope.launch {
-            AppDataManager.connections.collect {
-                // If we are already success, we might want to refresh details if connections list changed
-                if (_chatListState.value is ChatListState.Success) {
-                    loadChats(isForced = false)
+            AppDataManager.connections.collect { connections ->
+                // Refresh when shared connection state changes (e.g. after relogin hydration)
+                if (_currentUserId.value != null && connections.isNotEmpty()) {
+                    loadChats(isForced = true)
                 }
             }
         }
@@ -137,7 +137,28 @@ class ChatViewModel(
             // Fetch fresh data from API in background
             try {
                 val chats = chatRepository.fetchUserChatsWithDetails(userId)
-                _chatListState.value = ChatListState.Success(chats)
+
+                if (chats.isNotEmpty()) {
+                    _chatListState.value = ChatListState.Success(chats)
+                } else if (cachedConnections.isNotEmpty()) {
+                    // Keep hydrated/cached connections visible when API is empty
+                    // (common during session bootstrap or backend shape mismatch).
+                    if (_chatListState.value !is ChatListState.Success) {
+                        _chatListState.value = ChatListState.Success(cachedConnections.mapNotNull { connection ->
+                            val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+                            val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "User", createdAt = 0L)
+                            ChatWithDetails(
+                                chat = connection.chat,
+                                connection = connection,
+                                otherUser = otherUser,
+                                lastMessage = connection.chat.messages.lastOrNull(),
+                                unreadCount = 0
+                            )
+                        })
+                    }
+                } else {
+                    _chatListState.value = ChatListState.Success(emptyList())
+                }
             } catch (e: Exception) {
                 // Only show error if we don't have cached data
                 if (cachedConnections.isEmpty()) {

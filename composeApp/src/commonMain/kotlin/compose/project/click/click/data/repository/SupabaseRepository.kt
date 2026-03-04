@@ -53,9 +53,7 @@ class SupabaseRepository {
             supabase.from("connections")
                 .select {
                     filter {
-                        or {
-                            eq("user_ids", "cs.{$userId}")
-                        }
+                        contains("user_ids", listOf(userId))
                     }
                     order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                     range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
