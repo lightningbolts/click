@@ -41,6 +41,8 @@ class ChatViewModel(
     private val supabaseRepository: SupabaseRepository = SupabaseRepository()
 ) : ViewModel() {
 
+    private val vibeCheckEnabled = false
+
     private val _chatListState = MutableStateFlow<ChatListState>(ChatListState.Loading)
     val chatListState: StateFlow<ChatListState> = _chatListState.asStateFlow()
 
@@ -79,7 +81,7 @@ class ChatViewModel(
     private val _showIcebreakerPanel = MutableStateFlow(true)
     val showIcebreakerPanel: StateFlow<Boolean> = _showIcebreakerPanel.asStateFlow()
 
-    private var currentChatId: String? = null
+    private var currentConnectionId: String? = null
     private var realtimeJob: Job? = null
     private var typingPollingJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
@@ -172,9 +174,9 @@ class ChatViewModel(
     // Load messages for a specific chat
     fun loadChatMessages(chatId: String) {
         val userId = _currentUserId.value ?: return
-        if (currentChatId == chatId && _chatMessagesState.value is ChatMessagesState.Success) return
+        if (currentConnectionId == chatId && _chatMessagesState.value is ChatMessagesState.Success) return
         
-        currentChatId = chatId
+        currentConnectionId = chatId
 
         viewModelScope.launch {
             _chatMessagesState.value = ChatMessagesState.Loading
@@ -186,11 +188,17 @@ class ChatViewModel(
                     return@launch
                 }
 
+                val apiChatId = chatDetails.chat.id
+                if (apiChatId.isNullOrBlank()) {
+                    _chatMessagesState.value = ChatMessagesState.Error("Chat not found")
+                    return@launch
+                }
+
                 // Get messages
-                val messages = chatRepository.fetchMessagesForChat(chatId)
+                val messages = chatRepository.fetchMessagesForChat(apiChatId)
 
                 // Get all users for this chat in one go
-                val participants = chatRepository.fetchChatParticipants(chatId)
+                val participants = chatRepository.fetchChatParticipants(apiChatId)
                 val userMap = participants.associateBy { it.id }
 
                 // Map messages to include user info
@@ -206,17 +214,19 @@ class ChatViewModel(
                 _chatMessagesState.value = ChatMessagesState.Success(messagesWithUsers, chatDetails)
 
                 // Mark messages as read
-                chatRepository.markMessagesAsRead(chatId, userId)
+                chatRepository.markMessagesAsRead(apiChatId, userId)
 
                 // Subscribe to new messages
-                subscribeToNewMessages(chatId, userId)
+                subscribeToNewMessages(apiChatId, userId)
                 
                 // Monitor typing status
-                startTypingMonitoring(chatId)
+                startTypingMonitoring(apiChatId)
                 
-                // Start Vibe Check timer and update keep states
-                startVibeCheckTimer(chatDetails.connection, userId)
-                updateKeepStates(chatDetails.connection, userId)
+                // Vibe Check is disabled
+                if (vibeCheckEnabled) {
+                    startVibeCheckTimer(chatDetails.connection, userId)
+                    updateKeepStates(chatDetails.connection, userId)
+                }
                 
                 // Mark chat as begun if this is the first time
                 if (!chatDetails.connection.has_begun) {
@@ -277,18 +287,19 @@ class ChatViewModel(
     }
 
     fun sendMessage() {
-        val chatId = currentChatId ?: return
+        val connectionId = currentConnectionId ?: return
+        val apiChatId = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id ?: return
         val userId = _currentUserId.value ?: return
         val content = _messageInput.value.trim()
         if (content.isEmpty()) return
-        onUserStoppedTyping(chatId)
+        onUserStoppedTyping(apiChatId)
         viewModelScope.launch {
             try {
-                val message = chatRepository.sendMessage(chatId, userId, content)
+                val message = chatRepository.sendMessage(apiChatId, userId, content)
                 if (message != null) {
                     _messageInput.value = ""
                     // Activate connection on first message (pending → active)
-                    activateConnectionIfPending(chatId)
+                    activateConnectionIfPending(connectionId)
                 } else {
                     println("Failed to send message")
                 }
@@ -314,11 +325,12 @@ class ChatViewModel(
 
     fun updateMessageInput(text: String) {
         _messageInput.value = text
-        currentChatId?.let { onUserTyping(it) }
+        ((_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id)
+            ?.let { onUserTyping(it) }
     }
 
     fun leaveChatRoom() {
-        val chatId = currentChatId
+        val chatId = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id
         val userId = _currentUserId.value
         if (chatId != null && userId != null) {
              onUserStoppedTyping(chatId)
@@ -327,7 +339,7 @@ class ChatViewModel(
         realtimeJob = null
         typingPollingJob?.cancel()
         typingPollingJob = null
-        currentChatId = null
+        currentConnectionId = null
         _chatMessagesState.value = ChatMessagesState.Loading
         resetVibeCheckState()
         resetIcebreakerState()
@@ -449,7 +461,8 @@ class ChatViewModel(
     }
     
     fun keepConnection() {
-        val chatId = currentChatId ?: return
+        if (!vibeCheckEnabled) return
+        val chatId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
         val currentState = _chatMessagesState.value
         if (currentState !is ChatMessagesState.Success) return
@@ -567,7 +580,7 @@ class ChatViewModel(
      */
     fun reportConnection(reason: String, onReported: () -> Unit) {
         val userId = _currentUserId.value ?: return
-        val chatId = currentChatId ?: return
+        val chatId = currentConnectionId ?: return
         viewModelScope.launch {
             val success = supabaseRepository.reportConnection(chatId, userId, reason)
             if (success) {

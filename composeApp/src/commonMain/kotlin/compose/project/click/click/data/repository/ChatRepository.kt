@@ -4,6 +4,8 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.*
 import compose.project.click.click.data.storage.TokenStorage
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -12,10 +14,11 @@ import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.broadcast
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.decodeFromJsonElement
 import io.github.jan.supabase.realtime.RealtimeChannel
 
 /**
@@ -28,14 +31,137 @@ class ChatRepository(
 ) {
     private val supabase = SupabaseConfig.client
 
+    @Serializable
+    private data class ChatRow(
+        val id: String,
+        @SerialName("connection_id")
+        val connectionId: String,
+        @SerialName("created_at")
+        val createdAt: Long,
+        @SerialName("updated_at")
+        val updatedAt: Long
+    )
+
+    @Serializable
+    private data class MessageRow(
+        val id: String,
+        @SerialName("chat_id")
+        val chatId: String,
+        @SerialName("user_id")
+        val userId: String,
+        val content: String,
+        @SerialName("time_created")
+        val timeCreated: Long,
+        @SerialName("time_edited")
+        val timeEdited: Long? = null,
+        @SerialName("is_read")
+        val isRead: Boolean = false
+    ) {
+        fun toMessage(): Message = Message(
+            id = id,
+            user_id = userId,
+            content = content,
+            timeCreated = timeCreated,
+            timeEdited = timeEdited
+        )
+    }
+
     // Fetch all chats for a user with details via API
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return emptyList()
-            val result = apiClient.getUserChats(userId, authToken)
-            result.getOrElse {
-                println("Error fetching user chats: ${it.message}")
+            val connections = supabase.from("connections")
+                .select {
+                    filter {
+                        contains("user_ids", listOf(userId))
+                    }
+                    order("created", Order.DESCENDING)
+                }
+                .decodeList<Connection>()
+
+            if (connections.isEmpty()) return emptyList()
+
+            val connectionIds = connections.map { it.id }
+            val otherUserIds = connections
+                .flatMap { it.user_ids }
+                .filter { it != userId }
+                .distinct()
+
+            val users = if (otherUserIds.isNotEmpty()) {
+                supabase.from("users")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                        filter {
+                            isIn("id", otherUserIds)
+                        }
+                    }
+                    .decodeList<UserCore>()
+                    .map { it.toUser() }
+            } else {
                 emptyList()
+            }
+            val usersById = users.associateBy { it.id }
+
+            val chats = supabase.from("chats")
+                .select {
+                    filter {
+                        isIn("connection_id", connectionIds)
+                    }
+                }
+                .decodeList<ChatRow>()
+            val chatByConnectionId = chats.associateBy { it.connectionId }
+
+            val chatIds = chats.map { it.id }
+            val messages = if (chatIds.isNotEmpty()) {
+                supabase.from("messages")
+                    .select {
+                        filter {
+                            isIn("chat_id", chatIds)
+                        }
+                        order("time_created", Order.DESCENDING)
+                    }
+                    .decodeList<MessageRow>()
+            } else {
+                emptyList()
+            }
+
+            val firstByChatId = linkedMapOf<String, MessageRow>()
+            messages.forEach { row ->
+                if (!firstByChatId.containsKey(row.chatId)) {
+                    firstByChatId[row.chatId] = row
+                }
+            }
+
+            val unreadByChatId = mutableMapOf<String, Int>()
+            messages.forEach { row ->
+                if (row.userId != userId && !row.isRead) {
+                    unreadByChatId[row.chatId] = (unreadByChatId[row.chatId] ?: 0) + 1
+                }
+            }
+
+            connections.mapNotNull { connection ->
+                val chatRow = chatByConnectionId[connection.id]
+                val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+                val otherUser = usersById[otherUserId] ?: User(
+                    id = otherUserId,
+                    name = "User",
+                    email = null,
+                    image = null,
+                    createdAt = 0L
+                )
+
+                val lastMessage = chatRow?.let { firstByChatId[it.id]?.toMessage() }
+                val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
+
+                ChatWithDetails(
+                    chat = Chat(
+                        id = chatRow?.id,
+                        connectionId = connection.id,
+                        messages = emptyList()
+                    ),
+                    connection = connection,
+                    otherUser = otherUser,
+                    lastMessage = lastMessage,
+                    unreadCount = unreadCount
+                )
             }
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.message}")
@@ -46,14 +172,14 @@ class ChatRepository(
     // Fetch messages for a specific chat via API
     suspend fun fetchMessagesForChat(chatId: String): List<Message> {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return emptyList()
-            val result = apiClient.getChatMessages(chatId, authToken)
-            val baseMessages = result.getOrElse {
-                println("Error fetching messages: ${it.message}")
-                emptyList()
-            }
-            // Return messages as-is (reactions will be fetched separately if needed)
-            baseMessages
+            supabase.from("messages")
+                .select {
+                    filter {
+                        eq("chat_id", chatId)
+                    }
+                    order("time_created", Order.ASCENDING)
+                }
+                .decodeList<Message>()
         } catch (e: Exception) {
             println("Error fetching messages: ${e.message}")
             emptyList()
@@ -63,12 +189,35 @@ class ChatRepository(
     // Send a new message via API
     suspend fun sendMessage(chatId: String, userId: String, content: String): Message? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
-            val result = apiClient.sendMessage(chatId, userId, content, authToken)
-            result.getOrElse {
-                println("Error sending message: ${it.message}")
-                null
+            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            val inserted = supabase.from("messages")
+                .insert(
+                    buildJsonObject {
+                        put("chat_id", chatId)
+                        put("user_id", userId)
+                        put("content", content)
+                        put("time_created", now)
+                    }
+                ) {
+                    select()
+                }
+                .decodeSingle<Message>()
+
+            try {
+                supabase.from("chats")
+                    .update(
+                        buildJsonObject {
+                            put("updated_at", now)
+                        }
+                    ) {
+                        filter {
+                            eq("id", chatId)
+                        }
+                    }
+            } catch (_: Exception) {
             }
+
+            inserted
         } catch (e: Exception) {
             println("Error sending message: ${e.message}")
             null
@@ -78,8 +227,18 @@ class ChatRepository(
     // Mark messages as read via API
     suspend fun markMessagesAsRead(chatId: String, userId: String) {
         try {
-            val authToken = tokenStorage.getJwt() ?: return
-            apiClient.markMessagesAsRead(chatId, userId, authToken)
+            supabase.from("messages")
+                .update(
+                    buildJsonObject {
+                        put("is_read", true)
+                    }
+                ) {
+                    filter {
+                        eq("chat_id", chatId)
+                        neq("user_id", userId)
+                        eq("is_read", false)
+                    }
+                }
         } catch (e: Exception) {
             println("Error marking messages as read: ${e.message}")
         }
@@ -94,11 +253,17 @@ class ChatRepository(
             table = "messages"
         }.map { action ->
             when (action) {
-                is PostgresAction.Insert -> action.decodeRecord<Message>()
-                is PostgresAction.Update -> action.decodeRecord<Message>()
+                is PostgresAction.Insert -> {
+                    val row = action.decodeRecord<MessageRow>()
+                    if (row.chatId == chatId) row.toMessage() else null
+                }
+                is PostgresAction.Update -> {
+                    val row = action.decodeRecord<MessageRow>()
+                    if (row.chatId == chatId) row.toMessage() else null
+                }
                 else -> null
             }
-        }.map { it ?: throw IllegalStateException("Unknown message action") }
+        }.mapNotNull { it }
 
         return messageFlow
     }
@@ -106,12 +271,17 @@ class ChatRepository(
     // Fetch a specific chat by ID via API
     suspend fun fetchChatById(chatId: String): Chat? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
-            val result = apiClient.getChat(chatId, authToken)
-            result.getOrElse {
-                println("Error fetching chat: ${it.message}")
-                null
-            }
+            val row = supabase.from("chats")
+                .select {
+                    filter {
+                        eq("id", chatId)
+                    }
+                    limit(1)
+                }
+                .decodeList<ChatRow>()
+                .firstOrNull() ?: return null
+
+            Chat(id = row.id, connectionId = row.connectionId, messages = emptyList())
         } catch (e: Exception) {
             println("Error fetching chat: ${e.message}")
             null
@@ -121,9 +291,7 @@ class ChatRepository(
     // Fetch chat with details by chat ID via API
     suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
-            val result = apiClient.getUserChats(currentUserId, authToken)
-            result.getOrElse { emptyList() }
+            fetchUserChatsWithDetails(currentUserId)
                 .firstOrNull { it.connection.id == chatId }
         } catch (e: Exception) {
             println("Error fetching chat with details: ${e.message}")
@@ -134,12 +302,36 @@ class ChatRepository(
     // Get participants for a chat via API
     suspend fun fetchChatParticipants(chatId: String): List<User> {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return emptyList()
-            val result = apiClient.getChatParticipants(chatId, authToken)
-            result.getOrElse {
-                println("Error fetching participants: ${it.message}")
-                emptyList()
-            }
+            val chat = supabase.from("chats")
+                .select {
+                    filter {
+                        eq("id", chatId)
+                    }
+                    limit(1)
+                }
+                .decodeList<ChatRow>()
+                .firstOrNull() ?: return emptyList()
+
+            val connection = supabase.from("connections")
+                .select {
+                    filter {
+                        eq("id", chat.connectionId)
+                    }
+                    limit(1)
+                }
+                .decodeList<Connection>()
+                .firstOrNull() ?: return emptyList()
+
+            if (connection.user_ids.isEmpty()) return emptyList()
+
+            supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                    filter {
+                        isIn("id", connection.user_ids)
+                    }
+                }
+                .decodeList<UserCore>()
+                .map { it.toUser() }
         } catch (e: Exception) {
             println("Error fetching participants: ${e.message}")
             emptyList()
@@ -148,12 +340,17 @@ class ChatRepository(
 
     // Get user by ID - helper method for getting user details
     suspend fun getUserById(userId: String): User? {
-        // This is still needed for single lookups, but fetchChatParticipants should be used for the list
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
-            // We use a dummy chatId or improve the API to support single user lookup
-            val result = apiClient.getUser(userId, authToken)
-            result.getOrNull()
+            supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                    filter {
+                        eq("id", userId)
+                    }
+                    limit(1)
+                }
+                .decodeList<UserCore>()
+                .firstOrNull()
+                ?.toUser()
         } catch (e: Exception) {
             println("Error fetching user: ${e.message}")
             null

@@ -502,7 +502,11 @@ class ChatApiClient(
     // Extension functions to convert API models to domain models
     private fun ChatApiModel.toChatWithDetails(): ChatWithDetails {
         return ChatWithDetails(
-            chat = Chat(messages = emptyList()),
+            chat = Chat(
+                id = id,
+                connectionId = connection_id,
+                messages = emptyList()
+            ),
             connection = connection?.toConnection() ?: Connection(
                 id = connection_id,
                 user_ids = emptyList(),

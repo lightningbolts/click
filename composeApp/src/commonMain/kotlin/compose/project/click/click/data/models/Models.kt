@@ -139,6 +139,9 @@ data class ConnectionRequest(
 
 @Serializable
 data class Chat(
+    val id: String? = null,
+    @SerialName("connection_id")
+    val connectionId: String? = null,
     val messages: List<Message> = emptyList()
 )
 

@@ -2,8 +2,14 @@ package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -246,29 +252,27 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar
-            Box {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.primaryContainer
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
+            // Avatar with brand gradient
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(27.dp))
+                    .background(
+                        Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
                     )
-                }
+                    .border(
+                        width = 1.5.dp,
+                        color = PrimaryBlue.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(27.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -340,13 +344,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val typingUsers by viewModel.typingUsers.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
     
-    // Vibe Check state
-    val vibeCheckRemainingMs by viewModel.vibeCheckRemainingMs.collectAsState()
-    val currentUserHasKept by viewModel.currentUserHasKept.collectAsState()
-    val otherUserHasKept by viewModel.otherUserHasKept.collectAsState()
-    val vibeCheckExpired by viewModel.vibeCheckExpired.collectAsState()
-    val connectionKept by viewModel.connectionKept.collectAsState()
-    
     // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
     val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
@@ -378,24 +375,19 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
                     // Header
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Text(
-                                "Loading...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+                        Box(modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp)) {
+                            PageHeader(
+                                title = "Loading...",
+                                navigationIcon = {
+                                    IconButton(onClick = onBackPressed) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
                             )
                         }
                     }
@@ -405,20 +397,20 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     ) { CircularProgressIndicator() }
                 }
                 is ChatMessagesState.Error -> {
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+                        Box(modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp)) {
+                            PageHeader(
+                                title = "Chat",
+                                navigationIcon = {
+                                    IconButton(onClick = onBackPressed) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Back",
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            )
                         }
                     }
                     Box(
@@ -444,69 +436,63 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     val messages = state.messages
 
                     // Header
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                    AdaptiveSurface(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = onBackPressed) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(
-                                            Brush.linearGradient(
-                                                colors = listOf(
-                                                    MaterialTheme.colorScheme.primary,
-                                                    MaterialTheme.colorScheme.primaryContainer
-                                                )
+                            Box(modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp)) {
+                                PageHeader(
+                                    title = chatDetails.otherUser.name ?: "Unknown",
+                                    subtitle = "Active in this Click",
+                                    navigationIcon = {
+                                        IconButton(onClick = onBackPressed) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.ArrowBack,
+                                                contentDescription = "Back",
+                                                tint = MaterialTheme.colorScheme.onSurface
                                             )
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        chatDetails.otherUser.name ?: "Unknown",
-                                        fontWeight = FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        chatDetails.otherUser.email ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                IconButton(onClick = { searchOpen = !searchOpen }) {
-                                    Icon(Icons.Filled.Search, contentDescription = "Search")
-                                }
+                                        }
+                                    },
+                                    actions = {
+                                        // Avatar with brand gradient
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(RoundedCornerShape(19.dp))
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        colors = listOf(PrimaryBlue, LightBlue)
+                                                    )
+                                                )
+                                                .border(
+                                                    width = 1.5.dp,
+                                                    color = PrimaryBlue.copy(alpha = 0.4f),
+                                                    shape = RoundedCornerShape(19.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        IconButton(onClick = { searchOpen = !searchOpen }) {
+                                            Icon(
+                                                Icons.Filled.Search,
+                                                contentDescription = "Search",
+                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                )
                             }
 
                             if (searchOpen) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        .padding(horizontal = 20.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     OutlinedTextField(
@@ -532,23 +518,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 }
                             }
                         }
-                    }
-                    
-                    // Vibe Check Banner
-                    if (!connectionKept || vibeCheckRemainingMs > 0) {
-                        VibeCheckBanner(
-                            connection = chatDetails.connection,
-                            remainingMs = vibeCheckRemainingMs,
-                            currentUserHasKept = currentUserHasKept,
-                            otherUserHasKept = otherUserHasKept,
-                            vibeCheckExpired = vibeCheckExpired,
-                            connectionKept = connectionKept,
-                            onKeepClick = { viewModel.keepConnection() },
-                            onExpiredDismiss = {
-                                viewModel.handleExpiredConnectionDismiss()
-                                onBackPressed()
-                            }
-                        )
                     }
                     
                     // Icebreaker Prompts Panel
@@ -615,14 +584,37 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         }
                     }
 
-                    // Typing indicator
-                    if (typingUsers.isNotEmpty()) {
-                        Text(
-                            text = typingUsers.joinToString(", ") + " is typing...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
-                        )
+                    // Typing indicator — rendered as a chat bubble for polish
+                    AnimatedVisibility(
+                        visible = typingUsers.isNotEmpty(),
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                        exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .border(
+                                        width = 1.dp,
+                                        color = PrimaryBlue.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+                                    )
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "${typingUsers.first()} is typing…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                )
+                            }
+                        }
                     }
 
                     // Forward dialog
@@ -641,13 +633,21 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         )
                     }
 
-                    // Input
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth()) {
+                    // Input bar — floats above nav bar, rises with keyboard
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .imePadding(),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.Bottom
                         ) {
                             OutlinedTextField(
                                 value = messageInput,
@@ -656,37 +656,52 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     viewModel.onUserTyping(chatId)
                                 },
                                 modifier = Modifier.weight(1f),
-                                placeholder = { Text("Message ${chatDetails.otherUser.name}") },
+                                placeholder = {
+                                    Text(
+                                        "Message ${chatDetails.otherUser.name}…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                },
                                 shape = RoundedCornerShape(24.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    focusedBorderColor = PrimaryBlue.copy(alpha = 0.65f),
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
                                 ),
+                                textStyle = MaterialTheme.typography.bodyMedium,
                                 maxLines = 5
                             )
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            IconButton(
-                                onClick = { viewModel.sendMessage() },
-                                enabled = messageInput.trim().isNotEmpty(),
+                            // Gradient send button
+                            val canSend = messageInput.trim().isNotEmpty()
+                            val sendGradient = Brush.linearGradient(
+                                colors = if (canSend) listOf(PrimaryBlue, LightBlue)
+                                         else listOf(
+                                             MaterialTheme.colorScheme.surfaceVariant,
+                                             MaterialTheme.colorScheme.surfaceVariant
+                                         )
+                            )
+                            Box(
                                 modifier = Modifier
-                                    .size(48.dp)
-                                    .background(
-                                        if (messageInput.trim().isNotEmpty())
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.surfaceVariant,
-                                        RoundedCornerShape(24.dp)
-                                    )
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(23.dp))
+                                    .background(sendGradient)
+                                    .then(
+                                        if (canSend) Modifier.clickable { viewModel.sendMessage() }
+                                        else Modifier
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Send",
-                                    tint = if (messageInput.trim().isNotEmpty())
-                                        Color.White
-                                    else
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = if (canSend) Color.White
+                                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -750,53 +765,67 @@ fun ChatMessageBubble(
     val message = messageWithUser.message
     val isSent = messageWithUser.isSent
 
-    // TODO: Re-implement reactions with separate table
-    val grouped = emptyMap<String, List<Any>>()
-    val commonReactions = listOf("👍", "❤️", "😂")
+    // Gradient for sent bubbles — matches brand violet palette
+    val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
+
+    // Tail corner is slightly squared, opposite corners fully rounded
+    val sentShape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 5.dp)
+    val receivedShape = RoundedCornerShape(topStart = 5.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
-        Column(horizontalAlignment = if (isSent) Alignment.End else Alignment.Start) {
-            Card(
-                shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomStart = if (isSent) 16.dp else 4.dp,
-                    bottomEnd = if (isSent) 4.dp else 16.dp
-                ),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.widthIn(max = 300.dp)
+        if (isSent) {
+            // ── Sent bubble: violet gradient ─────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .clip(sentShape)
+                    .background(sentGradient)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column {
                     Text(
-                        message.content,
-                        color = if (isSent) Color.White else MaterialTheme.colorScheme.onSurface,
+                        text = message.content,
+                        color = Color.White,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            formatMessageTime(message.timeCreated),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isSent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        // TODO: Add message status back when we have that in the schema
-                    }
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = formatMessageTime(message.timeCreated),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.65f),
+                        modifier = Modifier.align(Alignment.End)
+                    )
                 }
             }
-
-            // Actions row (reactions temporarily disabled)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 4.dp)
+        } else {
+            // ── Received bubble: glass-style surface ──────────────────────────
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
+                    .clip(receivedShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                // Forward action
-                TextButton(onClick = { onForward(message.id) }) { Text("Forward") }
+                Column {
+                    Text(
+                        text = message.content,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = formatMessageTime(message.timeCreated),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                }
             }
         }
     }
@@ -1132,10 +1161,10 @@ fun IcebreakerPanel(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = PrimaryBlue.copy(alpha = 0.07f),
+        border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.22f))
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -1151,17 +1180,17 @@ fun IcebreakerPanel(
                         Icons.Filled.Lightbulb,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.secondary
+                        tint = PrimaryBlue
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         "Conversation Starters",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                
+
                 Row {
                     IconButton(
                         onClick = onRefresh,
@@ -1171,7 +1200,7 @@ fun IcebreakerPanel(
                             Icons.Filled.Refresh,
                             contentDescription = "Get new prompts",
                             modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            tint = PrimaryBlue.copy(alpha = 0.7f)
                         )
                     }
                     IconButton(
@@ -1182,38 +1211,37 @@ fun IcebreakerPanel(
                             Icons.Filled.Close,
                             contentDescription = "Dismiss",
                             modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
-            // Prompt chips
+
+            // Prompt chips styled with violet accent
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 prompts.forEach { prompt ->
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onPromptClick(prompt) },
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 1.dp
+                            .border(1.dp, PrimaryBlue.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                            .clickable { onPromptClick(prompt) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Filled.ChatBubbleOutline,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Violet accent dot
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(PrimaryBlue.copy(alpha = 0.6f))
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 prompt.text,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -1223,13 +1251,13 @@ fun IcebreakerPanel(
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             Text(
                 "Tap a prompt to use it",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                color = PrimaryBlue.copy(alpha = 0.6f),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         }

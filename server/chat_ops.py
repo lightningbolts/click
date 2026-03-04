@@ -15,6 +15,21 @@ class ChatOperations:
     def __init__(self, supabase_client: Client):
         self.supabase = supabase_client
 
+    def _normalize_message_for_api(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize DB message fields to API shape expected by mobile clients.
+        DB schema uses time_created/time_edited; API contracts use created_at/updated_at.
+        """
+        return {
+            "id": message.get("id"),
+            "chat_id": message.get("chat_id"),
+            "user_id": message.get("user_id"),
+            "content": message.get("content", ""),
+            "created_at": message.get("time_created") or message.get("created_at") or 0,
+            "updated_at": message.get("time_edited") or message.get("updated_at"),
+            "is_read": bool(message.get("is_read", False)),
+        }
+
     # Chat operations
     def create_chat(self, connection_id: str) -> Optional[Dict[str, Any]]:
         """Create a new chat for a connection"""
@@ -43,9 +58,9 @@ class ChatOperations:
     def fetch_chats_for_user(self, user_id: str) -> List[Dict[str, Any]]:
         """Fetch all chats for a user with connection details"""
         try:
-            # Get all connections for the user
-            connections_response = self.supabase.table("connections").select("*").or_(
-                f"user1_id.eq.{user_id},user2_id.eq.{user_id}"
+            # Get all connections for the user (user_ids is a uuid[] column)
+            connections_response = self.supabase.table("connections").select("*").contains(
+                "user_ids", [user_id]
             ).execute()
 
             if not connections_response.data:
@@ -53,48 +68,51 @@ class ChatOperations:
 
             chats = []
             for connection in connections_response.data:
-                if connection.get("chat_id"):
-                    # Get chat details
-                    chat_response = self.supabase.table("chats").select("*").eq(
-                        "id", connection["chat_id"]
-                    ).execute()
+                # Get or create chat row for this connection
+                chat_response = self.supabase.table("chats").select("*").eq(
+                    "connection_id", connection["id"]
+                ).limit(1).execute()
 
-                    if chat_response.data:
-                        chat = chat_response.data[0]
-                        chat["connection"] = connection
+                if chat_response.data:
+                    chat = chat_response.data[0]
+                else:
+                    created_chat = self.create_chat(connection["id"])
+                    if not created_chat:
+                        continue
+                    chat = created_chat
 
-                        # Get other user
-                        other_user_id = (
-                            connection["user2_id"]
-                            if connection["user1_id"] == user_id
-                            else connection["user1_id"]
-                        )
-                        user_response = self.supabase.table("users").select("*").eq(
-                            "id", other_user_id
-                        ).execute()
+                chat["connection"] = connection
 
-                        if user_response.data:
-                            chat["other_user"] = user_response.data[0]
+                # Get other user from user_ids array
+                user_ids = connection.get("user_ids", [])
+                other_user_id = next((uid for uid in user_ids if uid != user_id), None)
+                if other_user_id:
+                    user_response = self.supabase.table("users").select("id,name,email,image").eq(
+                        "id", other_user_id
+                    ).limit(1).execute()
+                    if user_response.data:
+                        chat["other_user"] = user_response.data[0]
 
-                        # Get last message
-                        last_msg_response = self.supabase.table("messages").select("*").eq(
-                            "chat_id", chat["id"]
-                        ).order("created_at", desc=True).limit(1).execute()
+                # Get last message
+                last_msg_response = self.supabase.table("messages").select("*").eq(
+                    "chat_id", chat["id"]
+                ).order("time_created", desc=True).limit(1).execute()
 
-                        chat["last_message"] = (
-                            last_msg_response.data[0] if last_msg_response.data else None
-                        )
+                chat["last_message"] = (
+                    self._normalize_message_for_api(last_msg_response.data[0])
+                    if last_msg_response.data else None
+                )
 
-                        # Count unread messages
-                        unread_response = self.supabase.table("messages").select(
-                            "*", count="exact"
-                        ).eq("chat_id", chat["id"]).eq("is_read", False).neq(
-                            "user_id", user_id
-                        ).execute()
+                # Count unread messages
+                unread_response = self.supabase.table("messages").select(
+                    "*", count="exact"
+                ).eq("chat_id", chat["id"]).eq("is_read", False).neq(
+                    "user_id", user_id
+                ).execute()
 
-                        chat["unread_count"] = unread_response.count if unread_response.count else 0
+                chat["unread_count"] = unread_response.count if unread_response.count else 0
 
-                        chats.append(chat)
+                chats.append(chat)
 
             # Sort by last activity
             chats.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
@@ -130,7 +148,7 @@ class ChatOperations:
                 "chat_id": chat_id,
                 "user_id": user_id,
                 "content": content,
-                "created_at": now,
+                "time_created": now,
                 "is_read": False
             }
             response = self.supabase.table("messages").insert(message_data).execute()
@@ -138,7 +156,7 @@ class ChatOperations:
             if response.data:
                 # Update chat timestamp
                 self.update_chat_timestamp(chat_id)
-                return response.data[0]
+                return self._normalize_message_for_api(response.data[0])
             return None
         except Exception as e:
             print(f"Error creating message: {e}")
@@ -149,9 +167,9 @@ class ChatOperations:
         try:
             response = self.supabase.table("messages").select("*").eq(
                 "chat_id", chat_id
-            ).order("created_at", desc=False).execute()
+            ).order("time_created", desc=False).execute()
 
-            messages = response.data if response.data else []
+            messages = [self._normalize_message_for_api(m) for m in (response.data if response.data else [])]
 
             # Enrich messages with user data
             for message in messages:
@@ -213,10 +231,10 @@ class ChatOperations:
             now = int(time.time() * 1000)
             response = self.supabase.table("messages").update({
                 "content": new_content,
-                "updated_at": now
+                "time_edited": now
             }).eq("id", message_id).execute()
 
-            return response.data[0] if response.data else None
+            return self._normalize_message_for_api(response.data[0]) if response.data else None
         except Exception as e:
             print(f"Error updating message: {e}")
             return None
@@ -225,21 +243,10 @@ class ChatOperations:
     def fetch_chat_for_connection(self, connection_id: str) -> Optional[Dict[str, Any]]:
         """Get the chat associated with a connection"""
         try:
-            # Get the connection
-            conn_response = self.supabase.table("connections").select("*").eq(
-                "id", connection_id
-            ).execute()
-
-            if not conn_response.data:
-                return None
-
-            connection = conn_response.data[0]
-            chat_id = connection.get("chat_id")
-
-            if not chat_id:
-                return None
-
-            return self.fetch_chat_by_id(chat_id)
+            response = self.supabase.table("chats").select("*").eq(
+                "connection_id", connection_id
+            ).limit(1).execute()
+            return response.data[0] if response.data else None
         except Exception as e:
             print(f"Error fetching chat for connection: {e}")
             return None
@@ -261,21 +268,15 @@ class ChatOperations:
 
             connection = conn_response.data[0]
 
-            # Fetch both users
-            user1_response = self.supabase.table("users").select("*").eq(
-                "id", connection["user1_id"]
-            ).execute()
-            user2_response = self.supabase.table("users").select("*").eq(
-                "id", connection["user2_id"]
+            user_ids = connection.get("user_ids", [])
+            if not user_ids:
+                return []
+
+            users_response = self.supabase.table("users").select("id,name,email,image").in_(
+                "id", user_ids
             ).execute()
 
-            participants = []
-            if user1_response.data:
-                participants.append(user1_response.data[0])
-            if user2_response.data:
-                participants.append(user2_response.data[0])
-
-            return participants
+            return users_response.data if users_response.data else []
         except Exception as e:
             print(f"Error fetching chat participants: {e}")
             return []
