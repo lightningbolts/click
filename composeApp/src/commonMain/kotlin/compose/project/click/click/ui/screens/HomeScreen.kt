@@ -258,7 +258,7 @@ fun HomeScreen(
 private fun GradientSectionHeader(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.headlineMedium.merge(
+        style = MaterialTheme.typography.titleLarge.merge(
             TextStyle(brush = headerGradientBrush())
         ),
         fontWeight = FontWeight.Bold

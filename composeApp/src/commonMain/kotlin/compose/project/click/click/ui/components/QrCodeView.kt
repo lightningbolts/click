@@ -56,11 +56,14 @@ fun UserQrCode(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    // QR content — starts as static URL fallback, replaced when token fetched
-    var qrPayload by remember { mutableStateOf("$CLICK_WEB_BASE_URL/connect/${user.id}") }
-    var isLoading by remember { mutableStateOf(true) }
+    // Static fallback URL — renders instantly so user never sees a blank
+    val fallbackUrl = "$CLICK_WEB_BASE_URL/connect/${user.id}"
+
+    var qrPayload by remember { mutableStateOf(fallbackUrl) }
+    var isLoading by remember { mutableStateOf(false) }
     var secondsLeft by remember { mutableIntStateOf(TOKEN_TTL_SECONDS) }
     var fetchError by remember { mutableStateOf(false) }
+    var hasEverFetched by remember { mutableStateOf(false) }
 
     // Fetch a new token from the web API
     suspend fun fetchToken() {
@@ -85,19 +88,22 @@ fun UserQrCode(
                     qrPayload = payload
                     secondsLeft = TOKEN_TTL_SECONDS
                 } else {
-                    // API returned success but no token — use fallback
-                    qrPayload = "$CLICK_WEB_BASE_URL/connect/${user.id}"
+                    // API returned success but no token — use fallback silently
+                    qrPayload = fallbackUrl
                     secondsLeft = TOKEN_TTL_SECONDS
                 }
             } else {
-                fetchError = true
+                // Only show error if we've ever had a successful fetch
+                // On first load, silently fall back to static URL
+                if (hasEverFetched) fetchError = true
             }
         } catch (e: Exception) {
             println("UserQrCode: Failed to fetch token: ${e.message}")
-            fetchError = true
+            if (hasEverFetched) fetchError = true
             // Keep showing the last valid QR rather than going blank
         } finally {
             isLoading = false
+            hasEverFetched = true
         }
     }
 
@@ -145,30 +151,24 @@ fun UserQrCode(
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            AnimatedContent(
-                targetState = isLoading to qrImageBitmap,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "qr_content"
-            ) { (loading, bitmap) ->
-                when {
-                    loading -> CircularProgressIndicator(
-                        modifier = Modifier.size(32.dp),
-                        color = Color(0xFF8338EC),
-                        strokeWidth = 2.dp
-                    )
-                    bitmap != null -> androidx.compose.foundation.Image(
-                        bitmap = bitmap,
-                        contentDescription = "QR Code",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    else -> Text("Unable to\ngenerate QR", color = Color.Gray, fontSize = 12.sp)
-                }
+            if (qrImageBitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = qrImageBitmap,
+                    contentDescription = "QR Code",
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    color = Color(0xFF8338EC),
+                    strokeWidth = 2.dp
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Countdown row
+        // Countdown row — only show after first successful fetch
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -185,7 +185,7 @@ fun UserQrCode(
                 ) {
                     Icon(Icons.Filled.Refresh, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                 }
-            } else {
+            } else if (hasEverFetched) {
                 Text(
                     text = if (secondsLeft > 0) "${secondsLeft}s" else "Refreshing…",
                     color = timerColor,
@@ -194,6 +194,13 @@ fun UserQrCode(
                 )
                 Text(
                     text = "· renews automatically",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            } else {
+                // Initial load — show nothing or subtle text
+                Text(
+                    text = "Generating secure code…",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )

@@ -3,6 +3,7 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsights
 import compose.project.click.click.data.models.ReconnectHelper
@@ -10,11 +11,17 @@ import compose.project.click.click.data.models.ReconnectReminder
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.storage.createTokenStorage
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.RealtimeChannel
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 data class UserStats(
@@ -50,9 +57,13 @@ class HomeViewModel(
     
     // Track if data has been loaded already
     private var dataLoaded = false
+    
+    // Realtime channel for connections changes
+    private var connectionsChannel: RealtimeChannel? = null
 
     init {
         observeAppData()
+        subscribeToConnectionChanges()
     }
     
     /**
@@ -196,5 +207,40 @@ class HomeViewModel(
     fun refresh() {
         dataLoaded = false
         AppDataManager.refresh(force = true)
+    }
+    
+    /**
+     * Subscribe to real-time changes on the connections table.
+     * Triggers an AppDataManager refresh on any INSERT/UPDATE/DELETE so
+     * the home screen connection count stays current without manual pull-to-refresh.
+     */
+    private fun subscribeToConnectionChanges() {
+        viewModelScope.launch {
+            try {
+                val channel = SupabaseConfig.client.channel("home:connections")
+                connectionsChannel = channel
+                
+                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "connections"
+                }.onEach {
+                    // Any change to connections → refresh data
+                    AppDataManager.refresh(force = true)
+                }.launchIn(this)
+                
+                channel.subscribe()
+            } catch (e: Exception) {
+                println("HomeViewModel: Error subscribing to connections: ${e.message}")
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        connectionsChannel?.let { channel ->
+            viewModelScope.launch {
+                try { channel.unsubscribe() } catch (_: Exception) {}
+            }
+        }
+        connectionsChannel = null
     }
 }

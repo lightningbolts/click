@@ -32,11 +32,10 @@ fun PageHeader(
         // Match app cards' rounding
         shape = RoundedCornerShape(getAdaptiveCornerRadius()),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp
+        shadowElevation = 0.dp
     ) {
-        // Match app cards' padding
         Row(
-            modifier = Modifier.padding(horizontal = getAdaptivePadding(), vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = getAdaptivePadding(), vertical = 12.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
             if (navigationIcon != null) {
@@ -46,15 +45,15 @@ fun PageHeader(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 if (subtitle != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

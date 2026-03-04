@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -133,7 +134,7 @@ fun ConnectionsListView(
                         )
                     }
                     else -> {
-                        PageHeader(title = "Clicks", subtitle = "Loading...")
+                        PageHeader(title = "Clicks", subtitle = "Loading…")
                     }
                 }
             }
@@ -211,20 +212,18 @@ fun ConnectionsListView(
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            contentPadding = PaddingValues(bottom = 16.dp)
                         ) {
                             items(filteredChats, key = { it.connection.id }) { chatDetails ->
                                 ConnectionItem(
                                     chatDetails = chatDetails,
                                     onClick = { onChatSelected(chatDetails.connection.id) }
                                 )
-                                if (chatDetails != filteredChats.last()) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(start = 72.dp),
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                    )
-                                }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                )
                             }
                         }
                     }
@@ -242,92 +241,88 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
     val unreadCount = chatDetails.unreadCount
     val timeText = lastMessage?.let { formatTimestamp(it.timeCreated) } ?: "No messages"
 
-    AdaptiveCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        // Avatar
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(
+                    Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            // Avatar with brand gradient
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(RoundedCornerShape(27.dp))
-                    .background(
-                        Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
-                    )
-                    .border(
-                        width = 1.5.dp,
-                        color = PrimaryBlue.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(27.dp)
-                    ),
-                contentAlignment = Alignment.Center
+            Text(
+                user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
+                    user.name ?: "Unknown",
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    timeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-            // Content
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        user.name ?: "Unknown",
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        timeText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    lastMessage?.content ?: "Start a conversation",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        lastMessage?.content ?: "Start a conversation",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1
-                    )
-
-                    if (unreadCount > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                unreadCount.toString(),
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                if (unreadCount > 0) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(
+                                Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue)),
+                                RoundedCornerShape(10.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            unreadCount.toString(),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -374,42 +369,71 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
-                    // Header
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
-                        Box(modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp)) {
-                            PageHeader(
-                                title = "Loading...",
-                                navigationIcon = {
-                                    IconButton(onClick = onBackPressed) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "Back",
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
+                    // Compact header while loading
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBackPressed) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Loading…",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
-                    ) { CircularProgressIndicator() }
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(32.dp),
+                            strokeWidth = 2.5.dp
+                        )
+                    }
                 }
                 is ChatMessagesState.Error -> {
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
-                        Box(modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp)) {
-                            PageHeader(
-                                title = "Chat",
-                                navigationIcon = {
-                                    IconButton(onClick = onBackPressed) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "Back",
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onBackPressed) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Chat",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -420,12 +444,13 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "Error loading chat",
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 state.message,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -435,57 +460,79 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     val chatDetails = state.chatDetails
                     val messages = state.messages
 
-                    // Header
-                    AdaptiveSurface(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+                    // Header — compact single row (~56dp)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 2.dp
+                    ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Box(modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 8.dp)) {
-                                PageHeader(
-                                    title = chatDetails.otherUser.name ?: "Unknown",
-                                    subtitle = "Active in this Click",
-                                    navigationIcon = {
-                                        IconButton(onClick = onBackPressed) {
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.ArrowBack,
-                                                contentDescription = "Back",
-                                                tint = MaterialTheme.colorScheme.onSurface
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .padding(horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = onBackPressed) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                // Avatar
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                colors = listOf(PrimaryBlue, LightBlue)
                                             )
-                                        }
-                                    },
-                                    actions = {
-                                        // Avatar with brand gradient
-                                        Box(
-                                            modifier = Modifier
-                                                .size(38.dp)
-                                                .clip(RoundedCornerShape(19.dp))
-                                                .background(
-                                                    Brush.linearGradient(
-                                                        colors = listOf(PrimaryBlue, LightBlue)
-                                                    )
-                                                )
-                                                .border(
-                                                    width = 1.5.dp,
-                                                    color = PrimaryBlue.copy(alpha = 0.4f),
-                                                    shape = RoundedCornerShape(19.dp)
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelLarge
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        IconButton(onClick = { searchOpen = !searchOpen }) {
-                                            Icon(
-                                                Icons.Filled.Search,
-                                                contentDescription = "Search",
-                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                            )
-                                        }
-                                    }
-                                )
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = PrimaryBlue.copy(alpha = 0.4f),
+                                            shape = RoundedCornerShape(18.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                // Name + status
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = chatDetails.otherUser.name ?: "Unknown",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Active in this Click",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                IconButton(onClick = { searchOpen = !searchOpen }) {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = "Search",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
                             }
 
                             if (searchOpen) {
@@ -531,7 +578,21 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     }
 
                     // Messages
-                    if (messages.isEmpty()) {
+                    if (messages.isEmpty() && state.isLoadingMessages) {
+                        // Messages loading in background — show subtle spinner
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    } else if (messages.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -565,8 +626,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             items(messages, key = { it.message.id }) { messageWithUser ->
                                 ChatMessageBubble(
@@ -633,20 +694,19 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         )
                     }
 
-                    // Input bar — floats above nav bar, rises with keyboard
+                    // Input bar — sits directly above nav bar
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding()
                             .imePadding(),
                         color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
+                        tonalElevation = 1.dp,
+                        shadowElevation = 1.dp
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.Bottom
                         ) {
                             OutlinedTextField(
@@ -655,7 +715,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     viewModel.updateMessageInput(it)
                                     viewModel.onUserTyping(chatId)
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 40.dp),
                                 placeholder = {
                                     Text(
                                         "Message ${chatDetails.otherUser.name}…",
@@ -663,7 +723,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )
                                 },
-                                shape = RoundedCornerShape(24.dp),
+                                shape = RoundedCornerShape(20.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = PrimaryBlue.copy(alpha = 0.65f),
                                     unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
@@ -671,7 +731,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
                                 ),
                                 textStyle = MaterialTheme.typography.bodyMedium,
-                                maxLines = 5
+                                maxLines = 4
                             )
 
                             Spacer(modifier = Modifier.width(8.dp))
@@ -687,8 +747,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             )
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(RoundedCornerShape(23.dp))
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(18.dp))
                                     .background(sendGradient)
                                     .then(
                                         if (canSend) Modifier.clickable { viewModel.sendMessage() }
@@ -701,7 +761,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     contentDescription = "Send",
                                     tint = if (canSend) Color.White
                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -782,10 +842,10 @@ fun ChatMessageBubble(
             // ── Sent bubble: violet gradient ─────────────────────────────────
             Box(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
+                    .fillMaxWidth(0.72f)
                     .clip(sentShape)
                     .background(sentGradient)
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Column {
                     Text(
@@ -793,7 +853,7 @@ fun ChatMessageBubble(
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = formatMessageTime(message.timeCreated),
                         style = MaterialTheme.typography.labelSmall,
@@ -806,11 +866,11 @@ fun ChatMessageBubble(
             // ── Received bubble: glass-style surface ──────────────────────────
             Box(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
+                    .fillMaxWidth(0.72f)
                     .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
                     .clip(receivedShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Column {
                     Text(
@@ -818,7 +878,7 @@ fun ChatMessageBubble(
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = formatMessageTime(message.timeCreated),
                         style = MaterialTheme.typography.labelSmall,

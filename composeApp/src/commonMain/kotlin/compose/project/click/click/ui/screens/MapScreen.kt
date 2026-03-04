@@ -122,46 +122,20 @@ fun MapScreen(
                     val stats = viewModel.getMapStats()
                     when (val state = mapState) {
                         is MapState.Success -> {
-                            MapHeader(
-                                totalConnections = stats.totalConnections,
-                                liveCount = stats.liveCount,
-                                ghostMode = ghostModeEnabled
+                            PageHeader(
+                                title = if (ghostModeEnabled) "Ghost Mode" else "Memory Map",
+                                subtitle = if (ghostModeEnabled) "You are hidden"
+                                           else "${stats.totalConnections} memories • ${stats.liveCount} live",
+                                actions = if (stats.liveCount > 0 && !ghostModeEnabled) {
+                                    { LiveIndicator(count = stats.liveCount) }
+                                } else null
                             )
                         }
                         else -> {
-                            PageHeader(title = "Memory Map", subtitle = "Loading...")
+                            PageHeader(title = "Memory Map", subtitle = "Loading…")
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Tribe filter chips
-                val selectedFilter by viewModel.selectedFilter.collectAsState()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    viewModel.availableFilters.forEach { filter ->
-                        FilterChip(
-                            selected = selectedFilter == filter,
-                            onClick = { viewModel.setFilter(filter) },
-                            label = { Text(filter, style = MaterialTheme.typography.labelMedium) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryBlue.copy(alpha = 0.2f),
-                                selectedLabelColor = PrimaryBlue
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                selectedBorderColor = PrimaryBlue,
-                                enabled = true,
-                                selected = selectedFilter == filter
-                            )
-                        )
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // Map container
@@ -294,38 +268,8 @@ fun MapScreen(
     }
 }
 
-@Composable
-private fun MapHeader(
-    totalConnections: Int,
-    liveCount: Int,
-    ghostMode: Boolean
-) {
-    Column {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    if (ghostMode) "Ghost Mode" else "Memory Map",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (ghostMode) Color.Gray else MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    if (ghostMode) "You are hidden" 
-                    else "$totalConnections memories • $liveCount live",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            if (liveCount > 0 && !ghostMode) {
-                LiveIndicator(count = liveCount)
-            }
-        }
-    }
-}
+// MapHeader is now handled directly in MapScreen via PageHeader
+// Keeping LiveIndicator as a separate composable for the actions slot
 
 @Composable
 private fun LiveIndicator(count: Int) {

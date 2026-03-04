@@ -244,28 +244,50 @@ class ChatRepository(
         }
     }
 
-    // Subscribe to new messages in a chat using Supabase Realtime
-    // This remains direct to Supabase for best real-time performance
-    fun subscribeToMessages(chatId: String): Flow<Message> {
+    /**
+     * Event emitted by the realtime messages subscription.
+     */
+    sealed class MessageChangeEvent {
+        data class Insert(val message: Message) : MessageChangeEvent()
+        data class Update(val message: Message) : MessageChangeEvent()
+        data class Delete(val messageId: String) : MessageChangeEvent()
+    }
+
+    /**
+     * Subscribe to messages in a chat using Supabase Realtime.
+     * Returns a [Pair] of the [RealtimeChannel] (for cleanup) and a [Flow] of change events.
+     * The caller MUST call `channel.subscribe()` after collecting the flow, or use the
+     * convenience wrapper that does it automatically.
+     */
+    fun subscribeToMessages(chatId: String): Pair<RealtimeChannel, Flow<MessageChangeEvent>> {
         val channel = supabase.channel("messages:$chatId")
 
-        val messageFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val changeFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
-        }.map { action ->
+        }.mapNotNull { action ->
             when (action) {
                 is PostgresAction.Insert -> {
                     val row = action.decodeRecord<MessageRow>()
-                    if (row.chatId == chatId) row.toMessage() else null
+                    if (row.chatId == chatId) MessageChangeEvent.Insert(row.toMessage()) else null
                 }
                 is PostgresAction.Update -> {
                     val row = action.decodeRecord<MessageRow>()
-                    if (row.chatId == chatId) row.toMessage() else null
+                    if (row.chatId == chatId) MessageChangeEvent.Update(row.toMessage()) else null
+                }
+                is PostgresAction.Delete -> {
+                    try {
+                        // In supabase-kt v3, old record is accessed via the raw oldRecord JSON
+                        val id = action.oldRecord["id"]?.toString()?.trim('"')
+                        if (id != null) MessageChangeEvent.Delete(id) else null
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
                 else -> null
             }
-        }.mapNotNull { it }
+        }
 
-        return messageFlow
+        return channel to changeFlow
     }
 
     // Fetch a specific chat by ID via API

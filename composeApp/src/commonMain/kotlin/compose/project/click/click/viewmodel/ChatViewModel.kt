@@ -19,6 +19,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import io.github.jan.supabase.realtime.RealtimeChannel
+import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.repository.ChatRepository.MessageChangeEvent
 
 sealed class ChatListState {
     data object Loading : ChatListState()
@@ -30,7 +33,8 @@ sealed class ChatMessagesState {
     data object Loading : ChatMessagesState()
     data class Success(
         val messages: List<MessageWithUser>,
-        val chatDetails: ChatWithDetails
+        val chatDetails: ChatWithDetails,
+        val isLoadingMessages: Boolean = false
     ) : ChatMessagesState()
     data class Error(val message: String) : ChatMessagesState()
 }
@@ -82,6 +86,7 @@ class ChatViewModel(
     val showIcebreakerPanel: StateFlow<Boolean> = _showIcebreakerPanel.asStateFlow()
 
     private var currentConnectionId: String? = null
+    private var activeChannel: RealtimeChannel? = null
     private var realtimeJob: Job? = null
     private var typingPollingJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
@@ -114,11 +119,15 @@ class ChatViewModel(
         if (!isForced && _chatListState.value is ChatListState.Success) return
         
         viewModelScope.launch {
-            // Show cached data immediately if available
             val cachedConnections = AppDataManager.connections.value
             val cachedUsers = AppDataManager.connectedUsers.value
             
-            if (cachedConnections.isNotEmpty()) {
+            // Show cached data immediately if available, BUT only if we don't
+            // already have real data from the API (avoids the flash to "Start a
+            // conversation" when returning from a chat).
+            val alreadyHasRealData = _chatListState.value is ChatListState.Success
+            
+            if (cachedConnections.isNotEmpty() && !alreadyHasRealData) {
                 // Build ChatWithDetails from cached data for instant display
                 val cachedChats = cachedConnections.mapNotNull { connection ->
                     val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
@@ -132,7 +141,7 @@ class ChatViewModel(
                     )
                 }
                 _chatListState.value = ChatListState.Success(cachedChats)
-            } else if (isForced || _chatListState.value !is ChatListState.Success) {
+            } else if (!alreadyHasRealData && (isForced || _chatListState.value !is ChatListState.Success)) {
                 _chatListState.value = ChatListState.Loading
             }
             
@@ -178,11 +187,20 @@ class ChatViewModel(
         
         currentConnectionId = chatId
 
-        viewModelScope.launch {
+        // Instantly show the chat header from cached list data (no loading spinner)
+        val cachedChat = (_chatListState.value as? ChatListState.Success)
+            ?.chats?.firstOrNull { it.connection.id == chatId }
+        if (cachedChat != null) {
+            // Show header immediately with empty message list — user sees the chat "open" instantly
+            _chatMessagesState.value = ChatMessagesState.Success(emptyList(), cachedChat, isLoadingMessages = true)
+        } else {
             _chatMessagesState.value = ChatMessagesState.Loading
+        }
+
+        viewModelScope.launch {
             try {
-                // Get chat details
-                val chatDetails = chatRepository.fetchChatWithDetails(chatId, userId)
+                // Resolve chat details (use cached if available)
+                val chatDetails = cachedChat ?: chatRepository.fetchChatWithDetails(chatId, userId)
                 if (chatDetails == null) {
                     _chatMessagesState.value = ChatMessagesState.Error("Chat not found")
                     return@launch
@@ -253,33 +271,69 @@ class ChatViewModel(
     // Subscribe to real-time message updates
     private fun subscribeToNewMessages(chatId: String, userId: String) {
         realtimeJob?.cancel()
+        viewModelScope.launch {
+            // Clean up previous channel
+            activeChannel?.let {
+                try { it.unsubscribe() } catch (_: Exception) {}
+            }
+            activeChannel = null
+        }
         realtimeJob = viewModelScope.launch {
             try {
-                chatRepository.subscribeToMessages(chatId)
-                    .collect { message ->
-                        // Get user for the new message
-                        val user = chatRepository.getUserById(message.user_id)
-                        if (user != null) {
-                            val messageWithUser = MessageWithUser(
-                                message = message,
-                                user = user,
-                                isSent = message.user_id == userId
-                            )
+                val (channel, changeFlow) = chatRepository.subscribeToMessages(chatId)
+                activeChannel = channel
 
-                            // Update state with new message
-                            val currentState = _chatMessagesState.value
-                            if (currentState is ChatMessagesState.Success) {
-                                _chatMessagesState.value = currentState.copy(
-                                    messages = currentState.messages + messageWithUser
-                                )
-
-                                // Mark new message as read if it's not from current user
-                                if (!messageWithUser.isSent) {
-                                    chatRepository.markMessagesAsRead(chatId, userId)
+                // Collect change events in background
+                changeFlow
+                    .onEach { event ->
+                        when (event) {
+                            is MessageChangeEvent.Insert -> {
+                                val user = chatRepository.getUserById(event.message.user_id)
+                                if (user != null) {
+                                    val messageWithUser = MessageWithUser(
+                                        message = event.message,
+                                        user = user,
+                                        isSent = event.message.user_id == userId
+                                    )
+                                    val currentState = _chatMessagesState.value
+                                    if (currentState is ChatMessagesState.Success) {
+                                        // Avoid duplicates (sender gets own message via realtime)
+                                        val exists = currentState.messages.any { it.message.id == event.message.id }
+                                        if (!exists) {
+                                            _chatMessagesState.value = currentState.copy(
+                                                messages = currentState.messages + messageWithUser
+                                            )
+                                        }
+                                        if (!messageWithUser.isSent) {
+                                            chatRepository.markMessagesAsRead(chatId, userId)
+                                        }
+                                    }
+                                }
+                            }
+                            is MessageChangeEvent.Update -> {
+                                val currentState = _chatMessagesState.value
+                                if (currentState is ChatMessagesState.Success) {
+                                    val updatedMessages = currentState.messages.map { mwu ->
+                                        if (mwu.message.id == event.message.id) {
+                                            mwu.copy(message = event.message)
+                                        } else mwu
+                                    }
+                                    _chatMessagesState.value = currentState.copy(messages = updatedMessages)
+                                }
+                            }
+                            is MessageChangeEvent.Delete -> {
+                                val currentState = _chatMessagesState.value
+                                if (currentState is ChatMessagesState.Success) {
+                                    val filtered = currentState.messages.filter { it.message.id != event.messageId }
+                                    _chatMessagesState.value = currentState.copy(messages = filtered)
                                 }
                             }
                         }
                     }
+                    .launchIn(this)
+
+                // Actually subscribe the channel — this is the critical step
+                channel.subscribe()
             } catch (e: Exception) {
                 println("Error subscribing to messages: ${e.message}")
             }
@@ -337,6 +391,13 @@ class ChatViewModel(
         }
         realtimeJob?.cancel()
         realtimeJob = null
+        // Remove the realtime channel from Supabase
+        activeChannel?.let { channel ->
+            viewModelScope.launch {
+                try { channel.unsubscribe() } catch (_: Exception) {}
+            }
+        }
+        activeChannel = null
         typingPollingJob?.cancel()
         typingPollingJob = null
         currentConnectionId = null
@@ -599,5 +660,11 @@ class ChatViewModel(
         realtimeJob?.cancel()
         typingPollingJob?.cancel()
         vibeCheckTimerJob?.cancel()
+        activeChannel?.let { channel ->
+            viewModelScope.launch {
+                try { channel.unsubscribe() } catch (_: Exception) {}
+            }
+        }
+        activeChannel = null
     }
 }
