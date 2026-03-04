@@ -1,32 +1,23 @@
 package compose.project.click.click
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
@@ -39,14 +30,9 @@ import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.rememberNfcManager
 import org.jetbrains.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.imePadding
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -280,15 +266,36 @@ fun App() {
             // --- End onboarding gate ---
             
             var currentRoute by remember { mutableStateOf("home") }
+            var previousRoute by remember { mutableStateOf("home") }
+            // Route history stack for back navigation
+            val routeHistory = remember { mutableStateListOf("home") }
             var showNfcScreen by remember { mutableStateOf(false) }
-            var isSearchOpen by remember { mutableStateOf(false) }
-            var searchQuery by remember { mutableStateOf("") }
             var pendingChatId by remember { mutableStateOf<String?>(null) }
+
+            // Helper: navigate to a route, pushing onto history stack
+            fun navigateTo(route: String) {
+                if (route != currentRoute) {
+                    previousRoute = currentRoute
+                    routeHistory.add(currentRoute)
+                    currentRoute = route
+                }
+            }
+
+            // Helper: go back to previous route
+            fun navigateBack(): Boolean {
+                if (routeHistory.size > 1) {
+                    routeHistory.removeLastOrNull()
+                    val target = routeHistory.lastOrNull() ?: "home"
+                    previousRoute = currentRoute
+                    currentRoute = target
+                    return true
+                }
+                return false
+            }
 
             val focusManager = LocalFocusManager.current
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
-            val focusRequester = remember { FocusRequester() }
 
             // Snackbar for connection success/error feedback
             val snackbarHostState = remember { SnackbarHostState() }
@@ -304,6 +311,19 @@ fun App() {
                         connectionViewModel.resetConnectionState()
                     }
                     else -> {}
+                }
+            }
+
+            // Platform back handler — intercepts Android back gesture/button
+            compose.project.click.click.ui.components.PlatformBackHandler(
+                enabled = showMyQRCode || showQRScanner || showNfcScreen || currentRoute != "home"
+            ) {
+                when {
+                    showMyQRCode -> showMyQRCode = false
+                    showQRScanner -> showQRScanner = false
+                    showNfcScreen -> showNfcScreen = false
+                    pendingChatId != null -> pendingChatId = null // close open chat first
+                    else -> navigateBack()
                 }
             }
 
@@ -336,8 +356,7 @@ fun App() {
                                     icon = { Icon(item.icon, contentDescription = item.title) },
                                     selected = currentRoute == item.route,
                                     onClick = {
-                                        currentRoute = item.route
-                                        isSearchOpen = false
+                                        navigateTo(item.route)
                                         // Reset overlay screens so we can navigate away
                                         showMyQRCode = false
                                         showQRScanner = false
@@ -359,7 +378,7 @@ fun App() {
                             NavigationBarItem(
                                 icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                                 selected = false,
-                                onClick = { isSearchOpen = true },
+                                onClick = { navigateTo("search") },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -396,7 +415,7 @@ fun App() {
                                         showQRScanner = false
                                         if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
                                             connectWithUser(userId)
-                                            currentRoute = NavigationItem.Connections.route
+                                            navigateTo(NavigationItem.Connections.route)
                                         }
                                     },
                                     onQRCodeScannedWithToken = { userId, tokenAgeMs ->
@@ -404,7 +423,7 @@ fun App() {
                                         showQRScanner = false
                                         if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
                                             connectWithUser(userId, tokenAgeMs)
-                                            currentRoute = NavigationItem.Connections.route
+                                            navigateTo(NavigationItem.Connections.route)
                                         }
                                     },
                                     onNavigateBack = { showQRScanner = false }
@@ -429,23 +448,46 @@ fun App() {
                                     onConnectionCreated = { connectionId ->
                                         // Navigate to connections and show the new connection
                                         showNfcScreen = false
-                                        currentRoute = NavigationItem.Connections.route
+                                        navigateTo(NavigationItem.Connections.route)
                                     },
                                     onBackPressed = {
                                         showNfcScreen = false
                                     }
                                 )
                             }
+                            currentRoute == "search" -> {
+                                // Global search — full screen, no nav bar
+                                val userId = when (val state = authViewModel.authState) {
+                                    is AuthState.Success -> state.userId
+                                    else -> ""
+                                }
+                                GlobalSearchScreen(
+                                    userId = userId,
+                                    onNavigateToChat = { connectionId ->
+                                        pendingChatId = connectionId
+                                        navigateTo(NavigationItem.Connections.route)
+                                    },
+                                    onNavigateToMap = {
+                                        navigateTo(NavigationItem.Map.route)
+                                    },
+                                    onBack = { navigateBack() }
+                                )
+                            }
                             else -> {
                                 when (currentRoute) {
-                                    NavigationItem.Home.route -> HomeScreen()
+                                    NavigationItem.Home.route -> HomeScreen(
+                                        onNavigateToChat = { connectionId ->
+                                            pendingChatId = connectionId
+                                            navigateTo(NavigationItem.Connections.route)
+                                        }
+                                    )
                                     NavigationItem.AddClick.route -> AddClickScreen(
                                         currentUserId = currentUser.id,
                                         currentUsername = currentUser.name,
                                         onNavigateToNfc = { showNfcScreen = true },
                                         onShowMyQRCode = { showMyQRCode = true },
                                         onScanQRCode = { showQRScanner = true },
-                                        onStartChatting = { currentRoute = NavigationItem.Connections.route }
+                                        onStartChatting = { navigateTo(NavigationItem.Connections.route) }
                                     )
                                     NavigationItem.Connections.route -> {
                                         // Get userId from AuthState - use a placeholder for now
@@ -456,7 +498,7 @@ fun App() {
                                         if (userId.isNotEmpty()) {
                                             ConnectionsScreen(
                                                 userId = userId,
-                                                searchQuery = searchQuery,
+                                                searchQuery = "",
                                                 initialChatId = pendingChatId,
                                                 onChatDismissed = { pendingChatId = null },
                                                 viewModel = chatViewModel
@@ -475,7 +517,7 @@ fun App() {
                                         viewModel = mapViewModel,
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
-                                            currentRoute = NavigationItem.Connections.route
+                                            navigateTo(NavigationItem.Connections.route)
                                         }
                                     )
                                     NavigationItem.Settings.route -> SettingsScreen(
@@ -489,87 +531,8 @@ fun App() {
                     }
                 }
             }
-            
-            // Search bar overlay - positioned at true screen bottom, outside Scaffold padding
-            AnimatedVisibility(
-                visible = isSearchOpen,
-                enter = fadeIn(animationSpec = tween(200)) + 
-                        slideInVertically(
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            ),
-                            initialOffsetY = { it }
-                        ),
-                exit = fadeOut(animationSpec = tween(150)) + 
-                       slideOutVertically(
-                           animationSpec = tween(200),
-                           targetOffsetY = { it }
-                       ),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .imePadding() // Move up when keyboard appears - now works relative to true screen bottom
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .fillMaxWidth()
-            ) {
-                Surface(
-                    modifier = Modifier.border(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    ),
-                    tonalElevation = 0.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    color = GlassDark
-                ) {
-                    TextField(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp) // Fixed height to prevent shrinking
-                            .focusRequester(focusRequester),
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        singleLine = true,
-                        placeholder = { Text("Search") },
-                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                        trailingIcon = {
-                            IconButton(onClick = {
-                                isSearchOpen = false
-                                searchQuery = ""
-                                focusManager.clearFocus()
-                            }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Close search")
-                            }
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            cursorColor = MaterialTheme.colorScheme.primary,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                focusManager.clearFocus()
-                                isSearchOpen = false
-                            }
-                        )
-                    )
-                }
-            }
             } // End of Scaffold wrapper Box
 
-            LaunchedEffect(isSearchOpen) {
-                if (isSearchOpen) {
-                    focusRequester.requestFocus()
-                }
-            }
             } // End of onboarding gate
         }
         } // End of Global Background Box

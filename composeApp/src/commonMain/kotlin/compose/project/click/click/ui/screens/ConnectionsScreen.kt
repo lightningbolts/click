@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
@@ -29,6 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
@@ -111,7 +115,23 @@ fun ConnectionsListView(
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val nudgeResult by viewModel.nudgeResult.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
+    // Connection menu state: holds the chatWithDetails for which the menu is open
+    var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
+
+    // Show nudge feedback
+    LaunchedEffect(nudgeResult) {
+        val result = nudgeResult
+        if (result != null) {
+            snackbarHostState.showSnackbar(result)
+            viewModel.clearNudgeResult()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
@@ -217,7 +237,14 @@ fun ConnectionsListView(
                             items(filteredChats, key = { it.connection.id }) { chatDetails ->
                                 ConnectionItem(
                                     chatDetails = chatDetails,
-                                    onClick = { onChatSelected(chatDetails.connection.id) }
+                                    onClick = { onChatSelected(chatDetails.connection.id) },
+                                    onNudge = {
+                                        val chatId = chatDetails.chat.id
+                                        if (chatId != null) {
+                                            viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
+                                        }
+                                    },
+                                    onOpenMenu = { pendingMenuChat = chatDetails }
                                 )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(start = 68.dp, end = 16.dp),
@@ -231,11 +258,59 @@ fun ConnectionsListView(
             }
         }
     }
+
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 16.dp)
+    )
+
+    // Connection action sheet
+    if (pendingMenuChat != null) {
+        ConnectionActionSheet(
+            chatDetails = pendingMenuChat!!,
+            onDismiss = { pendingMenuChat = null },
+            onNudge = {
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                val chatId = selected.chat.id
+                if (chatId != null) {
+                    viewModel.sendNudgeToChat(chatId, selected.otherUser.name ?: "them")
+                }
+            },
+            onOpenChat = {
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                onChatSelected(selected.connection.id)
+            },
+            onArchive = {
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.archiveConnectionById(selected.connection.id)
+            },
+            onDelete = {
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.deleteConnectionPermanentlyById(selected.connection.id)
+            },
+            onReport = { reason ->
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.reportConnectionForConnection(selected.connection.id, reason)
+            },
+            onBlock = {
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.blockUserForConnection(selected.connection.id)
+            }
+        )
+    }
+    } // End outer Box
 }
 
 
 @Composable
-fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
+fun ConnectionItem(
+    chatDetails: ChatWithDetails,
+    onClick: () -> Unit,
+    onNudge: () -> Unit = {},
+    onOpenMenu: () -> Unit = {}
+) {
     val user = chatDetails.otherUser
     val lastMessage = chatDetails.lastMessage
     val unreadCount = chatDetails.unreadCount
@@ -245,7 +320,7 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Avatar
@@ -327,6 +402,32 @@ fun ConnectionItem(chatDetails: ChatWithDetails, onClick: () -> Unit) {
                 }
             }
         }
+
+        // Nudge button
+        IconButton(
+            onClick = onNudge,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = "Nudge",
+                modifier = Modifier.size(18.dp),
+                tint = PrimaryBlue.copy(alpha = 0.7f)
+            )
+        }
+
+        // Overflow menu
+        IconButton(
+            onClick = onOpenMenu,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = "More options",
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -338,7 +439,9 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val messageInput by viewModel.messageInput.collectAsState()
     val typingUsers by viewModel.typingUsers.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
-    
+    val editingMessageId by viewModel.editingMessageId.collectAsState()
+    val nudgeResult by viewModel.nudgeResult.collectAsState()
+
     // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
     val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
@@ -346,9 +449,21 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    var searchOpen by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    // Connection action sheet (archive, delete, report, block)
+    var showConnectionSheet by remember { mutableStateOf(false) }
+    // Message context sheet (reactions, edit, delete, copy)
+    var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show nudge snackbar
+    LaunchedEffect(nudgeResult) {
+        val r = nudgeResult
+        if (r != null) {
+            coroutineScope.launch { snackbarHostState.showSnackbar(r) }
+            viewModel.clearNudgeResult()
+        }
+    }
 
     // Start typing monitoring for this chat
     LaunchedEffect(chatId) {
@@ -365,6 +480,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
@@ -526,42 +642,21 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     )
                                 }
 
-                                IconButton(onClick = { searchOpen = !searchOpen }) {
+                                // Nudge button
+                                IconButton(onClick = { viewModel.sendNudge() }) {
                                     Icon(
-                                        Icons.Filled.Search,
-                                        contentDescription = "Search",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        Icons.Filled.Notifications,
+                                        contentDescription = "Nudge",
+                                        tint = PrimaryBlue.copy(alpha = 0.85f)
                                     )
                                 }
-                            }
-
-                            if (searchOpen) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    OutlinedTextField(
-                                        value = searchQuery,
-                                        onValueChange = { searchQuery = it },
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true,
-                                        placeholder = { Text("Search messages") }
+                                // Overflow / connection options
+                                IconButton(onClick = { showConnectionSheet = true }) {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        contentDescription = "More options",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                     )
-                                    Spacer(Modifier.width(8.dp))
-                                    TextButton(onClick = {
-                                        if (searchQuery.isNotBlank()) {
-                                            viewModel.searchMessages(chatId, searchQuery)
-                                        }
-                                    }) { Text("Go") }
-                                    Spacer(Modifier.width(4.dp))
-                                    TextButton(onClick = {
-                                        searchOpen = false
-                                        searchQuery = ""
-                                        // reload chat messages
-                                        viewModel.loadChatMessages(chatId)
-                                    }) { Text("Clear") }
                                 }
                             }
                         }
@@ -630,16 +725,19 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             items(messages, key = { it.message.id }) { messageWithUser ->
+                                val reactionsMap = viewModel.messageReactions.collectAsState().value
+                                val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
                                 ChatMessageBubble(
                                     messageWithUser = messageWithUser,
                                     currentUserId = viewModel.currentUserId.collectAsState().value,
+                                    reactions = msgReactions,
                                     onToggleReaction = { reaction ->
-                                        // TODO: Re-implement reactions with separate table
-                                        // Reactions removed temporarily since Message model was updated
+                                        viewModel.toggleReaction(messageWithUser.message.id, reaction)
                                     },
                                     onForward = { msgId ->
                                         forwardMessageId = msgId
-                                    }
+                                    },
+                                    onLongPress = { contextMenuMessage = messageWithUser }
                                 )
                             }
                         }
@@ -694,6 +792,46 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         )
                     }
 
+                    // Edit mode indicator strip
+                    if (editingMessageId != null) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = PrimaryBlue.copy(alpha = 0.12f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = PrimaryBlue
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Editing message",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = PrimaryBlue
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick = { viewModel.cancelEditMessage() },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Cancel edit",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = PrimaryBlue
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Input bar — sits directly above nav bar
                     Surface(
                         modifier = Modifier
@@ -706,7 +844,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.Bottom
                         ) {
                             OutlinedTextField(
@@ -718,7 +856,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 modifier = Modifier.weight(1f).defaultMinSize(minHeight = 40.dp),
                                 placeholder = {
                                     Text(
-                                        "Message ${chatDetails.otherUser.name}…",
+                                        if (editingMessageId != null) "Edit message…"
+                                        else "Message ${chatDetails.otherUser.name}…",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )
@@ -736,7 +875,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            // Gradient send button
+                            // Squircle send / confirm-edit button
                             val canSend = messageInput.trim().isNotEmpty()
                             val sendGradient = Brush.linearGradient(
                                 colors = if (canSend) listOf(PrimaryBlue, LightBlue)
@@ -747,8 +886,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             )
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(18.dp))
+                                    .size(44.dp)        // matches typical min input height
+                                    .clip(RoundedCornerShape(12.dp))  // squircle — not a full circle
                                     .background(sendGradient)
                                     .then(
                                         if (canSend) Modifier.clickable { viewModel.sendMessage() }
@@ -757,11 +896,12 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
+                                    if (editingMessageId != null) Icons.Filled.Check
+                                    else Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
                                     tint = if (canSend) Color.White
                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -770,6 +910,49 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
             }
         }
     }
+
+    // Snackbar overlay
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 80.dp) // above input bar
+    )
+
+    // Message long-press context sheet
+    if (contextMenuMessage != null) {
+        MessageActionSheet(
+            messageWithUser = contextMenuMessage!!,
+            viewModel = viewModel,
+            onDismiss = { contextMenuMessage = null }
+        )
+    }
+
+    // Connection action sheet
+    if (showConnectionSheet) {
+        val successState = chatMessagesState as? ChatMessagesState.Success
+        ConnectionActionSheet(
+            chatDetails = successState?.chatDetails,
+            onDismiss = { showConnectionSheet = false },
+            onNudge = {
+                viewModel.sendNudge()
+            },
+            onOpenChat = { },
+            onArchive = {
+                viewModel.archiveConnection { onBackPressed() }
+            },
+            onDelete = {
+                viewModel.deleteConnectionPermanently { onBackPressed() }
+            },
+            onReport = { reason ->
+                viewModel.reportConnection(reason) { }
+            },
+            onBlock = {
+                viewModel.blockUser { onBackPressed() }
+            }
+        )
+    }
+    } // End outer Box
 }
 
 @Composable
@@ -819,8 +1002,10 @@ private fun ForwardDialog(
 fun ChatMessageBubble(
     messageWithUser: MessageWithUser,
     currentUserId: String?,
-    onToggleReaction: (String) -> Unit,
-    onForward: (String) -> Unit
+    reactions: List<compose.project.click.click.data.models.MessageReaction> = emptyList(),
+    onToggleReaction: (String) -> Unit = {},
+    onForward: (String) -> Unit,
+    onLongPress: (MessageWithUser) -> Unit = {}
 ) {
     val message = messageWithUser.message
     val isSent = messageWithUser.isSent
@@ -832,62 +1017,661 @@ fun ChatMessageBubble(
     val sentShape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 5.dp)
     val receivedShape = RoundedCornerShape(topStart = 5.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 6.dp),
-        horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
+    // Group reactions by type: emoji → count
+    val reactionGroups = reactions.groupBy { it.reactionType }
+        .mapValues { (_, list) -> list.size }
+        .entries
+        .sortedByDescending { it.value }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
     ) {
-        if (isSent) {
-            // ── Sent bubble: violet gradient ─────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .widthIn(max = 280.dp)
-                    .clip(sentShape)
-                    .background(sentGradient)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Column {
-                    Text(
-                        text = message.content,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatMessageTime(message.timeCreated),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.65f),
-                        modifier = Modifier.align(Alignment.End)
-                    )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp),
+            horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
+        ) {
+            if (isSent) {
+                // ── Sent bubble: violet gradient ─────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .clip(sentShape)
+                        .background(sentGradient)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { onLongPress(messageWithUser) }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = message.content,
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        // "(edited)" label for edited messages
+                        if (message.timeEdited != null) {
+                            Text(
+                                text = "(edited)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = formatMessageTime(message.timeCreated),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.65f),
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
                 }
-            }
-        } else {
-            // ── Received bubble: glass-style surface ──────────────────────────
-            Box(
-                modifier = Modifier
-                    .widthIn(max = 280.dp)
-                    .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
-                    .clip(receivedShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Column {
-                    Text(
-                        text = message.content,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatMessageTime(message.timeCreated),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.End)
-                    )
+            } else {
+                // ── Received bubble: glass-style surface ──────────────────────────
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
+                        .clip(receivedShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { onLongPress(messageWithUser) }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = message.content,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        // "(edited)" label for edited messages
+                        if (message.timeEdited != null) {
+                            Text(
+                                text = "(edited)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = formatMessageTime(message.timeCreated),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
                 }
             }
         }
+
+        // ── Reaction chips row below the bubble ────────────────────────────────
+        if (reactionGroups.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                reactionGroups.forEach { (emoji, count) ->
+                    val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isOwnReaction) PrimaryBlue.copy(alpha = 0.25f)
+                                else Color.White.copy(alpha = 0.08f)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isOwnReaction) PrimaryBlue.copy(alpha = 0.5f)
+                                else Color.White.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { onToggleReaction(emoji) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (count > 1) "$emoji $count" else emoji,
+                            fontSize = 13.sp,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Bottom sheet that appears when a user long-presses a message.
+ * Shows emoji reactions strip + contextual actions (copy, edit, delete).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MessageActionSheet(
+    messageWithUser: MessageWithUser,
+    viewModel: ChatViewModel,
+    onDismiss: () -> Unit
+) {
+    val isSent = messageWithUser.isSent
+    val message = messageWithUser.message
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
+    var showDeleteMessageConfirm by remember { mutableStateOf(false) }
+    var showDeleteMessageFinalConfirm by remember { mutableStateOf(false) }
+
+    fun dismiss() {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = SurfaceDark,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            // ── Emoji reaction strip ──────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                val emojis = listOf("👍", "❤️", "😂", "😮", "😢", "😡")
+                emojis.forEach { emoji ->
+                    Text(
+                        text = emoji,
+                        fontSize = 28.sp,
+                        modifier = Modifier
+                            .clickable {
+                                viewModel.addReaction(message.id, emoji)
+                                dismiss()
+                            }
+                            .padding(8.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+            // ── Copy action ───────────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Copy", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                },
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                },
+                modifier = Modifier.clickable {
+                    clipboardManager.setText(AnnotatedString(message.content))
+                    dismiss()
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            // ── Edit action (sent messages only) ──────────────────────────────
+            if (isSent) {
+                ListItem(
+                    headlineContent = {
+                        Text("Edit", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit message",
+                            tint = LightBlue
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        viewModel.startEditMessage(message.id, message.content)
+                        dismiss()
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                // ── Delete action (sent messages only) ────────────────────────
+                ListItem(
+                    headlineContent = {
+                        Text("Delete", color = Color(0xFFFF4444), style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete message",
+                            tint = Color(0xFFFF4444)
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showDeleteMessageConfirm = true
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
+        }
+    }
+
+    // ── Delete message confirmation dialog ──────────────────────────────────
+    if (showDeleteMessageConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteMessageConfirm = false },
+            title = { Text("Delete Message?", color = Color.White) },
+            text = {
+                Text(
+                    "This message will be permanently deleted. This cannot be undone.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteMessageConfirm = false
+                    showDeleteMessageFinalConfirm = true
+                }) {
+                    Text("Delete", color = Color(0xFFFF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessageConfirm = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
+    }
+
+    // ── Final delete confirmation dialog ───────────────────────────────────
+    if (showDeleteMessageFinalConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteMessageFinalConfirm = false },
+            title = { Text("Delete Message Permanently?", color = Color.White) },
+            text = {
+                Text(
+                    "This action is permanent and cannot be undone.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMessage(message.id)
+                    showDeleteMessageFinalConfirm = false
+                    dismiss()
+                }) {
+                    Text("Yes, Delete", color = Color(0xFFFF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessageFinalConfirm = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
+    }
+}
+
+/**
+ * Bottom sheet for connection-level actions (nudge, archive, remove, report, block).
+ * Used both from the Connections list overflow menu and from within an open chat.
+ * All actions are full callbacks so this composable stays ViewModel-agnostic.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConnectionActionSheet(
+    chatDetails: ChatWithDetails?,
+    onDismiss: () -> Unit,
+    onNudge: () -> Unit = {},
+    onOpenChat: () -> Unit = {},
+    onArchive: () -> Unit = {},
+    onDelete: () -> Unit = {},
+    onReport: (String) -> Unit = {},
+    onBlock: () -> Unit = {}
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showBlockConfirm by remember { mutableStateOf(false) }
+    var showArchiveConfirm by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportReason by remember { mutableStateOf("") }
+    var showFinalConfirm by remember { mutableStateOf(false) }
+    var finalConfirmTitle by remember { mutableStateOf("") }
+    var finalConfirmBody by remember { mutableStateOf("") }
+    var finalConfirmButtonLabel by remember { mutableStateOf("") }
+    var finalConfirmButtonColor by remember { mutableStateOf(Color.White) }
+    var finalConfirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun dismiss() {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
+
+    fun openFinalConfirm(
+        title: String,
+        body: String,
+        buttonLabel: String,
+        buttonColor: Color,
+        action: () -> Unit
+    ) {
+        finalConfirmTitle = title
+        finalConfirmBody = body
+        finalConfirmButtonLabel = buttonLabel
+        finalConfirmButtonColor = buttonColor
+        finalConfirmAction = action
+        showFinalConfirm = true
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = SurfaceDark,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            // Connection name header
+            chatDetails?.let { details ->
+                Text(
+                    text = details.otherUser.name ?: "Connection",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .align(Alignment.CenterHorizontally)
+                )
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            }
+
+            // ── Nudge ──────────────────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Nudge 👋", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                },
+                supportingContent = {
+                    Text("Send a quick ping", color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall)
+                },
+                modifier = Modifier.clickable {
+                    onNudge()
+                    dismiss()
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            // ── Archive ────────────────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Archive", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                },
+                supportingContent = {
+                    Text("Hide this connection (recoverable)", color = Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall)
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Archive, contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f))
+                },
+                modifier = Modifier.clickable {
+                    showArchiveConfirm = true
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+            // ── Remove Connection ──────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Remove Connection", color = Color(0xFFFF4444),
+                        style = MaterialTheme.typography.bodyLarge)
+                },
+                leadingContent = {
+                    Icon(Icons.Default.PersonRemove, contentDescription = null,
+                        tint = Color(0xFFFF4444))
+                },
+                modifier = Modifier.clickable { showDeleteConfirm = true },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            // ── Report ─────────────────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Report", color = Color(0xFFFF8C00),
+                        style = MaterialTheme.typography.bodyLarge)
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Flag, contentDescription = null,
+                        tint = Color(0xFFFF8C00))
+                },
+                modifier = Modifier.clickable { showReportDialog = true },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            // ── Block ──────────────────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Block", color = Color(0xFFFF4444),
+                        style = MaterialTheme.typography.bodyLarge)
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Block, contentDescription = null,
+                        tint = Color(0xFFFF4444))
+                },
+                modifier = Modifier.clickable {
+                    showBlockConfirm = true
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+        }
+    }
+
+    // ── Archive confirmation dialog ────────────────────────────────────────────
+    if (showArchiveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showArchiveConfirm = false },
+            title = { Text("Archive Connection?", color = Color.White) },
+            text = {
+                Text(
+                    "This connection will be hidden from your list. You can recover it later.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showArchiveConfirm = false
+                    openFinalConfirm(
+                        title = "Confirm Archive",
+                        body = "Archive this connection now? You can unarchive it later.",
+                        buttonLabel = "Yes, Archive",
+                        buttonColor = PrimaryBlue
+                    ) {
+                        onArchive()
+                    }
+                }) {
+                    Text("Archive", color = PrimaryBlue)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showArchiveConfirm = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
+    }
+
+    // ── Block confirmation dialog ──────────────────────────────────────────────
+    if (showBlockConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBlockConfirm = false },
+            title = { Text("Block User?", color = Color.White) },
+            text = {
+                Text(
+                    "They won't be able to contact you and this connection will be removed. This cannot be undone.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBlockConfirm = false
+                    openFinalConfirm(
+                        title = "Confirm Block",
+                        body = "Block this user and remove this connection? This cannot be undone.",
+                        buttonLabel = "Yes, Block",
+                        buttonColor = Color(0xFFFF4444)
+                    ) {
+                        onBlock()
+                    }
+                }) {
+                    Text("Block", color = Color(0xFFFF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockConfirm = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
+    }
+
+    // ── Delete confirmation dialog ─────────────────────────────────────────────
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Remove Connection?", color = Color.White) },
+            text = {
+                Text(
+                    "This will permanently remove this connection and all messages. This cannot be undone.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    openFinalConfirm(
+                        title = "Confirm Remove",
+                        body = "Permanently remove this connection and all messages? This cannot be undone.",
+                        buttonLabel = "Yes, Remove",
+                        buttonColor = Color(0xFFFF4444)
+                    ) {
+                        onDelete()
+                    }
+                }) {
+                    Text("Remove", color = Color(0xFFFF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
+    }
+
+    // ── Report reason dialog ───────────────────────────────────────────────────
+    if (showReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = { Text("Report User", color = Color.White) },
+            text = {
+                Column {
+                    Text(
+                        "Please describe the issue:",
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    OutlinedTextField(
+                        value = reportReason,
+                        onValueChange = { reportReason = it },
+                        placeholder = { Text("Reason for report...", color = Color.White.copy(alpha = 0.4f)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (reportReason.isNotBlank()) {
+                        showReportDialog = false
+                        val reasonToSubmit = reportReason.trim()
+                        openFinalConfirm(
+                            title = "Confirm Report",
+                            body = "Submit this report for review?",
+                            buttonLabel = "Yes, Report",
+                            buttonColor = Color(0xFFFF8C00)
+                        ) {
+                            onReport(reasonToSubmit)
+                        }
+                    }
+                }) {
+                    Text("Submit", color = Color(0xFFFF8C00))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReportDialog = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
+    }
+
+    // ── Final destructive-action confirmation dialog ────────────────────────
+    if (showFinalConfirm) {
+        AlertDialog(
+            onDismissRequest = {
+                showFinalConfirm = false
+                finalConfirmAction = null
+            },
+            title = { Text(finalConfirmTitle, color = Color.White) },
+            text = {
+                Text(
+                    finalConfirmBody,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    finalConfirmAction?.invoke()
+                    showFinalConfirm = false
+                    finalConfirmAction = null
+                    dismiss()
+                }) {
+                    Text(finalConfirmButtonLabel, color = finalConfirmButtonColor)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showFinalConfirm = false
+                    finalConfirmAction = null
+                }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
     }
 }
 

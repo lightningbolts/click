@@ -409,18 +409,131 @@ class ChatRepository(
         }
     }
 
-    suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
-        return try {
-            val authToken = tokenStorage.getJwt() ?: return false
-            apiClient.addReaction(messageId, userId, reactionType, authToken).isSuccess
-        } catch (e: Exception) { println("Error adding reaction: ${e.message}"); false }
+    // ── Reaction CRUD via direct Supabase (bypasses Python API) ──────────────
+
+    @Serializable
+    private data class ReactionRow(
+        val id: String = "",
+        @SerialName("message_id")
+        val messageId: String,
+        @SerialName("user_id")
+        val userId: String,
+        @SerialName("reaction_type")
+        val reactionType: String,
+        @SerialName("created_at")
+        val createdAt: Long
+    ) {
+        fun toMessageReaction(): MessageReaction = MessageReaction(
+            id = id,
+            messageId = messageId,
+            userId = userId,
+            reactionType = reactionType,
+            createdAt = createdAt
+        )
     }
 
+    /** Fetch all reactions for messages in a given chat. */
+    suspend fun fetchReactionsForChat(chatId: String): List<MessageReaction> {
+        return try {
+            // Get all message IDs for this chat first
+            val messageIds = supabase.from("messages")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                    filter { eq("chat_id", chatId) }
+                }
+                .decodeList<MessageIdOnly>()
+                .map { it.id }
+
+            if (messageIds.isEmpty()) return emptyList()
+
+            supabase.from("message_reactions")
+                .select {
+                    filter { isIn("message_id", messageIds) }
+                }
+                .decodeList<ReactionRow>()
+                .map { it.toMessageReaction() }
+        } catch (e: Exception) {
+            println("Error fetching reactions: ${e.message}")
+            emptyList()
+        }
+    }
+
+    @Serializable
+    private data class MessageIdOnly(val id: String)
+
+    /** Add a reaction. Uses upsert with the unique constraint to avoid duplicates. */
+    suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
+        return try {
+            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            supabase.from("message_reactions")
+                .insert(
+                    buildJsonObject {
+                        put("message_id", messageId)
+                        put("user_id", userId)
+                        put("reaction_type", reactionType)
+                        put("created_at", now)
+                    }
+                )
+            true
+        } catch (e: Exception) {
+            println("Error adding reaction: ${e.message}")
+            false
+        }
+    }
+
+    /** Remove a reaction by matching message_id, user_id, reaction_type. */
     suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return false
-            apiClient.removeReaction(messageId, userId, reactionType, authToken).getOrElse { false }
-        } catch (e: Exception) { println("Error removing reaction: ${e.message}"); false }
+            supabase.from("message_reactions")
+                .delete {
+                    filter {
+                        eq("message_id", messageId)
+                        eq("user_id", userId)
+                        eq("reaction_type", reactionType)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error removing reaction: ${e.message}")
+            false
+        }
+    }
+
+    // ── Realtime subscription for reactions ────────────────────────────────────
+
+    sealed class ReactionChangeEvent {
+        data class Insert(val reaction: MessageReaction) : ReactionChangeEvent()
+        data class Delete(val reactionId: String, val messageId: String) : ReactionChangeEvent()
+    }
+
+    /**
+     * Subscribe to reaction changes via Supabase Realtime.
+     * Returns a [Pair] of the channel (for cleanup) and a [Flow] of change events.
+     */
+    fun subscribeToReactions(chatId: String): Pair<RealtimeChannel, Flow<ReactionChangeEvent>> {
+        val channel = supabase.channel("reactions:$chatId")
+
+        val changeFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "message_reactions"
+        }.mapNotNull { action ->
+            when (action) {
+                is PostgresAction.Insert -> {
+                    try {
+                        val row = action.decodeRecord<ReactionRow>()
+                        ReactionChangeEvent.Insert(row.toMessageReaction())
+                    } catch (_: Exception) { null }
+                }
+                is PostgresAction.Delete -> {
+                    try {
+                        val id = action.oldRecord["id"]?.toString()?.trim('"')
+                        val msgId = action.oldRecord["message_id"]?.toString()?.trim('"')
+                        if (id != null && msgId != null) ReactionChangeEvent.Delete(id, msgId) else null
+                    } catch (_: Exception) { null }
+                }
+                else -> null
+            }
+        }
+
+        return channel to changeFlow
     }
 
     private val typingChannels = mutableMapOf<String, RealtimeChannel>()
@@ -480,9 +593,21 @@ class ChatRepository(
     }
 
     suspend fun searchMessages(chatId: String, query: String): List<Message> {
+        // Use direct Supabase query with ilike for reliable search (bypasses Python API)
         return try {
-            val authToken = tokenStorage.getJwt() ?: return emptyList()
-            apiClient.searchMessages(chatId, query, authToken).getOrElse { emptyList() }
-        } catch (e: Exception) { println("Error searching messages: ${e.message}"); emptyList() }
+            supabase.from("messages")
+                .select {
+                    filter {
+                        eq("chat_id", chatId)
+                        ilike("content", "%$query%")
+                    }
+                    order("time_created", Order.DESCENDING)
+                    limit(50)
+                }
+                .decodeList<Message>()
+        } catch (e: Exception) {
+            println("Error searching messages: ${e.message}")
+            emptyList()
+        }
     }
 }

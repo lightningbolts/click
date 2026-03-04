@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.IcebreakerPrompt
 import compose.project.click.click.data.models.IcebreakerRepository
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -22,6 +23,7 @@ import kotlinx.datetime.Clock
 import io.github.jan.supabase.realtime.RealtimeChannel
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.repository.ChatRepository.MessageChangeEvent
+import compose.project.click.click.data.repository.ChatRepository.ReactionChangeEvent
 
 sealed class ChatListState {
     data object Loading : ChatListState()
@@ -85,8 +87,27 @@ class ChatViewModel(
     private val _showIcebreakerPanel = MutableStateFlow(true)
     val showIcebreakerPanel: StateFlow<Boolean> = _showIcebreakerPanel.asStateFlow()
 
+    // ── Nudge result feedback ──────────────────────────────────────────────────
+    private val _nudgeResult = MutableStateFlow<String?>(null)
+    val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
+
+    // ── Message editing state ─────────────────────────────────────────────────
+    // Non-null when the user is editing an existing message
+    private val _editingMessageId = MutableStateFlow<String?>(null)
+    val editingMessageId: StateFlow<String?> = _editingMessageId.asStateFlow()
+
+    // ── Archived connection IDs (in-memory; persisted per-session) ─────────────
+    private val _archivedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val archivedConnectionIds: StateFlow<Set<String>> = _archivedConnectionIds.asStateFlow()
+
+    // ── Reactions state: messageId → list of reactions ─────────────────────────
+    private val _messageReactions = MutableStateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>>(emptyMap())
+    val messageReactions: StateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>> = _messageReactions.asStateFlow()
+
     private var currentConnectionId: String? = null
     private var activeChannel: RealtimeChannel? = null
+    private var reactionsChannel: RealtimeChannel? = null
+    private var reactionsJob: Job? = null
     private var realtimeJob: Job? = null
     private var typingPollingJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
@@ -236,6 +257,9 @@ class ChatViewModel(
 
                 // Subscribe to new messages
                 subscribeToNewMessages(apiChatId, userId)
+
+                // Load initial reactions & subscribe to changes via Realtime
+                loadAndSubscribeReactions(apiChatId)
                 
                 // Monitor typing status
                 startTypingMonitoring(apiChatId)
@@ -341,6 +365,12 @@ class ChatViewModel(
     }
 
     fun sendMessage() {
+        // If in edit mode, confirm the edit instead of posting a new message
+        val editId = _editingMessageId.value
+        if (editId != null) {
+            confirmEditMessage(editId)
+            return
+        }
         val connectionId = currentConnectionId ?: return
         val apiChatId = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id ?: return
         val userId = _currentUserId.value ?: return
@@ -391,13 +421,22 @@ class ChatViewModel(
         }
         realtimeJob?.cancel()
         realtimeJob = null
-        // Remove the realtime channel from Supabase
+        // Remove the realtime channels from Supabase
         activeChannel?.let { channel ->
             viewModelScope.launch {
                 try { channel.unsubscribe() } catch (_: Exception) {}
             }
         }
         activeChannel = null
+        reactionsJob?.cancel()
+        reactionsJob = null
+        reactionsChannel?.let { channel ->
+            viewModelScope.launch {
+                try { channel.unsubscribe() } catch (_: Exception) {}
+            }
+        }
+        reactionsChannel = null
+        _messageReactions.value = emptyMap()
         typingPollingJob?.cancel()
         typingPollingJob = null
         currentConnectionId = null
@@ -446,11 +485,91 @@ class ChatViewModel(
         viewModelScope.launch { chatRepository.sendTypingStatus(chatId, userId, false) }
     }
 
-    fun addReaction(messageId: String, reactionType: String) {
-        val userId = _currentUserId.value ?: return
-        viewModelScope.launch {
-            chatRepository.addReaction(messageId, userId, reactionType)
+    // ── Reactions ──────────────────────────────────────────────────────────────
+
+    /** Load existing reactions from DB, then subscribe to Realtime changes. */
+    private fun loadAndSubscribeReactions(chatId: String) {
+        reactionsJob?.cancel()
+        reactionsChannel?.let { ch ->
+            viewModelScope.launch { try { ch.unsubscribe() } catch (_: Exception) {} }
         }
+        reactionsChannel = null
+
+        reactionsJob = viewModelScope.launch {
+            // 1. Fetch existing reactions
+            val initial = chatRepository.fetchReactionsForChat(chatId)
+            _messageReactions.value = initial.groupBy { it.messageId }
+
+            // 2. Subscribe to Realtime inserts/deletes
+            try {
+                val (channel, changeFlow) = chatRepository.subscribeToReactions(chatId)
+                reactionsChannel = channel
+
+                changeFlow
+                    .onEach { event ->
+                        val current = _messageReactions.value.toMutableMap()
+                        when (event) {
+                            is ReactionChangeEvent.Insert -> {
+                                val list = current.getOrElse(event.reaction.messageId) { emptyList() }
+                                // Deduplicate
+                                if (list.none { it.id == event.reaction.id }) {
+                                    current[event.reaction.messageId] = list + event.reaction
+                                    _messageReactions.value = current
+                                }
+                            }
+                            is ReactionChangeEvent.Delete -> {
+                                val list = current[event.messageId]
+                                if (list != null) {
+                                    current[event.messageId] = list.filter { it.id != event.reactionId }
+                                    _messageReactions.value = current
+                                }
+                            }
+                        }
+                    }
+                    .launchIn(this)
+
+                channel.subscribe()
+            } catch (e: Exception) {
+                println("Error subscribing to reactions: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Toggle a reaction on a message. If the current user already has this reaction,
+     * remove it; otherwise add it.
+     */
+    fun toggleReaction(messageId: String, reactionType: String) {
+        val userId = _currentUserId.value ?: return
+        val existing = _messageReactions.value[messageId]
+            ?.firstOrNull { it.userId == userId && it.reactionType == reactionType }
+
+        viewModelScope.launch {
+            if (existing != null) {
+                // Optimistic local removal
+                val current = _messageReactions.value.toMutableMap()
+                current[messageId] = (current[messageId] ?: emptyList()).filter { it.id != existing.id }
+                _messageReactions.value = current
+                chatRepository.removeReaction(messageId, userId, reactionType)
+            } else {
+                // Optimistic local insert
+                val tempReaction = MessageReaction(
+                    id = "temp-${messageId}-${reactionType}",
+                    messageId = messageId,
+                    userId = userId,
+                    reactionType = reactionType,
+                    createdAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                )
+                val current = _messageReactions.value.toMutableMap()
+                current[messageId] = (current[messageId] ?: emptyList()) + tempReaction
+                _messageReactions.value = current
+                chatRepository.addReaction(messageId, userId, reactionType)
+            }
+        }
+    }
+
+    fun addReaction(messageId: String, reactionType: String) {
+        toggleReaction(messageId, reactionType)
     }
 
     fun removeReaction(messageId: String, reactionType: String) {
@@ -613,23 +732,239 @@ class ChatViewModel(
         _showIcebreakerPanel.value = false
     }
 
+    // ==================== Nudge ====================
+
+    /**
+     * Send a nudge message to the current chat.
+     * Works from any screen that has access to the chat details.
+     */
+    fun sendNudge() {
+        val currentState = _chatMessagesState.value
+        if (currentState !is ChatMessagesState.Success) return
+        val chatId = currentState.chatDetails.chat.id ?: return
+        val userId = _currentUserId.value ?: return
+        val currentUser = compose.project.click.click.data.AppDataManager.currentUser.value ?: return
+        val otherUserName = currentState.chatDetails.otherUser.name ?: "them"
+        viewModelScope.launch {
+            val msg = chatRepository.sendMessage(
+                chatId = chatId,
+                userId = userId,
+                content = "👋 ${currentUser.name ?: "Someone"} nudged you!"
+            )
+            _nudgeResult.value = if (msg != null) "Nudge sent to $otherUserName! 👋" else "Failed to send nudge"
+        }
+    }
+
+    /**
+     * Send a nudge to an explicit chat — usable from Home or Connections list
+     * without needing to open the full chat view.
+     */
+    fun sendNudgeToChat(chatId: String, otherUserName: String) {
+        val userId = _currentUserId.value ?: return
+        val currentUser = compose.project.click.click.data.AppDataManager.currentUser.value ?: return
+        viewModelScope.launch {
+            val msg = chatRepository.sendMessage(
+                chatId = chatId,
+                userId = userId,
+                content = "👋 ${currentUser.name ?: "Someone"} nudged you!"
+            )
+            _nudgeResult.value = if (msg != null) "Nudge sent to $otherUserName! 👋" else "Failed to send nudge"
+        }
+    }
+
+    fun clearNudgeResult() {
+        _nudgeResult.value = null
+    }
+
+    // ==================== Message Edit / Delete ====================
+
+    /**
+     * Enter editing mode for a sent message.
+     * Pre-fills the message input with the current content.
+     */
+    fun startEditMessage(messageId: String, currentContent: String) {
+        _editingMessageId.value = messageId
+        _messageInput.value = currentContent
+    }
+
+    /**
+     * Cancel an in-progress edit and restore the input to empty.
+     */
+    fun cancelEditMessage() {
+        _editingMessageId.value = null
+        _messageInput.value = ""
+    }
+
+    /**
+     * Submit the edited message content to Supabase.
+     */
+    private fun confirmEditMessage(messageId: String) {
+        val connectionId = currentConnectionId ?: return
+        val newContent = _messageInput.value.trim()
+        if (newContent.isEmpty()) return
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        // Optimistic local update
+        val previousState = _chatMessagesState.value
+        if (previousState is ChatMessagesState.Success) {
+            _chatMessagesState.value = previousState.copy(
+                messages = previousState.messages.map { mwu ->
+                    if (mwu.message.id == messageId) {
+                        mwu.copy(
+                            message = mwu.message.copy(
+                                content = newContent,
+                                timeEdited = now
+                            )
+                        )
+                    } else {
+                        mwu
+                    }
+                }
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                val success = supabaseRepository.editMessage(messageId, newContent)
+                if (success) {
+                    _editingMessageId.value = null
+                    _messageInput.value = ""
+                } else {
+                    loadChatMessages(connectionId)
+                }
+            } catch (e: Exception) {
+                println("Error editing message: ${e.message}")
+                loadChatMessages(connectionId)
+            }
+        }
+    }
+
+    /**
+     * Delete a message from the chat (with optimistic local removal).
+     */
+    fun deleteMessage(messageId: String) {
+        val connectionId = currentConnectionId ?: return
+
+        // Optimistic: remove from local state immediately
+        val currentState = _chatMessagesState.value
+        if (currentState is ChatMessagesState.Success) {
+            _chatMessagesState.value = currentState.copy(
+                messages = currentState.messages.filter { it.message.id != messageId }
+            )
+        }
+        // Also remove any reactions for this message
+        val currentReactions = _messageReactions.value.toMutableMap()
+        currentReactions.remove(messageId)
+        _messageReactions.value = currentReactions
+
+        viewModelScope.launch {
+            try {
+                val success = supabaseRepository.deleteMessage(messageId)
+                if (!success) {
+                    loadChatMessages(connectionId)
+                }
+            } catch (e: Exception) {
+                println("Error deleting message: ${e.message}")
+                // Revert optimistic removal on failure — reload full state
+                loadChatMessages(connectionId)
+            }
+        }
+    }
+
+    // ==================== Connection Archive / Delete (User-initiated) ====================
+
+    /**
+     * Archive the current connection (hide from main list, recoverable).
+     * State is stored in-memory for this session; backed by Supabase when the
+     * connection_archives table is provisioned (see database/add_connection_archives.sql).
+     */
+    fun archiveConnection(onComplete: () -> Unit = {}) {
+        val connectionId = currentConnectionId ?: return
+        archiveConnectionById(connectionId, onComplete)
+    }
+
+    /**
+     * Archive a specific connection by ID.
+     */
+    fun archiveConnectionById(connectionId: String, onComplete: () -> Unit = {}) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
+            supabaseRepository.archiveConnection(userId, connectionId) // no-op if table missing
+            if (currentConnectionId == connectionId) {
+                leaveChatRoom()
+            }
+            loadChats(isForced = true)
+            onComplete()
+        }
+    }
+
+    /**
+     * Unarchive a connection so it re-appears in the main list.
+     */
+    fun unarchiveConnection(connectionId: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
+            supabaseRepository.unarchiveConnection(userId, connectionId)
+            loadChats(isForced = true)
+        }
+    }
+
+    /**
+     * Hard-delete the current connection (removes from DB).
+     */
+    fun deleteConnectionPermanently(onComplete: () -> Unit = {}) {
+        val connectionId = currentConnectionId ?: return
+        deleteConnectionPermanentlyById(connectionId, onComplete)
+    }
+
+    /**
+     * Hard-delete a specific connection by ID.
+     */
+    fun deleteConnectionPermanentlyById(connectionId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            supabaseRepository.deleteConnection(connectionId)
+            if (currentConnectionId == connectionId) {
+                leaveChatRoom()
+            }
+            loadChats(isForced = true)
+            onComplete()
+        }
+    }
+
     // ==================== Safety Actions ====================
 
     /**
      * Block the other user in the current chat.
-     * Inserts into user_blocks and leaves the chat.
+     * Resolves the other user ID from chat state or AppDataManager connections.
+     * This avoids race conditions when called from the connections list
+     * where chat state may not have loaded yet.
      */
     fun blockUser(onBlocked: () -> Unit) {
+        val connectionId = currentConnectionId ?: return
+        blockUserForConnection(connectionId, onBlocked)
+    }
+
+    /**
+     * Block the other user for a specific connection.
+     */
+    fun blockUserForConnection(connectionId: String, onBlocked: () -> Unit = {}) {
         val userId = _currentUserId.value ?: return
-        val currentState = _chatMessagesState.value
-        if (currentState !is ChatMessagesState.Success) return
-        val connection = currentState.chatDetails.connection
-        val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return
+
+        // Try to get the other user ID from chat state first, then fall back to AppDataManager
+        val otherUserId = resolveOtherUserId(userId, connectionId)
+        if (otherUserId == null) {
+            println("blockUser: Could not resolve other user ID for connection $connectionId")
+            return
+        }
 
         viewModelScope.launch {
             val success = supabaseRepository.blockUser(userId, otherUserId)
             if (success) {
-                leaveChatRoom()
+                if (currentConnectionId == connectionId) {
+                    leaveChatRoom()
+                }
                 loadChats(isForced = true)
                 onBlocked()
             }
@@ -638,16 +973,41 @@ class ChatViewModel(
 
     /**
      * Report the current connection for safety review.
+     * Uses currentConnectionId directly — no dependency on chat messages state.
      */
     fun reportConnection(reason: String, onReported: () -> Unit) {
+        val connectionId = currentConnectionId ?: return
+        reportConnectionForConnection(connectionId, reason, onReported)
+    }
+
+    /**
+     * Report a specific connection for safety review.
+     */
+    fun reportConnectionForConnection(connectionId: String, reason: String, onReported: () -> Unit = {}) {
         val userId = _currentUserId.value ?: return
-        val chatId = currentConnectionId ?: return
         viewModelScope.launch {
-            val success = supabaseRepository.reportConnection(chatId, userId, reason)
+            val success = supabaseRepository.reportConnection(connectionId, userId, reason)
             if (success) {
                 onReported()
             }
         }
+    }
+
+    /**
+     * Resolve the other user's ID from either the loaded chat state
+     * or the cached connections in AppDataManager. This ensures block/report
+     * work even when called from the list without a fully loaded chat.
+     */
+    private fun resolveOtherUserId(userId: String, connectionId: String): String? {
+        // 1. Try loaded chat state
+        val chatState = _chatMessagesState.value
+        if (chatState is ChatMessagesState.Success) {
+            val fromChat = chatState.chatDetails.connection.user_ids.firstOrNull { it != userId }
+            if (fromChat != null) return fromChat
+        }
+        // 2. Fall back to AppDataManager cached connections
+        val connection = AppDataManager.connections.value.firstOrNull { it.id == connectionId }
+        return connection?.user_ids?.firstOrNull { it != userId }
     }
     
     private fun resetIcebreakerState() {
@@ -658,6 +1018,7 @@ class ChatViewModel(
     override fun onCleared() {
         super.onCleared()
         realtimeJob?.cancel()
+        reactionsJob?.cancel()
         typingPollingJob?.cancel()
         vibeCheckTimerJob?.cancel()
         activeChannel?.let { channel ->
@@ -666,5 +1027,11 @@ class ChatViewModel(
             }
         }
         activeChannel = null
+        reactionsChannel?.let { channel ->
+            viewModelScope.launch {
+                try { channel.unsubscribe() } catch (_: Exception) {}
+            }
+        }
+        reactionsChannel = null
     }
 }

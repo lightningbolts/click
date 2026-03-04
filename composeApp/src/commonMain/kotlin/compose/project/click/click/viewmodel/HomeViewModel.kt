@@ -54,6 +54,22 @@ class HomeViewModel(
     // Show/hide insights panel
     private val _showInsightsPanel = MutableStateFlow(false)
     val showInsightsPanel: StateFlow<Boolean> = _showInsightsPanel.asStateFlow()
+
+    // ── Connections grouped by semantic location for the expandable home cards ──
+    private val _locationGroupedConnections = MutableStateFlow<Map<String, List<Connection>>>(emptyMap())
+    val locationGroupedConnections: StateFlow<Map<String, List<Connection>>> = _locationGroupedConnections.asStateFlow()
+
+    // Which location groups the user has expanded on the home screen
+    private val _expandedLocations = MutableStateFlow<Set<String>>(emptySet())
+    val expandedLocations: StateFlow<Set<String>> = _expandedLocations.asStateFlow()
+
+    // Connected users map (id → User) for name resolution in home cards
+    private val _connectedUsers = MutableStateFlow<Map<String, User>>(emptyMap())
+    val connectedUsers: StateFlow<Map<String, User>> = _connectedUsers.asStateFlow()
+
+    // Nudge feedback toast
+    private val _nudgeResult = MutableStateFlow<String?>(null)
+    val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
     
     // Track if data has been loaded already
     private var dataLoaded = false
@@ -99,6 +115,15 @@ class HomeViewModel(
                             recentConnections = recentConnections,
                             uniqueLocations = uniqueLocations
                         )
+
+                        // Build location-grouped map (all connections, not just top 3)
+                        val grouped = connections
+                            .sortedByDescending { it.created }
+                            .groupBy { it.semantic_location ?: "Somewhere New" }
+                        _locationGroupedConnections.value = grouped
+
+                        // Expose connected users for name lookups
+                        _connectedUsers.value = AppDataManager.connectedUsers.value
                         
                         _homeState.value = HomeState.Success(user, stats)
                         
@@ -180,6 +205,54 @@ class HomeViewModel(
         }
     }
     
+    /**
+     * Toggle expanded state for a location group on the home screen.
+     */
+    fun toggleLocationExpanded(location: String) {
+        val current = _expandedLocations.value
+        _expandedLocations.value = if (location in current) current - location else current + location
+    }
+
+    /**
+     * Send a nudge from the home screen without opening the chat view.
+     */
+    fun sendNudge(chatId: String, otherUserName: String) {
+        val currentUser = AppDataManager.currentUser.value ?: return
+        viewModelScope.launch {
+            val msg = chatRepository.sendMessage(
+                chatId = chatId,
+                userId = currentUser.id,
+                content = "👋 ${currentUser.name ?: "Someone"} nudged you!"
+            )
+            _nudgeResult.value = if (msg != null) "Nudge sent to $otherUserName! 👋" else "Failed to send nudge"
+        }
+    }
+
+    /**
+     * Send a nudge using a connection ID — resolves the chat ID first.
+     * Used from the home screen where chat IDs may not be cached.
+     */
+    fun sendNudgeByConnectionId(connectionId: String, otherUserName: String) {
+        val currentUser = AppDataManager.currentUser.value ?: return
+        viewModelScope.launch {
+            try {
+                val chatDetails = chatRepository.fetchChatWithDetails(connectionId, currentUser.id)
+                val chatId = chatDetails?.chat?.id
+                if (chatId != null) {
+                    sendNudge(chatId, otherUserName)
+                } else {
+                    _nudgeResult.value = "Unable to send nudge — chat not found"
+                }
+            } catch (e: Exception) {
+                _nudgeResult.value = "Failed to send nudge"
+            }
+        }
+    }
+
+    fun clearNudgeResult() {
+        _nudgeResult.value = null
+    }
+
     /**
      * Dismiss a reconnect reminder
      */

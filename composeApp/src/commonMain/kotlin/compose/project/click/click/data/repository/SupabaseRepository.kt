@@ -536,5 +536,104 @@ class SupabaseRepository {
             false
         }
     }
+
+    // ==================== Archive Methods ====================
+
+    /**
+     * Archive a connection for the given user.
+     * Inserts into the connection_archives table (see database/add_connection_archives.sql).
+     * Silently no-ops if the table has not been provisioned yet.
+     */
+    suspend fun archiveConnection(userId: String, connectionId: String): Boolean {
+        return try {
+            supabase.from("connection_archives")
+                .insert(buildJsonObject {
+                    put("user_id", userId)
+                    put("connection_id", connectionId)
+                })
+            true
+        } catch (e: Exception) {
+            println("archiveConnection (non-fatal): ${e.message}")
+            false // table may not exist yet; in-memory fallback handles UI state
+        }
+    }
+
+    /**
+     * Unarchive a connection, removing it from the user's archive list.
+     */
+    suspend fun unarchiveConnection(userId: String, connectionId: String): Boolean {
+        return try {
+            supabase.from("connection_archives")
+                .delete {
+                    filter {
+                        eq("user_id", userId)
+                        eq("connection_id", connectionId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            println("unarchiveConnection (non-fatal): ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Fetch all archived connection IDs for a user.
+     */
+    suspend fun getArchivedConnectionIds(userId: String): Set<String> {
+        return try {
+            @kotlinx.serialization.Serializable
+            data class ArchiveRow(
+                @kotlinx.serialization.SerialName("connection_id") val connectionId: String
+            )
+            val rows = supabase.from("connection_archives")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
+                    filter { eq("user_id", userId) }
+                }
+                .decodeList<ArchiveRow>()
+            rows.map { it.connectionId }.toSet()
+        } catch (e: Exception) {
+            println("getArchivedConnectionIds (non-fatal): ${e.message}")
+            emptySet()
+        }
+    }
+
+    // ==================== Message Edit / Delete (direct Supabase) ====================
+
+    /**
+     * Edit the content of an existing message and stamp time_edited.
+     */
+    suspend fun editMessage(messageId: String, newContent: String): Boolean {
+        return try {
+            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            supabase.from("messages")
+                .update({
+                    set("content", newContent)
+                    set("time_edited", now)
+                }) {
+                    filter { eq("id", messageId) }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error editing message: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Hard-delete a single message.
+     */
+    suspend fun deleteMessage(messageId: String): Boolean {
+        return try {
+            supabase.from("messages")
+                .delete {
+                    filter { eq("id", messageId) }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error deleting message: ${e.message}")
+            false
+        }
+    }
 }
 
