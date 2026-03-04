@@ -284,19 +284,19 @@ fun ConnectionsListView(
             },
             onArchive = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.archiveConnectionById(selected.connection.id)
+                viewModel.archiveConnectionById(selected.connection.id) { }
             },
             onDelete = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.deleteConnectionPermanentlyById(selected.connection.id)
+                viewModel.deleteConnectionPermanentlyById(selected.connection.id) { }
             },
             onReport = { reason ->
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.reportConnectionForConnection(selected.connection.id, reason)
+                viewModel.reportConnectionForConnection(selected.connection.id, reason) { }
             },
             onBlock = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.blockUserForConnection(selected.connection.id)
+                viewModel.blockUserForConnection(selected.connection.id) { }
             }
         )
     }
@@ -939,16 +939,22 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
             },
             onOpenChat = { },
             onArchive = {
-                viewModel.archiveConnection { onBackPressed() }
+                viewModel.archiveConnection { success ->
+                    if (success) onBackPressed()
+                }
             },
             onDelete = {
-                viewModel.deleteConnectionPermanently { onBackPressed() }
+                viewModel.deleteConnectionPermanently { success ->
+                    if (success) onBackPressed()
+                }
             },
             onReport = { reason ->
                 viewModel.reportConnection(reason) { }
             },
             onBlock = {
-                viewModel.blockUser { onBackPressed() }
+                viewModel.blockUser { success ->
+                    if (success) onBackPressed()
+                }
             }
         )
     }

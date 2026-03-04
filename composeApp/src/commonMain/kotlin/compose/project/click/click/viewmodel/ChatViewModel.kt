@@ -99,6 +99,8 @@ class ChatViewModel(
     // ── Archived connection IDs (in-memory; persisted per-session) ─────────────
     private val _archivedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
     val archivedConnectionIds: StateFlow<Set<String>> = _archivedConnectionIds.asStateFlow()
+    private val _hiddenConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenConnectionIds: StateFlow<Set<String>> = _hiddenConnectionIds.asStateFlow()
 
     // ── Reactions state: messageId → list of reactions ─────────────────────────
     private val _messageReactions = MutableStateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>>(emptyMap())
@@ -161,7 +163,7 @@ class ChatViewModel(
                         unreadCount = 0 // Will be updated from API
                     )
                 }
-                _chatListState.value = ChatListState.Success(cachedChats)
+                _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(cachedChats))
             } else if (!alreadyHasRealData && (isForced || _chatListState.value !is ChatListState.Success)) {
                 _chatListState.value = ChatListState.Loading
             }
@@ -171,12 +173,12 @@ class ChatViewModel(
                 val chats = chatRepository.fetchUserChatsWithDetails(userId)
 
                 if (chats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(chats)
+                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(chats))
                 } else if (cachedConnections.isNotEmpty()) {
                     // Keep hydrated/cached connections visible when API is empty
                     // (common during session bootstrap or backend shape mismatch).
                     if (_chatListState.value !is ChatListState.Success) {
-                        _chatListState.value = ChatListState.Success(cachedConnections.mapNotNull { connection ->
+                        _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(cachedConnections.mapNotNull { connection ->
                             val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
                             val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "User", createdAt = 0L)
                             ChatWithDetails(
@@ -186,7 +188,7 @@ class ChatViewModel(
                                 lastMessage = connection.chat.messages.lastOrNull(),
                                 unreadCount = 0
                             )
-                        })
+                        }))
                     }
                 } else {
                     _chatListState.value = ChatListState.Success(emptyList())
@@ -198,6 +200,23 @@ class ChatViewModel(
                 }
                 // Otherwise keep showing cached data
             }
+        }
+    }
+
+    private fun applyConnectionVisibilityFilters(chats: List<ChatWithDetails>): List<ChatWithDetails> {
+        val archivedIds = _archivedConnectionIds.value
+        val hiddenIds = _hiddenConnectionIds.value
+        return chats.filter { chat ->
+            chat.connection.id !in archivedIds && chat.connection.id !in hiddenIds
+        }
+    }
+
+    private fun removeConnectionFromCurrentList(connectionId: String) {
+        val state = _chatListState.value
+        if (state is ChatListState.Success) {
+            _chatListState.value = state.copy(
+                chats = state.chats.filter { it.connection.id != connectionId }
+            )
         }
     }
 
@@ -511,11 +530,14 @@ class ChatViewModel(
                         when (event) {
                             is ReactionChangeEvent.Insert -> {
                                 val list = current.getOrElse(event.reaction.messageId) { emptyList() }
-                                // Deduplicate
-                                if (list.none { it.id == event.reaction.id }) {
-                                    current[event.reaction.messageId] = list + event.reaction
-                                    _messageReactions.value = current
+                                // Deduplicate against both optimistic and persisted rows
+                                val withoutDuplicates = list.filterNot {
+                                    it.id == event.reaction.id ||
+                                        (it.userId == event.reaction.userId &&
+                                            it.reactionType == event.reaction.reactionType)
                                 }
+                                current[event.reaction.messageId] = withoutDuplicates + event.reaction
+                                _messageReactions.value = current
                             }
                             is ReactionChangeEvent.Delete -> {
                                 val list = current[event.messageId]
@@ -541,7 +563,8 @@ class ChatViewModel(
      */
     fun toggleReaction(messageId: String, reactionType: String) {
         val userId = _currentUserId.value ?: return
-        val existing = _messageReactions.value[messageId]
+        val existingList = _messageReactions.value[messageId].orEmpty()
+        val existing = existingList
             ?.firstOrNull { it.userId == userId && it.reactionType == reactionType }
 
         viewModelScope.launch {
@@ -561,7 +584,8 @@ class ChatViewModel(
                     createdAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 )
                 val current = _messageReactions.value.toMutableMap()
-                current[messageId] = (current[messageId] ?: emptyList()) + tempReaction
+                val deduped = existingList.filterNot { it.userId == userId && it.reactionType == reactionType }
+                current[messageId] = deduped + tempReaction
                 _messageReactions.value = current
                 chatRepository.addReaction(messageId, userId, reactionType)
             }
@@ -878,7 +902,7 @@ class ChatViewModel(
      * State is stored in-memory for this session; backed by Supabase when the
      * connection_archives table is provisioned (see database/add_connection_archives.sql).
      */
-    fun archiveConnection(onComplete: () -> Unit = {}) {
+    fun archiveConnection(onComplete: (Boolean) -> Unit = {}) {
         val connectionId = currentConnectionId ?: return
         archiveConnectionById(connectionId, onComplete)
     }
@@ -886,16 +910,18 @@ class ChatViewModel(
     /**
      * Archive a specific connection by ID.
      */
-    fun archiveConnectionById(connectionId: String, onComplete: () -> Unit = {}) {
+    fun archiveConnectionById(connectionId: String, onComplete: (Boolean) -> Unit = {}) {
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
             _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
-            supabaseRepository.archiveConnection(userId, connectionId) // no-op if table missing
+            removeConnectionFromCurrentList(connectionId)
+            supabaseRepository.archiveConnection(userId, connectionId) // non-fatal if table missing
             if (currentConnectionId == connectionId) {
                 leaveChatRoom()
             }
             loadChats(isForced = true)
-            onComplete()
+            _nudgeResult.value = "Connection archived"
+            onComplete(true)
         }
     }
 
@@ -914,7 +940,7 @@ class ChatViewModel(
     /**
      * Hard-delete the current connection (removes from DB).
      */
-    fun deleteConnectionPermanently(onComplete: () -> Unit = {}) {
+    fun deleteConnectionPermanently(onComplete: (Boolean) -> Unit = {}) {
         val connectionId = currentConnectionId ?: return
         deleteConnectionPermanentlyById(connectionId, onComplete)
     }
@@ -922,14 +948,24 @@ class ChatViewModel(
     /**
      * Hard-delete a specific connection by ID.
      */
-    fun deleteConnectionPermanentlyById(connectionId: String, onComplete: () -> Unit = {}) {
+    fun deleteConnectionPermanentlyById(connectionId: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            supabaseRepository.deleteConnection(connectionId)
-            if (currentConnectionId == connectionId) {
-                leaveChatRoom()
+            _hiddenConnectionIds.value = _hiddenConnectionIds.value + connectionId
+            removeConnectionFromCurrentList(connectionId)
+            val success = supabaseRepository.deleteConnection(connectionId)
+            if (success) {
+                if (currentConnectionId == connectionId) {
+                    leaveChatRoom()
+                }
+                loadChats(isForced = true)
+                _nudgeResult.value = "Connection removed"
+                onComplete(true)
+            } else {
+                _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
+                loadChats(isForced = true)
+                _nudgeResult.value = "Failed to remove connection"
+                onComplete(false)
             }
-            loadChats(isForced = true)
-            onComplete()
         }
     }
 
@@ -941,7 +977,7 @@ class ChatViewModel(
      * This avoids race conditions when called from the connections list
      * where chat state may not have loaded yet.
      */
-    fun blockUser(onBlocked: () -> Unit) {
+    fun blockUser(onBlocked: (Boolean) -> Unit) {
         val connectionId = currentConnectionId ?: return
         blockUserForConnection(connectionId, onBlocked)
     }
@@ -949,24 +985,32 @@ class ChatViewModel(
     /**
      * Block the other user for a specific connection.
      */
-    fun blockUserForConnection(connectionId: String, onBlocked: () -> Unit = {}) {
+    fun blockUserForConnection(connectionId: String, onBlocked: (Boolean) -> Unit = {}) {
         val userId = _currentUserId.value ?: return
 
         // Try to get the other user ID from chat state first, then fall back to AppDataManager
         val otherUserId = resolveOtherUserId(userId, connectionId)
         if (otherUserId == null) {
             println("blockUser: Could not resolve other user ID for connection $connectionId")
+            _nudgeResult.value = "Could not block user"
+            onBlocked(false)
             return
         }
 
         viewModelScope.launch {
             val success = supabaseRepository.blockUser(userId, otherUserId)
             if (success) {
+                _hiddenConnectionIds.value = _hiddenConnectionIds.value + connectionId
+                removeConnectionFromCurrentList(connectionId)
                 if (currentConnectionId == connectionId) {
                     leaveChatRoom()
                 }
                 loadChats(isForced = true)
-                onBlocked()
+                _nudgeResult.value = "User blocked"
+                onBlocked(true)
+            } else {
+                _nudgeResult.value = "Failed to block user"
+                onBlocked(false)
             }
         }
     }
@@ -975,7 +1019,7 @@ class ChatViewModel(
      * Report the current connection for safety review.
      * Uses currentConnectionId directly — no dependency on chat messages state.
      */
-    fun reportConnection(reason: String, onReported: () -> Unit) {
+    fun reportConnection(reason: String, onReported: (Boolean) -> Unit) {
         val connectionId = currentConnectionId ?: return
         reportConnectionForConnection(connectionId, reason, onReported)
     }
@@ -983,12 +1027,16 @@ class ChatViewModel(
     /**
      * Report a specific connection for safety review.
      */
-    fun reportConnectionForConnection(connectionId: String, reason: String, onReported: () -> Unit = {}) {
+    fun reportConnectionForConnection(connectionId: String, reason: String, onReported: (Boolean) -> Unit = {}) {
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
             val success = supabaseRepository.reportConnection(connectionId, userId, reason)
             if (success) {
-                onReported()
+                _nudgeResult.value = "Report submitted"
+                onReported(true)
+            } else {
+                _nudgeResult.value = "Failed to submit report"
+                onReported(false)
             }
         }
     }

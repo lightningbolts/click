@@ -460,6 +460,9 @@ class ChatRepository(
     @Serializable
     private data class MessageIdOnly(val id: String)
 
+    @Serializable
+    private data class ChatIdOnly(val id: String)
+
     /** Add a reaction. Uses upsert with the unique constraint to avoid duplicates. */
     suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
@@ -609,5 +612,31 @@ class ChatRepository(
             println("Error searching messages: ${e.message}")
             emptyList()
         }
+    }
+
+    suspend fun resolveChatIdForConnection(connectionId: String): String? {
+        return try {
+            val rows = supabase.from("chats")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                    filter {
+                        eq("connection_id", connectionId)
+                    }
+                    limit(1)
+                }
+                .decodeList<ChatIdOnly>()
+            rows.firstOrNull()?.id
+        } catch (e: Exception) {
+            println("Error resolving chat id for connection $connectionId: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> {
+        val resolvedChatId = resolveChatIdForConnection(connectionId)
+        val messages = when {
+            !resolvedChatId.isNullOrBlank() -> searchMessages(resolvedChatId, query)
+            else -> emptyList()
+        }
+        return resolvedChatId to messages
     }
 }

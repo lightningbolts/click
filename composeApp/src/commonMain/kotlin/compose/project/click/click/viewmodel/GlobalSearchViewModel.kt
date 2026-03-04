@@ -126,22 +126,25 @@ class GlobalSearchViewModel(
                 val messageResults: List<MessageSearchResult> = coroutineScope {
                     connections.map { conn ->
                         async {
-                            val chatId = conn.chat.id ?: return@async emptyList<MessageSearchResult>()
                             val otherUserId = conn.user_ids.firstOrNull { it != currentUserId }
                             val chatName = otherUserId?.let { id ->
                                 connectedUsers[id]?.name
                             } ?: conn.semantic_location ?: "Chat"
 
-                            val remoteMatches = chatRepository.searchMessages(chatId, lowerQuery)
+                            val (resolvedChatId, remoteMatches) = chatRepository.searchMessagesByConnectionId(
+                                connectionId = conn.id,
+                                query = lowerQuery
+                            )
                             val localMatches = conn.chat.messages.filter { msg ->
                                 msg.content.lowercase().contains(lowerQuery)
                             }
                             val mergedMatches = (remoteMatches + localMatches).distinctBy { it.id }
+                            val resultChatId = resolvedChatId ?: conn.chat.id ?: conn.id
 
                             mergedMatches.map { msg ->
                                 MessageSearchResult(
                                     message = msg,
-                                    chatId = chatId,
+                                    chatId = resultChatId,
                                     chatName = chatName,
                                     connectionId = conn.id
                                 )
