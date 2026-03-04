@@ -6,6 +6,9 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.ui.utils.*
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -88,6 +91,13 @@ class MapViewModel : ViewModel() {
     
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
+
+    // Chat repository for nudge messages
+    private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
+
+    // Nudge result for snackbar feedback
+    private val _nudgeResult = MutableStateFlow<String?>(null)
+    val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
 
     init {
         observeAppData()
@@ -342,6 +352,35 @@ class MapViewModel : ViewModel() {
             }
         }
         connectionsChannel = null
+    }
+
+    /**
+     * Send a nudge to a connection.
+     * This sends a special emoji message ("👋") to the connection's chat.
+     */
+    fun sendNudge(connectionId: String, otherUserName: String) {
+        val currentUser = AppDataManager.currentUser.value ?: return
+        val connection = (mapState.value as? MapState.Success)
+            ?.connections?.firstOrNull { it.id == connectionId } ?: return
+        val chatId = connection.chat.id ?: return
+
+        viewModelScope.launch {
+            val currentName = currentUser.name ?: "Someone"
+            val msg = chatRepository.sendMessage(
+                chatId = chatId,
+                userId = currentUser.id,
+                content = "👋 $currentName nudged you!"
+            )
+            _nudgeResult.value = if (msg != null) {
+                "Nudge sent to $otherUserName!"
+            } else {
+                "Failed to send nudge"
+            }
+        }
+    }
+
+    fun clearNudgeResult() {
+        _nudgeResult.value = null
     }
 }
 

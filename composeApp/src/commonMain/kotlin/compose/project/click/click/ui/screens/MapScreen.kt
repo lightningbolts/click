@@ -85,6 +85,18 @@ fun MapScreen(
         }
     }
 
+    // Show snackbar for nudge result
+    val nudgeResult by viewModel.nudgeResult.collectAsState()
+    LaunchedEffect(nudgeResult) {
+        nudgeResult?.let { msg ->
+            snackbarHostState.showSnackbar(
+                message = msg,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearNudgeResult()
+        }
+    }
+
     // Bottom sheet state
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
@@ -116,7 +128,7 @@ fun MapScreen(
                 .padding(paddingValues)
                 .then(grayscaleModifier)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+             Column(modifier = Modifier.fillMaxSize()) {
                 // Header with stats
                 Box(modifier = Modifier.padding(start = 20.dp, end = 20.dp)) {
                     val stats = viewModel.getMapStats()
@@ -138,13 +150,16 @@ fun MapScreen(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Map container
-                Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+                // Map container — takes top half
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 20.dp)
+                ) {
                     val mapShape = RoundedCornerShape(20.dp)
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(500.dp)
+                            .fillMaxSize()
                             .clip(mapShape)
                             .border(
                                 1.dp,
@@ -222,18 +237,20 @@ fun MapScreen(
 
                 // Time legend
                 TimeLegend(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                 )
 
-                // Connections list - filtered by viewport
-                ConnectionsList(
-                    mapState = mapState,
-                    visibleBounds = viewModel.visibleBounds.collectAsState().value,
-                    onConnectionClick = { point ->
-                        viewModel.onConnectionTapped(point)
-                    },
-                    onRefresh = { viewModel.refresh() }
-                )
+                // Connections list — takes bottom half
+                Box(modifier = Modifier.weight(1f)) {
+                    ConnectionsList(
+                        mapState = mapState,
+                        visibleBounds = viewModel.visibleBounds.collectAsState().value,
+                        onConnectionClick = { point ->
+                            viewModel.onConnectionTapped(point)
+                        },
+                        onRefresh = { viewModel.refresh() }
+                    )
+                }
             }
         }
     }
@@ -258,7 +275,14 @@ fun MapScreen(
                     viewModel.clearSelection()
                     onNavigateToChat?.invoke(connectionId)
                 },
-                onNudge = { /* TODO: Implement nudge */ },
+                onNudge = {
+                    viewModel.sendNudge(
+                        connectionId = connectionSelection.point.connection.id,
+                        otherUserName = connectionSelection.otherUser?.name ?: "Someone"
+                    )
+                    showBottomSheet = false
+                    viewModel.clearSelection()
+                },
                 onDismiss = {
                     showBottomSheet = false
                     viewModel.clearSelection()
