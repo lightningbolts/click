@@ -118,7 +118,7 @@ fun MapScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header with stats
-                Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                Box(modifier = Modifier.padding(start = 20.dp, end = 20.dp)) {
                     val stats = viewModel.getMapStats()
                     when (val state = mapState) {
                         is MapState.Success -> {

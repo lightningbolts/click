@@ -842,7 +842,7 @@ fun ChatMessageBubble(
             // ── Sent bubble: violet gradient ─────────────────────────────────
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.72f)
+                    .widthIn(max = 280.dp)
                     .clip(sentShape)
                     .background(sentGradient)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -866,7 +866,7 @@ fun ChatMessageBubble(
             // ── Received bubble: glass-style surface ──────────────────────────
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.72f)
+                    .widthIn(max = 280.dp)
                     .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
                     .clip(receivedShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
