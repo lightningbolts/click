@@ -114,10 +114,11 @@ fun ConnectionsListView(
     onChatSelected: (String) -> Unit
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
+    val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Archived
 
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
@@ -137,19 +138,23 @@ fun ConnectionsListView(
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 when (val state = chatListState) {
                     is ChatListState.Success -> {
+                        val activeChats = state.chats.filter { it.connection.id !in archivedConnectionIds }
+                        val archivedChats = state.chats.filter { it.connection.id in archivedConnectionIds }
+                        val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
                         val filteredCount = if (searchQuery.isBlank()) {
-                            state.chats.size
+                            tabChats.size
                         } else {
-                            state.chats.count { chat ->
+                            tabChats.count { chat ->
                                 chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
                             }
                         }
+                        val tabLabel = if (selectedTabIndex == 0) "active" else "archived"
                         PageHeader(
                             title = "Clicks",
                             subtitle = if (searchQuery.isNotBlank()) {
                                 "$filteredCount result${if (filteredCount == 1) "" else "s"} for \"$searchQuery\""
                             } else {
-                                "${state.chats.size} ${if (state.chats.size == 1) "connection" else "connections"}"
+                                "$filteredCount $tabLabel ${if (filteredCount == 1) "connection" else "connections"}"
                             }
                         )
                     }
@@ -159,6 +164,31 @@ fun ConnectionsListView(
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
+
+            if (chatListState is ChatListState.Success) {
+                val successState = chatListState as ChatListState.Success
+                val activeCount = successState.chats.count { it.connection.id !in archivedConnectionIds }
+                val archivedCount = successState.chats.count { it.connection.id in archivedConnectionIds }
+
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.08f)) }
+                ) {
+                    Tab(
+                        selected = selectedTabIndex == 0,
+                        onClick = { selectedTabIndex = 0 },
+                        text = { Text("Active ($activeCount)") }
+                    )
+                    Tab(
+                        selected = selectedTabIndex == 1,
+                        onClick = { selectedTabIndex = 1 },
+                        text = { Text("Archived ($archivedCount)") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
 
             when (val state = chatListState) {
                 is ChatListState.Loading -> {
@@ -194,11 +224,14 @@ fun ConnectionsListView(
                     }
                 }
                 is ChatListState.Success -> {
-                    // Filter chats based on search query
+                    val activeChats = state.chats.filter { it.connection.id !in archivedConnectionIds }
+                    val archivedChats = state.chats.filter { it.connection.id in archivedConnectionIds }
+                    val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
+
                     val filteredChats = if (searchQuery.isBlank()) {
-                        state.chats
+                        tabChats
                     } else {
-                        state.chats.filter { chat ->
+                        tabChats.filter { chat ->
                             chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
                         }
                     }
@@ -217,13 +250,17 @@ fun ConnectionsListView(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    if (searchQuery.isNotBlank()) "No matches found" else "No connections yet",
+                                    if (searchQuery.isNotBlank()) "No matches found"
+                                    else if (selectedTabIndex == 1) "No archived connections"
+                                    else "No connections yet",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    if (searchQuery.isNotBlank()) "Try a different search term" else "Start clicking with people nearby!",
+                                    if (searchQuery.isNotBlank()) "Try a different search term"
+                                    else if (selectedTabIndex == 1) "Archived chats will appear here"
+                                    else "Start clicking with people nearby!",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -244,7 +281,8 @@ fun ConnectionsListView(
                                             viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
                                         }
                                     },
-                                    onOpenMenu = { pendingMenuChat = chatDetails }
+                                    onOpenMenu = { pendingMenuChat = chatDetails },
+                                    onLongPress = { pendingMenuChat = chatDetails }
                                 )
                                 HorizontalDivider(
                                     modifier = Modifier.padding(start = 68.dp, end = 16.dp),
@@ -268,8 +306,11 @@ fun ConnectionsListView(
 
     // Connection action sheet
     if (pendingMenuChat != null) {
+        val selected = pendingMenuChat!!
+        val isArchived = selected.connection.id in archivedConnectionIds
         ConnectionActionSheet(
-            chatDetails = pendingMenuChat!!,
+            chatDetails = selected,
+            isArchived = isArchived,
             onDismiss = { pendingMenuChat = null },
             onNudge = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
@@ -285,6 +326,10 @@ fun ConnectionsListView(
             onArchive = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
                 viewModel.archiveConnectionById(selected.connection.id) { }
+            },
+            onUnarchive = {
+                val selected = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.unarchiveConnection(selected.connection.id)
             },
             onDelete = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
@@ -309,7 +354,8 @@ fun ConnectionItem(
     chatDetails: ChatWithDetails,
     onClick: () -> Unit,
     onNudge: () -> Unit = {},
-    onOpenMenu: () -> Unit = {}
+    onOpenMenu: () -> Unit = {},
+    onLongPress: () -> Unit = {}
 ) {
     val user = chatDetails.otherUser
     val lastMessage = chatDetails.lastMessage
@@ -319,7 +365,10 @@ fun ConnectionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            )
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1338,10 +1387,12 @@ private fun MessageActionSheet(
 @Composable
 private fun ConnectionActionSheet(
     chatDetails: ChatWithDetails?,
+    isArchived: Boolean = false,
     onDismiss: () -> Unit,
     onNudge: () -> Unit = {},
     onOpenChat: () -> Unit = {},
     onArchive: () -> Unit = {},
+    onUnarchive: () -> Unit = {},
     onDelete: () -> Unit = {},
     onReport: (String) -> Unit = {},
     onBlock: () -> Unit = {}
@@ -1351,6 +1402,7 @@ private fun ConnectionActionSheet(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
     var showArchiveConfirm by remember { mutableStateOf(false) }
+    var showUnarchiveConfirm by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     var reportReason by remember { mutableStateOf("") }
     var showFinalConfirm by remember { mutableStateOf(false) }
@@ -1419,24 +1471,44 @@ private fun ConnectionActionSheet(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
             )
 
-            // ── Archive ────────────────────────────────────────────────────────
-            ListItem(
-                headlineContent = {
-                    Text("Archive", color = Color.White, style = MaterialTheme.typography.bodyLarge)
-                },
-                supportingContent = {
-                    Text("Hide this connection (recoverable)", color = Color.White.copy(alpha = 0.5f),
-                        style = MaterialTheme.typography.bodySmall)
-                },
-                leadingContent = {
-                    Icon(Icons.Default.Archive, contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f))
-                },
-                modifier = Modifier.clickable {
-                    showArchiveConfirm = true
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
+            if (isArchived) {
+                ListItem(
+                    headlineContent = {
+                        Text("Unarchive", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    supportingContent = {
+                        Text("Move this connection back to Active", color = Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodySmall)
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Unarchive, contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.7f))
+                    },
+                    modifier = Modifier.clickable {
+                        showUnarchiveConfirm = true
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            } else {
+                // ── Archive ────────────────────────────────────────────────────
+                ListItem(
+                    headlineContent = {
+                        Text("Archive", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    supportingContent = {
+                        Text("Hide this connection (recoverable)", color = Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodySmall)
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Archive, contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.7f))
+                    },
+                    modifier = Modifier.clickable {
+                        showArchiveConfirm = true
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
 
@@ -1484,6 +1556,40 @@ private fun ConnectionActionSheet(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
             )
         }
+    }
+
+    if (showUnarchiveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showUnarchiveConfirm = false },
+            title = { Text("Unarchive Connection?", color = Color.White) },
+            text = {
+                Text(
+                    "This connection will return to your Active list.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnarchiveConfirm = false
+                    openFinalConfirm(
+                        title = "Confirm Unarchive",
+                        body = "Move this connection back to Active now?",
+                        buttonLabel = "Yes, Unarchive",
+                        buttonColor = PrimaryBlue
+                    ) {
+                        onUnarchive()
+                    }
+                }) {
+                    Text("Unarchive", color = PrimaryBlue)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnarchiveConfirm = false }) {
+                    Text("Cancel", color = LightBlue)
+                }
+            },
+            containerColor = SurfaceDark
+        )
     }
 
     // ── Archive confirmation dialog ────────────────────────────────────────────

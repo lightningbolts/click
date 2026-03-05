@@ -131,6 +131,9 @@ class ChatViewModel(
     fun setCurrentUser(userId: String) {
         if (_currentUserId.value == userId && _chatListState.value is ChatListState.Success) return
         _currentUserId.value = userId
+        viewModelScope.launch {
+            _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(userId)
+        }
         loadChats()
     }
 
@@ -204,10 +207,9 @@ class ChatViewModel(
     }
 
     private fun applyConnectionVisibilityFilters(chats: List<ChatWithDetails>): List<ChatWithDetails> {
-        val archivedIds = _archivedConnectionIds.value
         val hiddenIds = _hiddenConnectionIds.value
         return chats.filter { chat ->
-            chat.connection.id !in archivedIds && chat.connection.id !in hiddenIds
+            chat.connection.id !in hiddenIds
         }
     }
 
@@ -934,6 +936,7 @@ class ChatViewModel(
             _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
             supabaseRepository.unarchiveConnection(userId, connectionId)
             loadChats(isForced = true)
+            _nudgeResult.value = "Connection unarchived"
         }
     }
 
