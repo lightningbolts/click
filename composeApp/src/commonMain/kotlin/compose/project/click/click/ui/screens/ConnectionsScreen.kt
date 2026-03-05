@@ -627,10 +627,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // imePadding here (outermost Box) ensures the keyboard height is counted
-            // exactly once — avoids the double-offset that occurs when the window
-            // already adjusts for the IME AND an inner composable also adds imePadding.
-            .imePadding()
             .pointerInput(chatId) {
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
@@ -1007,9 +1003,20 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         }
                     }
 
+                    // Calculate keyboard padding accounting for the Scaffold bottom bar
+                    val density = LocalDensity.current
+                    val imeBottomPx = WindowInsets.ime.getBottom(density)
+                    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
+                    // Subtract system nav bar + approximate Scaffold NavigationBar (~80dp)
+                    val bottomBarPx = with(density) { 80.dp.roundToPx() }
+                    val effectiveImePadding = with(density) {
+                        (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(bottom = effectiveImePadding)
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

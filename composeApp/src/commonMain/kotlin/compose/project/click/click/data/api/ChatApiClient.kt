@@ -113,8 +113,9 @@ class ChatApiClient(
     @Serializable
     data class UserApiModel(
         val id: String,
-        val name: String,
-        val email: String,
+        val name: String? = null,
+        val full_name: String? = null,
+        val email: String? = null,
         val image: String? = null
     )
 
@@ -554,9 +555,14 @@ class ChatApiClient(
     }
 
     private fun UserApiModel.toUser(): User {
+        val resolvedName = full_name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "Connection"
+
         return User(
             id = id,
-            name = name,
+            name = resolvedName,
             email = email,
             image = image,
             createdAt = 0,

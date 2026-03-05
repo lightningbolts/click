@@ -82,24 +82,32 @@ data class UserInsertMinimal(
 data class UserCore(
     val id: String,
     val name: String? = null,
+    val full_name: String? = null,
     val email: String? = null,
     val image: String? = null
 ) {
     /**
-     * Convert to full User model with defaults for missing fields
+     * Convert to full User model with defaults for missing fields.
+     * Resolves display name: full_name > name > email prefix > "Connection".
      */
-    fun toUser() = User(
-        id = id,
-        name = name,
-        email = email,
-        image = image,
-        createdAt = 0L,
-        lastPolled = null,
-        connections = emptyList(),
-        paired_with = emptyList(),
-        connection_today = -1,
-        last_paired = null
-    )
+    fun toUser(): User {
+        val resolvedName = full_name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "Connection"
+        return User(
+            id = id,
+            name = resolvedName,
+            email = email,
+            image = image,
+            createdAt = 0L,
+            lastPolled = null,
+            connections = emptyList(),
+            paired_with = emptyList(),
+            connection_today = -1,
+            last_paired = null
+        )
+    }
 }
 
 @Serializable

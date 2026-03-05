@@ -171,7 +171,7 @@ class ChatViewModel(
                 // Build ChatWithDetails from cached data for instant display
                 val cachedChats = cachedConnections.mapNotNull { connection ->
                     val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
-                    val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "User", createdAt = 0L)
+                    val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
                     ChatWithDetails(
                         chat = connection.chat,
                         connection = connection,
@@ -198,7 +198,7 @@ class ChatViewModel(
                     if (_chatListState.value !is ChatListState.Success) {
                         _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(cachedConnections.mapNotNull { connection ->
                             val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
-                            val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "User", createdAt = 0L)
+                            val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
                             ChatWithDetails(
                                 chat = connection.chat,
                                 connection = connection,

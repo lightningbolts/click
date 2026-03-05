@@ -23,7 +23,13 @@ actual class LocationService {
         return suspendCancellableCoroutine { continuation ->
             val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
                 override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
-                    val location = didUpdateLocations.lastOrNull() as? CLLocation
+                    val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
+                    val location = candidates.firstOrNull { loc ->
+                        loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 100.0
+                    } ?: candidates.firstOrNull { loc ->
+                        loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 300.0
+                    }
+
                     manager.stopUpdatingLocation()
                     manager.delegate = null
                     if (location != null) {
@@ -54,7 +60,8 @@ actual class LocationService {
             locationManager.desiredAccuracy = kCLLocationAccuracyBest
 
             if (hasLocationPermission()) {
-                locationManager.startUpdatingLocation()
+                // Single-shot request avoids long-running updates and reduces stale values.
+                locationManager.requestLocation()
             } else {
                 // If no permission, return null — caller should request first
                 continuation.resume(null)

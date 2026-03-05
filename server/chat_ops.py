@@ -30,6 +30,23 @@ class ChatOperations:
             "is_read": bool(message.get("is_read", False)),
         }
 
+    def _normalize_user_for_api(self, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize user payloads so clients always receive a stable display `name`.
+        Prefer full_name, then legacy name, then email prefix.
+        """
+        email = user.get("email")
+        email_prefix = email.split("@")[0] if isinstance(email, str) and "@" in email else None
+        display_name = user.get("full_name") or user.get("name") or email_prefix or "Connection"
+
+        return {
+            "id": user.get("id"),
+            "name": display_name,
+            "full_name": user.get("full_name"),
+            "email": email,
+            "image": user.get("image"),
+        }
+
     # Chat operations
     def create_chat(self, connection_id: str) -> Optional[Dict[str, Any]]:
         """Create a new chat for a connection"""
@@ -87,11 +104,11 @@ class ChatOperations:
                 user_ids = connection.get("user_ids", [])
                 other_user_id = next((uid for uid in user_ids if uid != user_id), None)
                 if other_user_id:
-                    user_response = self.supabase.table("users").select("id,name,email,image").eq(
+                    user_response = self.supabase.table("users").select("id,name,full_name,email,image").eq(
                         "id", other_user_id
                     ).limit(1).execute()
                     if user_response.data:
-                        chat["other_user"] = user_response.data[0]
+                        chat["other_user"] = self._normalize_user_for_api(user_response.data[0])
 
                 # Get last message
                 last_msg_response = self.supabase.table("messages").select("*").eq(
@@ -272,11 +289,11 @@ class ChatOperations:
             if not user_ids:
                 return []
 
-            users_response = self.supabase.table("users").select("id,name,email,image").in_(
+            users_response = self.supabase.table("users").select("id,name,full_name,email,image").in_(
                 "id", user_ids
             ).execute()
 
-            return users_response.data if users_response.data else []
+            return [self._normalize_user_for_api(u) for u in users_response.data] if users_response.data else []
         except Exception as e:
             print(f"Error fetching chat participants: {e}")
             return []

@@ -92,7 +92,7 @@ class SupabaseRepository {
             if (userIds.isEmpty()) return emptyList()
 
             supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image")) {
                     filter {
                         isIn("id", userIds)
                     }

@@ -3,6 +3,7 @@ package compose.project.click.click.utils
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Location
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -22,6 +23,13 @@ import kotlin.coroutines.resume
  * Context is initialized from MainActivity via [initLocationService].
  */
 actual class LocationService {
+
+    private companion object {
+        private const val FRESH_MAX_AGE_MS = 30_000L
+        private const val LAST_KNOWN_MAX_AGE_MS = 10 * 60_000L
+        private const val FRESH_MAX_ACCURACY_METERS = 80f
+        private const val LAST_KNOWN_MAX_ACCURACY_METERS = 150f
+    }
 
     private val context: Context
         get() = locationContext
@@ -43,16 +51,19 @@ actual class LocationService {
         }
 
         return try {
-            // Try to get the last known location first (instant, no battery cost)
-            val lastLocation = getLastKnownLocation()
-            if (lastLocation != null) {
-                println("LocationService.android: Got last known location: ${lastLocation.latitude}, ${lastLocation.longitude}")
-                return lastLocation
+            // Prefer a fresh high-accuracy fix first.
+            val freshLocation = getFreshLocation()
+            if (freshLocation != null) {
+                println("LocationService.android: Got fresh location: ${freshLocation.latitude}, ${freshLocation.longitude}")
+                return freshLocation
             }
 
-            // Fall back to requesting a fresh location
-            println("LocationService.android: Requesting fresh location...")
-            getFreshLocation()
+            // Fall back to a recent last-known fix if a fresh fix is unavailable.
+            val lastLocation = getLastKnownLocation()
+            if (lastLocation != null) {
+                println("LocationService.android: Falling back to last known location: ${lastLocation.latitude}, ${lastLocation.longitude}")
+            }
+            lastLocation
         } catch (e: Exception) {
             println("LocationService.android: Error getting location: ${e.message}")
             null
@@ -64,11 +75,10 @@ actual class LocationService {
         return suspendCancellableCoroutine { continuation ->
             fusedClient.lastLocation
                 .addOnSuccessListener { location ->
-                    if (location != null && location.latitude != 0.0 && location.longitude != 0.0) {
-                        continuation.resume(LocationResult(location.latitude, location.longitude))
-                    } else {
-                        continuation.resume(null)
-                    }
+                    continuation.resume(location?.toValidatedLocationResult(
+                        maxAgeMs = LAST_KNOWN_MAX_AGE_MS,
+                        maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS
+                    ))
                 }
                 .addOnFailureListener {
                     println("LocationService.android: lastLocation failed: ${it.message}")
@@ -91,13 +101,16 @@ actual class LocationService {
                 cancellationTokenSource.token
             )
                 .addOnSuccessListener { location ->
-                    if (location != null) {
-                        println("LocationService.android: Fresh location: ${location.latitude}, ${location.longitude}")
-                        continuation.resume(LocationResult(location.latitude, location.longitude))
+                    val validated = location?.toValidatedLocationResult(
+                        maxAgeMs = FRESH_MAX_AGE_MS,
+                        maxAccuracyMeters = FRESH_MAX_ACCURACY_METERS
+                    )
+                    if (validated != null) {
+                        println("LocationService.android: Fresh location accepted")
                     } else {
-                        println("LocationService.android: Fresh location returned null")
-                        continuation.resume(null)
+                        println("LocationService.android: Fresh location missing or not accurate enough")
                     }
+                    continuation.resume(validated)
                 }
                 .addOnFailureListener { e ->
                     println("LocationService.android: Fresh location failed: ${e.message}")
@@ -128,6 +141,17 @@ actual class LocationService {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         return locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
                locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+    }
+
+    private fun Location.toValidatedLocationResult(maxAgeMs: Long, maxAccuracyMeters: Float): LocationResult? {
+        if (latitude == 0.0 && longitude == 0.0) return null
+
+        val ageMs = (System.currentTimeMillis() - time).coerceAtLeast(0L)
+        if (ageMs > maxAgeMs) return null
+
+        if (hasAccuracy() && accuracy > maxAccuracyMeters) return null
+
+        return LocationResult(latitude = latitude, longitude = longitude)
     }
 }
 
