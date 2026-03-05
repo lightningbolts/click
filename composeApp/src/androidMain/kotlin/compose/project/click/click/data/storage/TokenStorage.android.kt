@@ -57,6 +57,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_TOKEN_TYPE = "token_type"
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
+        private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -84,6 +85,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     override suspend fun getTagsInitialized(): Boolean? {
         return if (sharedPreferences.contains(KEY_TAGS_INITIALIZED)) {
             sharedPreferences.getBoolean(KEY_TAGS_INITIALIZED, false)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveDarkModeEnabled(isDarkMode: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_DARK_MODE_ENABLED, isDarkMode)
+            apply()
+        }
+    }
+
+    override suspend fun getDarkModeEnabled(): Boolean? {
+        return if (sharedPreferences.contains(KEY_DARK_MODE_ENABLED)) {
+            sharedPreferences.getBoolean(KEY_DARK_MODE_ENABLED, true)
         } else {
             null
         }

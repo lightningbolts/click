@@ -64,7 +64,10 @@ private val CardSpacing = 24.dp
  */
 @Composable
 private fun headerGradientBrush() = Brush.horizontalGradient(
-    colors = listOf(GradientTextStart, GradientTextEnd)
+    colors = listOf(
+        MaterialTheme.colorScheme.onSurface,
+        MaterialTheme.colorScheme.onSurfaceVariant
+    )
 )
 
 @Composable
@@ -99,7 +102,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         when (val state = homeState) {
             is HomeState.Loading -> {
@@ -133,7 +136,7 @@ fun HomeScreen(
                     Text(
                         state.message,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = OnSurfaceDark.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
@@ -209,13 +212,13 @@ fun HomeScreen(
                                             "No Connections Yet",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = OnSurfaceDark
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
                                             "Start making connections by tapping Add Click",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = OnSurfaceDark.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                         )
                                     }
                                 }
@@ -230,7 +233,7 @@ fun HomeScreen(
                                 Text(
                                     "Connections you haven't talked to in a while",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = OnSurfaceDark.copy(alpha = 0.6f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )
                             }
                             
@@ -339,12 +342,12 @@ private fun GlassStatCard(
                 value,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = OnSurfaceDark
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 label,
                 style = MaterialTheme.typography.bodySmall,
-                color = OnSurfaceDark.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         }
     }
@@ -409,12 +412,12 @@ private fun LocationGroupCard(
                         location,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
-                        color = OnSurfaceDark
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         "${connections.size} connection${if (connections.size != 1) "s" else ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = OnSurfaceDark.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
 
@@ -441,7 +444,7 @@ private fun LocationGroupCard(
                     Icons.Filled.ChevronRight,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                     modifier = Modifier.rotate(chevronAngle),
-                    tint = OnSurfaceDark.copy(alpha = 0.55f)
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
 
@@ -535,12 +538,12 @@ private fun ConnectionRowItem(
                 displayName,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = OnSurfaceDark
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 timeAgo,
                 style = MaterialTheme.typography.labelSmall,
-                color = OnSurfaceDark.copy(alpha = 0.55f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
             )
         }
 
@@ -566,7 +569,7 @@ private fun ConnectionRowItem(
                 Icons.Filled.Chat,
                 contentDescription = "Open chat",
                 modifier = Modifier.size(18.dp),
-                tint = OnSurfaceDark.copy(alpha = 0.6f)
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         }
     }
@@ -629,7 +632,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                     connection.semantic_location ?: "Connection",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = OnSurfaceDark
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -637,13 +640,13 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                         Icons.Filled.AccessTime,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = OnSurfaceDark.copy(alpha = 0.6f)
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         timeAgo,
                         style = MaterialTheme.typography.bodySmall,
-                        color = OnSurfaceDark.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -651,7 +654,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = "View details",
-                tint = OnSurfaceDark.copy(alpha = 0.6f)
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         }
     }
@@ -699,12 +702,12 @@ fun ReconnectReminderCard(
                     reminder.userName ?: "Someone",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = OnSurfaceDark
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     "${reminder.daysSinceContact} days since last chat",
                     style = MaterialTheme.typography.bodySmall,
-                    color = OnSurfaceDark.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
             
@@ -718,7 +721,7 @@ fun ReconnectReminderCard(
                         Icons.Filled.Close,
                         contentDescription = "Dismiss",
                         modifier = Modifier.size(18.dp),
-                        tint = OnSurfaceDark.copy(alpha = 0.6f)
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
                 Button(
@@ -774,13 +777,13 @@ fun ConnectionInsightsCard(
                         "Connection Insights",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = OnSurfaceDark
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Icon(
                     if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = OnSurfaceDark.copy(alpha = 0.7f)
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
             
@@ -863,7 +866,7 @@ private fun InsightStat(
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = OnSurfaceDark.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
     }
 }
@@ -890,14 +893,14 @@ private fun InsightRow(
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = OnSurfaceDark.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
             )
         }
         Text(
             value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            color = OnSurfaceDark
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

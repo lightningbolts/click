@@ -40,6 +40,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_TOKEN_TYPE = "token_type"
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
+        private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -168,6 +169,19 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getTagsInitialized(): Boolean? {
         return if (userDefaults.objectForKey(KEY_TAGS_INITIALIZED) != null) {
             userDefaults.boolForKey(KEY_TAGS_INITIALIZED)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveDarkModeEnabled(isDarkMode: Boolean) {
+        userDefaults.setBool(isDarkMode, KEY_DARK_MODE_ENABLED)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getDarkModeEnabled(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_DARK_MODE_ENABLED) != null) {
+            userDefaults.boolForKey(KEY_DARK_MODE_ENABLED)
         } else {
             null
         }

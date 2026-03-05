@@ -511,6 +511,7 @@ class ChatViewModel(
         }
         reactionsChannel = null
         _messageReactions.value = emptyMap()
+        _typingUsers.value = emptyList()
         typingPollingJob?.cancel()
         typingPollingJob = null
         currentConnectionId = null

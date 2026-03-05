@@ -15,6 +15,10 @@ interface TokenStorage {
     // Tags/onboarding local cache to avoid re-showing the tagging screen on app resume
     suspend fun saveTagsInitialized(initialized: Boolean)
     suspend fun getTagsInitialized(): Boolean?
+
+    // Theme preference persistence (true = dark mode, false = light mode)
+    suspend fun saveDarkModeEnabled(isDarkMode: Boolean)
+    suspend fun getDarkModeEnabled(): Boolean?
 }
 
 expect fun createTokenStorage(): TokenStorage

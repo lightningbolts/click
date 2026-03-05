@@ -12,11 +12,14 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.SizeTransform
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +40,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
@@ -75,15 +79,13 @@ fun ConnectionsScreen(
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
 
-    LaunchedEffect(initialChatId) {
+    LaunchedEffect(userId, initialChatId) {
+        viewModel.setCurrentUser(userId)
         if (initialChatId != null) {
             selectedChatId = initialChatId
+            viewModel.loadChats(isForced = true)
             viewModel.loadChatMessages(initialChatId)
         }
-    }
-
-    LaunchedEffect(userId) {
-        viewModel.setCurrentUser(userId)
     }
 
     DisposableEffect(Unit) {
@@ -95,12 +97,18 @@ fun ConnectionsScreen(
     AnimatedContent(
         targetState = selectedChatId,
         transitionSpec = {
+            val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+            val fadeSpec  = tween<Float>(220, easing = LinearOutSlowInEasing)
             if (targetState != null) {
-                (slideInHorizontally(animationSpec = tween(220), initialOffsetX = { it }) + fadeIn(animationSpec = tween(200)))
-                    .togetherWith(slideOutHorizontally(animationSpec = tween(180), targetOffsetX = { -it / 3 }) + fadeOut(animationSpec = tween(150)))
+                // Opening chat: new screen slides in from right, old slides fully out to left
+                (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) + fadeIn(animationSpec = fadeSpec))
+                    .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) + fadeOut(animationSpec = fadeSpec))
+                    .using(SizeTransform(clip = true))
             } else {
-                (slideInHorizontally(animationSpec = tween(220), initialOffsetX = { -it / 3 }) + fadeIn(animationSpec = tween(200)))
-                    .togetherWith(slideOutHorizontally(animationSpec = tween(180), targetOffsetX = { it }) + fadeOut(animationSpec = tween(150)))
+                // Closing chat: new screen slides in from left, old slides fully out to right
+                (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) + fadeIn(animationSpec = fadeSpec))
+                    .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) + fadeOut(animationSpec = fadeSpec))
+                    .using(SizeTransform(clip = true))
             }
         },
         label = "chat_open_close_transition"
@@ -193,37 +201,64 @@ fun ConnectionsListView(
                 val activeCount = successState.chats.count { it.connection.id !in archivedConnectionIds }
                 val archivedCount = successState.chats.count { it.connection.id in archivedConnectionIds }
 
-                Box(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    TabRow(
-                        selectedTabIndex = selectedTabIndex,
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White,
-                        indicator = { tabPositions ->
-                            if (selectedTabIndex in tabPositions.indices) {
-                                Box(
-                                    modifier = Modifier
-                                        .offset(x = tabPositions[selectedTabIndex].left)
-                                        .width(tabPositions[selectedTabIndex].width)
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(PrimaryBlue.copy(alpha = 0.22f))
-                                )
-                            }
-                        },
-                        divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.08f)) }
-                    ) {
-                        Tab(
-                            selected = selectedTabIndex == 0,
-                            onClick = { selectedTabIndex = 0 },
-                            modifier = Modifier.clip(RoundedCornerShape(999.dp)),
-                            text = { Text("Active ($activeCount)") }
+                // Segmented control — matches the web pill-toggle design
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(12.dp)
                         )
-                        Tab(
-                            selected = selectedTabIndex == 1,
-                            onClick = { selectedTabIndex = 1 },
-                            modifier = Modifier.clip(RoundedCornerShape(999.dp)),
-                            text = { Text("Archived ($archivedCount)") }
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Active tab
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .then(
+                                if (selectedTabIndex == 0) Modifier
+                                    .background(PrimaryBlue.copy(alpha = 0.18f))
+                                    .border(1.dp, PrimaryBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                else Modifier
+                            )
+                            .clickable { selectedTabIndex = 0 }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Active ($activeCount)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (selectedTabIndex == 0) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selectedTabIndex == 0) LightBlue
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // Archived tab
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .then(
+                                if (selectedTabIndex == 1) Modifier
+                                    .background(PrimaryBlue.copy(alpha = 0.18f))
+                                    .border(1.dp, PrimaryBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                else Modifier
+                            )
+                            .clickable { selectedTabIndex = 1 }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Archived ($archivedCount)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (selectedTabIndex == 1) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selectedTabIndex == 1) LightBlue
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -560,9 +595,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         }
     }
 
-    // Start typing monitoring for this chat
     LaunchedEffect(chatId) {
-        viewModel.startTypingMonitoring(chatId)
+        viewModel.loadChatMessages(chatId)
     }
 
     // Scroll to bottom when new messages arrive
@@ -962,7 +996,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             value = messageInput,
                             onValueChange = {
                                 viewModel.updateMessageInput(it)
-                                viewModel.onUserTyping(chatId)
                             },
                             modifier = Modifier
                                 .weight(1f)

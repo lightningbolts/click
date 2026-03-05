@@ -1,10 +1,16 @@
 package compose.project.click.click
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -35,7 +41,6 @@ import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.rememberNfcManager
 import org.jetbrains.compose.ui.tooling.preview.Preview
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
 import io.ktor.client.*
@@ -52,8 +57,7 @@ import compose.project.click.click.data.AppDataManager
 @Composable
 @Preview
 fun App() {
-    // Initialize from system theme but default to dark for cyber aesthetic
-    val systemDark = isSystemInDarkTheme()
+    // Default to dark until persisted preference is loaded.
     var isDarkMode by remember { mutableStateOf(true) }
 
     // Ktor client
@@ -67,6 +71,7 @@ fun App() {
 
     // Auth ViewModel with TokenStorage
     val tokenStorage = remember { createTokenStorage() }
+    val appScope = rememberCoroutineScope()
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
 
@@ -76,6 +81,13 @@ fun App() {
     val currentUser = when (val state = authViewModel.authState) {
         is AuthState.Success -> User(id = state.userId, name = state.name ?: state.email, createdAt = 0L)
         else -> User(id = "", name = "", createdAt = 0L)
+    }
+
+    LaunchedEffect(Unit) {
+        val persisted = tokenStorage.getDarkModeEnabled()
+        if (persisted != null) {
+            isDarkMode = persisted
+        }
     }
 
     // Coroutine scope for location-aware connection
@@ -348,11 +360,18 @@ fun App() {
                         modifier = Modifier.border(
                             width = 1.dp,
                             brush = Brush.verticalGradient(
-                                colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
+                                colors = listOf(
+                                    PrimaryBlue.copy(alpha = if (isDarkMode) 0.5f else 0.25f),
+                                    Color.Transparent
+                                )
                             ),
                             shape = androidx.compose.ui.graphics.RectangleShape
                         ),
-                        containerColor = GlassDark,
+                        containerColor = if (isDarkMode) {
+                            GlassDark
+                        } else {
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                        },
                         tonalElevation = 0.dp
                     ) {
                         Row(
@@ -411,34 +430,63 @@ fun App() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        val screenKey = remember(showMyQRCode, showQRScanner, showNfcScreen, currentRoute) {
-                            when {
-                                showMyQRCode -> "my_qr"
-                                showQRScanner -> "qr_scanner"
-                                showNfcScreen -> "nfc"
-                                currentRoute == "search" -> "search"
-                                else -> currentRoute
-                            }
+                        val screenKey = when {
+                            showMyQRCode -> "my_qr"
+                            showQRScanner -> "qr_scanner"
+                            showNfcScreen -> "nfc"
+                            currentRoute == "search" -> "search"
+                            else -> currentRoute
                         }
 
                         AnimatedContent(
                             targetState = screenKey,
                             transitionSpec = {
-                                fadeIn(animationSpec = tween(180)).togetherWith(
-                                    fadeOut(animationSpec = tween(150))
+                                val routeOrder = listOf(
+                                    NavigationItem.Home.route,
+                                    NavigationItem.AddClick.route,
+                                    NavigationItem.Connections.route,
+                                    NavigationItem.Map.route,
+                                    NavigationItem.Settings.route,
+                                    "search",
+                                    "my_qr",
+                                    "qr_scanner",
+                                    "nfc"
                                 )
+
+                                val initialIndex = routeOrder.indexOf(initialState).let { if (it >= 0) it else 0 }
+                                val targetIndex = routeOrder.indexOf(targetState).let { if (it >= 0) it else 0 }
+                                val movingForward = targetIndex >= initialIndex
+
+                                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                                val fadeSpec  = tween<Float>(220, easing = LinearOutSlowInEasing)
+
+                                if (movingForward) {
+                                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                                        fadeIn(animationSpec = fadeSpec))
+                                        .togetherWith(
+                                            slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) +
+                                                fadeOut(animationSpec = fadeSpec)
+                                        ).using(SizeTransform(clip = true))
+                                } else {
+                                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) +
+                                        fadeIn(animationSpec = fadeSpec))
+                                        .togetherWith(
+                                            slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                                                fadeOut(animationSpec = fadeSpec)
+                                        ).using(SizeTransform(clip = true))
+                                }
                             },
                             label = "app_screen_transition"
-                        ) {
-                            when {
-                                showMyQRCode -> {
+                        ) { animatedScreen ->
+                            when (animatedScreen) {
+                                "my_qr" -> {
                                     MyQRCodeScreen(
                                         userId = currentUser.id,
                                         username = currentUser.name,
                                         onNavigateBack = { showMyQRCode = false }
                                     )
                                 }
-                                showQRScanner -> {
+                                "qr_scanner" -> {
                                     QRScannerScreen(
                                         onQRCodeScanned = { userId ->
                                             showQRScanner = false
@@ -457,7 +505,7 @@ fun App() {
                                         onNavigateBack = { showQRScanner = false }
                                     )
                                 }
-                                showNfcScreen -> {
+                                "nfc" -> {
                                     val userId = when (val state = authViewModel.authState) {
                                         is AuthState.Success -> state.userId
                                         else -> ""
@@ -481,7 +529,7 @@ fun App() {
                                         }
                                     )
                                 }
-                                currentRoute == "search" -> {
+                                "search" -> {
                                     val userId = when (val state = authViewModel.authState) {
                                         is AuthState.Success -> state.userId
                                         else -> ""
@@ -499,7 +547,7 @@ fun App() {
                                     )
                                 }
                                 else -> {
-                                    when (currentRoute) {
+                                    when (animatedScreen) {
                                         NavigationItem.Home.route -> HomeScreen(
                                             onNavigateToChat = { connectionId ->
                                                 pendingChatId = connectionId
@@ -545,7 +593,13 @@ fun App() {
                                         )
                                         NavigationItem.Settings.route -> SettingsScreen(
                                             isDarkMode = isDarkMode,
-                                            onToggleDarkMode = { isDarkMode = !isDarkMode },
+                                            onToggleDarkMode = {
+                                                val next = !isDarkMode
+                                                isDarkMode = next
+                                                appScope.launch {
+                                                    tokenStorage.saveDarkModeEnabled(next)
+                                                }
+                                            },
                                             onSignOut = { authViewModel.signOut() }
                                         )
                                     }
