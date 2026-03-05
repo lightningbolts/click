@@ -111,6 +111,13 @@ class ChatRepository(
                 .filter { it != userId }
                 .distinct()
 
+            val authToken = tokenStorage.getJwt()
+            val displayNamesById = if (!authToken.isNullOrBlank() && otherUserIds.isNotEmpty()) {
+                apiClient.getDisplayNames(otherUserIds, authToken).getOrElse { emptyMap() }
+            } else {
+                emptyMap()
+            }
+
             val users = fetchUsersByIdsSafe(otherUserIds)
             val usersById = users.associateBy { it.id }
 
@@ -156,7 +163,7 @@ class ChatRepository(
                 val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
                 val otherUser = usersById[otherUserId] ?: User(
                     id = otherUserId,
-                    name = "User",
+                    name = displayNamesById[otherUserId] ?: "Connection",
                     email = null,
                     image = null,
                     createdAt = 0L

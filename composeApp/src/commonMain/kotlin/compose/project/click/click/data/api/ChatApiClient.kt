@@ -85,6 +85,12 @@ class ChatApiClient(
     @Serializable
     data class SearchMessagesResponse(val messages: List<MessageApiModel>)
 
+    @Serializable
+    data class DisplayNamesRequest(val user_ids: List<String>)
+
+    @Serializable
+    data class DisplayNamesResponse(val names: Map<String, String>)
+
     // API Models (snake_case to match Python API)
     @Serializable
     data class ChatApiModel(
@@ -498,6 +504,31 @@ class ChatApiClient(
                 Result.success(searchResponse.messages.map { it.toMessage() })
             } else Result.failure(Exception("Failed to search messages: ${response.status}"))
         } catch (e: Exception) { Result.failure(e) }
+    }
+
+    /**
+     * Resolve display names for a batch of user IDs.
+     * Uses backend service credentials so it still works when users table is protected by RLS.
+     */
+    suspend fun getDisplayNames(userIds: List<String>, authToken: String): Result<Map<String, String>> {
+        return try {
+            if (userIds.isEmpty()) return Result.success(emptyMap())
+
+            val response = client.post("$baseUrl/api/users/display-names") {
+                header("Authorization", authToken)
+                contentType(ContentType.Application.Json)
+                setBody(DisplayNamesRequest(user_ids = userIds))
+            }
+
+            if (response.status.value in 200..299) {
+                val body = response.body<DisplayNamesResponse>()
+                Result.success(body.names)
+            } else {
+                Result.failure(Exception("Failed to fetch display names: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     // Extension functions to convert API models to domain models

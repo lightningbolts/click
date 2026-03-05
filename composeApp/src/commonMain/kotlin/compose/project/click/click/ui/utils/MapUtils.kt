@@ -222,9 +222,11 @@ fun clusterPoints(
         // Mark as assigned
         nearbyPoints.forEach { assigned.add(it.connection.id) }
         
-        // Calculate cluster center
-        val centerLat = nearbyPoints.map { it.latitude }.average()
-        val centerLon = nearbyPoints.map { it.longitude }.average()
+        // Anchor cluster to a real connection point instead of averaging coordinates,
+        // which can drift pins away from true locations.
+        val representative = nearbyPoints.maxByOrNull { it.connection.created } ?: point
+        val centerLat = representative.latitude
+        val centerLon = representative.longitude
         
         // Determine the dominant semantic icon for this cluster
         val iconCounts = nearbyPoints

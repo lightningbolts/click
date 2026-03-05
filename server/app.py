@@ -23,10 +23,12 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and
 chat_ops = ChatOperations(supabase) if supabase else None
 
 
-def validate(encoded, email):
+def validate(encoded, email=None):
     try:
         decoded = database_ops.supabase.auth.get_claims(encoded)
-        if(decoded["email"] == email and decoded['exp'] >= time.time() and decoded["aud"] == "authenticated"):
+        if email is None:
+            return decoded['exp'] >= time.time() and decoded.get("aud") == "authenticated"
+        if(decoded.get("email") == email and decoded['exp'] >= time.time() and decoded.get("aud") == "authenticated"):
             return True
         else:
             return False
@@ -361,6 +363,48 @@ def get_chat_participants(chat_id):
     try:
         participants = chat_ops.get_chat_participants(chat_id)
         return jsonify({"participants": participants}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/users/display-names', methods=['POST'])
+def get_display_names():
+    """Resolve display names for a batch of user IDs in an RLS-safe way."""
+    if not validate(request.headers.get('Authorization')):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not supabase:
+        return jsonify({"error": "Chat service not configured"}), 500
+
+    try:
+        payload = request.get_json(silent=True) or {}
+        user_ids = payload.get("user_ids") or []
+        user_ids = [str(uid) for uid in user_ids if uid][:100]
+
+        if not user_ids:
+            return jsonify({"names": {}}), 200
+
+        names = {}
+
+        try:
+            users_response = supabase.table("users").select("id,name,full_name,email").in_("id", user_ids).execute()
+            users = users_response.data or []
+        except Exception:
+            users_response = supabase.table("users").select("id,name,email").in_("id", user_ids).execute()
+            users = users_response.data or []
+
+        for user in users:
+            email = user.get("email")
+            email_prefix = email.split("@")[0] if isinstance(email, str) and "@" in email else None
+            resolved = (
+                (user.get("full_name") or "").strip()
+                or (user.get("name") or "").strip()
+                or (email_prefix or "").strip()
+                or "Connection"
+            )
+            names[user.get("id")] = resolved
+
+        return jsonify({"names": names}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
