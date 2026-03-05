@@ -70,6 +70,10 @@ fun MapScreen(
     val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
     val cameraTarget by viewModel.cameraTarget.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.onMapScreenEntered()
+    }
+
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     
     // Snackbar state for ghost mode notification
@@ -202,6 +206,9 @@ fun MapScreen(
                                         }
                                     },
                                     onZoomChanged = { viewModel.setZoomLevel(it) },
+                                    onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
+                                        viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
+                                    },
                                     onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() }
                                 )
 
@@ -341,6 +348,7 @@ private fun MapContent(
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
+    onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
     onCameraAnimationComplete: () -> Unit
 ) {
     val pins = when (renderData) {
@@ -363,7 +371,9 @@ private fun MapContent(
         ghostMode = ghostMode,
         onPinTapped = onPinTapped,
         onClusterTapped = onClusterTapped,
-        onZoomChanged = onZoomChanged
+        onZoomChanged = onZoomChanged,
+        onVisibleBoundsChanged = onVisibleBoundsChanged,
+        onCameraAnimationComplete = onCameraAnimationComplete
     )
 }
 

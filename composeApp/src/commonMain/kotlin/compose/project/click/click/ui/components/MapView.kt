@@ -78,7 +78,9 @@ expect fun PlatformMap(
     ghostMode: Boolean = false,
     onPinTapped: (MapPin) -> Unit = {},
     onClusterTapped: (MapClusterPin) -> Unit = {},
-    onZoomChanged: (Double) -> Unit = {}
+    onZoomChanged: (Double) -> Unit = {},
+    onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit = { _, _, _, _ -> },
+    onCameraAnimationComplete: () -> Unit = {}
 )
 
 /**

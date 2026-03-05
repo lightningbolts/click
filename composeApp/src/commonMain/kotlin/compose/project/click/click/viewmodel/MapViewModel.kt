@@ -14,6 +14,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.pow
 
 /**
@@ -53,6 +55,10 @@ sealed class MapSelection {
  * - Selected connection/cluster state for bottom sheet
  */
 class MapViewModel : ViewModel() {
+    companion object {
+        // Session memory for map camera across map screen exits/returns.
+        private var lastKnownCameraTarget: CameraTarget? = null
+    }
 
     // Base data state
     private val _mapState = MutableStateFlow<MapState>(MapState.Loading)
@@ -77,6 +83,10 @@ class MapViewModel : ViewModel() {
     private val _cameraTarget = MutableStateFlow<CameraTarget?>(null)
     val cameraTarget: StateFlow<CameraTarget?> = _cameraTarget.asStateFlow()
 
+    // Stable default camera target derived from all connection locations.
+    private val _defaultCameraTarget = MutableStateFlow<CameraTarget?>(lastKnownCameraTarget)
+    val defaultCameraTarget: StateFlow<CameraTarget?> = _defaultCameraTarget.asStateFlow()
+
     // Visible bounds for viewport-based filtering in ConnectionsList
     private val _visibleBounds = MutableStateFlow<BoundingBox?>(null)
     val visibleBounds: StateFlow<BoundingBox?> = _visibleBounds.asStateFlow()
@@ -98,6 +108,10 @@ class MapViewModel : ViewModel() {
     // Nudge result for snackbar feedback
     private val _nudgeResult = MutableStateFlow<String?>(null)
     val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
+
+    // Guards against map callback feedback immediately canceling programmatic zoom animations.
+    private var pendingProgrammaticZoomTarget: Double? = null
+    private var pendingProgrammaticZoomSetAtMs: Long = 0L
 
     init {
         observeAppData()
@@ -125,6 +139,7 @@ class MapViewModel : ViewModel() {
                 when {
                     isDataLoaded -> {
                         _mapState.value = MapState.Success(connections)
+                        ensureDefaultCameraTarget(connections)
                         updateRenderData(connections, zoom, filter)
                     }
                     isLoading -> {
@@ -157,6 +172,47 @@ class MapViewModel : ViewModel() {
     }
 
     /**
+     * Computes a one-time default camera based on all valid connection coordinates.
+     */
+    private fun ensureDefaultCameraTarget(connections: List<Connection>) {
+        if (_defaultCameraTarget.value != null) return
+
+        val valid = connections.filter {
+            val lat = it.geo_location.lat
+            val lon = it.geo_location.lon
+            lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)
+        }
+
+        if (valid.isEmpty()) return
+
+        val minLat = valid.minOf { it.geo_location.lat }
+        val maxLat = valid.maxOf { it.geo_location.lat }
+        val minLon = valid.minOf { it.geo_location.lon }
+        val maxLon = valid.maxOf { it.geo_location.lon }
+
+        val bounds = BoundingBox(minLat = minLat, maxLat = maxLat, minLon = minLon, maxLon = maxLon)
+        val targetZoom = calculateZoomForBounds(bounds).coerceIn(2.0, 16.0)
+
+        val computedTarget = CameraTarget(
+            latitude = bounds.centerLat,
+            longitude = bounds.centerLon,
+            zoom = targetZoom
+        )
+        _defaultCameraTarget.value = computedTarget
+        lastKnownCameraTarget = computedTarget
+
+        // If we don't already have an active camera move, apply this default as a one-shot initial camera.
+        if (_cameraTarget.value == null) {
+            _cameraTarget.value = computedTarget
+        }
+
+        // Use the computed zoom only for first initialization to match initial map framing.
+        if (_zoomLevel.value == 10.0) {
+            _zoomLevel.value = targetZoom
+        }
+    }
+
+    /**
      * Set the active tribe filter
      */
     fun setFilter(filter: String) {
@@ -167,15 +223,62 @@ class MapViewModel : ViewModel() {
      * Update the current zoom level
      */
     fun setZoomLevel(zoom: Double) {
+        val pendingTarget = pendingProgrammaticZoomTarget
+        if (pendingTarget != null) {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val ageMs = now - pendingProgrammaticZoomSetAtMs
+            val reachedPendingTarget = abs(zoom - pendingTarget) <= 0.25
+
+            if (reachedPendingTarget || ageMs > 1500L) {
+                pendingProgrammaticZoomTarget = null
+            } else {
+                return
+            }
+        }
+
+        if (abs(_zoomLevel.value - zoom) <= 0.01) return
         _zoomLevel.value = zoom
-        estimateVisibleBounds()
+
+        _visibleBounds.value?.let { bounds ->
+            persistCameraTarget(
+                latitude = bounds.centerLat,
+                longitude = bounds.centerLon,
+                zoom = zoom
+            )
+        }
     }
 
     /**
      * Update visible bounds from outside (e.g., the platform map callback)
      */
     fun updateVisibleBounds(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) {
-        _visibleBounds.value = BoundingBox(minLat, maxLat, minLon, maxLon)
+        val bounds = BoundingBox(minLat, maxLat, minLon, maxLon)
+        _visibleBounds.value = bounds
+        persistCameraTarget(
+            latitude = bounds.centerLat,
+            longitude = bounds.centerLon,
+            zoom = _zoomLevel.value
+        )
+    }
+
+    private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
+        if (!latitude.isFinite() || !longitude.isFinite() || !zoom.isFinite()) return
+
+        val candidate = CameraTarget(
+            latitude = latitude,
+            longitude = longitude,
+            zoom = zoom.coerceIn(2.0, 20.0)
+        )
+
+        val previous = lastKnownCameraTarget
+        val changed = previous == null ||
+            abs(previous.latitude - candidate.latitude) > 0.000001 ||
+            abs(previous.longitude - candidate.longitude) > 0.000001 ||
+            abs(previous.zoom - candidate.zoom) > 0.01
+
+        if (changed) {
+            lastKnownCameraTarget = candidate
+        }
     }
 
     /**
@@ -224,16 +327,20 @@ class MapViewModel : ViewModel() {
      * Zoom in
      */
     fun zoomIn() {
-        _zoomLevel.value = minOf(_zoomLevel.value + 1.0, 20.0)
-        estimateVisibleBounds()
+        val target = minOf(_zoomLevel.value + 1.0, 20.0)
+        pendingProgrammaticZoomTarget = target
+        pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        _zoomLevel.value = target
     }
 
     /**
      * Zoom out
      */
     fun zoomOut() {
-        _zoomLevel.value = maxOf(_zoomLevel.value - 1.0, 2.0)
-        estimateVisibleBounds()
+        val target = maxOf(_zoomLevel.value - 1.0, 2.0)
+        pendingProgrammaticZoomTarget = target
+        pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        _zoomLevel.value = target
     }
 
     /**
@@ -255,6 +362,8 @@ class MapViewModel : ViewModel() {
         )
         
         // Update zoom level to trigger rendering change
+        pendingProgrammaticZoomTarget = targetZoom
+        pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
         _zoomLevel.value = targetZoom
     }
 
@@ -292,6 +401,21 @@ class MapViewModel : ViewModel() {
      */
     fun onCameraAnimationComplete() {
         _cameraTarget.value = null
+    }
+
+    /**
+     * Called whenever the map screen is entered so we can restore the last viewport.
+     */
+    fun onMapScreenEntered() {
+        if (_cameraTarget.value != null) return
+
+        val target = lastKnownCameraTarget ?: _defaultCameraTarget.value
+        if (target != null) {
+            _cameraTarget.value = target
+            if (abs(_zoomLevel.value - target.zoom) > 0.01) {
+                _zoomLevel.value = target.zoom
+            }
+        }
     }
 
     /**

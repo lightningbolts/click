@@ -12,6 +12,10 @@ import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.utils.TimeState
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 actual fun PlatformMap(
@@ -24,7 +28,9 @@ actual fun PlatformMap(
     ghostMode: Boolean,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
-    onZoomChanged: (Double) -> Unit
+    onZoomChanged: (Double) -> Unit,
+    onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
+    onCameraAnimationComplete: () -> Unit
 ) {
     // Determine center position
     val initialCenter = when {
@@ -38,8 +44,8 @@ actual fun PlatformMap(
         position = CameraPosition.fromLatLngZoom(initialCenter, zoom.toFloat())
     }
 
-    // Animate to target when centerLat/centerLon changes
-    LaunchedEffect(centerLat, centerLon, zoom) {
+    // Animate to target when centerLat/centerLon changes.
+    LaunchedEffect(centerLat, centerLon) {
         if (centerLat != null && centerLon != null) {
             cameraPositionState.animate(
                 update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
@@ -47,6 +53,7 @@ actual fun PlatformMap(
                     zoom.toFloat()
                 )
             )
+            onCameraAnimationComplete()
         }
     }
 
@@ -59,23 +66,29 @@ actual fun PlatformMap(
         }
     }
 
-    // Report zoom changes back to the ViewModel
-    LaunchedEffect(cameraPositionState.position.zoom) {
-        onZoomChanged(cameraPositionState.position.zoom.toDouble())
+    // Report zoom changes back to the ViewModel.
+    LaunchedEffect(cameraPositionState) {
+        snapshotFlow { cameraPositionState.position.zoom.toDouble() }
+            .distinctUntilChanged()
+            .collectLatest { onZoomChanged(it) }
     }
 
-    // Center on first pin when pins change
-    LaunchedEffect(pins, clusters) {
-        val target = when {
-            pins.isNotEmpty() -> LatLng(pins.first().latitude, pins.first().longitude)
-            clusters.isNotEmpty() -> LatLng(clusters.first().latitude, clusters.first().longitude)
-            else -> null
-        }
-        target?.let {
-            cameraPositionState.animate(
-                update = com.google.android.gms.maps.CameraUpdateFactory.newLatLng(it)
-            )
-        }
+    // Report true visible map bounds so "memories in view" uses the real viewport.
+    LaunchedEffect(cameraPositionState) {
+        snapshotFlow { cameraPositionState.projection?.visibleRegion?.latLngBounds }
+            .filterNotNull()
+            .map { bounds ->
+                listOf(
+                    bounds.southwest.latitude,
+                    bounds.northeast.latitude,
+                    bounds.southwest.longitude,
+                    bounds.northeast.longitude
+                )
+            }
+            .distinctUntilChanged()
+            .collectLatest { (minLat, maxLat, minLon, maxLon) ->
+                onVisibleBoundsChanged(minLat, maxLat, minLon, maxLon)
+            }
     }
 
     // Map properties - grayscale when ghost mode
