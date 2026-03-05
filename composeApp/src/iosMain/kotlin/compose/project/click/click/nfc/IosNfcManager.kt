@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import platform.CoreNFC.*
 import platform.Foundation.*
 import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.darwin.NSObject
 import platform.darwin.dispatch_get_main_queue
 
@@ -159,12 +160,9 @@ class IosNfcManager : NfcManager {
     }
 
     override fun openNfcSettings() {
-        // On iOS, there's no dedicated NFC settings page
-        // NFC is always on if the hardware supports it
-        // Open the general Settings app
-        val settingsUrl = NSURL.URLWithString("App-Prefs:root=General")
-            ?: NSURL.URLWithString("app-settings:")
-            ?: return
+        // On iOS, there is no direct NFC settings page.
+        // Open this app's settings so users can adjust relevant permissions.
+        val settingsUrl = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
         
         if (UIApplication.sharedApplication.canOpenURL(settingsUrl)) {
             UIApplication.sharedApplication.openURL(settingsUrl)

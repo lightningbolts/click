@@ -8,13 +8,18 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,10 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.ui.theme.*
@@ -83,26 +91,40 @@ fun ConnectionsScreen(
         }
     }
 
-    if (selectedChatId == null) {
-        ConnectionsListView(
-            viewModel = viewModel,
-            searchQuery = searchQuery,
-            onChatSelected = { chatId ->
-                selectedChatId = chatId
-                viewModel.loadChatMessages(chatId)
+    AnimatedContent(
+        targetState = selectedChatId,
+        transitionSpec = {
+            if (targetState != null) {
+                (slideInHorizontally(initialOffsetX = { it }) + fadeIn())
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut())
+            } else {
+                (slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn())
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }) + fadeOut())
             }
-        )
-    } else {
-        ChatView(
-            viewModel = viewModel,
-            chatId = selectedChatId!!,
-            onBackPressed = {
-                selectedChatId = null
-                viewModel.leaveChatRoom()
-                viewModel.loadChats() // Refresh chat list
-                onChatDismissed?.invoke()
-            }
-        )
+        },
+        label = "chat_open_close_transition"
+    ) { activeChatId ->
+        if (activeChatId == null) {
+            ConnectionsListView(
+                viewModel = viewModel,
+                searchQuery = searchQuery,
+                onChatSelected = { chatId ->
+                    selectedChatId = chatId
+                    viewModel.loadChatMessages(chatId)
+                }
+            )
+        } else {
+            ChatView(
+                viewModel = viewModel,
+                chatId = activeChatId,
+                onBackPressed = {
+                    selectedChatId = null
+                    viewModel.leaveChatRoom()
+                    viewModel.loadChats()
+                    onChatDismissed?.invoke()
+                }
+            )
+        }
     }
 }
 
@@ -170,22 +192,24 @@ fun ConnectionsListView(
                 val activeCount = successState.chats.count { it.connection.id !in archivedConnectionIds }
                 val archivedCount = successState.chats.count { it.connection.id in archivedConnectionIds }
 
-                TabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    containerColor = Color.Transparent,
-                    contentColor = Color.White,
-                    divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.08f)) }
-                ) {
-                    Tab(
-                        selected = selectedTabIndex == 0,
-                        onClick = { selectedTabIndex = 0 },
-                        text = { Text("Active ($activeCount)") }
-                    )
-                    Tab(
-                        selected = selectedTabIndex == 1,
-                        onClick = { selectedTabIndex = 1 },
-                        text = { Text("Archived ($archivedCount)") }
-                    )
+                Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.08f)) }
+                    ) {
+                        Tab(
+                            selected = selectedTabIndex == 0,
+                            onClick = { selectedTabIndex = 0 },
+                            text = { Text("Active ($activeCount)") }
+                        )
+                        Tab(
+                            selected = selectedTabIndex == 1,
+                            onClick = { selectedTabIndex = 1 },
+                            text = { Text("Archived ($archivedCount)") }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
             }
@@ -497,6 +521,11 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val swipeStartEdgePx = remember(density) { with(density) { 28.dp.toPx() } }
+    val swipeDismissThresholdPx = remember(density) { with(density) { 88.dp.toPx() } }
+    var isEdgeSwiping by remember(chatId) { mutableStateOf(false) }
+    var horizontalDragDistance by remember(chatId) { mutableStateOf(0f) }
 
     // Connection action sheet (archive, delete, report, block)
     var showConnectionSheet by remember { mutableStateOf(false) }
@@ -529,7 +558,34 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(chatId) {
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        isEdgeSwiping = offset.x <= swipeStartEdgePx
+                        horizontalDragDistance = 0f
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        if (isEdgeSwiping) {
+                            horizontalDragDistance = (horizontalDragDistance + dragAmount).coerceAtLeast(0f)
+                        }
+                    },
+                    onDragCancel = {
+                        isEdgeSwiping = false
+                        horizontalDragDistance = 0f
+                    },
+                    onDragEnd = {
+                        if (isEdgeSwiping && horizontalDragDistance >= swipeDismissThresholdPx) {
+                            onBackPressed()
+                        }
+                        isEdgeSwiping = false
+                        horizontalDragDistance = 0f
+                    }
+                )
+            }
+    ) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
@@ -564,12 +620,15 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         }
                     }
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(32.dp),
-                            strokeWidth = 2.5.dp
+                        Text(
+                            text = "Loading messages…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -624,6 +683,18 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                 is ChatMessagesState.Success -> {
                     val chatDetails = state.chatDetails
                     val messages = state.messages
+                    val typingLabel = remember(typingUsers, chatDetails.otherUser.id, chatDetails.otherUser.name) {
+                        val displayNames = typingUsers.map { userId ->
+                            if (userId == chatDetails.otherUser.id) chatDetails.otherUser.name ?: "Someone"
+                            else "Someone"
+                        }.distinct()
+                        when (displayNames.size) {
+                            0 -> ""
+                            1 -> "${displayNames.first()} is typing…"
+                            2 -> "${displayNames[0]} and ${displayNames[1]} are typing…"
+                            else -> "${displayNames.first()} and ${displayNames.size - 1} others are typing…"
+                        }
+                    }
 
                     // Header — compact single row (~56dp)
                     Surface(
@@ -816,10 +887,10 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Text(
-                                    text = "${typingUsers.first()} is typing…",
+                                    text = typingLabel,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                    fontStyle = FontStyle.Italic
                                 )
                             }
                         }
@@ -881,78 +952,70 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         }
                     }
 
-                    // Input bar — sits directly above nav bar
-                    Surface(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .imePadding(),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp,
-                        shadowElevation = 1.dp
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
+                        OutlinedTextField(
+                            value = messageInput,
+                            onValueChange = {
+                                viewModel.updateMessageInput(it)
+                                viewModel.onUserTyping(chatId)
+                            },
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            OutlinedTextField(
-                                value = messageInput,
-                                onValueChange = {
-                                    viewModel.updateMessageInput(it)
-                                    viewModel.onUserTyping(chatId)
-                                },
-                                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 40.dp),
-                                placeholder = {
-                                    Text(
-                                        if (editingMessageId != null) "Edit message…"
-                                        else "Message ${chatDetails.otherUser.name}…",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                },
-                                shape = RoundedCornerShape(20.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PrimaryBlue.copy(alpha = 0.65f),
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                                ),
-                                textStyle = MaterialTheme.typography.bodyMedium,
-                                maxLines = 4
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            // Squircle send / confirm-edit button
-                            val canSend = messageInput.trim().isNotEmpty()
-                            val sendGradient = Brush.linearGradient(
-                                colors = if (canSend) listOf(PrimaryBlue, LightBlue)
-                                         else listOf(
-                                             MaterialTheme.colorScheme.surfaceVariant,
-                                             MaterialTheme.colorScheme.surfaceVariant
-                                         )
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)        // matches typical min input height
-                                    .clip(RoundedCornerShape(12.dp))  // squircle — not a full circle
-                                    .background(sendGradient)
-                                    .then(
-                                        if (canSend) Modifier.clickable { viewModel.sendMessage() }
-                                        else Modifier
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    if (editingMessageId != null) Icons.Filled.Check
-                                    else Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
-                                    tint = if (canSend) Color.White
-                                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(20.dp)
+                                .weight(1f)
+                                .height(44.dp),
+                            placeholder = {
+                                Text(
+                                    if (editingMessageId != null) "Edit message…"
+                                    else "Message ${chatDetails.otherUser.name}…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
-                            }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PrimaryBlue.copy(alpha = 0.65f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                            ),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            singleLine = true,
+                            maxLines = 1
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        val canSend = messageInput.trim().isNotEmpty()
+                        val sendGradient = Brush.linearGradient(
+                            colors = if (canSend) listOf(PrimaryBlue, LightBlue)
+                            else listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(sendGradient)
+                                .then(
+                                    if (canSend) Modifier.clickable { viewModel.sendMessage() }
+                                    else Modifier
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (editingMessageId != null) Icons.Filled.Check
+                                else Icons.AutoMirrored.Filled.Send,
+                                contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
+                                tint = if (canSend) Color.White
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -1120,6 +1183,12 @@ fun ChatMessageBubble(
                             text = formatMessageTime(message.timeCreated),
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.65f),
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                        Text(
+                            text = if (message.isRead) "Read" else "Sent",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.55f),
                             modifier = Modifier.align(Alignment.End)
                         )
                     }

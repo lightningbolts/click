@@ -62,7 +62,8 @@ class ChatRepository(
             user_id = userId,
             content = content,
             timeCreated = timeCreated,
-            timeEdited = timeEdited
+            timeEdited = timeEdited,
+            isRead = isRead
         )
     }
 

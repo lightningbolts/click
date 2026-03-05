@@ -110,7 +110,9 @@ data class Message(
     @SerialName("time_created")
     val timeCreated: Long,
     @SerialName("time_edited")
-    val timeEdited: Long? = null
+    val timeEdited: Long? = null,
+    @SerialName("is_read")
+    val isRead: Boolean = false
 )
 
 @Serializable
