@@ -67,7 +67,6 @@ private val INTEREST_CATEGORIES = listOf(
 )
 
 private const val MIN_TAGS = 3
-private const val MAX_TAGS = 12
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -91,7 +90,7 @@ fun InterestTaggingScreen(
     fun toggleTag(tag: String) {
         if (tag in selectedTags) {
             selectedTags.remove(tag)
-        } else if (selectedTags.size < MAX_TAGS) {
+        } else {
             selectedTags.add(tag)
         }
     }
@@ -99,7 +98,6 @@ fun InterestTaggingScreen(
     fun addCustomInterest() {
         val raw = customInterestInput.trim()
         if (raw.isEmpty()) return
-        if (selectedTags.size >= MAX_TAGS) return
         if (selectedTags.none { it.equals(raw, ignoreCase = true) }) {
             selectedTags.add(raw)
         }
@@ -133,7 +131,7 @@ fun InterestTaggingScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Pick $MIN_TAGS–$MAX_TAGS interests to help find common ground with your connections",
+                text = "Pick at least $MIN_TAGS interests to help find common ground with your connections",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
@@ -144,7 +142,7 @@ fun InterestTaggingScreen(
 
             // Selection count indicator
             Text(
-                text = "${selectedTags.size} / $MAX_TAGS selected" +
+                text = "${selectedTags.size} selected" +
                     if (selectedTags.size < MIN_TAGS) " (min $MIN_TAGS)" else "",
                 style = MaterialTheme.typography.labelMedium,
                 color = if (selectedTags.size >= MIN_TAGS) PrimaryBlue 
@@ -262,7 +260,7 @@ fun InterestTaggingScreen(
                 )
                 FilledTonalButton(
                     onClick = { addCustomInterest() },
-                    enabled = customInterestInput.trim().isNotEmpty() && selectedTags.size < MAX_TAGS,
+                    enabled = customInterestInput.trim().isNotEmpty(),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
