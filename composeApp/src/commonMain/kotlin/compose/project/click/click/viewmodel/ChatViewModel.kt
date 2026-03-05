@@ -15,7 +15,9 @@ import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -46,6 +48,13 @@ class ChatViewModel(
     private val chatRepository: ChatRepository = ChatRepository(tokenStorage = tokenStorage),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository()
 ) : ViewModel() {
+
+    private data class PrefetchedChatPayload(
+        val messages: List<MessageWithUser>,
+        val reactionsByMessageId: Map<String, List<MessageReaction>>,
+        val icebreakerPrompts: List<IcebreakerPrompt>,
+        val showIcebreakerPanel: Boolean
+    )
 
     private val vibeCheckEnabled = false
 
@@ -114,6 +123,8 @@ class ChatViewModel(
     private var typingPollingJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var lastTypingSent: Long = 0L
+    private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
+    private val prefetchedChatLimit = 3
 
     init {
         // Observe AppDataManager connections to stay in sync
@@ -130,6 +141,9 @@ class ChatViewModel(
     // Set the current user
     fun setCurrentUser(userId: String) {
         if (_currentUserId.value == userId && _chatListState.value is ChatListState.Success) return
+        if (_currentUserId.value != userId) {
+            prefetchedChatPayloads.clear()
+        }
         _currentUserId.value = userId
         viewModelScope.launch {
             _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(userId)
@@ -177,6 +191,7 @@ class ChatViewModel(
 
                 if (chats.isNotEmpty()) {
                     _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(chats))
+                    prefetchChatPayloads(userId, chats)
                 } else if (cachedConnections.isNotEmpty()) {
                     // Keep hydrated/cached connections visible when API is empty
                     // (common during session bootstrap or backend shape mismatch).
@@ -232,9 +247,13 @@ class ChatViewModel(
         // Instantly show the chat header from cached list data (no loading spinner)
         val cachedChat = (_chatListState.value as? ChatListState.Success)
             ?.chats?.firstOrNull { it.connection.id == chatId }
-        if (cachedChat != null) {
-            // Show header immediately with empty message list — user sees the chat "open" instantly
-            _chatMessagesState.value = ChatMessagesState.Success(emptyList(), cachedChat, isLoadingMessages = true)
+        val prefetchedPayload = prefetchedChatPayloads[chatId]
+
+        if (cachedChat != null && prefetchedPayload != null) {
+            _messageReactions.value = prefetchedPayload.reactionsByMessageId
+            _icebreakerPrompts.value = prefetchedPayload.icebreakerPrompts
+            _showIcebreakerPanel.value = prefetchedPayload.showIcebreakerPanel
+            _chatMessagesState.value = ChatMessagesState.Success(prefetchedPayload.messages, cachedChat)
         } else {
             _chatMessagesState.value = ChatMessagesState.Loading
         }
@@ -254,24 +273,13 @@ class ChatViewModel(
                     return@launch
                 }
 
-                // Get messages
-                val messages = chatRepository.fetchMessagesForChat(apiChatId)
+                val payload = prefetchedPayload ?: buildChatPayload(chatDetails, apiChatId, userId)
+                prefetchedChatPayloads[chatId] = payload
 
-                // Get all users for this chat in one go
-                val participants = chatRepository.fetchChatParticipants(apiChatId)
-                val userMap = participants.associateBy { it.id }
-
-                // Map messages to include user info
-                val messagesWithUsers = messages.map { message ->
-                    val user = userMap[message.user_id] ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
-                    MessageWithUser(
-                        message = message,
-                        user = user,
-                        isSent = message.user_id == userId
-                    )
-                }
-
-                _chatMessagesState.value = ChatMessagesState.Success(messagesWithUsers, chatDetails)
+                _messageReactions.value = payload.reactionsByMessageId
+                _icebreakerPrompts.value = payload.icebreakerPrompts
+                _showIcebreakerPanel.value = payload.showIcebreakerPanel
+                _chatMessagesState.value = ChatMessagesState.Success(payload.messages, chatDetails)
 
                 // Mark messages as read
                 chatRepository.markMessagesAsRead(apiChatId, userId)
@@ -280,7 +288,7 @@ class ChatViewModel(
                 subscribeToNewMessages(apiChatId, userId)
 
                 // Load initial reactions & subscribe to changes via Realtime
-                loadAndSubscribeReactions(apiChatId)
+                loadAndSubscribeReactions(apiChatId, payload.reactionsByMessageId)
                 
                 // Monitor typing status
                 startTypingMonitoring(apiChatId)
@@ -296,17 +304,62 @@ class ChatViewModel(
                     supabaseRepository.updateConnectionHasBegun(chatId, true)
                 }
                 
-                // Load icebreaker prompts for new conversations (show only if few messages)
-                if (messagesWithUsers.size < 5) {
-                    loadIcebreakerPrompts(chatDetails.connection.context_tag)
-                    _showIcebreakerPanel.value = true
-                } else {
-                    _showIcebreakerPanel.value = false
-                }
+                // Icebreaker state is already prepared in payload before UI render.
             } catch (e: Exception) {
                 _chatMessagesState.value = ChatMessagesState.Error(e.message ?: "Failed to load messages")
             }
         }
+    }
+
+    private fun prefetchChatPayloads(userId: String, chats: List<ChatWithDetails>) {
+        viewModelScope.launch {
+            chats
+                .take(prefetchedChatLimit)
+                .forEach { chatDetails ->
+                    val connectionId = chatDetails.connection.id
+                    if (prefetchedChatPayloads.containsKey(connectionId)) return@forEach
+                    val apiChatId = chatDetails.chat.id ?: return@forEach
+                    runCatching {
+                        buildChatPayload(chatDetails, apiChatId, userId)
+                    }.onSuccess { payload ->
+                        prefetchedChatPayloads[connectionId] = payload
+                    }
+                }
+        }
+    }
+
+    private suspend fun buildChatPayload(
+        chatDetails: ChatWithDetails,
+        apiChatId: String,
+        userId: String
+    ): PrefetchedChatPayload = coroutineScope {
+        val messagesDeferred = async { chatRepository.fetchMessagesForChat(apiChatId) }
+        val participantsDeferred = async { chatRepository.fetchChatParticipants(apiChatId) }
+        val reactionsDeferred = async { chatRepository.fetchReactionsForChat(apiChatId) }
+
+        val participants = participantsDeferred.await().associateBy { it.id }
+        val messagesWithUsers = messagesDeferred.await().map { message ->
+            val user = participants[message.user_id] ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
+            MessageWithUser(
+                message = message,
+                user = user,
+                isSent = message.user_id == userId
+            )
+        }
+        val reactionsByMessageId = reactionsDeferred.await().groupBy { it.messageId }
+        val shouldShowIcebreaker = messagesWithUsers.size < 5
+        val prompts = if (shouldShowIcebreaker) {
+            IcebreakerRepository.getPromptsForContext(chatDetails.connection.context_tag, count = 3)
+        } else {
+            emptyList()
+        }
+
+        PrefetchedChatPayload(
+            messages = messagesWithUsers,
+            reactionsByMessageId = reactionsByMessageId,
+            icebreakerPrompts = prompts,
+            showIcebreakerPanel = shouldShowIcebreaker
+        )
     }
 
     // ... rest of the file remains the same ...
@@ -509,7 +562,10 @@ class ChatViewModel(
     // ── Reactions ──────────────────────────────────────────────────────────────
 
     /** Load existing reactions from DB, then subscribe to Realtime changes. */
-    private fun loadAndSubscribeReactions(chatId: String) {
+    private fun loadAndSubscribeReactions(
+        chatId: String,
+        initialReactionsByMessageId: Map<String, List<MessageReaction>> = emptyMap()
+    ) {
         reactionsJob?.cancel()
         reactionsChannel?.let { ch ->
             viewModelScope.launch { try { ch.unsubscribe() } catch (_: Exception) {} }
@@ -518,8 +574,12 @@ class ChatViewModel(
 
         reactionsJob = viewModelScope.launch {
             // 1. Fetch existing reactions
-            val initial = chatRepository.fetchReactionsForChat(chatId)
-            _messageReactions.value = initial.groupBy { it.messageId }
+            if (initialReactionsByMessageId.isNotEmpty()) {
+                _messageReactions.value = initialReactionsByMessageId
+            } else {
+                val initial = chatRepository.fetchReactionsForChat(chatId)
+                _messageReactions.value = initial.groupBy { it.messageId }
+            }
 
             // 2. Subscribe to Realtime inserts/deletes
             try {

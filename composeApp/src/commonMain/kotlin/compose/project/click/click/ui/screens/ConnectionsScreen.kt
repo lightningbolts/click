@@ -11,6 +11,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -95,11 +96,11 @@ fun ConnectionsScreen(
         targetState = selectedChatId,
         transitionSpec = {
             if (targetState != null) {
-                (slideInHorizontally(initialOffsetX = { it }) + fadeIn())
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut())
+                (slideInHorizontally(animationSpec = tween(220), initialOffsetX = { it }) + fadeIn(animationSpec = tween(200)))
+                    .togetherWith(slideOutHorizontally(animationSpec = tween(180), targetOffsetX = { -it / 3 }) + fadeOut(animationSpec = tween(150)))
             } else {
-                (slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn())
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }) + fadeOut())
+                (slideInHorizontally(animationSpec = tween(220), initialOffsetX = { -it / 3 }) + fadeIn(animationSpec = tween(200)))
+                    .togetherWith(slideOutHorizontally(animationSpec = tween(180), targetOffsetX = { it }) + fadeOut(animationSpec = tween(150)))
             }
         },
         label = "chat_open_close_transition"
@@ -197,16 +198,31 @@ fun ConnectionsListView(
                         selectedTabIndex = selectedTabIndex,
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
+                        indicator = { tabPositions ->
+                            if (selectedTabIndex in tabPositions.indices) {
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = tabPositions[selectedTabIndex].left)
+                                        .width(tabPositions[selectedTabIndex].width)
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(PrimaryBlue.copy(alpha = 0.22f))
+                                )
+                            }
+                        },
                         divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.08f)) }
                     ) {
                         Tab(
                             selected = selectedTabIndex == 0,
                             onClick = { selectedTabIndex = 0 },
+                            modifier = Modifier.clip(RoundedCornerShape(999.dp)),
                             text = { Text("Active ($activeCount)") }
                         )
                         Tab(
                             selected = selectedTabIndex == 1,
                             onClick = { selectedTabIndex = 1 },
+                            modifier = Modifier.clip(RoundedCornerShape(999.dp)),
                             text = { Text("Archived ($archivedCount)") }
                         )
                     }
@@ -673,6 +689,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                 is ChatMessagesState.Success -> {
                     val chatDetails = state.chatDetails
                     val messages = state.messages
+                    val reactionsMap by viewModel.messageReactions.collectAsState()
                     val typingLabel = remember(typingUsers, chatDetails.otherUser.id, chatDetails.otherUser.name) {
                         val displayNames = typingUsers.map { userId ->
                             if (userId == chatDetails.otherUser.id) chatDetails.otherUser.name ?: "Someone"
@@ -829,7 +846,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             items(messages, key = { it.message.id }) { messageWithUser ->
-                                val reactionsMap = viewModel.messageReactions.collectAsState().value
                                 val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
                                 ChatMessageBubble(
                                     messageWithUser = messageWithUser,
@@ -950,7 +966,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(44.dp),
+                                .defaultMinSize(minHeight = 52.dp),
                             placeholder = {
                                 Text(
                                     if (editingMessageId != null) "Edit message…"
