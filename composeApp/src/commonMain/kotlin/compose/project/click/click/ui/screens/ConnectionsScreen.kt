@@ -521,6 +521,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
     val swipeStartEdgePx = remember(density) { with(density) { 28.dp.toPx() } }
     val swipeDismissThresholdPx = remember(density) { with(density) { 88.dp.toPx() } }
@@ -590,17 +591,11 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
-                    // Compact header while loading
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 2.dp
-                    ) {
+                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
-                                .padding(horizontal = 4.dp),
+                                .height(56.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = onBackPressed) {
@@ -633,16 +628,11 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     }
                 }
                 is ChatMessagesState.Error -> {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 2.dp
-                    ) {
+                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
-                                .padding(horizontal = 4.dp),
+                                .height(56.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = onBackPressed) {
@@ -696,18 +686,12 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         }
                     }
 
-                    // Header — compact single row (~56dp)
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 2.dp
-                    ) {
+                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(56.dp)
-                                    .padding(horizontal = 4.dp),
+                                    .height(56.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = onBackPressed) {
