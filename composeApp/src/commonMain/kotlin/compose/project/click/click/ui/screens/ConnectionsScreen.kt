@@ -627,6 +627,10 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // imePadding here (outermost Box) ensures the keyboard height is counted
+            // exactly once — avoids the double-offset that occurs when the window
+            // already adjusts for the IME AND an inner composable also adds imePadding.
+            .imePadding()
             .pointerInput(chatId) {
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
@@ -653,8 +657,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
             }
     ) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        // imePadding keeps the header visible and the input row above the keyboard
-        Column(modifier = Modifier.fillMaxSize().imePadding()) {
+        Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
                     Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
