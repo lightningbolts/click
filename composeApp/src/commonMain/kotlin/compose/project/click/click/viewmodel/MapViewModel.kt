@@ -183,18 +183,27 @@ class MapViewModel : ViewModel() {
      * This is used as a fallback when the platform map doesn't report bounds.
      */
     private fun estimateVisibleBounds() {
+        fun validConnections(): List<Connection> {
+            val state = _mapState.value
+            if (state !is MapState.Success) return emptyList()
+            return state.connections.filter {
+                val lat = it.geo_location.lat
+                val lon = it.geo_location.lon
+                lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)
+            }
+        }
+
         val center = _cameraTarget.value
         val centerLat = center?.latitude ?: run {
-            // Estimate from connections
-            val state = _mapState.value
-            if (state is MapState.Success && state.connections.isNotEmpty()) {
-                state.connections.map { it.geo_location.lat }.average()
+            val connections = validConnections()
+            if (connections.isNotEmpty()) {
+                connections.map { it.geo_location.lat }.average()
             } else return
         }
         val centerLon = center?.longitude ?: run {
-            val state = _mapState.value
-            if (state is MapState.Success && state.connections.isNotEmpty()) {
-                state.connections.map { it.geo_location.lon }.average()
+            val connections = validConnections()
+            if (connections.isNotEmpty()) {
+                connections.map { it.geo_location.lon }.average()
             } else return
         }
 

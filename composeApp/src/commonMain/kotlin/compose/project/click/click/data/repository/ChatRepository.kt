@@ -31,6 +31,30 @@ class ChatRepository(
 ) {
     private val supabase = SupabaseConfig.client
 
+    private suspend fun fetchUsersByIdsSafe(userIds: List<String>): List<User> {
+        if (userIds.isEmpty()) return emptyList()
+
+        val usersWithFullName = runCatching {
+            supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image")) {
+                    filter {
+                        isIn("id", userIds)
+                    }
+                }
+                .decodeList<UserCore>()
+        }.getOrNull()
+
+        val rows = usersWithFullName ?: supabase.from("users")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                filter {
+                    isIn("id", userIds)
+                }
+            }
+            .decodeList<UserCore>()
+
+        return rows.map { it.toUser() }
+    }
+
     @Serializable
     private data class ChatRow(
         val id: String,
@@ -87,18 +111,7 @@ class ChatRepository(
                 .filter { it != userId }
                 .distinct()
 
-            val users = if (otherUserIds.isNotEmpty()) {
-                supabase.from("users")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
-                        filter {
-                            isIn("id", otherUserIds)
-                        }
-                    }
-                    .decodeList<UserCore>()
-                    .map { it.toUser() }
-            } else {
-                emptyList()
-            }
+            val users = fetchUsersByIdsSafe(otherUserIds)
             val usersById = users.associateBy { it.id }
 
             val chats = supabase.from("chats")
@@ -347,14 +360,7 @@ class ChatRepository(
 
             if (connection.user_ids.isEmpty()) return emptyList()
 
-            supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
-                    filter {
-                        isIn("id", connection.user_ids)
-                    }
-                }
-                .decodeList<UserCore>()
-                .map { it.toUser() }
+            fetchUsersByIdsSafe(connection.user_ids)
         } catch (e: Exception) {
             println("Error fetching participants: ${e.message}")
             emptyList()
@@ -364,16 +370,7 @@ class ChatRepository(
     // Get user by ID - helper method for getting user details
     suspend fun getUserById(userId: String): User? {
         return try {
-            supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
-                    filter {
-                        eq("id", userId)
-                    }
-                    limit(1)
-                }
-                .decodeList<UserCore>()
-                .firstOrNull()
-                ?.toUser()
+            fetchUsersByIdsSafe(listOf(userId)).firstOrNull()
         } catch (e: Exception) {
             println("Error fetching user: ${e.message}")
             null

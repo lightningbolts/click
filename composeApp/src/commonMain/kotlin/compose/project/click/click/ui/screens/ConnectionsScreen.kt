@@ -45,12 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
@@ -578,16 +573,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val keyboardController = LocalSoftwareKeyboardController.current
-    // Dismiss the soft keyboard whenever the user scrolls through the message list
-    val imeNestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y != 0f) keyboardController?.hide()
-                return Offset.Zero
-            }
-        }
-    }
     val density = LocalDensity.current
     val swipeStartEdgePx = remember(density) { with(density) { 28.dp.toPx() } }
     val swipeDismissThresholdPx = remember(density) { with(density) { 88.dp.toPx() } }
@@ -890,9 +875,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             state = listState,
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxWidth()
-                                // Dismiss keyboard when user scrolls through messages
-                                .nestedScroll(imeNestedScrollConnection),
+                                .fillMaxWidth(),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {

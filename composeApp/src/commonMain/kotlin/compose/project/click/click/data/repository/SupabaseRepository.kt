@@ -91,14 +91,25 @@ class SupabaseRepository {
         return try {
             if (userIds.isEmpty()) return emptyList()
 
-            supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image")) {
+            val usersWithFullName = runCatching {
+                supabase.from("users")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image")) {
+                        filter {
+                            isIn("id", userIds)
+                        }
+                    }
+                    .decodeList<UserCore>()
+            }.getOrNull()
+
+            val users = usersWithFullName ?: supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
                     filter {
                         isIn("id", userIds)
                     }
                 }
                 .decodeList<UserCore>()
-                .map { it.toUser() }
+
+            users.map { it.toUser() }
         } catch (e: Exception) {
             println("Error fetching users: ${e.message}")
             emptyList()
