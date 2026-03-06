@@ -28,6 +28,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -380,17 +381,11 @@ fun App() {
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
+                    val navShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                     NavigationBar(
-                        modifier = Modifier.border(
-                            width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    PrimaryBlue.copy(alpha = if (isDarkMode) 0.5f else 0.25f),
-                                    Color.Transparent
-                                )
-                            ),
-                            shape = androidx.compose.ui.graphics.RectangleShape
-                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(navShape),
                         containerColor = if (isDarkMode) {
                             GlassDark
                         } else {

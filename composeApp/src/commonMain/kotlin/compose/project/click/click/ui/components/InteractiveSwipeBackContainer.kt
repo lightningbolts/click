@@ -100,9 +100,7 @@ fun InteractiveSwipeBackContainer(
                         val tracker = VelocityTracker()
                         tracker.addPosition(down.uptimeMillis, down.position)
 
-                        var totalDx = 0f
-                        var totalDy = 0f
-                        var accepted = false
+                        var startedTracking = false
                         var pointerId = down.id
                         var lastPosition = down.position
 
@@ -114,34 +112,24 @@ fun InteractiveSwipeBackContainer(
                             val delta: Offset = change.position - lastPosition
                             lastPosition = change.position
                             val dx = delta.x
-                            val dy = delta.y
-                            totalDx += dx
-                            totalDy += dy
                             tracker.addPosition(change.uptimeMillis, change.position)
 
-                            if (!accepted) {
-                                val horizontalEnough = abs(totalDx) > 2f
-                                val mostlyHorizontal = abs(totalDx) >= abs(totalDy) * 1.15f
-                                val rightward = totalDx > 0f
-                                val clearlyVertical = abs(totalDy) > 12f && abs(totalDy) > abs(totalDx)
-                                val wrongDirection = totalDx < -8f
-
-                                if (horizontalEnough && mostlyHorizontal && rightward) {
-                                    accepted = true
+                            // Start visual tracking immediately for rightward edge drags.
+                            // This keeps motion glued to the finger/mouse even before full intent resolution.
+                            if (dx > 0f || dragOffsetPx > 0f) {
+                                dragOffsetPx = (dragOffsetPx + dx).coerceIn(0f, widthPx)
+                                if (dragOffsetPx > 0f) {
+                                    startedTracking = true
                                     isGestureActive = true
-                                } else if (clearlyVertical || wrongDirection) {
-                                    isGestureActive = false
-                                    break
                                 }
                             }
 
-                            if (accepted && change.positionChanged()) {
+                            if (startedTracking && change.positionChanged()) {
                                 change.consumePositionChangeCompat()
-                                dragOffsetPx = (dragOffsetPx + dx).coerceIn(0f, widthPx)
                             }
                         }
 
-                        if (accepted) {
+                        if (dragOffsetPx > 0f) {
                             val velocityX = tracker.calculateVelocity().x
                             val progress = dragOffsetPx / widthPx
                             val projected = progress + (velocityX / 3200f)

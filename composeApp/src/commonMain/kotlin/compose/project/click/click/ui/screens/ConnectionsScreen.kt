@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
@@ -80,9 +82,11 @@ fun ConnectionsScreen(
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
 
-    fun closeActiveChat() {
+    fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
         if (selectedChatId != null) {
+            chatTransitionMode = mode
             selectedChatId = null
             viewModel.leaveChatRoom()
             viewModel.loadChats()
@@ -112,42 +116,72 @@ fun ConnectionsScreen(
 
     PlatformBackHandler(
         enabled = selectedChatId != null,
-        onBack = { closeActiveChat() }
+        onBack = { closeActiveChat(ChatTransitionMode.Tap) }
     )
 
     fun openChat(chatId: String) {
+        chatTransitionMode = ChatTransitionMode.Tap
         selectedChatId = chatId
         viewModel.loadChatMessages(chatId)
     }
 
     if (isIOS) {
-        val activeChatId = selectedChatId
-        if (activeChatId == null) {
-            ConnectionsListView(
-                viewModel = viewModel,
-                searchQuery = searchQuery,
-                onChatSelected = { chatId -> openChat(chatId) }
-            )
-        } else {
-            InteractiveSwipeBackContainer(
-                enabled = true,
-                edgeSwipeWidth = 56.dp,
-                onBack = { closeActiveChat() },
-                previousContent = {
-                    ConnectionsListView(
-                        viewModel = viewModel,
-                        searchQuery = searchQuery,
-                        onChatSelected = { chatId -> openChat(chatId) }
-                    )
-                },
-                currentContent = {
-                    ChatView(
-                        viewModel = viewModel,
-                        chatId = activeChatId,
-                        onBackPressed = { closeActiveChat() }
-                    )
+        AnimatedContent(
+            targetState = selectedChatId,
+            transitionSpec = {
+                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                when {
+                    initialState == null && targetState != null -> {
+                        (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) + fadeIn(animationSpec = fadeSpec))
+                            .togetherWith(
+                                slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) +
+                                    fadeOut(animationSpec = fadeSpec)
+                            )
+                            .using(SizeTransform(clip = true))
+                    }
+                    initialState != null && targetState == null && chatTransitionMode == ChatTransitionMode.Tap -> {
+                        (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) + fadeIn(animationSpec = fadeSpec))
+                            .togetherWith(
+                                slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                                    fadeOut(animationSpec = fadeSpec)
+                            )
+                            .using(SizeTransform(clip = true))
+                    }
+                    else -> {
+                    EnterTransition.None togetherWith ExitTransition.None
+                    }
                 }
-            )
+            },
+            label = "ios_chat_open_transition"
+        ) { activeChatId ->
+            if (activeChatId == null) {
+                ConnectionsListView(
+                    viewModel = viewModel,
+                    searchQuery = searchQuery,
+                    onChatSelected = { chatId -> openChat(chatId) }
+                )
+            } else {
+                InteractiveSwipeBackContainer(
+                    enabled = true,
+                    edgeSwipeWidth = 56.dp,
+                    onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
+                    previousContent = {
+                        ConnectionsListView(
+                            viewModel = viewModel,
+                            searchQuery = searchQuery,
+                            onChatSelected = { chatId -> openChat(chatId) }
+                        )
+                    },
+                    currentContent = {
+                        ChatView(
+                            viewModel = viewModel,
+                            chatId = activeChatId,
+                            onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) }
+                        )
+                    }
+                )
+            }
         }
     } else {
         AnimatedContent(
@@ -177,11 +211,16 @@ fun ConnectionsScreen(
                 ChatView(
                     viewModel = viewModel,
                     chatId = activeChatId,
-                    onBackPressed = { closeActiveChat() }
+                    onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) }
                 )
             }
         }
     }
+}
+
+private enum class ChatTransitionMode {
+    Tap,
+    Gesture
 }
 
 
