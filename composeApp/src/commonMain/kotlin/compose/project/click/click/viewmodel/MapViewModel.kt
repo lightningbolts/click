@@ -122,6 +122,7 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch {
             combine(
                 AppDataManager.connections,
+                AppDataManager.connectedUsers,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
                 _zoomLevel,
@@ -130,17 +131,19 @@ class MapViewModel : ViewModel() {
                 // Using array-based combine for 5+ flows
                 @Suppress("UNCHECKED_CAST")
                 val connections = values[0] as List<Connection>
-                val isDataLoaded = values[1] as Boolean
-                val isLoading = values[2] as Boolean
-                val zoom = values[3] as Double
-                val filter = values[4] as String
-                Quintuple(connections, isDataLoaded, isLoading, zoom, filter)
-            }.collectLatest { (connections, isDataLoaded, isLoading, zoom, filter) ->
+                val connectedUsers = values[1] as Map<String, User>
+                val isDataLoaded = values[2] as Boolean
+                val isLoading = values[3] as Boolean
+                val zoom = values[4] as Double
+                val filter = values[5] as String
+                Sextuple(connections, connectedUsers, isDataLoaded, isLoading, zoom, filter)
+            }.collectLatest { (connections, connectedUsers, isDataLoaded, isLoading, zoom, filter) ->
                 when {
                     isDataLoaded -> {
                         _mapState.value = MapState.Success(connections)
                         ensureDefaultCameraTarget(connections)
                         updateRenderData(connections, zoom, filter)
+                        refreshSelectedConnectionUser(connectedUsers)
                     }
                     isLoading -> {
                         _mapState.value = MapState.Loading
@@ -382,6 +385,16 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    private fun refreshSelectedConnectionUser(connectedUsers: Map<String, User>) {
+        val selected = _selection.value as? MapSelection.ConnectionSelected ?: return
+        val currentUserId = AppDataManager.currentUser.value?.id
+        val otherUserId = selected.point.connection.user_ids.find { it != currentUserId } ?: return
+        val refreshedUser = connectedUsers[otherUserId] ?: return
+        if (refreshedUser != selected.otherUser) {
+            _selection.value = selected.copy(otherUser = refreshedUser)
+        }
+    }
+
     /**
      * Clear current selection
      */
@@ -555,4 +568,13 @@ private data class Quintuple<A, B, C, D, E>(
     val third: C,
     val fourth: D,
     val fifth: E
+)
+
+private data class Sextuple<A, B, C, D, E, F>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+    val sixth: F
 )

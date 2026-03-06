@@ -91,12 +91,12 @@ class HomeViewModel(
             combine(
                 AppDataManager.currentUser,
                 AppDataManager.connections,
+                AppDataManager.connectedUsers,
                 AppDataManager.isLoading,
                 AppDataManager.isDataLoaded
-            ) { user, connections, isLoading, isDataLoaded ->
-                Triple(user to connections, isLoading, isDataLoaded)
-            }.collectLatest { (data, isLoading, isDataLoaded) ->
-                val (user, connections) = data
+            ) { user, connections, connectedUsers, isLoading, isDataLoaded ->
+                Quintuple(user, connections, connectedUsers, isLoading, isDataLoaded)
+            }.collectLatest { (user, connections, connectedUsers, isLoading, isDataLoaded) ->
                 
                 when {
                     user != null && isDataLoaded -> {
@@ -123,7 +123,7 @@ class HomeViewModel(
                         _locationGroupedConnections.value = grouped
 
                         // Expose connected users for name lookups
-                        _connectedUsers.value = AppDataManager.connectedUsers.value
+                        _connectedUsers.value = connectedUsers
                         
                         _homeState.value = HomeState.Success(user, stats)
                         
@@ -317,3 +317,11 @@ class HomeViewModel(
         connectionsChannel = null
     }
 }
+
+private data class Quintuple<A, B, C, D, E>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E
+)
