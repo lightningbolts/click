@@ -26,7 +26,7 @@ class SupabaseRepository {
             println("Fetching user with ID: $userId")
             // Select only essential columns that are guaranteed to exist
             val result = supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
                     filter {
                         eq("id", userId)
                     }
@@ -93,7 +93,7 @@ class SupabaseRepository {
 
             val usersWithFullName = runCatching {
                 supabase.from("users")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image")) {
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image", "last_polled")) {
                         filter {
                             isIn("id", userIds)
                         }
@@ -102,7 +102,7 @@ class SupabaseRepository {
             }.getOrNull()
 
             val users = usersWithFullName ?: supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
                     filter {
                         isIn("id", userIds)
                     }

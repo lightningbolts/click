@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0037657B2F5B73FC0085C54A /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0037657A2F5B73FC0085C54A /* LiveKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		5C5F0582113B3BBBAE701F1D /* click.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = click.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -41,6 +45,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0037657B2F5B73FC0085C54A /* LiveKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,6 +90,7 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
+				0037657A2F5B73FC0085C54A /* LiveKit */,
 			);
 			productName = iosApp;
 			productReference = 5C5F0582113B3BBBAE701F1D /* click.app */;
@@ -114,6 +120,9 @@
 			);
 			mainGroup = E1BA788836B3512B5E8EF791;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				003765792F5B73FC0085C54A /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DB33206E757D8E631C55F65D /* Products */;
 			projectDirPath = "";
@@ -250,6 +259,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -282,6 +292,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -380,6 +391,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		003765792F5B73FC0085C54A /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.12.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0037657A2F5B73FC0085C54A /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 003765792F5B73FC0085C54A /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA4C51A4D03626637697394B /* Project object */;
 }

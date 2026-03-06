@@ -35,6 +35,11 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
+import compose.project.click.click.calls.ActiveCallOverlay
+import compose.project.click.click.calls.CallOverlayState
+import compose.project.click.click.calls.CallPreviewOverlay
+import compose.project.click.click.calls.CallSessionManager
+import compose.project.click.click.calls.CallState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
@@ -224,6 +229,14 @@ fun App() {
             // Initialize app data once when authenticated
             LaunchedEffect(Unit) {
                 AppDataManager.initializeData()
+            }
+            val appDataUser by AppDataManager.currentUser.collectAsState()
+            val globalCallOverlayState by CallSessionManager.overlayState.collectAsState()
+            val globalCallState by CallSessionManager.callState.collectAsState()
+            val activeInvite by CallSessionManager.activeInvite.collectAsState()
+
+            LaunchedEffect(appDataUser?.id, appDataUser?.name) {
+                CallSessionManager.bindUser(appDataUser?.id, appDataUser?.name)
             }
 
             // --- Interest tagging onboarding gate ---
@@ -787,6 +800,34 @@ fun App() {
                             label = "app_screen_transition"
                         ) { animatedScreen ->
                             renderScreen(animatedScreen)
+                        }
+
+                        when (val overlayState = globalCallOverlayState) {
+                            is CallOverlayState.Outgoing,
+                            is CallOverlayState.Incoming,
+                            is CallOverlayState.Connecting,
+                            is CallOverlayState.Ended,
+                            -> {
+                                CallPreviewOverlay(
+                                    overlayState = overlayState,
+                                    currentUserId = appDataUser?.id,
+                                    onAccept = { CallSessionManager.acceptIncomingCall() },
+                                    onDecline = { CallSessionManager.declineIncomingCall() },
+                                    onCancel = { CallSessionManager.cancelCurrentCall() },
+                                    onDismissEnded = { CallSessionManager.dismissEndedCall() },
+                                )
+                            }
+
+                            CallOverlayState.Idle -> {
+                                if (globalCallState !is CallState.Idle) {
+                                    ActiveCallOverlay(
+                                        callManager = CallSessionManager.callManager,
+                                        otherUserName = activeInvite?.counterpartName(appDataUser?.id) ?: "Connection",
+                                        state = globalCallState,
+                                        onEndCall = { CallSessionManager.endActiveCall() },
+                                    )
+                                }
+                            }
                         }
                     }
                 }

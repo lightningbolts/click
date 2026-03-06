@@ -84,7 +84,9 @@ data class UserCore(
     val name: String? = null,
     val full_name: String? = null,
     val email: String? = null,
-    val image: String? = null
+    val image: String? = null,
+    @SerialName("last_polled")
+    val lastPolled: Long? = null
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
@@ -101,7 +103,7 @@ data class UserCore(
             email = email,
             image = image,
             createdAt = 0L,
-            lastPolled = null,
+            lastPolled = lastPolled,
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,

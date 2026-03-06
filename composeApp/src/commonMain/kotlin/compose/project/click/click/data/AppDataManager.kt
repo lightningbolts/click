@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 /**
  * Singleton app state manager that loads data once at app startup.
@@ -23,6 +25,7 @@ import kotlinx.datetime.Clock
  */
 object AppDataManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var presenceHeartbeatJob: Job? = null
     
     private val authRepository = AuthRepository()
     private val supabaseRepository = SupabaseRepository()
@@ -57,6 +60,7 @@ object AppDataManager {
     // Last refresh time
     private var lastRefreshTime: Long = 0
     private const val REFRESH_COOLDOWN_MS = 30_000 // 30 seconds minimum between refreshes
+    private const val PRESENCE_HEARTBEAT_MS = 30_000L
     
     // Error state
     private val _error = MutableStateFlow<String?>(null)
@@ -146,6 +150,7 @@ object AppDataManager {
             
             _currentUser.value = user
             println("AppDataManager: Current user set to: ${user.name}")
+            startPresenceHeartbeat(user.id)
             pushNotificationService.requestPermission()
             pushNotificationService.registerToken(user.id)
             
@@ -177,11 +182,7 @@ object AppDataManager {
             _connections.value = userConnections
             
             // Fetch connected users info
-            val otherUserIds = userConnections.flatMap { it.user_ids }.filter { it != user.id }.distinct()
-            if (otherUserIds.isNotEmpty()) {
-                val users = supabaseRepository.fetchUsersByIds(otherUserIds)
-                _connectedUsers.value = users.associateBy { it.id }
-            }
+            refreshConnectedUsers(userConnections, user.id)
             
             _isDataLoaded.value = true
             lastRefreshTime = Clock.System.now().toEpochMilliseconds()
@@ -220,6 +221,8 @@ object AppDataManager {
      * Clear all data (on logout)
      */
     fun clearData() {
+        presenceHeartbeatJob?.cancel()
+        presenceHeartbeatJob = null
         _currentUser.value = null
         _connections.value = emptyList()
         _connectedUsers.value = emptyMap()
@@ -338,6 +341,37 @@ object AppDataManager {
         val currentUserId = _currentUser.value?.id ?: return null
         val otherUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: return null
         return _connectedUsers.value[otherUserId]
+    }
+
+    private fun startPresenceHeartbeat(userId: String) {
+        if (presenceHeartbeatJob?.isActive == true) return
+
+        presenceHeartbeatJob = scope.launch {
+            while (_currentUser.value?.id == userId) {
+                if (!_ghostModeEnabled.value) {
+                    val now = Clock.System.now().toEpochMilliseconds()
+                    supabaseRepository.updateUserLastPolled(userId, now)
+                    refreshConnectedUsers(_connections.value, userId)
+                    _currentUser.value = _currentUser.value?.copy(lastPolled = now)
+                }
+                delay(PRESENCE_HEARTBEAT_MS)
+            }
+        }
+    }
+
+    private suspend fun refreshConnectedUsers(connections: List<Connection>, currentUserId: String) {
+        val otherUserIds = connections
+            .flatMap { it.user_ids }
+            .filter { it != currentUserId }
+            .distinct()
+
+        if (otherUserIds.isEmpty()) {
+            _connectedUsers.value = emptyMap()
+            return
+        }
+
+        val users = supabaseRepository.fetchUsersByIds(otherUserIds)
+        _connectedUsers.value = users.associateBy { it.id }
     }
     
     /**

@@ -67,6 +67,12 @@ class ChatRepository(
     )
 
     @Serializable
+    private data class ChatInsert(
+        @SerialName("connection_id")
+        val connectionId: String
+    )
+
+    @Serializable
     private data class MessageRow(
         val id: String,
         @SerialName("chat_id")
@@ -249,6 +255,40 @@ class ChatRepository(
         }
     }
 
+    suspend fun ensureChatForConnection(connectionId: String): Chat? {
+        return try {
+            val existing = supabase.from("chats")
+                .select {
+                    filter {
+                        eq("connection_id", connectionId)
+                    }
+                    limit(1)
+                }
+                .decodeList<ChatRow>()
+                .firstOrNull()
+
+            if (existing != null) {
+                return Chat(id = existing.id, connectionId = existing.connectionId, messages = emptyList())
+            }
+
+            val inserted = supabase.from("chats")
+                .insert(ChatInsert(connectionId = connectionId)) {
+                    select()
+                }
+                .decodeSingle<ChatRow>()
+
+            Chat(id = inserted.id, connectionId = inserted.connectionId, messages = emptyList())
+        } catch (e: Exception) {
+            println("Error ensuring chat for connection $connectionId: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun sendMessageForConnection(connectionId: String, userId: String, content: String): Message? {
+        val chat = ensureChatForConnection(connectionId) ?: return null
+        return sendMessage(chat.id ?: return null, userId, content)
+    }
+
     // Mark messages as read via API
     suspend fun markMessagesAsRead(chatId: String, userId: String) {
         try {
@@ -338,8 +378,21 @@ class ChatRepository(
     // Fetch chat with details by chat ID via API
     suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? {
         return try {
-            fetchUserChatsWithDetails(currentUserId)
+            val chatDetails = fetchUserChatsWithDetails(currentUserId)
                 .firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+                ?: return null
+
+            if (!chatDetails.chat.id.isNullOrBlank()) {
+                return chatDetails
+            }
+
+            val ensuredChat = ensureChatForConnection(chatDetails.connection.id) ?: return chatDetails
+            chatDetails.copy(
+                chat = chatDetails.chat.copy(
+                    id = ensuredChat.id,
+                    connectionId = chatDetails.connection.id
+                )
+            )
         } catch (e: Exception) {
             println("Error fetching chat with details: ${e.message}")
             null

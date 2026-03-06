@@ -138,6 +138,16 @@ class ChatViewModel(
             ) { connections, connectedUsers ->
                 connections to connectedUsers
             }.collect { (connections, connectedUsers) ->
+                val currentMessages = _chatMessagesState.value as? ChatMessagesState.Success
+                if (currentMessages != null) {
+                    val refreshedOtherUser = connectedUsers[currentMessages.chatDetails.otherUser.id]
+                    if (refreshedOtherUser != null && refreshedOtherUser != currentMessages.chatDetails.otherUser) {
+                        _chatMessagesState.value = currentMessages.copy(
+                            chatDetails = currentMessages.chatDetails.copy(otherUser = refreshedOtherUser)
+                        )
+                    }
+                }
+
                 // Wait for both flows so cached chat rows do not render placeholder users before hydration finishes.
                 if (_currentUserId.value != null && connections.isNotEmpty() && connectedUsers.isNotEmpty()) {
                     loadChats(isForced = true)
@@ -341,14 +351,25 @@ class ChatViewModel(
 
                 val resolvedConnectionId = chatDetails.connection.id
 
-                val apiChatId = chatDetails.chat.id
+                val apiChatId = chatDetails.chat.id ?: resolveOrCreateApiChatId(resolvedConnectionId)
                 if (apiChatId.isNullOrBlank()) {
-                    _chatMessagesState.value = ChatMessagesState.Error("Chat not found")
+                    _chatMessagesState.value = ChatMessagesState.Error("Unable to start chat")
                     return@launch
                 }
                 currentApiChatId = apiChatId
 
-                val payload = prefetchedPayload ?: buildChatPayload(chatDetails, apiChatId, userId)
+                val hydratedChatDetails = if (chatDetails.chat.id == apiChatId) {
+                    chatDetails
+                } else {
+                    chatDetails.copy(
+                        chat = chatDetails.chat.copy(
+                            id = apiChatId,
+                            connectionId = resolvedConnectionId
+                        )
+                    )
+                }
+
+                val payload = prefetchedPayload ?: buildChatPayload(hydratedChatDetails, apiChatId, userId)
                 prefetchedChatPayloads[resolvedConnectionId] = payload
 
                 _messageReactions.value = payload.reactionsByMessageId
@@ -356,7 +377,7 @@ class ChatViewModel(
                 _showIcebreakerPanel.value = payload.showIcebreakerPanel
                 _chatMessagesState.value = ChatMessagesState.Success(
                     messages = payload.messages,
-                    chatDetails = chatDetails,
+                    chatDetails = hydratedChatDetails,
                     isLoadingMessages = false
                 )
 
@@ -631,6 +652,36 @@ class ChatViewModel(
         )
     }
 
+    private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {
+        val currentState = _chatMessagesState.value as? ChatMessagesState.Success
+        val existingChatId = currentState
+            ?.takeIf { it.chatDetails.connection.id == connectionId }
+            ?.chatDetails
+            ?.chat
+            ?.id
+
+        if (!existingChatId.isNullOrBlank()) {
+            currentApiChatId = existingChatId
+            return existingChatId
+        }
+
+        val ensuredChat = chatRepository.ensureChatForConnection(connectionId) ?: return null
+        currentApiChatId = ensuredChat.id
+
+        if (currentState != null && currentState.chatDetails.connection.id == connectionId) {
+            _chatMessagesState.value = currentState.copy(
+                chatDetails = currentState.chatDetails.copy(
+                    chat = currentState.chatDetails.chat.copy(
+                        id = ensuredChat.id,
+                        connectionId = connectionId
+                    )
+                )
+            )
+        }
+
+        return ensuredChat.id
+    }
+
     fun sendMessage() {
         // If in edit mode, confirm the edit instead of posting a new message
         val editId = _editingMessageId.value
@@ -639,13 +690,13 @@ class ChatViewModel(
             return
         }
         val connectionId = currentConnectionId ?: return
-        val apiChatId = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id ?: return
         val userId = _currentUserId.value ?: return
         val content = _messageInput.value.trim()
         if (content.isEmpty()) return
-        onUserStoppedTyping(apiChatId)
         viewModelScope.launch {
             try {
+                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: return@launch
+                onUserStoppedTyping(apiChatId)
                 val message = chatRepository.sendMessage(apiChatId, userId, content)
                 if (message != null) {
                     _messageInput.value = ""
@@ -901,6 +952,7 @@ class ChatViewModel(
             _vibeCheckRemainingMs.value = 0L
             return
         }
+
         vibeCheckTimerJob = viewModelScope.launch {
             while (true) {
                 val now = Clock.System.now().toEpochMilliseconds()
@@ -914,7 +966,7 @@ class ChatViewModel(
             }
         }
     }
-    
+
     private fun updateKeepStates(connection: Connection, userId: String) {
         val userIndex = connection.getUserIndex(userId)
         val otherUserIndex = if (userIndex == 0) 1 else 0
@@ -1040,11 +1092,12 @@ class ChatViewModel(
     fun sendNudge() {
         val currentState = _chatMessagesState.value
         if (currentState !is ChatMessagesState.Success) return
-        val chatId = currentState.chatDetails.chat.id ?: return
+        val connectionId = currentState.chatDetails.connection.id
         val userId = _currentUserId.value ?: return
         val currentUser = compose.project.click.click.data.AppDataManager.currentUser.value ?: return
         val otherUserName = currentState.chatDetails.otherUser.name ?: "them"
         viewModelScope.launch {
+            val chatId = resolveOrCreateApiChatId(connectionId) ?: return@launch
             val msg = chatRepository.sendMessage(
                 chatId = chatId,
                 userId = userId,

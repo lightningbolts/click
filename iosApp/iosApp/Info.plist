@@ -4,29 +4,17 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	
-	<!-- NFC Configuration -->
-	<key>NFCReaderUsageDescription</key>
-	<string>Click uses NFC to quickly connect you with nearby users by tapping phones together.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>location</string>
+		<string>remote-notification</string>
+	</array>
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>
 		<string>TAG</string>
 	</array>
-	
-	<!-- Camera Permission -->
-	<key>NSCameraUsageDescription</key>
-	<string>Click uses your camera to scan QR codes and connect with others.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Click uses your microphone for voice and video calls.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
-	
-	<!-- Location Permissions -->
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Click uses your location to show where you connected with others and display nearby connections on the map.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Click uses your location to show where you connected with others and display nearby connections on the map.</string>
 </dict>
 </plist>
