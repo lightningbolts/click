@@ -386,6 +386,15 @@ def get_display_names():
 
         names = {}
 
+        def normalize_display_name(full_name, name, email):
+            email_prefix = email.split("@")[0] if isinstance(email, str) and "@" in email else None
+            return (
+                (full_name or "").strip()
+                or (name or "").strip()
+                or (email_prefix or "").strip()
+                or "Connection"
+            )
+
         try:
             users_response = supabase.table("users").select("id,name,full_name,email").in_("id", user_ids).execute()
             users = users_response.data or []
@@ -394,15 +403,36 @@ def get_display_names():
             users = users_response.data or []
 
         for user in users:
-            email = user.get("email")
-            email_prefix = email.split("@")[0] if isinstance(email, str) and "@" in email else None
-            resolved = (
-                (user.get("full_name") or "").strip()
-                or (user.get("name") or "").strip()
-                or (email_prefix or "").strip()
-                or "Connection"
+            user_id = user.get("id")
+            if not user_id:
+                continue
+            names[user_id] = normalize_display_name(
+                user.get("full_name"),
+                user.get("name"),
+                user.get("email")
             )
-            names[user.get("id")] = resolved
+
+        unresolved_ids = [user_id for user_id in user_ids if names.get(user_id) == "Connection"]
+        if unresolved_ids:
+            for user_id in unresolved_ids:
+                try:
+                    auth_response = supabase.auth.admin.get_user_by_id(user_id)
+                    auth_user = getattr(auth_response, "user", None) or auth_response
+                    if isinstance(auth_user, dict):
+                        user_metadata = auth_user.get("user_metadata") or {}
+                        email = auth_user.get("email")
+                    else:
+                        user_metadata = getattr(auth_user, "user_metadata", None) or {}
+                        email = getattr(auth_user, "email", None)
+                    resolved = normalize_display_name(
+                        user_metadata.get("full_name"),
+                        user_metadata.get("name"),
+                        email
+                    )
+                    if resolved != "Connection":
+                        names[user_id] = resolved
+                except Exception:
+                    continue
 
         return jsonify({"names": names}), 200
     except Exception as e:

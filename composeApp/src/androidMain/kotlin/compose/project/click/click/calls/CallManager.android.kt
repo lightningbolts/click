@@ -197,6 +197,7 @@ actual class CallManager {
 
         cameraEnabled = localTrack != null && videoRequested
         _callState.value = CallState.Connected(
+            videoRequested = videoRequested,
             microphoneEnabled = microphoneEnabled,
             cameraEnabled = cameraEnabled,
             remoteVideoAvailable = remoteTrack != null,

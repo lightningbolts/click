@@ -3,7 +3,6 @@ package compose.project.click.click.data
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
-import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
@@ -30,7 +29,6 @@ object AppDataManager {
     
     private val authRepository = AuthRepository()
     private val supabaseRepository = SupabaseRepository()
-    private val chatApiClient = ChatApiClient()
     private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
     private val tokenStorage = createTokenStorage() // For local preferences storage
     private val pushNotificationService = createPushNotificationService()
@@ -143,11 +141,18 @@ object AppDataManager {
                 println("AppDataManager: Creating new user in DB: ${newUser.name}")
                 supabaseRepository.upsertUser(newUser)
                 user = newUser
-            } else if (user.name == null && authName != null) {
-                // Update user name from auth metadata if DB name is null
-                println("AppDataManager: Updating user name from auth metadata: $authName")
-                supabaseRepository.updateUserName(user.id, authName)
-                user = user.copy(name = authName)
+            } else {
+                val desiredName = authName ?: user.name
+                val desiredEmail = authUser.email ?: user.email
+                val syncedUser = user.copy(
+                    name = desiredName,
+                    email = desiredEmail
+                )
+                if (syncedUser != user) {
+                    println("AppDataManager: Syncing current user profile to users table: ${syncedUser.name}")
+                    supabaseRepository.upsertUser(syncedUser)
+                    user = syncedUser
+                }
             }
             
             _currentUser.value = user
@@ -374,28 +379,7 @@ object AppDataManager {
 
         val users = supabaseRepository.fetchUsersByIds(otherUserIds)
         val existingUsers = _connectedUsers.value
-        val usersById = users.associateBy { it.id }.toMutableMap()
-        val unresolvedIds = otherUserIds.filter { userId ->
-            val resolvedName = usersById[userId]?.name?.trim()
-            resolvedName.isNullOrEmpty() || resolvedName == "Connection"
-        }
-
-        if (unresolvedIds.isNotEmpty()) {
-            val authToken = tokenStorage.getJwt()
-            if (!authToken.isNullOrBlank()) {
-                val displayNamesById = chatApiClient.getDisplayNames(unresolvedIds, authToken)
-                    .getOrElse { emptyMap() }
-
-                displayNamesById.forEach { (userId, displayName) ->
-                    val normalizedName = displayName.trim()
-                    if (normalizedName.isNotEmpty()) {
-                        val existingUser = usersById[userId] ?: existingUsers[userId]
-                        usersById[userId] = existingUser?.copy(name = normalizedName)
-                            ?: User(id = userId, name = normalizedName, createdAt = 0L)
-                    }
-                }
-            }
-        }
+        val usersById = users.associateBy { it.id }
 
         _connectedUsers.value = otherUserIds.associateWith { userId ->
             usersById[userId]

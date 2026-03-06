@@ -942,7 +942,10 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     }
                                     DropdownMenu(
                                         expanded = showCallMenu,
-                                        onDismissRequest = { showCallMenu = false }
+                                        onDismissRequest = { showCallMenu = false },
+                                        shape = RoundedCornerShape(22.dp),
+                                        tonalElevation = 8.dp,
+                                        shadowElevation = 16.dp
                                     ) {
                                         DropdownMenuItem(
                                             text = { Text("Voice call") },

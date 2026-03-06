@@ -110,6 +110,13 @@ object CallSessionManager {
                         _overlayState.value = CallOverlayState.Ended(activeInviteValue, state.reason ?: "Call ended")
                     }
 
+                    is CallState.Connected -> {
+                        CallRingtonePlayer.stop()
+                        if (_overlayState.value is CallOverlayState.Connecting) {
+                            _overlayState.value = CallOverlayState.Idle
+                        }
+                    }
+
                     else -> {
                         CallRingtonePlayer.stop()
                     }

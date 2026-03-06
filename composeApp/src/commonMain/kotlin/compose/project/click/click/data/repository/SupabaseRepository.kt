@@ -5,6 +5,8 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -17,6 +19,30 @@ import kotlinx.serialization.json.put
 class SupabaseRepository {
     private val supabase = SupabaseConfig.client
 
+    @Serializable
+    private data class DisplayNameRpcRow(
+        val id: String,
+        @SerialName("display_name")
+        val displayName: String,
+        val email: String? = null,
+        val image: String? = null,
+        @SerialName("last_polled")
+        val lastPolled: Long? = null,
+    ) {
+        fun toUser(): User = User(
+            id = id,
+            name = displayName.trim().ifEmpty { "Connection" },
+            email = email,
+            image = image,
+            createdAt = 0L,
+            lastPolled = lastPolled,
+            connections = emptyList(),
+            paired_with = emptyList(),
+            connection_today = -1,
+            last_paired = null,
+        )
+    }
+
     /**
      * Fetch a user by their ID
      * Only fetches core columns that definitely exist
@@ -24,14 +50,23 @@ class SupabaseRepository {
     suspend fun fetchUserById(userId: String): User? {
         return try {
             println("Fetching user with ID: $userId")
-            // Select only essential columns that are guaranteed to exist
-            val result = supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
-                    filter {
-                        eq("id", userId)
+            val result = runCatching {
+                supabase.from("users")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image", "last_polled")) {
+                        filter {
+                            eq("id", userId)
+                        }
                     }
-                }
-                .decodeList<UserCore>()
+                    .decodeList<UserCore>()
+            }.getOrElse {
+                supabase.from("users")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
+                        filter {
+                            eq("id", userId)
+                        }
+                    }
+                    .decodeList<UserCore>()
+            }
             println("Found ${result.size} user(s)")
             result.firstOrNull()?.toUser()
         } catch (e: Exception) {
@@ -109,9 +144,30 @@ class SupabaseRepository {
                 }
                 .decodeList<UserCore>()
 
-            users.map { it.toUser() }
+            val resolvedUsers = users.map { it.toUser() }
+            val unresolvedIds = resolvedUsers
+                .filter { user -> user.name.isNullOrBlank() || user.name == "Connection" }
+                .map { it.id }
+
+            if (unresolvedIds.isEmpty()) {
+                resolvedUsers
+            } else {
+                val rpcUsersById = fetchDisplayNamesViaRpc(unresolvedIds).associateBy { it.id }
+                resolvedUsers.map { user -> rpcUsersById[user.id] ?: user }
+            }
         } catch (e: Exception) {
             println("Error fetching users: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchDisplayNamesViaRpc(userIds: List<String>): List<User> {
+        return try {
+            supabase.postgrest.rpc("get_user_display_names", buildJsonObject {
+                put("user_ids", kotlinx.serialization.json.JsonArray(userIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            }).decodeList<DisplayNameRpcRow>().map { it.toUser() }
+        } catch (e: Exception) {
+            println("Error resolving display names via RPC: ${e.message}")
             emptyList()
         }
     }
@@ -378,14 +434,26 @@ class SupabaseRepository {
     suspend fun updateUserName(userId: String, name: String): Boolean {
         return try {
             println("Updating user name for $userId to: $name")
-            supabase.from("users")
-                .update({
-                    set("name", name)
-                }) {
-                    filter {
-                        eq("id", userId)
+            runCatching {
+                supabase.from("users")
+                    .update({
+                        set("name", name)
+                        set("full_name", name)
+                    }) {
+                        filter {
+                            eq("id", userId)
+                        }
                     }
-                }
+            }.getOrElse {
+                supabase.from("users")
+                    .update({
+                        set("name", name)
+                    }) {
+                        filter {
+                            eq("id", userId)
+                        }
+                    }
+            }
             println("Successfully updated user name for $userId to: $name")
             true
         } catch (e: Exception) {
@@ -405,25 +473,59 @@ class SupabaseRepository {
             
             // Check if user exists
             val existing = fetchUserById(user.id)
+            val resolvedName = user.name?.trim()?.takeIf { it.isNotEmpty() }
+                ?: user.email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
+                ?: "User"
             
             if (existing != null) {
                 // Update existing user if name changed
-                if (existing.name != user.name && user.name != null) {
-                    supabase.from("users")
-                        .update({
-                            set("name", user.name)
-                        }) {
-                            filter {
-                                eq("id", user.id)
+                if (existing.name != resolvedName || (user.email != null && existing.email != user.email) || existing.image != user.image) {
+                    runCatching {
+                        supabase.from("users")
+                            .update({
+                                set("name", resolvedName)
+                                set("full_name", resolvedName)
+                                user.email?.let { set("email", it) }
+                                user.image?.let { set("image", it) }
+                            }) {
+                                filter {
+                                    eq("id", user.id)
+                                }
                             }
-                        }
-                    println("Updated existing user name: ${user.name}")
+                    }.getOrElse {
+                        supabase.from("users")
+                            .update({
+                                set("name", resolvedName)
+                                user.email?.let { set("email", it) }
+                                user.image?.let { set("image", it) }
+                            }) {
+                                filter {
+                                    eq("id", user.id)
+                                }
+                            }
+                    }
+                    println("Updated existing user profile: $resolvedName")
                 }
                 true
             } else {
-                // Insert new user using serializable DTO
-                supabase.from("users")
-                    .insert(user.toInsertDto())
+                // Insert a valid user row so other clients can resolve this user's name directly from Supabase.
+                runCatching {
+                    supabase.from("users")
+                        .insert(
+                            buildJsonObject {
+                                put("id", user.id)
+                                put("name", resolvedName)
+                                put("full_name", resolvedName)
+                                put("email", user.email ?: "")
+                                put("created_at", if (user.createdAt > 0L) user.createdAt else kotlinx.datetime.Clock.System.now().toEpochMilliseconds())
+                                user.image?.let { put("image", it) }
+                                user.lastPolled?.let { put("last_polled", it) }
+                            }
+                        )
+                }.getOrElse {
+                    supabase.from("users")
+                        .insert(user.toInsertDto().copy(name = resolvedName, email = user.email ?: ""))
+                }
                 println("Inserted new user: ${user.id}")
                 true
             }

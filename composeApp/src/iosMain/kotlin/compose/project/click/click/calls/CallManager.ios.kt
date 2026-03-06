@@ -84,6 +84,7 @@ actual class CallManager {
             _callState.value = when (status) {
                 "connecting" -> CallState.Connecting(videoRequested = reportedVideoRequested)
                 "connected" -> CallState.Connected(
+                    videoRequested = reportedVideoRequested,
                     microphoneEnabled = microphoneEnabled,
                     cameraEnabled = cameraEnabled,
                     remoteVideoAvailable = remoteVideoAvailable,

@@ -4,6 +4,7 @@ sealed class CallState {
     data object Idle : CallState()
     data class Connecting(val videoRequested: Boolean) : CallState()
     data class Connected(
+        val videoRequested: Boolean,
         val microphoneEnabled: Boolean,
         val cameraEnabled: Boolean,
         val remoteVideoAvailable: Boolean,

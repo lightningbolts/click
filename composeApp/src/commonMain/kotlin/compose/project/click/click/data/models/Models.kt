@@ -59,7 +59,8 @@ data class User(
     fun toInsertDto() = UserInsertMinimal(
         id = id,
         name = name ?: "User",
-        email = email ?: ""
+        email = email ?: "",
+        created_at = if (createdAt > 0L) createdAt else kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
     )
 }
 
@@ -71,7 +72,9 @@ data class User(
 data class UserInsertMinimal(
     val id: String,
     val name: String,
-    val email: String
+    val email: String,
+    @SerialName("created_at")
+    val created_at: Long
 )
 
 /**

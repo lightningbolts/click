@@ -48,6 +48,7 @@ class AuthRepository(
                 this.email = email
                 this.password = password
                 data = buildJsonObject {
+                    put("full_name", name)
                     put("name", name)
                 }
             }

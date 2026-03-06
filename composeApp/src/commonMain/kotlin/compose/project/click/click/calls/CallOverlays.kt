@@ -252,7 +252,7 @@ fun ActiveCallOverlay(
     val isVideoEnabled = (state as? CallState.Connected)?.cameraEnabled == true
     val isVideoCall = when (state) {
         is CallState.Connecting -> state.videoRequested
-        is CallState.Connected -> state.hasVideo
+        is CallState.Connected -> state.videoRequested
         else -> false
     }
     val hasRemoteVideo = (state as? CallState.Connected)?.remoteVideoAvailable == true
