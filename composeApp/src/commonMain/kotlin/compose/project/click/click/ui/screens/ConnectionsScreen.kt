@@ -85,6 +85,7 @@ fun ConnectionsScreen(
     var selectedChatId by remember { mutableStateOf(initialChatId) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
+    var isTapCloseInFlight by remember { mutableStateOf(false) }
     val screenScope = rememberCoroutineScope()
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
 
@@ -98,6 +99,7 @@ fun ConnectionsScreen(
         if (selectedChatId != null) {
             closeCleanupJob?.cancel()
             chatTransitionMode = mode
+            isTapCloseInFlight = mode == ChatTransitionMode.Tap
             selectedChatId = null
             if (mode == ChatTransitionMode.Tap) {
                 closeCleanupJob = screenScope.launch {
@@ -105,9 +107,11 @@ fun ConnectionsScreen(
                     if (selectedChatId == null) {
                         finalizeChatClose()
                     }
+                    isTapCloseInFlight = false
                     closeCleanupJob = null
                 }
             } else {
+                isTapCloseInFlight = false
                 finalizeChatClose()
             }
         }
@@ -125,13 +129,14 @@ fun ConnectionsScreen(
     DisposableEffect(Unit) {
         onDispose {
             closeCleanupJob?.cancel()
+            isTapCloseInFlight = false
             onChatOpenStateChanged(false)
             viewModel.leaveChatRoom()
         }
     }
 
-    LaunchedEffect(selectedChatId) {
-        onChatOpenStateChanged(selectedChatId != null)
+    LaunchedEffect(selectedChatId, isTapCloseInFlight) {
+        onChatOpenStateChanged(selectedChatId != null || isTapCloseInFlight)
     }
 
     PlatformBackHandler(
@@ -141,6 +146,7 @@ fun ConnectionsScreen(
 
     fun openChat(chatId: String) {
         closeCleanupJob?.cancel()
+        isTapCloseInFlight = false
         chatTransitionMode = ChatTransitionMode.Tap
         selectedChatId = chatId
         viewModel.loadChatMessages(chatId)

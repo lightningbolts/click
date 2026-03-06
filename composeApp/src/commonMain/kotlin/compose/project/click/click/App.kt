@@ -723,6 +723,7 @@ fun App() {
                                     val interactivePrimary = allowInteractiveSwipeBack &&
                                         isIOS &&
                                         isPrimaryNavRoute(animatedScreen) &&
+                                        animatedScreen != NavigationItem.Connections.route &&
                                         previousKey != animatedScreen &&
                                         !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
 
