@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,6 +54,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.getPlatform
+import compose.project.click.click.calls.CallCoordinator
+import compose.project.click.click.calls.CallState
+import compose.project.click.click.calls.createCallManager
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
@@ -749,6 +754,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val chatListState by viewModel.chatListState.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
+    val currentUserId by viewModel.currentUserId.collectAsState()
+    val currentUser by AppDataManager.currentUser.collectAsState()
 
     // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
@@ -764,6 +771,10 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val callManager = remember { createCallManager() }
+    val callCoordinator = remember { CallCoordinator() }
+    val callState by callManager.callState.collectAsState()
+    var isLaunchingCall by remember { mutableStateOf(false) }
 
     // Show nudge snackbar
     LaunchedEffect(nudgeResult) {
@@ -931,6 +942,82 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     Icon(
                                         Icons.Filled.Notifications,
                                         contentDescription = "Nudge",
+                                        tint = PrimaryBlue.copy(alpha = 0.85f)
+                                    )
+                                }
+                                IconButton(
+                                    enabled = !isLaunchingCall,
+                                    onClick = {
+                                        val userId = currentUserId
+                                        if (userId.isNullOrBlank()) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("You need to be signed in to start a call")
+                                            }
+                                            return@IconButton
+                                        }
+
+                                        isLaunchingCall = true
+                                        coroutineScope.launch {
+                                            val result = callCoordinator.fetchCallToken(
+                                                roomName = "click-${chatDetails.connection.id}",
+                                                participantName = currentUser?.name ?: "Click User",
+                                                userId = userId
+                                            )
+                                            result.onSuccess { response ->
+                                                callManager.startCall(
+                                                    roomName = "click-${chatDetails.connection.id}",
+                                                    token = response.token,
+                                                    wsUrl = response.wsUrl,
+                                                    videoEnabled = false
+                                                )
+                                            }.onFailure {
+                                                snackbarHostState.showSnackbar(it.message ?: "Unable to start voice call")
+                                            }
+                                            isLaunchingCall = false
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Call,
+                                        contentDescription = "Start voice call",
+                                        tint = PrimaryBlue.copy(alpha = 0.85f)
+                                    )
+                                }
+                                IconButton(
+                                    enabled = !isLaunchingCall,
+                                    onClick = {
+                                        val userId = currentUserId
+                                        if (userId.isNullOrBlank()) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("You need to be signed in to start a call")
+                                            }
+                                            return@IconButton
+                                        }
+
+                                        isLaunchingCall = true
+                                        coroutineScope.launch {
+                                            val result = callCoordinator.fetchCallToken(
+                                                roomName = "click-${chatDetails.connection.id}",
+                                                participantName = currentUser?.name ?: "Click User",
+                                                userId = userId
+                                            )
+                                            result.onSuccess { response ->
+                                                callManager.startCall(
+                                                    roomName = "click-${chatDetails.connection.id}",
+                                                    token = response.token,
+                                                    wsUrl = response.wsUrl,
+                                                    videoEnabled = true
+                                                )
+                                            }.onFailure {
+                                                snackbarHostState.showSnackbar(it.message ?: "Unable to start video call")
+                                            }
+                                            isLaunchingCall = false
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Videocam,
+                                        contentDescription = "Start video call",
                                         tint = PrimaryBlue.copy(alpha = 0.85f)
                                     )
                                 }
@@ -1193,6 +1280,16 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
             .padding(bottom = 80.dp) // above input bar
     )
 
+    if (callState !is CallState.Idle) {
+        CallScreenOverlay(
+            otherUserName = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.otherUser?.name ?: "Connection",
+            state = callState,
+            onEndCall = {
+                callManager.endCall()
+            }
+        )
+    }
+
     // Message long-press context sheet
     if (contextMenuMessage != null) {
         MessageActionSheet(
@@ -1233,6 +1330,145 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         )
     }
     } // End outer Box
+}
+
+@Composable
+private fun CallScreenOverlay(
+    otherUserName: String,
+    state: CallState,
+    onEndCall: () -> Unit
+) {
+    val isVideoCall = (state as? CallState.Connected)?.hasVideo == true
+    var isMuted by remember { mutableStateOf(false) }
+    var isVideoEnabled by remember(isVideoCall) { mutableStateOf(isVideoCall) }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.Black.copy(alpha = 0.94f)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = when (state) {
+                        is CallState.Connecting -> "Connecting…"
+                        is CallState.Connected -> if (state.hasVideo) "Video call" else "Voice call"
+                        is CallState.Ended -> state.reason ?: "Call ended"
+                        CallState.Idle -> ""
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.75f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .size(140.dp)
+                        .clip(RoundedCornerShape(70.dp))
+                        .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = otherUserName.firstOrNull()?.uppercase() ?: "?",
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(18.dp))
+                Text(
+                    text = otherUserName,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                if (isVideoEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Remote video will appear here after LiveKit native SDK setup",
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(24.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                                .size(width = 110.dp, height = 160.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White.copy(alpha = 0.1f))
+                                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(20.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Local preview",
+                                color = Color.White.copy(alpha = 0.65f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledTonalIconButton(
+                        onClick = { isMuted = !isMuted },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                            contentDescription = if (isMuted) "Unmute" else "Mute",
+                            tint = Color.White
+                        )
+                    }
+                    FilledTonalIconButton(
+                        onClick = { isVideoEnabled = !isVideoEnabled },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isVideoEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                            contentDescription = if (isVideoEnabled) "Turn camera off" else "Turn camera on",
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(
+                        onClick = onEndCall,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CallEnd,
+                            contentDescription = "End call",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

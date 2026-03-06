@@ -17,6 +17,8 @@ import java.lang.ref.WeakReference
 
 private const val PUSH_NOTIFICATION_PREFS = "push_notification_prefs"
 private const val KEY_PUSH_USER_ID = "push_user_id"
+private const val KEY_PENDING_PUSH_TOKEN = "pending_push_token"
+private const val KEY_PENDING_PUSH_PLATFORM = "pending_push_platform"
 private const val PUSH_PERMISSION_REQUEST_CODE = 4012
 
 private object AndroidPushNotificationRuntime {
@@ -46,6 +48,27 @@ private object AndroidPushNotificationRuntime {
         val context = applicationContext ?: return null
         return context.getSharedPreferences(PUSH_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
             .getString(KEY_PUSH_USER_ID, null)
+    }
+
+    fun savePendingToken(token: String, platform: String) {
+        val context = applicationContext ?: return
+        context.getSharedPreferences(PUSH_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_PENDING_PUSH_TOKEN, token)
+            .putString(KEY_PENDING_PUSH_PLATFORM, platform)
+            .apply()
+    }
+
+    fun consumePendingToken(): PendingPushToken? {
+        val context = applicationContext ?: return null
+        val prefs = context.getSharedPreferences(PUSH_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
+        val token = prefs.getString(KEY_PENDING_PUSH_TOKEN, null) ?: return null
+        val platform = prefs.getString(KEY_PENDING_PUSH_PLATFORM, null) ?: return null
+        prefs.edit()
+            .remove(KEY_PENDING_PUSH_TOKEN)
+            .remove(KEY_PENDING_PUSH_PLATFORM)
+            .apply()
+        return PendingPushToken(token = token, platform = platform)
     }
 }
 

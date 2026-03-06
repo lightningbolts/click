@@ -3,6 +3,7 @@ package compose.project.click.click
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.PushTokenRepository
+import compose.project.click.click.notifications.savePendingPushToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,7 +16,8 @@ fun savePushToken(token: String, platform: String) {
     pushTokenScope.launch {
         val currentUserId = AppDataManager.currentUser.value?.id ?: AuthRepository().getCurrentUser()?.id
         if (currentUserId.isNullOrBlank()) {
-            println("savePushToken: Skipping upload because no authenticated user is available")
+            savePendingPushToken(token, platform)
+            println("savePushToken: Cached token because no authenticated user is available yet")
             return@launch
         }
         pushTokenRepository.savePushToken(
