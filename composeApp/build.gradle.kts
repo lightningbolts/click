@@ -34,6 +34,7 @@ kotlin {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             implementation("androidx.core:core-ktx:1.17.0")
+            implementation("io.livekit:livekit-android:2.20.3")
             // WebView-based map needs no native Map SDK dependency
 
             // Ktor Android engine

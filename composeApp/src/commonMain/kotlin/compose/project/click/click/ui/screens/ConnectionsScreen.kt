@@ -56,6 +56,8 @@ import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.getPlatform
 import compose.project.click.click.calls.CallCoordinator
 import compose.project.click.click.calls.CallState
+import compose.project.click.click.calls.CallVideoSurface
+import compose.project.click.click.calls.CallManager
 import compose.project.click.click.calls.createCallManager
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.ui.theme.*
@@ -1282,6 +1284,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
     if (callState !is CallState.Idle) {
         CallScreenOverlay(
+            callManager = callManager,
             otherUserName = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.otherUser?.name ?: "Connection",
             state = callState,
             onEndCall = {
@@ -1334,13 +1337,21 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
 @Composable
 private fun CallScreenOverlay(
+    callManager: CallManager,
     otherUserName: String,
     state: CallState,
     onEndCall: () -> Unit
 ) {
-    val isVideoCall = (state as? CallState.Connected)?.hasVideo == true
-    var isMuted by remember { mutableStateOf(false) }
-    var isVideoEnabled by remember(isVideoCall) { mutableStateOf(isVideoCall) }
+    val isMuted = (state as? CallState.Connected)?.microphoneEnabled == false
+    val isVideoEnabled = (state as? CallState.Connected)?.cameraEnabled == true
+    val isVideoCall = when (state) {
+        is CallState.Connecting -> state.videoRequested
+        is CallState.Connected -> state.hasVideo
+        else -> false
+    }
+    val hasRemoteVideo = (state as? CallState.Connected)?.remoteVideoAvailable == true
+    val hasLocalVideo = (state as? CallState.Connected)?.localVideoAvailable == true
+    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -1355,7 +1366,7 @@ private fun CallScreenOverlay(
             ) {
                 Text(
                     text = when (state) {
-                        is CallState.Connecting -> "Connecting…"
+                        is CallState.Connecting -> if (state.videoRequested) "Connecting video…" else "Connecting…"
                         is CallState.Connected -> if (state.hasVideo) "Video call" else "Voice call"
                         is CallState.Ended -> state.reason ?: "Call ended"
                         CallState.Idle -> ""
@@ -1397,13 +1408,25 @@ private fun CallScreenOverlay(
                             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Remote video will appear here after LiveKit native SDK setup",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(24.dp)
+                        CallVideoSurface(
+                            callManager = callManager,
+                            isLocal = false,
+                            modifier = Modifier.fillMaxSize()
                         )
+
+                        if (!hasRemoteVideo) {
+                            Text(
+                                text = if (isIOS) {
+                                    "iOS video activates after the LiveKit Swift package is added in Xcode"
+                                } else {
+                                    "Waiting for remote video…"
+                                },
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(24.dp)
+                            )
+                        }
 
                         Box(
                             modifier = Modifier
@@ -1415,11 +1438,19 @@ private fun CallScreenOverlay(
                                 .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(20.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Local preview",
-                                color = Color.White.copy(alpha = 0.65f),
-                                style = MaterialTheme.typography.bodySmall
+                            CallVideoSurface(
+                                callManager = callManager,
+                                isLocal = true,
+                                modifier = Modifier.fillMaxSize()
                             )
+
+                            if (!hasLocalVideo) {
+                                Text(
+                                    text = "Local preview",
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 } else {
@@ -1433,7 +1464,7 @@ private fun CallScreenOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilledTonalIconButton(
-                        onClick = { isMuted = !isMuted },
+                        onClick = { callManager.setMicrophoneEnabled(isMuted) },
                         modifier = Modifier.size(56.dp)
                     ) {
                         Icon(
@@ -1443,7 +1474,7 @@ private fun CallScreenOverlay(
                         )
                     }
                     FilledTonalIconButton(
-                        onClick = { isVideoEnabled = !isVideoEnabled },
+                        onClick = { callManager.setCameraEnabled(!isVideoEnabled) },
                         modifier = Modifier.size(56.dp)
                     ) {
                         Icon(

@@ -2,7 +2,15 @@ package compose.project.click.click.calls
 
 sealed class CallState {
     data object Idle : CallState()
-    data object Connecting : CallState()
-    data class Connected(val hasVideo: Boolean) : CallState()
+    data class Connecting(val videoRequested: Boolean) : CallState()
+    data class Connected(
+        val microphoneEnabled: Boolean,
+        val cameraEnabled: Boolean,
+        val remoteVideoAvailable: Boolean,
+        val localVideoAvailable: Boolean,
+    ) : CallState() {
+        val hasVideo: Boolean
+            get() = cameraEnabled || remoteVideoAvailable || localVideoAvailable
+    }
     data class Ended(val reason: String? = null) : CallState()
 }

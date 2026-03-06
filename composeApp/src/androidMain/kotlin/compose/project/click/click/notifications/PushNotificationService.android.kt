@@ -21,7 +21,7 @@ private const val KEY_PENDING_PUSH_TOKEN = "pending_push_token"
 private const val KEY_PENDING_PUSH_PLATFORM = "pending_push_platform"
 private const val PUSH_PERMISSION_REQUEST_CODE = 4012
 
-private object AndroidPushNotificationRuntime {
+internal object AndroidPushNotificationRuntime {
     private var applicationContext: Context? = null
     private var currentActivityRef: WeakReference<Activity>? = null
 

@@ -12,23 +12,27 @@ CREATE INDEX IF NOT EXISTS idx_push_tokens_platform ON push_tokens(platform);
 
 ALTER TABLE push_tokens ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can read their own push tokens"
+DROP POLICY IF EXISTS "Users can read their own push tokens" ON push_tokens;
+CREATE POLICY "Users can read their own push tokens"
 ON push_tokens
 FOR SELECT
 USING (auth.uid() = user_id);
 
-CREATE POLICY IF NOT EXISTS "Users can insert their own push tokens"
+DROP POLICY IF EXISTS "Users can insert their own push tokens" ON push_tokens;
+CREATE POLICY "Users can insert their own push tokens"
 ON push_tokens
 FOR INSERT
 WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY IF NOT EXISTS "Users can update their own push tokens"
+DROP POLICY IF EXISTS "Users can update their own push tokens" ON push_tokens;
+CREATE POLICY "Users can update their own push tokens"
 ON push_tokens
 FOR UPDATE
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY IF NOT EXISTS "Users can delete their own push tokens"
+DROP POLICY IF EXISTS "Users can delete their own push tokens" ON push_tokens;
+CREATE POLICY "Users can delete their own push tokens"
 ON push_tokens
 FOR DELETE
 USING (auth.uid() = user_id);

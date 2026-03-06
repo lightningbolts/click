@@ -2,7 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.83.0";
 import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_KEY")!;
+const SUPABASE_SERVICE_KEY =
+  Deno.env.get("SUPABASE_SERVICE_KEY") ??
+  Deno.env.get("SUPABASE_KEY")!;
 const FCM_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const APNS_URL = "https://api.push.apple.com/3/device";

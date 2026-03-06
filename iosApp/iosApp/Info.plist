@@ -16,6 +16,12 @@
 	<!-- Camera Permission -->
 	<key>NSCameraUsageDescription</key>
 	<string>Click uses your camera to scan QR codes and connect with others.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Click uses your microphone for voice and video calls.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	
 	<!-- Location Permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>

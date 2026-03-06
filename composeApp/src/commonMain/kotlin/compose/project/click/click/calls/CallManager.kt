@@ -7,6 +7,10 @@ expect class CallManager() {
 
     fun startCall(roomName: String, token: String, wsUrl: String, videoEnabled: Boolean)
 
+    fun setMicrophoneEnabled(enabled: Boolean)
+
+    fun setCameraEnabled(enabled: Boolean)
+
     fun endCall()
 }
 
