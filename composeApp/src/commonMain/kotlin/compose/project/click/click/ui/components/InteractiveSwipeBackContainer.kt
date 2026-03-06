@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -16,7 +17,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -27,11 +30,13 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * iOS-style interactive back container:
@@ -60,15 +65,16 @@ fun InteractiveSwipeBackContainer(
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val edgeWidthPx = with(density) { edgeSwipeWidth.toPx() }
         val dragCommitThresholdPx = with(density) { 10.dp.toPx() }
-        val showPreviousLayer = isGestureActive || isSettling || dragOffsetPx > 0.5f
+        val showPreviousLayer = isGestureActive || isSettling || dragOffsetPx > dragCommitThresholdPx
 
         if (showPreviousLayer) {
+            val progress = (dragOffsetPx / widthPx).coerceIn(0f, 1f)
+            val previousOffsetPx = (-widthPx * 0.18f + (widthPx * 0.18f * progress)).roundToInt()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .offset { IntOffset(previousOffsetPx, 0) }
                     .graphicsLayer {
-                        val progress = (dragOffsetPx / widthPx).coerceIn(0f, 1f)
-                        translationX = -widthPx * 0.18f + (widthPx * 0.18f * progress)
                         alpha = 0.86f + (0.14f * progress)
                     }
             ) {
@@ -79,11 +85,9 @@ fun InteractiveSwipeBackContainer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(dragOffsetPx.roundToInt(), 0) }
                 .graphicsLayer {
-                    translationX = dragOffsetPx
-                    shadowElevation = if (dragOffsetPx > 0f) 14f else 0f
-                    ambientShadowColor = Color.Black.copy(alpha = 0.18f)
-                    spotShadowColor = Color.Black.copy(alpha = 0.22f)
+                    clip = true
                 }
                 .pointerInput(enabled, widthPx, edgeWidthPx) {
                     if (!enabled) return@pointerInput
@@ -181,6 +185,21 @@ fun InteractiveSwipeBackContainer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .drawWithContent {
+                        drawContent()
+                        val progress = (dragOffsetPx / widthPx).coerceIn(0f, 1f)
+                        if (progress > 0f) {
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.12f * (1f - progress)),
+                                        Color.Transparent
+                                    ),
+                                    endX = size.width * 0.06f
+                                )
+                            )
+                        }
+                    }
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 currentContent()
