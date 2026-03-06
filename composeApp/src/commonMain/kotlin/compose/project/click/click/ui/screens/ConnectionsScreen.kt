@@ -23,7 +23,6 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
@@ -46,15 +44,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
+import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.AdaptiveSurface
 import compose.project.click.click.ui.components.PageHeader
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.ui.unit.coerceAtLeast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
@@ -75,9 +75,20 @@ fun ConnectionsScreen(
     searchQuery: String = "",
     initialChatId: String? = null,
     onChatDismissed: (() -> Unit)? = null,
+    onChatOpenStateChanged: (Boolean) -> Unit = {},
     viewModel: ChatViewModel = viewModel { ChatViewModel() }
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
+    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+
+    fun closeActiveChat() {
+        if (selectedChatId != null) {
+            selectedChatId = null
+            viewModel.leaveChatRoom()
+            viewModel.loadChats()
+            onChatDismissed?.invoke()
+        }
+    }
 
     LaunchedEffect(userId, initialChatId) {
         viewModel.setCurrentUser(userId)
@@ -90,49 +101,85 @@ fun ConnectionsScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            onChatOpenStateChanged(false)
             viewModel.leaveChatRoom()
         }
     }
 
-    AnimatedContent(
-        targetState = selectedChatId,
-        transitionSpec = {
-            val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-            val fadeSpec  = tween<Float>(220, easing = LinearOutSlowInEasing)
-            if (targetState != null) {
-                // Opening chat: new screen slides in from right, old slides fully out to left
-                (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) + fadeIn(animationSpec = fadeSpec))
-                    .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) + fadeOut(animationSpec = fadeSpec))
-                    .using(SizeTransform(clip = true))
-            } else {
-                // Closing chat: new screen slides in from left, old slides fully out to right
-                (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) + fadeIn(animationSpec = fadeSpec))
-                    .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) + fadeOut(animationSpec = fadeSpec))
-                    .using(SizeTransform(clip = true))
-            }
-        },
-        label = "chat_open_close_transition"
-    ) { activeChatId ->
+    LaunchedEffect(selectedChatId) {
+        onChatOpenStateChanged(selectedChatId != null)
+    }
+
+    PlatformBackHandler(
+        enabled = selectedChatId != null,
+        onBack = { closeActiveChat() }
+    )
+
+    fun openChat(chatId: String) {
+        selectedChatId = chatId
+        viewModel.loadChatMessages(chatId)
+    }
+
+    if (isIOS) {
+        val activeChatId = selectedChatId
         if (activeChatId == null) {
             ConnectionsListView(
                 viewModel = viewModel,
                 searchQuery = searchQuery,
-                onChatSelected = { chatId ->
-                    selectedChatId = chatId
-                    viewModel.loadChatMessages(chatId)
-                }
+                onChatSelected = { chatId -> openChat(chatId) }
             )
         } else {
-            ChatView(
-                viewModel = viewModel,
-                chatId = activeChatId,
-                onBackPressed = {
-                    selectedChatId = null
-                    viewModel.leaveChatRoom()
-                    viewModel.loadChats()
-                    onChatDismissed?.invoke()
+            InteractiveSwipeBackContainer(
+                enabled = true,
+                edgeSwipeWidth = 56.dp,
+                onBack = { closeActiveChat() },
+                previousContent = {
+                    ConnectionsListView(
+                        viewModel = viewModel,
+                        searchQuery = searchQuery,
+                        onChatSelected = { chatId -> openChat(chatId) }
+                    )
+                },
+                currentContent = {
+                    ChatView(
+                        viewModel = viewModel,
+                        chatId = activeChatId,
+                        onBackPressed = { closeActiveChat() }
+                    )
                 }
             )
+        }
+    } else {
+        AnimatedContent(
+            targetState = selectedChatId,
+            transitionSpec = {
+                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                if (targetState != null) {
+                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) + fadeIn(animationSpec = fadeSpec))
+                        .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) + fadeOut(animationSpec = fadeSpec))
+                        .using(SizeTransform(clip = true))
+                } else {
+                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) + fadeIn(animationSpec = fadeSpec))
+                        .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) + fadeOut(animationSpec = fadeSpec))
+                        .using(SizeTransform(clip = true))
+                }
+            },
+            label = "chat_open_close_transition"
+        ) { activeChatId ->
+            if (activeChatId == null) {
+                ConnectionsListView(
+                    viewModel = viewModel,
+                    searchQuery = searchQuery,
+                    onChatSelected = { chatId -> openChat(chatId) }
+                )
+            } else {
+                ChatView(
+                    viewModel = viewModel,
+                    chatId = activeChatId,
+                    onBackPressed = { closeActiveChat() }
+                )
+            }
         }
     }
 }
@@ -573,11 +620,6 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val density = LocalDensity.current
-    val swipeStartEdgePx = remember(density) { with(density) { 28.dp.toPx() } }
-    val swipeDismissThresholdPx = remember(density) { with(density) { 88.dp.toPx() } }
-    var isEdgeSwiping by remember(chatId) { mutableStateOf(false) }
-    var horizontalDragDistance by remember(chatId) { mutableStateOf(0f) }
 
     // Connection action sheet (archive, delete, report, block)
     var showConnectionSheet by remember { mutableStateOf(false) }
@@ -610,32 +652,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(chatId) {
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        isEdgeSwiping = offset.x <= swipeStartEdgePx
-                        horizontalDragDistance = 0f
-                    },
-                    onHorizontalDrag = { change, dragAmount ->
-                        if (isEdgeSwiping) {
-                            horizontalDragDistance = (horizontalDragDistance + dragAmount).coerceAtLeast(0f)
-                        }
-                    },
-                    onDragCancel = {
-                        isEdgeSwiping = false
-                        horizontalDragDistance = 0f
-                    },
-                    onDragEnd = {
-                        if (isEdgeSwiping && horizontalDragDistance >= swipeDismissThresholdPx) {
-                            onBackPressed()
-                        }
-                        isEdgeSwiping = false
-                        horizontalDragDistance = 0f
-                    }
-                )
-            }
+        modifier = Modifier.fillMaxSize()
     ) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
