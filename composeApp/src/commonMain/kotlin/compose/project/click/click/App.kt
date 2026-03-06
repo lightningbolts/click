@@ -334,9 +334,18 @@ fun App() {
                 currentRoute == "search" -> "search"
                 else -> currentRoute
             }
+            val canSwipeBackMainRoute = isIOS &&
+                routeHistory.size > 1 &&
+                isPrimaryNavRoute(currentRoute) &&
+                currentRoute != NavigationItem.Home.route &&
+                !showMyQRCode &&
+                !showQRScanner &&
+                !showNfcScreen &&
+                !isConnectionsChatOpen
             val iOSSwipeOwnsBack = isIOS && (
                 isSwipeBackScreen(activeScreenKey) ||
-                    (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen)
+                    (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen) ||
+                    canSwipeBackMainRoute
                 )
 
             LaunchedEffect(currentUser.id) {
@@ -460,6 +469,76 @@ fun App() {
 
                         @Composable
                         fun renderScreen(animatedScreen: String, allowInteractiveSwipeBack: Boolean = true) {
+                            @Composable
+                            fun renderPrimaryScreen(route: String) {
+                                when (route) {
+                                    NavigationItem.Home.route -> HomeScreen(
+                                        onNavigateToChat = { connectionId ->
+                                            pendingChatId = connectionId
+                                            navigateTo(NavigationItem.Connections.route)
+                                        }
+                                    )
+
+                                    NavigationItem.AddClick.route -> AddClickScreen(
+                                        currentUserId = currentUser.id,
+                                        currentUsername = currentUser.name,
+                                        onNavigateToNfc = { showNfcScreen = true },
+                                        onShowMyQRCode = { showMyQRCode = true },
+                                        onScanQRCode = { showQRScanner = true },
+                                        onStartChatting = { navigateTo(NavigationItem.Connections.route) }
+                                    )
+
+                                    NavigationItem.Connections.route -> {
+                                        val userId = when (val state = authViewModel.authState) {
+                                            is AuthState.Success -> state.userId
+                                            else -> ""
+                                        }
+                                        if (userId.isNotEmpty()) {
+                                            ConnectionsScreen(
+                                                userId = userId,
+                                                searchQuery = "",
+                                                initialChatId = pendingChatId,
+                                                onChatDismissed = { pendingChatId = null },
+                                                onChatOpenStateChanged = { isOpen ->
+                                                    isConnectionsChatOpen = isOpen
+                                                    if (!isOpen) {
+                                                        pendingChatId = null
+                                                    }
+                                                },
+                                                viewModel = chatViewModel
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("Please log in to view connections")
+                                            }
+                                        }
+                                    }
+
+                                    NavigationItem.Map.route -> MapScreen(
+                                        viewModel = mapViewModel,
+                                        onNavigateToChat = { connectionId ->
+                                            pendingChatId = connectionId
+                                            navigateTo(NavigationItem.Connections.route)
+                                        }
+                                    )
+
+                                    NavigationItem.Settings.route -> SettingsScreen(
+                                        isDarkMode = isDarkMode,
+                                        onToggleDarkMode = {
+                                            val next = !isDarkMode
+                                            isDarkMode = next
+                                            appScope.launch {
+                                                tokenStorage.saveDarkModeEnabled(next)
+                                            }
+                                        },
+                                        onSignOut = { authViewModel.signOut() }
+                                    )
+                                }
+                            }
+
                             when (animatedScreen) {
                                 "my_qr" -> {
                                     val previousKey = currentRoute
@@ -626,71 +705,25 @@ fun App() {
                                 }
 
                                 else -> {
-                                    when (animatedScreen) {
-                                        NavigationItem.Home.route -> HomeScreen(
-                                            onNavigateToChat = { connectionId ->
-                                                pendingChatId = connectionId
-                                                navigateTo(NavigationItem.Connections.route)
-                                            }
-                                        )
+                                    val previousKey = routeHistory.lastOrNull()
+                                    val interactivePrimary = allowInteractiveSwipeBack &&
+                                        isIOS &&
+                                        isPrimaryNavRoute(animatedScreen) &&
+                                        previousKey != null &&
+                                        previousKey != animatedScreen &&
+                                        routeHistory.size > 1 &&
+                                        !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
 
-                                        NavigationItem.AddClick.route -> AddClickScreen(
-                                            currentUserId = currentUser.id,
-                                            currentUsername = currentUser.name,
-                                            onNavigateToNfc = { showNfcScreen = true },
-                                            onShowMyQRCode = { showMyQRCode = true },
-                                            onScanQRCode = { showQRScanner = true },
-                                            onStartChatting = { navigateTo(NavigationItem.Connections.route) }
+                                    if (interactivePrimary) {
+                                        InteractiveSwipeBackContainer(
+                                            enabled = true,
+                                            edgeSwipeWidth = 56.dp,
+                                            onBack = { navigateBack(NavigationTransitionMode.GestureBack) },
+                                            previousContent = { renderScreen(previousKey, false) },
+                                            currentContent = { renderPrimaryScreen(animatedScreen) }
                                         )
-
-                                        NavigationItem.Connections.route -> {
-                                            val userId = when (val state = authViewModel.authState) {
-                                                is AuthState.Success -> state.userId
-                                                else -> ""
-                                            }
-                                            if (userId.isNotEmpty()) {
-                                                ConnectionsScreen(
-                                                    userId = userId,
-                                                    searchQuery = "",
-                                                    initialChatId = pendingChatId,
-                                                    onChatDismissed = { pendingChatId = null },
-                                                    onChatOpenStateChanged = { isOpen ->
-                                                        isConnectionsChatOpen = isOpen
-                                                        if (!isOpen) {
-                                                            pendingChatId = null
-                                                        }
-                                                    },
-                                                    viewModel = chatViewModel
-                                                )
-                                            } else {
-                                                Box(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text("Please log in to view connections")
-                                                }
-                                            }
-                                        }
-
-                                        NavigationItem.Map.route -> MapScreen(
-                                            viewModel = mapViewModel,
-                                            onNavigateToChat = { connectionId ->
-                                                pendingChatId = connectionId
-                                                navigateTo(NavigationItem.Connections.route)
-                                            }
-                                        )
-
-                                        NavigationItem.Settings.route -> SettingsScreen(
-                                            isDarkMode = isDarkMode,
-                                            onToggleDarkMode = {
-                                                val next = !isDarkMode
-                                                isDarkMode = next
-                                                appScope.launch {
-                                                    tokenStorage.saveDarkModeEnabled(next)
-                                                }
-                                            },
-                                            onSignOut = { authViewModel.signOut() }
-                                        )
+                                    } else {
+                                        renderPrimaryScreen(animatedScreen)
                                     }
                                 }
                             }
@@ -763,4 +796,12 @@ private fun isSwipeBackScreen(screenKey: String): Boolean {
         screenKey == "my_qr" ||
         screenKey == "qr_scanner" ||
         screenKey == "nfc"
+}
+
+private fun isPrimaryNavRoute(route: String): Boolean {
+    return route == NavigationItem.Home.route ||
+        route == NavigationItem.AddClick.route ||
+        route == NavigationItem.Connections.route ||
+        route == NavigationItem.Map.route ||
+        route == NavigationItem.Settings.route
 }
