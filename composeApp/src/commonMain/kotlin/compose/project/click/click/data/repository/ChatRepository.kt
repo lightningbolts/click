@@ -183,6 +183,10 @@ class ChatRepository(
                     lastMessage = lastMessage,
                     unreadCount = unreadCount
                 )
+            }.sortedByDescending { chatDetails ->
+                chatDetails.lastMessage?.timeCreated
+                    ?: chatDetails.connection.last_message_at
+                    ?: chatDetails.connection.created
             }
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.message}")
