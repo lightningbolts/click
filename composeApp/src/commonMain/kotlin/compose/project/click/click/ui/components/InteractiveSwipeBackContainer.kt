@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -80,6 +81,9 @@ fun InteractiveSwipeBackContainer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
             ) {
                 previousContent()
             }
@@ -92,6 +96,7 @@ fun InteractiveSwipeBackContainer(
                     // Pixel-align translation to prevent sub-pixel text/layer shimmer on iOS.
                     translationX = dragOffset.value.roundToInt().toFloat()
                     clip = true
+                    compositingStrategy = CompositingStrategy.Offscreen
                 }
                 .pointerInput(enabled, widthPx, edgeWidthPx) {
                     if (!enabled) return@pointerInput
@@ -111,7 +116,9 @@ fun InteractiveSwipeBackContainer(
 
                         var pointerId = down.id
                         val dragStartPosition = down.position
+                        var lastPointerPosition = down.position
                         var hasCommittedToSwipe = false
+                        var dragOffsetPx = 0f
                         var lastDispatchedOffset = 0f
 
                         while (true) {
@@ -124,6 +131,9 @@ fun InteractiveSwipeBackContainer(
                                 tracker.addPosition(change.uptimeMillis, change.position)
                             }
 
+                            val stepDelta = change.position - lastPointerPosition
+                            val stepDx = stepDelta.x
+                            val stepDy = stepDelta.y
                             val totalDelta: Offset = change.position - dragStartPosition
                             val dx = totalDelta.x
                             val dy = totalDelta.y
@@ -136,6 +146,9 @@ fun InteractiveSwipeBackContainer(
                                     horizontalIntent -> {
                                         hasCommittedToSwipe = true
                                         isGestureActive = true
+                                        dragOffsetPx = dx.coerceIn(0f, widthPx)
+                                        lastDispatchedOffset = dragOffsetPx
+                                        snapChannel.trySend(dragOffsetPx)
                                     }
                                     verticalIntent -> {
                                         snapChannel.trySend(0f)
@@ -144,23 +157,27 @@ fun InteractiveSwipeBackContainer(
                                 }
                             }
 
-                            if (hasCommittedToSwipe) {
-                                val nextOffset = dx.coerceIn(0f, widthPx)
-                                val movedEnough = abs(nextOffset - lastDispatchedOffset) >= dragJitterThresholdPx
-                                if (!positionChanged && nextOffset == lastDispatchedOffset) {
-                                    continue
-                                }
-                                if (!movedEnough && nextOffset != 0f && nextOffset != widthPx) {
-                                    continue
-                                }
+                            if (hasCommittedToSwipe && positionChanged) {
+                                val horizontalStepDominant = abs(stepDx) >= abs(stepDy)
+                                val hasMeaningfulHorizontalStep = abs(stepDx) >= dragJitterThresholdPx
 
-                                lastDispatchedOffset = nextOffset
-                                snapChannel.trySend(nextOffset)
+                                if (horizontalStepDominant || hasMeaningfulHorizontalStep) {
+                                    val nextOffset = (dragOffsetPx + stepDx).coerceIn(0f, widthPx)
+                                    val movedEnough = abs(nextOffset - lastDispatchedOffset) >= dragJitterThresholdPx
+
+                                    if (movedEnough || nextOffset == 0f || nextOffset == widthPx) {
+                                        dragOffsetPx = nextOffset
+                                        lastDispatchedOffset = nextOffset
+                                        snapChannel.trySend(nextOffset)
+                                    }
+                                }
                             }
 
                             if (hasCommittedToSwipe && positionChanged) {
                                 change.consumePositionChangeCompat()
                             }
+
+                            lastPointerPosition = change.position
                         }
 
                         if (hasCommittedToSwipe && dragOffset.value > 0f) {
