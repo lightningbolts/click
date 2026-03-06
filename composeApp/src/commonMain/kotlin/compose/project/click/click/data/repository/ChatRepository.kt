@@ -335,7 +335,7 @@ class ChatRepository(
     suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? {
         return try {
             fetchUserChatsWithDetails(currentUserId)
-                .firstOrNull { it.connection.id == chatId }
+                .firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
         } catch (e: Exception) {
             println("Error fetching chat with details: ${e.message}")
             null

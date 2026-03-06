@@ -44,7 +44,7 @@ import kotlin.math.abs
 fun InteractiveSwipeBackContainer(
     modifier: Modifier = Modifier,
     enabled: Boolean,
-    edgeSwipeWidth: Dp = 44.dp,
+    edgeSwipeWidth: Dp = 24.dp,
     onBack: () -> Unit,
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit
@@ -59,6 +59,7 @@ fun InteractiveSwipeBackContainer(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val edgeWidthPx = with(density) { edgeSwipeWidth.toPx() }
+        val dragCommitThresholdPx = with(density) { 10.dp.toPx() }
         val showPreviousLayer = isGestureActive || isSettling || dragOffsetPx > 0.5f
 
         if (showPreviousLayer) {
@@ -84,11 +85,11 @@ fun InteractiveSwipeBackContainer(
                     ambientShadowColor = Color.Black.copy(alpha = 0.18f)
                     spotShadowColor = Color.Black.copy(alpha = 0.22f)
                 }
-                .pointerInput(enabled, widthPx) {
+                .pointerInput(enabled, widthPx, edgeWidthPx) {
                     if (!enabled) return@pointerInput
 
                     awaitEachGesture {
-                        val down = awaitFirstPressedChange()
+                        val down = awaitFirstPressedChange(PointerEventPass.Final)
                         if (down.position.x > edgeWidthPx) {
                             return@awaitEachGesture
                         }
@@ -100,36 +101,47 @@ fun InteractiveSwipeBackContainer(
                         val tracker = VelocityTracker()
                         tracker.addPosition(down.uptimeMillis, down.position)
 
-                        var startedTracking = false
                         var pointerId = down.id
-                        var lastPosition = down.position
+                        val dragStartPosition = down.position
+                        var hasCommittedToSwipe = false
 
                         while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val event = awaitPointerEvent(PointerEventPass.Final)
                             val change = event.changes.firstOrNull { it.id == pointerId }
                             if (change == null || !change.pressed) break
 
-                            val delta: Offset = change.position - lastPosition
-                            lastPosition = change.position
-                            val dx = delta.x
                             tracker.addPosition(change.uptimeMillis, change.position)
 
-                            // Start visual tracking immediately for rightward edge drags.
-                            // This keeps motion glued to the finger/mouse even before full intent resolution.
-                            if (dx > 0f || dragOffsetPx > 0f) {
-                                dragOffsetPx = (dragOffsetPx + dx).coerceIn(0f, widthPx)
-                                if (dragOffsetPx > 0f) {
-                                    startedTracking = true
-                                    isGestureActive = true
+                            val totalDelta: Offset = change.position - dragStartPosition
+                            val dx = totalDelta.x
+                            val dy = totalDelta.y
+
+                            if (!hasCommittedToSwipe) {
+                                val horizontalIntent = dx > dragCommitThresholdPx && dx > abs(dy)
+                                val verticalIntent = abs(dy) > dragCommitThresholdPx && abs(dy) > abs(dx)
+
+                                when {
+                                    horizontalIntent -> {
+                                        hasCommittedToSwipe = true
+                                        isGestureActive = true
+                                    }
+                                    verticalIntent -> {
+                                        dragOffsetPx = 0f
+                                        break
+                                    }
                                 }
                             }
 
-                            if (startedTracking && change.positionChanged()) {
+                            if (hasCommittedToSwipe) {
+                                dragOffsetPx = dx.coerceIn(0f, widthPx)
+                            }
+
+                            if (hasCommittedToSwipe && change.positionChanged()) {
                                 change.consumePositionChangeCompat()
                             }
                         }
 
-                        if (dragOffsetPx > 0f) {
+                        if (hasCommittedToSwipe && dragOffsetPx > 0f) {
                             val velocityX = tracker.calculateVelocity().x
                             val progress = dragOffsetPx / widthPx
                             val projected = progress + (velocityX / 3200f)
@@ -158,24 +170,8 @@ fun InteractiveSwipeBackContainer(
                                 isSettling = false
                                 settleJob = null
                             }
-                        } else if (dragOffsetPx > 0f) {
-                            isSettling = true
-                            settleJob = settleScope.launch {
-                                animate(
-                                    initialValue = dragOffsetPx,
-                                    targetValue = 0f,
-                                    animationSpec = spring(
-                                        dampingRatio = 0.86f,
-                                        stiffness = Spring.StiffnessMedium
-                                    )
-                                ) { value, _ ->
-                                    dragOffsetPx = value
-                                }
-                                isGestureActive = false
-                                isSettling = false
-                                settleJob = null
-                            }
                         } else {
+                            dragOffsetPx = 0f
                             isGestureActive = false
                             isSettling = false
                         }
@@ -197,9 +193,11 @@ private fun PointerInputChange.consumePositionChangeCompat() {
     consume()
 }
 
-private suspend fun AwaitPointerEventScope.awaitFirstPressedChange(): PointerInputChange {
+private suspend fun AwaitPointerEventScope.awaitFirstPressedChange(
+    pass: PointerEventPass = PointerEventPass.Initial
+): PointerInputChange {
     while (true) {
-        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val event = awaitPointerEvent(pass)
         val pressed = event.changes.firstOrNull { it.pressed }
         if (pressed != null) return pressed
     }

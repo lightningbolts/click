@@ -324,6 +324,21 @@ fun App() {
                 return false
             }
 
+            fun navigatePrimaryRouteBackHome(mode: NavigationTransitionMode = NavigationTransitionMode.Tap): Boolean {
+                if (!isPrimaryNavRoute(currentRoute) || currentRoute == NavigationItem.Home.route) {
+                    return false
+                }
+
+                transitionMode = mode
+                previousRoute = currentRoute
+                currentRoute = NavigationItem.Home.route
+                routeHistory.clear()
+                routeHistory.add(NavigationItem.Home.route)
+                isConnectionsChatOpen = false
+                pendingChatId = null
+                return true
+            }
+
             val focusManager = LocalFocusManager.current
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
@@ -335,7 +350,6 @@ fun App() {
                 else -> currentRoute
             }
             val canSwipeBackMainRoute = isIOS &&
-                routeHistory.size > 1 &&
                 isPrimaryNavRoute(currentRoute) &&
                 currentRoute != NavigationItem.Home.route &&
                 !showMyQRCode &&
@@ -560,7 +574,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 56.dp,
+                                            edgeSwipeWidth = 24.dp,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showMyQRCode = false
@@ -605,7 +619,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 56.dp,
+                                            edgeSwipeWidth = 24.dp,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showQRScanner = false
@@ -653,7 +667,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 56.dp,
+                                            edgeSwipeWidth = 24.dp,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showNfcScreen = false
@@ -694,7 +708,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 56.dp,
+                                            edgeSwipeWidth = 24.dp,
                                             onBack = { navigateBack(NavigationTransitionMode.GestureBack) },
                                             previousContent = { renderScreen(previousKey, false) },
                                             currentContent = content
@@ -705,20 +719,18 @@ fun App() {
                                 }
 
                                 else -> {
-                                    val previousKey = routeHistory.lastOrNull()
+                                    val previousKey = NavigationItem.Home.route
                                     val interactivePrimary = allowInteractiveSwipeBack &&
                                         isIOS &&
                                         isPrimaryNavRoute(animatedScreen) &&
-                                        previousKey != null &&
                                         previousKey != animatedScreen &&
-                                        routeHistory.size > 1 &&
                                         !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
 
                                     if (interactivePrimary) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 56.dp,
-                                            onBack = { navigateBack(NavigationTransitionMode.GestureBack) },
+                                            edgeSwipeWidth = 24.dp,
+                                            onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
                                             previousContent = { renderScreen(previousKey, false) },
                                             currentContent = { renderPrimaryScreen(animatedScreen) }
                                         )

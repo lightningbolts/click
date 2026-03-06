@@ -65,6 +65,8 @@ import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.ChatListState
 import compose.project.click.click.viewmodel.ChatMessagesState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -83,14 +85,31 @@ fun ConnectionsScreen(
     var selectedChatId by remember { mutableStateOf(initialChatId) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
+    val screenScope = rememberCoroutineScope()
+    var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
+
+    fun finalizeChatClose() {
+        viewModel.leaveChatRoom()
+        viewModel.loadChats()
+        onChatDismissed?.invoke()
+    }
 
     fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
         if (selectedChatId != null) {
+            closeCleanupJob?.cancel()
             chatTransitionMode = mode
             selectedChatId = null
-            viewModel.leaveChatRoom()
-            viewModel.loadChats()
-            onChatDismissed?.invoke()
+            if (mode == ChatTransitionMode.Tap) {
+                closeCleanupJob = screenScope.launch {
+                    delay(CHAT_TRANSITION_DURATION_MS)
+                    if (selectedChatId == null) {
+                        finalizeChatClose()
+                    }
+                    closeCleanupJob = null
+                }
+            } else {
+                finalizeChatClose()
+            }
         }
     }
 
@@ -105,6 +124,7 @@ fun ConnectionsScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            closeCleanupJob?.cancel()
             onChatOpenStateChanged(false)
             viewModel.leaveChatRoom()
         }
@@ -115,11 +135,12 @@ fun ConnectionsScreen(
     }
 
     PlatformBackHandler(
-        enabled = selectedChatId != null,
+        enabled = selectedChatId != null && !isIOS,
         onBack = { closeActiveChat(ChatTransitionMode.Tap) }
     )
 
     fun openChat(chatId: String) {
+        closeCleanupJob?.cancel()
         chatTransitionMode = ChatTransitionMode.Tap
         selectedChatId = chatId
         viewModel.loadChatMessages(chatId)
@@ -164,7 +185,7 @@ fun ConnectionsScreen(
             } else {
                 InteractiveSwipeBackContainer(
                     enabled = true,
-                    edgeSwipeWidth = 56.dp,
+                    edgeSwipeWidth = 24.dp,
                     onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
                     previousContent = {
                         ConnectionsListView(
@@ -222,6 +243,8 @@ private enum class ChatTransitionMode {
     Tap,
     Gesture
 }
+
+private const val CHAT_TRANSITION_DURATION_MS = 300L
 
 
 @Composable
@@ -518,18 +541,26 @@ fun ConnectionItem(
     onOpenMenu: () -> Unit = {},
     onLongPress: () -> Unit = {}
 ) {
+    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     val user = chatDetails.otherUser
     val lastMessage = chatDetails.lastMessage
     val unreadCount = chatDetails.unreadCount
     val timeText = lastMessage?.let { formatTimestamp(it.timeCreated) } ?: "No messages"
 
+    val rowTapModifier = if (isIOS) {
+        Modifier.clickable(onClick = onClick)
+    } else {
+        Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongPress
+        )
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongPress
-            )
+            .clip(RoundedCornerShape(18.dp))
+            .then(rowTapModifier)
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

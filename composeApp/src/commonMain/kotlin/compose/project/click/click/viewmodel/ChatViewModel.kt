@@ -240,14 +240,16 @@ class ChatViewModel(
     // Load messages for a specific chat
     fun loadChatMessages(chatId: String) {
         val userId = _currentUserId.value ?: return
-        if (currentConnectionId == chatId && _chatMessagesState.value is ChatMessagesState.Success) return
-        
-        currentConnectionId = chatId
+        val cachedChat = (_chatListState.value as? ChatListState.Success)
+            ?.chats?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+        val connectionId = cachedChat?.connection?.id ?: chatId
+
+        if (currentConnectionId == connectionId && _chatMessagesState.value is ChatMessagesState.Success) return
+
+        currentConnectionId = connectionId
 
         // Instantly show the chat header from cached list data (no loading spinner)
-        val cachedChat = (_chatListState.value as? ChatListState.Success)
-            ?.chats?.firstOrNull { it.connection.id == chatId }
-        val prefetchedPayload = prefetchedChatPayloads[chatId]
+        val prefetchedPayload = prefetchedChatPayloads[connectionId]
 
         if (cachedChat != null && prefetchedPayload != null) {
             _messageReactions.value = prefetchedPayload.reactionsByMessageId
@@ -267,6 +269,8 @@ class ChatViewModel(
                     return@launch
                 }
 
+                val resolvedConnectionId = chatDetails.connection.id
+
                 val apiChatId = chatDetails.chat.id
                 if (apiChatId.isNullOrBlank()) {
                     _chatMessagesState.value = ChatMessagesState.Error("Chat not found")
@@ -274,7 +278,7 @@ class ChatViewModel(
                 }
 
                 val payload = prefetchedPayload ?: buildChatPayload(chatDetails, apiChatId, userId)
-                prefetchedChatPayloads[chatId] = payload
+                prefetchedChatPayloads[resolvedConnectionId] = payload
 
                 _messageReactions.value = payload.reactionsByMessageId
                 _icebreakerPrompts.value = payload.icebreakerPrompts
@@ -301,7 +305,7 @@ class ChatViewModel(
                 
                 // Mark chat as begun if this is the first time
                 if (!chatDetails.connection.has_begun) {
-                    supabaseRepository.updateConnectionHasBegun(chatId, true)
+                    supabaseRepository.updateConnectionHasBegun(resolvedConnectionId, true)
                 }
                 
                 // Icebreaker state is already prepared in payload before UI render.
