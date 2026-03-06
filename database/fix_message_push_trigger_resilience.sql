@@ -1,0 +1,68 @@
+-- Make message push delivery best-effort so a broken push setup never blocks chat sends.
+
+CREATE OR REPLACE FUNCTION notify_new_message_push()
+RETURNS TRIGGER AS $$
+DECLARE
+    recipient_user_id UUID;
+    sender_name TEXT;
+    preview_body TEXT;
+    supabase_url TEXT;
+    service_role_key TEXT;
+BEGIN
+    SELECT u.id::uuid
+      INTO recipient_user_id
+      FROM chats ch
+      JOIN connections c ON c.id = ch.connection_id
+      JOIN LATERAL unnest(c.user_ids) AS u(id) ON TRUE
+     WHERE ch.id = NEW.chat_id
+       AND u.id <> NEW.user_id::text
+     LIMIT 1;
+
+    IF recipient_user_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    supabase_url := current_setting('app.settings.supabase_url', true);
+    service_role_key := current_setting('app.settings.service_role_key', true);
+
+    IF supabase_url IS NULL OR supabase_url = '' OR service_role_key IS NULL OR service_role_key = '' THEN
+        RAISE LOG 'Skipping push notification for message % because required database settings are missing', NEW.id;
+        RETURN NEW;
+    END IF;
+
+    SELECT COALESCE(NULLIF(name, ''), 'Someone')
+      INTO sender_name
+      FROM users
+     WHERE id = NEW.user_id
+     LIMIT 1;
+
+    preview_body := LEFT(COALESCE(NULLIF(NEW.content, ''), 'Open Click to view the latest message'), 120);
+
+    BEGIN
+        PERFORM net.http_post(
+            url := supabase_url || '/functions/v1/send-push-notification',
+            headers := jsonb_build_object(
+                'Authorization', 'Bearer ' || service_role_key,
+                'Content-Type', 'application/json'
+            ),
+            body := jsonb_build_object(
+                'recipient_user_id', recipient_user_id,
+                'title', 'New message from ' || sender_name,
+                'body', preview_body,
+                'data', jsonb_build_object(
+                    'chat_id', NEW.chat_id,
+                    'message_id', NEW.id,
+                    'sender_user_id', NEW.user_id
+                )
+            )
+        );
+    EXCEPTION
+        WHEN undefined_function THEN
+            RAISE LOG 'Skipping push notification for message % because pg_net is unavailable', NEW.id;
+        WHEN OTHERS THEN
+            RAISE LOG 'Push notification dispatch failed for message %: %', NEW.id, SQLERRM;
+    END;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

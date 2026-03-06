@@ -10,6 +10,7 @@ Run these SQL files in the Supabase SQL editor, in this order:
 
 1. `click/database/add_push_tokens.sql`
 2. `click/database/add_push_notification_trigger.sql`
+3. `click/database/fix_message_push_trigger_resilience.sql`
 
 Before running the trigger SQL, enable the required extension:
 
@@ -28,6 +29,8 @@ Validation:
 select * from pg_extension where extname = 'pg_net';
 select * from pg_policies where tablename = 'push_tokens';
 ```
+
+The resilience migration keeps message delivery working even if push delivery is misconfigured or temporarily unavailable.
 
 ## 2. Supabase Edge Function For Push Delivery
 

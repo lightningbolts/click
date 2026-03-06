@@ -238,6 +238,13 @@ object CallSessionManager {
     }
 
     fun endActiveCall() {
+        val invite = activeInviteValue
+        if (invite != null) {
+            scope.launch {
+                val peerId = if (currentUserId == invite.callerId) invite.calleeId else invite.callerId
+                sendCancel(invite, peerId, "ended")
+            }
+        }
         internalCallManager.endCall()
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
@@ -353,6 +360,17 @@ object CallSessionManager {
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
 
+        if (callState.value is CallState.Connected) {
+            internalCallManager.endCall()
+            activeInviteValue = null
+            _overlayState.value = when (cancel.reason) {
+                "ended" -> CallOverlayState.Ended(invite, "Call ended")
+                "missed" -> CallOverlayState.Ended(invite, "No answer")
+                else -> CallOverlayState.Idle
+            }
+            return
+        }
+
         when (_overlayState.value) {
             is CallOverlayState.Incoming,
             is CallOverlayState.Outgoing,
@@ -361,6 +379,7 @@ object CallSessionManager {
                 activeInviteValue = null
                 _overlayState.value = when (cancel.reason) {
                     "missed" -> CallOverlayState.Ended(invite, "No answer")
+                    "ended" -> CallOverlayState.Ended(invite, "Call ended")
                     else -> CallOverlayState.Idle
                 }
             }

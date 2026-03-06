@@ -331,7 +331,7 @@ class ChatViewModel(
             _chatMessagesState.value = ChatMessagesState.Success(
                 messages = prefetchedPayload.messages,
                 chatDetails = cachedChat,
-                isLoadingMessages = false
+                isLoadingMessages = true
             )
         } else if (hasRenderableStateForTarget && currentState != null) {
             // Keep current content visible while refreshing in background.
@@ -369,7 +369,7 @@ class ChatViewModel(
                     )
                 }
 
-                val payload = prefetchedPayload ?: buildChatPayload(hydratedChatDetails, apiChatId, userId)
+                val payload = buildChatPayload(hydratedChatDetails, apiChatId, userId)
                 prefetchedChatPayloads[resolvedConnectionId] = payload
 
                 _messageReactions.value = payload.reactionsByMessageId

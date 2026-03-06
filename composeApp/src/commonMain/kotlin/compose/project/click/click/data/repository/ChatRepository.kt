@@ -221,18 +221,36 @@ class ChatRepository(
     suspend fun sendMessage(chatId: String, userId: String, content: String): Message? {
         return try {
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            val inserted = supabase.from("messages")
-                .insert(
-                    buildJsonObject {
-                        put("chat_id", chatId)
-                        put("user_id", userId)
-                        put("content", content)
-                        put("time_created", now)
+            val payload = buildJsonObject {
+                put("chat_id", chatId)
+                put("user_id", userId)
+                put("content", content)
+                put("time_created", now)
+            }
+
+            val inserted = runCatching {
+                supabase.from("messages")
+                    .insert(payload) {
+                        select()
                     }
-                ) {
-                    select()
-                }
-                .decodeSingle<Message>()
+                    .decodeSingle<Message>()
+            }.getOrElse {
+                // Some deployments can fail on the immediate returning payload even when the row exists.
+                supabase.from("messages")
+                    .select {
+                        filter {
+                            eq("chat_id", chatId)
+                            eq("user_id", userId)
+                            eq("content", content)
+                            eq("time_created", now)
+                        }
+                        order("time_created", Order.DESCENDING)
+                        limit(1)
+                    }
+                    .decodeList<Message>()
+                    .firstOrNull()
+                    ?: throw it
+            }
 
             try {
                 supabase.from("chats")

@@ -322,11 +322,7 @@ fun ActiveCallOverlay(
 
                         if (!hasRemoteVideo) {
                             Text(
-                                text = if (isIOS) {
-                                    "iOS video activates after the LiveKit Swift package is added in Xcode"
-                                } else {
-                                    "Waiting for remote video…"
-                                },
+                                text = if (isIOS) "Waiting for remote video…" else "Waiting for remote video…",
                                 color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
