@@ -574,7 +574,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 24.dp,
+                                            edgeSwipeWidth = 44.dp,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showMyQRCode = false
@@ -619,7 +619,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 24.dp,
+                                            edgeSwipeWidth = 44.dp,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showQRScanner = false
@@ -667,7 +667,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 24.dp,
+                                            edgeSwipeWidth = 44.dp,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showNfcScreen = false
@@ -708,7 +708,7 @@ fun App() {
                                     if (interactive) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 24.dp,
+                                            edgeSwipeWidth = 44.dp,
                                             onBack = { navigateBack(NavigationTransitionMode.GestureBack) },
                                             previousContent = { renderScreen(previousKey, false) },
                                             currentContent = content
@@ -730,7 +730,7 @@ fun App() {
                                     if (interactivePrimary) {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
-                                            edgeSwipeWidth = 24.dp,
+                                            edgeSwipeWidth = 44.dp,
                                             onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
                                             previousContent = { renderScreen(previousKey, false) },
                                             currentContent = { renderPrimaryScreen(animatedScreen) }

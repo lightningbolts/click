@@ -257,7 +257,13 @@ class ChatViewModel(
         val connectionId = cachedChat?.connection?.id ?: chatId
 
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success
+        val currentConnectionStateId = currentState?.chatDetails?.connection?.id
         val activeApiChatId = currentState?.chatDetails?.chat?.id
+        val hasRenderableStateForTarget =
+            currentState != null && (
+                currentConnectionStateId == connectionId ||
+                    (activeApiChatId != null && activeApiChatId == chatId)
+                )
         val hasLiveSubscriptions =
             currentApiChatId == activeApiChatId &&
                 activeChannel != null &&
@@ -277,7 +283,14 @@ class ChatViewModel(
             _messageReactions.value = prefetchedPayload.reactionsByMessageId
             _icebreakerPrompts.value = prefetchedPayload.icebreakerPrompts
             _showIcebreakerPanel.value = prefetchedPayload.showIcebreakerPanel
-            _chatMessagesState.value = ChatMessagesState.Success(prefetchedPayload.messages, cachedChat)
+            _chatMessagesState.value = ChatMessagesState.Success(
+                messages = prefetchedPayload.messages,
+                chatDetails = cachedChat,
+                isLoadingMessages = false
+            )
+        } else if (hasRenderableStateForTarget && currentState != null) {
+            // Keep current content visible while refreshing in background.
+            _chatMessagesState.value = currentState.copy(isLoadingMessages = true)
         } else {
             _chatMessagesState.value = ChatMessagesState.Loading
         }
@@ -306,7 +319,11 @@ class ChatViewModel(
                 _messageReactions.value = payload.reactionsByMessageId
                 _icebreakerPrompts.value = payload.icebreakerPrompts
                 _showIcebreakerPanel.value = payload.showIcebreakerPanel
-                _chatMessagesState.value = ChatMessagesState.Success(payload.messages, chatDetails)
+                _chatMessagesState.value = ChatMessagesState.Success(
+                    messages = payload.messages,
+                    chatDetails = chatDetails,
+                    isLoadingMessages = false
+                )
 
                 // Mark messages as read
                 chatRepository.markMessagesAsRead(apiChatId, userId)
@@ -334,7 +351,18 @@ class ChatViewModel(
                 
                 // Icebreaker state is already prepared in payload before UI render.
             } catch (e: Exception) {
-                _chatMessagesState.value = ChatMessagesState.Error(e.message ?: "Failed to load messages")
+                val latestState = _chatMessagesState.value as? ChatMessagesState.Success
+                val sameChatStillVisible =
+                    latestState != null && (
+                        latestState.chatDetails.connection.id == connectionId ||
+                            latestState.chatDetails.chat.id == chatId
+                        )
+
+                if (sameChatStillVisible) {
+                    _chatMessagesState.value = latestState.copy(isLoadingMessages = false)
+                } else {
+                    _chatMessagesState.value = ChatMessagesState.Error(e.message ?: "Failed to load messages")
+                }
             }
         }
     }
