@@ -131,11 +131,15 @@ class ChatViewModel(
     private val prefetchedChatLimit = 3
 
     init {
-        // Observe AppDataManager connections to stay in sync
         viewModelScope.launch {
-            AppDataManager.connections.collect { connections ->
-                // Refresh when shared connection state changes (e.g. after relogin hydration)
-                if (_currentUserId.value != null && connections.isNotEmpty()) {
+            combine(
+                AppDataManager.connections,
+                AppDataManager.connectedUsers
+            ) { connections, connectedUsers ->
+                connections to connectedUsers
+            }.collect { (connections, connectedUsers) ->
+                // Wait for both flows so cached chat rows do not render placeholder users before hydration finishes.
+                if (_currentUserId.value != null && connections.isNotEmpty() && connectedUsers.isNotEmpty()) {
                     loadChats(isForced = true)
                 }
             }
@@ -173,25 +177,17 @@ class ChatViewModel(
         viewModelScope.launch {
             val cachedConnections = AppDataManager.connections.value
             val cachedUsers = AppDataManager.connectedUsers.value
+            val canRenderCachedChats = cachedConnections.any { connection ->
+                connection.user_ids.any { otherUserId -> otherUserId != userId && cachedUsers.containsKey(otherUserId) }
+            }
             
             // Show cached data immediately if available, BUT only if we don't
             // already have real data from the API (avoids the flash to "Start a
             // conversation" when returning from a chat).
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
             
-            if (cachedConnections.isNotEmpty() && !alreadyHasRealData) {
-                // Build ChatWithDetails from cached data for instant display
-                val cachedChats = cachedConnections.mapNotNull { connection ->
-                    val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
-                    val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
-                    ChatWithDetails(
-                        chat = connection.chat,
-                        connection = connection,
-                        otherUser = otherUser,
-                        lastMessage = connection.chat.messages.lastOrNull(),
-                        unreadCount = 0 // Will be updated from API
-                    )
-                }
+            if (cachedConnections.isNotEmpty() && canRenderCachedChats && !alreadyHasRealData) {
+                val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
                 _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(cachedChats))
             } else if (!alreadyHasRealData && (isForced || _chatListState.value !is ChatListState.Success)) {
                 _chatListState.value = ChatListState.Loading
@@ -204,21 +200,13 @@ class ChatViewModel(
                 if (chats.isNotEmpty()) {
                     _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(chats))
                     prefetchChatPayloads(userId, chats)
-                } else if (cachedConnections.isNotEmpty()) {
+                } else if (cachedConnections.isNotEmpty() && canRenderCachedChats) {
                     // Keep hydrated/cached connections visible when API is empty
                     // (common during session bootstrap or backend shape mismatch).
                     if (_chatListState.value !is ChatListState.Success) {
-                        _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(cachedConnections.mapNotNull { connection ->
-                            val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
-                            val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
-                            ChatWithDetails(
-                                chat = connection.chat,
-                                connection = connection,
-                                otherUser = otherUser,
-                                lastMessage = connection.chat.messages.lastOrNull(),
-                                unreadCount = 0
-                            )
-                        }))
+                        _chatListState.value = ChatListState.Success(
+                            applyConnectionVisibilityFilters(buildCachedChats(cachedConnections, cachedUsers, userId))
+                        )
                     }
                 } else {
                     _chatListState.value = ChatListState.Success(emptyList())
@@ -233,10 +221,57 @@ class ChatViewModel(
         }
     }
 
+    private fun buildCachedChats(
+        cachedConnections: List<Connection>,
+        cachedUsers: Map<String, User>,
+        userId: String
+    ): List<ChatWithDetails> {
+        return cachedConnections.mapNotNull { connection ->
+            val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+            val otherUser = cachedUsers[otherUserId] ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
+            ChatWithDetails(
+                chat = connection.chat,
+                connection = connection,
+                otherUser = otherUser,
+                lastMessage = connection.chat.messages.lastOrNull(),
+                unreadCount = 0
+            )
+        }
+    }
+
     private fun applyConnectionVisibilityFilters(chats: List<ChatWithDetails>): List<ChatWithDetails> {
         val hiddenIds = _hiddenConnectionIds.value
+        val now = Clock.System.now().toEpochMilliseconds()
         return chats.filter { chat ->
-            chat.connection.id !in hiddenIds
+            chat.connection.id !in hiddenIds && !isExpiredConnection(chat.connection, now)
+        }
+    }
+
+    private fun isExpiredConnection(connection: Connection, now: Long): Boolean {
+        return connection.expiry_state == "expired" && connection.expiry < now
+    }
+
+    private fun updateConnectionState(connectionId: String, transform: (Connection) -> Connection) {
+        val currentListState = _chatListState.value
+        if (currentListState is ChatListState.Success) {
+            _chatListState.value = currentListState.copy(
+                chats = currentListState.chats.map { chat ->
+                    if (chat.connection.id == connectionId) {
+                        chat.copy(connection = transform(chat.connection))
+                    } else {
+                        chat
+                    }
+                }
+            )
+        }
+
+        val currentMessageState = _chatMessagesState.value
+        if (currentMessageState is ChatMessagesState.Success && currentMessageState.chatDetails.connection.id == connectionId) {
+            _chatMessagesState.value = currentMessageState.copy(
+                chatDetails = currentMessageState.chatDetails.copy(
+                    connection = transform(currentMessageState.chatDetails.connection)
+                )
+            )
         }
     }
 
@@ -637,7 +672,9 @@ class ChatViewModel(
         if (currentState is ChatMessagesState.Success) {
             val connection = currentState.chatDetails.connection
             if (connection.isPending()) {
-                supabaseRepository.updateConnectionExpiryState(connectionId, "active")
+                if (supabaseRepository.updateConnectionExpiryState(connectionId, "active")) {
+                    updateConnectionState(connectionId) { it.copy(expiry_state = "active") }
+                }
             }
         }
     }
@@ -892,30 +929,41 @@ class ChatViewModel(
     }
     
     fun keepConnection() {
-        if (!vibeCheckEnabled) return
-        val chatId = currentConnectionId ?: return
+        val connectionId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
         val currentState = _chatMessagesState.value
         if (currentState !is ChatMessagesState.Success) return
         val connection = currentState.chatDetails.connection
         viewModelScope.launch {
-            val success = supabaseRepository.updateUserKeepDecision(
-                connectionId = chatId,
-                userId = userId,
-                keepConnection = true,
-                currentShouldContinue = connection.should_continue,
-                userIds = connection.user_ids
-            )
+            val success = if (vibeCheckEnabled) {
+                supabaseRepository.updateUserKeepDecision(
+                    connectionId = connectionId,
+                    userId = userId,
+                    keepConnection = true,
+                    currentShouldContinue = connection.should_continue,
+                    userIds = connection.user_ids
+                )
+            } else {
+                supabaseRepository.updateConnectionExpiryState(connectionId, "kept")
+            }
+
             if (success) {
                 _currentUserHasKept.value = true
+                updateConnectionState(connectionId) { it.copy(expiry_state = "kept") }
+                if (!vibeCheckEnabled) {
+                    _connectionKept.value = true
+                    vibeCheckTimerJob?.cancel()
+                    loadChats(isForced = true)
+                    return@launch
+                }
+
                 val otherUserIndex = if (connection.getUserIndex(userId) == 0) 1 else 0
                 if (connection.should_continue.getOrNull(otherUserIndex) == true) {
                     _connectionKept.value = true
                     vibeCheckTimerJob?.cancel()
-                    // Mutual keep → permanent connection
-                    supabaseRepository.updateConnectionExpiryState(chatId, "kept")
+                    supabaseRepository.updateConnectionExpiryState(connectionId, "kept")
                 }
-                refreshConnectionState(chatId, userId)
+                refreshConnectionState(connectionId, userId)
             }
         }
     }

@@ -3,6 +3,7 @@ package compose.project.click.click.data
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
+import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -27,6 +28,7 @@ object AppDataManager {
     private val supabaseRepository = SupabaseRepository()
     private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
     private val tokenStorage = createTokenStorage() // For local preferences storage
+    private val pushNotificationService = createPushNotificationService()
     
     // Current user state
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -144,6 +146,8 @@ object AppDataManager {
             
             _currentUser.value = user
             println("AppDataManager: Current user set to: ${user.name}")
+            pushNotificationService.requestPermission()
+            pushNotificationService.registerToken(user.id)
             
             // Load availability from local storage first for immediate display
             val localFreeThisWeek = tokenStorage.getFreeThisWeek()

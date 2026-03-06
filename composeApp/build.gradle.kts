@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.googleSecrets)
+    id("com.google.gms.google-services") version "4.4.2"
 }
 
 kotlin {
@@ -32,6 +33,7 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            implementation("androidx.core:core-ktx:1.17.0")
             // WebView-based map needs no native Map SDK dependency
 
             // Ktor Android engine
@@ -50,6 +52,7 @@ kotlin {
             implementation("com.google.maps.android:maps-compose:4.3.3")
             implementation("com.google.android.gms:play-services-maps:18.2.0")
             implementation("com.google.android.gms:play-services-location:21.0.1")
+            implementation("com.google.firebase:firebase-messaging-ktx:23.4.1")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
