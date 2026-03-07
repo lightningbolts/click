@@ -403,6 +403,51 @@ object AppDataManager {
                 else -> User(id = userId, name = "Connection", createdAt = 0L)
             }
         }
+
+        // If any users are still unresolved after the fetch (e.g. Supabase cold start caused the
+        // RPC to fail silently), schedule quick background retries so the UI updates within seconds
+        // rather than waiting for the 30-second presence heartbeat.
+        scheduleUnresolvedUserRetry()
+    }
+
+    /**
+     * If the connected-users map still has any "Connection" placeholder names, retry name
+     * resolution in the background at 2 s, then 8 s intervals so a cold-start RPC failure
+     * doesn't leave placeholder names visible for a full heartbeat cycle (30 s).
+     */
+    private fun scheduleUnresolvedUserRetry() {
+        val unresolvedIds = _connectedUsers.value
+            .entries
+            .filter { !isResolvedDisplayName(it.value.name) }
+            .map { it.key }
+
+        if (unresolvedIds.isEmpty()) return
+
+        scope.launch {
+            for (delayMs in listOf(2_000L, 8_000L)) {
+                delay(delayMs)
+                // Stop if nothing left to resolve
+                val stillUnresolved = _connectedUsers.value
+                    .entries
+                    .filter { !isResolvedDisplayName(it.value.name) }
+                    .map { it.key }
+
+                if (stillUnresolved.isEmpty()) break
+
+                val retried = supabaseRepository.fetchUsersByIds(stillUnresolved)
+                val currentMap = _connectedUsers.value.toMutableMap()
+                var anyResolved = false
+                retried.forEach { user ->
+                    if (isResolvedDisplayName(user.name)) {
+                        currentMap[user.id] = user
+                        anyResolved = true
+                    }
+                }
+                if (anyResolved) {
+                    _connectedUsers.value = currentMap
+                }
+            }
+        }
     }
     
     /**

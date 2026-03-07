@@ -11,6 +11,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.TokenStorage
@@ -138,6 +139,7 @@ class ChatViewModel(
             ) { connections, connectedUsers ->
                 connections to connectedUsers
             }.collect { (connections, connectedUsers) ->
+                // Always patch the open chat screen with the freshest user name.
                 val currentMessages = _chatMessagesState.value as? ChatMessagesState.Success
                 if (currentMessages != null) {
                     val refreshedOtherUser = connectedUsers[currentMessages.chatDetails.otherUser.id]
@@ -148,8 +150,38 @@ class ChatViewModel(
                     }
                 }
 
-                // Wait for both flows so cached chat rows do not render placeholder users before hydration finishes.
-                if (_currentUserId.value != null && connections.isNotEmpty() && connectedUsers.isNotEmpty()) {
+                // When AppDataManager resolves user names (e.g. after the RPC fallback or a
+                // retry), patch the chat-list rows in place so the UI updates immediately without
+                // waiting for a full API round-trip. Doing this avoids the 30-second heartbeat
+                // cycle that previously kept "Connection" visible until the next presence tick.
+                val currentListState = _chatListState.value as? ChatListState.Success
+                if (currentListState != null && connectedUsers.isNotEmpty()) {
+                    val updatedChats = currentListState.chats.map { chat ->
+                        val freshUser = connectedUsers[chat.otherUser.id]
+                        if (freshUser != null &&
+                            isResolvedDisplayName(freshUser.name) &&
+                            !isResolvedDisplayName(chat.otherUser.name)
+                        ) {
+                            chat.copy(otherUser = freshUser)
+                        } else {
+                            chat
+                        }
+                    }
+                    if (updatedChats != currentListState.chats) {
+                        _chatListState.value = ChatListState.Success(
+                            applyConnectionVisibilityFilters(updatedChats)
+                        )
+                    }
+                }
+
+                // Only trigger a full chat-list load when we don't already have real data.
+                // Previously this called loadChats(isForced = true) on every connectedUsers
+                // emission (including the 30-second heartbeat), causing redundant full fetches.
+                if (_currentUserId.value != null &&
+                    connections.isNotEmpty() &&
+                    connectedUsers.isNotEmpty() &&
+                    _chatListState.value !is ChatListState.Success
+                ) {
                     loadChats(isForced = true)
                 }
             }
@@ -187,8 +219,15 @@ class ChatViewModel(
         viewModelScope.launch {
             val cachedConnections = AppDataManager.connections.value
             val cachedUsers = AppDataManager.connectedUsers.value
+
+            // Only use the fast-render cache path when the cached users have RESOLVED names.
+            // Using "Connection" placeholder names in the cache would flash unresolved names
+            // in the UI, which is exactly the bug we are fixing.
             val canRenderCachedChats = cachedConnections.any { connection ->
-                connection.user_ids.any { otherUserId -> otherUserId != userId && cachedUsers.containsKey(otherUserId) }
+                connection.user_ids.any { otherUserId ->
+                    otherUserId != userId &&
+                    cachedUsers[otherUserId]?.let { isResolvedDisplayName(it.name) } == true
+                }
             }
             
             // Show cached data immediately if available, BUT only if we don't
@@ -198,7 +237,12 @@ class ChatViewModel(
             
             if (cachedConnections.isNotEmpty() && canRenderCachedChats && !alreadyHasRealData) {
                 val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(cachedChats))
+                // Filter out any entries whose user name is still a placeholder — the API
+                // result will fill them in correctly a moment later.
+                val readyChats = cachedChats.filter { isResolvedDisplayName(it.otherUser.name) }
+                if (readyChats.isNotEmpty()) {
+                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(readyChats))
+                }
             } else if (!alreadyHasRealData && (isForced || _chatListState.value !is ChatListState.Success)) {
                 _chatListState.value = ChatListState.Loading
             }
@@ -208,15 +252,33 @@ class ChatViewModel(
                 val chats = chatRepository.fetchUserChatsWithDetails(userId)
 
                 if (chats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(chats))
-                    prefetchChatPayloads(userId, chats)
+                    // Prefer any already-resolved names from AppDataManager's cache over
+                    // freshly-fetched users that still carry "Connection" (can happen when the
+                    // RPC resolved names in AppDataManager before the ChatRepository fetch ran).
+                    val enriched = chats.map { chat ->
+                        val cached = cachedUsers[chat.otherUser.id]
+                        if (cached != null &&
+                            isResolvedDisplayName(cached.name) &&
+                            !isResolvedDisplayName(chat.otherUser.name)
+                        ) {
+                            chat.copy(otherUser = cached)
+                        } else {
+                            chat
+                        }
+                    }
+                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(enriched))
+                    prefetchChatPayloads(userId, enriched)
                 } else if (cachedConnections.isNotEmpty() && canRenderCachedChats) {
                     // Keep hydrated/cached connections visible when API is empty
                     // (common during session bootstrap or backend shape mismatch).
                     if (_chatListState.value !is ChatListState.Success) {
-                        _chatListState.value = ChatListState.Success(
-                            applyConnectionVisibilityFilters(buildCachedChats(cachedConnections, cachedUsers, userId))
-                        )
+                        val readyChats = buildCachedChats(cachedConnections, cachedUsers, userId)
+                            .filter { isResolvedDisplayName(it.otherUser.name) }
+                        if (readyChats.isNotEmpty()) {
+                            _chatListState.value = ChatListState.Success(
+                                applyConnectionVisibilityFilters(readyChats)
+                            )
+                        }
                     }
                 } else {
                     _chatListState.value = ChatListState.Success(emptyList())
