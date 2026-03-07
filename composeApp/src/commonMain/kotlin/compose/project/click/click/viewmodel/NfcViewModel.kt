@@ -163,7 +163,7 @@ class NfcViewModel(
                     onSuccess = { connection ->
                         _connectionState.value = NfcConnectionState.Success(connection, otherUser)
                         // Add to AppDataManager to update all screens
-                        AppDataManager.addConnection(connection)
+                        AppDataManager.addConnection(connection, otherUser)
                         stopScanning()
                     },
                     onFailure = { error ->

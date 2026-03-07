@@ -10,9 +10,11 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -168,8 +170,15 @@ object AppDataManager {
             _currentUser.value = user
             println("AppDataManager: Current user set to: ${user.name}")
             startPresenceHeartbeat(user.id)
-            pushNotificationService.requestPermission()
-            pushNotificationService.registerToken(user.id)
+
+            // Push registration is non-critical for first paint. Keep it off the main
+            // startup path so chats/connections do not wait on permission or token work.
+            scope.launch {
+                runCatching { pushNotificationService.requestPermission() }
+                    .onFailure { println("AppDataManager: Push permission request failed: ${it.message}") }
+                runCatching { pushNotificationService.registerToken(user.id) }
+                    .onFailure { println("AppDataManager: Push token registration failed: ${it.message}") }
+            }
             
             // Load availability from local storage first for immediate display
             val localFreeThisWeek = tokenStorage.getFreeThisWeek()
@@ -182,27 +191,33 @@ object AppDataManager {
                 )
                 println("AppDataManager: Loaded local availability: isFreeThisWeek=$localFreeThisWeek")
             }
-            
-            // Fetch availability from Supabase (may update the local value)
-            val availability = supabaseRepository.fetchUserAvailability(user.id)
-            if (availability != null) {
-                _userAvailability.value = availability
-                // Sync local storage with server value
-                tokenStorage.saveFreeThisWeek(availability.isFreeThisWeek)
-                println("AppDataManager: Synced availability from Supabase: isFreeThisWeek=${availability.isFreeThisWeek}")
-            } else if (localFreeThisWeek == null) {
-                println("AppDataManager: No availability found locally or on server")
+
+            coroutineScope {
+                val availabilityDeferred = async {
+                    runCatching { supabaseRepository.fetchUserAvailability(user.id) }
+                        .onFailure { println("AppDataManager: Availability fetch failed: ${it.message}") }
+                        .getOrNull()
+                }
+
+                // Prioritize connections and connected-user hydration so the Home/Map/Chats
+                // screens are ready before slower auxiliary startup work completes.
+                val userConnections = supabaseRepository.fetchUserConnections(user.id)
+                _connections.value = userConnections
+                refreshConnectedUsers(userConnections, user.id)
+
+                _isDataLoaded.value = true
+                lastRefreshTime = Clock.System.now().toEpochMilliseconds()
+
+                // Apply availability after the primary connection data is visible.
+                val availability = availabilityDeferred.await()
+                if (availability != null) {
+                    _userAvailability.value = availability
+                    tokenStorage.saveFreeThisWeek(availability.isFreeThisWeek)
+                    println("AppDataManager: Synced availability from Supabase: isFreeThisWeek=${availability.isFreeThisWeek}")
+                } else if (localFreeThisWeek == null) {
+                    println("AppDataManager: No availability found locally or on server")
+                }
             }
-            
-            // Fetch connections
-            val userConnections = supabaseRepository.fetchUserConnections(user.id)
-            _connections.value = userConnections
-            
-            // Fetch connected users info
-            refreshConnectedUsers(userConnections, user.id)
-            
-            _isDataLoaded.value = true
-            lastRefreshTime = Clock.System.now().toEpochMilliseconds()
             
         } catch (e: Exception) {
             println("Error loading app data: ${e.message}")
@@ -264,8 +279,35 @@ object AppDataManager {
     /**
      * Update connections list (after making a new connection)
      */
-    fun addConnection(connection: Connection) {
-        _connections.value = _connections.value + connection
+    fun addConnection(connection: Connection, otherUser: User? = null) {
+        _connections.value = (_connections.value + connection).distinctBy { it.id }
+
+        val currentUserId = _currentUser.value?.id
+        val otherUserId = currentUserId?.let { currentId ->
+            connection.user_ids.firstOrNull { it != currentId }
+        }
+
+        if (otherUser != null && otherUserId != null && otherUser.id == otherUserId) {
+            val existingUser = _connectedUsers.value[otherUser.id]
+            val preferredUser = when {
+                isResolvedDisplayName(otherUser.name) -> otherUser
+                existingUser != null -> existingUser
+                else -> otherUser
+            }
+            _connectedUsers.value = _connectedUsers.value + (otherUser.id to preferredUser)
+        }
+
+        if (currentUserId != null && otherUserId != null) {
+            if (_connectedUsers.value[otherUserId] == null) {
+                _connectedUsers.value = _connectedUsers.value + (
+                    otherUserId to User(id = otherUserId, name = "Connection", createdAt = 0L)
+                )
+            }
+
+            scope.launch {
+                refreshConnectedUsers(_connections.value, currentUserId)
+            }
+        }
     }
     
     /**

@@ -36,8 +36,8 @@ import kotlinx.datetime.Clock
  * Now supports both token-based (new) and userId-only (legacy) results.
  */
 sealed class QRScanResult {
-    /** Token-based scan — includes tokenAgeMs for proximity confidence scoring. */
-    data class TokenSuccess(val userId: String, val tokenAgeMs: Long) : QRScanResult()
+    /** Token-based scan — includes the single-use QR token for server-side redemption. */
+    data class TokenSuccess(val userId: String, val token: String) : QRScanResult()
     /** Legacy scan — userId only, no token timing data. */
     data class LegacySuccess(val userId: String) : QRScanResult()
     /** Invalid QR format. */
@@ -50,7 +50,7 @@ sealed class QRScanResult {
 @Composable
 fun QRScannerScreen(
     onQRCodeScanned: (String) -> Unit,
-    onQRCodeScannedWithToken: ((userId: String, tokenAgeMs: Long) -> Unit)? = null,
+    onQRCodeScannedWithToken: ((userId: String, token: String) -> Unit)? = null,
     onNavigateBack: () -> Unit
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -87,12 +87,10 @@ fun QRScannerScreen(
                 }
                 
                 // Calculate token age: token was created at (exp - 90000)
-                val tokenCreatedAt = result.payload.exp - 90_000L
-                val tokenAgeMs = now - tokenCreatedAt
-                
-                // Use token-aware callback if available, otherwise fall back to legacy
+                // Use token-aware callback if available so the app can redeem the token
+                // server-side before attempting to create the connection.
                 if (onQRCodeScannedWithToken != null) {
-                    onQRCodeScannedWithToken(result.payload.userId, tokenAgeMs)
+                    onQRCodeScannedWithToken(result.payload.userId, result.payload.token)
                 } else {
                     onQRCodeScanned(result.payload.userId)
                 }

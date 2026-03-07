@@ -174,7 +174,8 @@ data class ConnectionRequest(
     val locationLng: Double? = null,
     val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
     val connectionMethod: String = "qr", // "qr" or "nfc"
-    val tokenAgeMs: Long? = null // Milliseconds since QR token was created (null for NFC/legacy)
+    val tokenAgeMs: Long? = null, // Milliseconds since QR token was created (null for NFC/legacy)
+    val qrToken: String? = null
 )
 
 @Serializable

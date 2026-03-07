@@ -102,7 +102,7 @@ fun App() {
     // Coroutine scope for location-aware connection
     val connectionScope = rememberCoroutineScope()
 
-    fun connectWithUser(userId: String, tokenAgeMs: Long? = null) {
+    fun connectWithUser(userId: String, qrToken: String? = null, tokenAgeMs: Long? = null) {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
                 // Attempt to capture location for proximity verification + semantic location
@@ -118,7 +118,8 @@ fun App() {
                     latitude = location?.latitude,
                     longitude = location?.longitude,
                     connectionMethod = "qr",
-                    tokenAgeMs = tokenAgeMs
+                    tokenAgeMs = tokenAgeMs,
+                    qrToken = qrToken
                 )
             }
         }
@@ -615,10 +616,10 @@ fun App() {
                                                     navigateTo(NavigationItem.Connections.route)
                                                 }
                                             },
-                                            onQRCodeScannedWithToken = { userId, tokenAgeMs ->
+                                            onQRCodeScannedWithToken = { userId, qrToken ->
                                                 showQRScanner = false
                                                 if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    connectWithUser(userId, tokenAgeMs)
+                                                    connectWithUser(userId, qrToken = qrToken)
                                                     navigateTo(NavigationItem.Connections.route)
                                                 }
                                             },

@@ -37,7 +37,8 @@ class ConnectionViewModel : ViewModel() {
      * @param longitude Optional longitude of the connection location
      * @param contextTag Optional user-defined tag like "Met at Dawg Daze"
      * @param connectionMethod "qr" or "nfc"
-     * @param tokenAgeMs Milliseconds since QR token was created (null for NFC/legacy)
+     * @param tokenAgeMs Milliseconds since QR token was created (legacy/fallback only)
+     * @param qrToken Single-use token from the current QR format
      */
     fun connectWithUser(
         scannedUserId: String,
@@ -46,7 +47,8 @@ class ConnectionViewModel : ViewModel() {
         longitude: Double? = null,
         contextTag: String? = null,
         connectionMethod: String = "qr",
-        tokenAgeMs: Long? = null
+        tokenAgeMs: Long? = null,
+        qrToken: String? = null
     ) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
@@ -58,14 +60,6 @@ class ConnectionViewModel : ViewModel() {
                     return@launch
                 }
 
-                // Get the scanned user's info
-                val userResult = repository.getUserById(scannedUserId)
-                if (userResult.isFailure) {
-                    _connectionState.value = ConnectionState.Error("User not found")
-                    return@launch
-                }
-                val scannedUser = userResult.getOrNull()!!
-
                 // Create connection request with proximity signals
                 val request = ConnectionRequest(
                     userId1 = currentUserId,
@@ -74,7 +68,8 @@ class ConnectionViewModel : ViewModel() {
                     locationLng = longitude,
                     contextTag = contextTag,
                     connectionMethod = connectionMethod,
-                    tokenAgeMs = tokenAgeMs
+                    tokenAgeMs = tokenAgeMs,
+                    qrToken = qrToken
                 )
 
                 // Create the connection
@@ -82,10 +77,14 @@ class ConnectionViewModel : ViewModel() {
 
                 if (result.isSuccess) {
                     val connection = result.getOrNull()!!
-                    _connectionState.value = ConnectionState.Success(connection, scannedUser)
+                    val connectedUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: scannedUserId
+                    val connectedUser = repository.getUserById(connectedUserId).getOrElse {
+                        User(id = connectedUserId, name = "Connection", createdAt = 0L)
+                    }
+                    _connectionState.value = ConnectionState.Success(connection, connectedUser)
 
                     // Add to AppDataManager to update all screens immediately
-                    AppDataManager.addConnection(connection)
+                    AppDataManager.addConnection(connection, connectedUser)
 
                     // Force a full refresh so connections screen picks up the new connection
                     // This also updates the connected users map

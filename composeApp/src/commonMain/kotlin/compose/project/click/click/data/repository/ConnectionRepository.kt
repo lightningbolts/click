@@ -7,12 +7,14 @@ import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.statement.bodyAsText
 import kotlinx.datetime.Clock
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -35,7 +37,16 @@ sealed class ProximityResult {
 
 class ConnectionRepository {
     private val supabase = SupabaseConfig.client
+    private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
+
+    @Serializable
+    private data class RedeemQrTokenResponse(
+        val success: Boolean,
+        val error: String? = null,
+        @SerialName("user_id") val userId: String? = null,
+        @SerialName("token_age_ms") val tokenAgeMs: Long? = null,
+    )
 
     /**
      * Create a connection between two users with proximity verification.
@@ -46,10 +57,28 @@ class ConnectionRepository {
      */
     suspend fun createConnection(request: ConnectionRequest): Result<Connection> {
         return try {
+            val redeemedToken = if (!request.qrToken.isNullOrBlank()) {
+                redeemQrToken(request.qrToken)
+                    .getOrElse { return Result.failure(it) }
+            } else {
+                null
+            }
+
+            val scannedUserId = redeemedToken?.userId ?: request.userId2
+            if (scannedUserId.isBlank()) {
+                return Result.failure(Exception("Invalid QR code"))
+            }
+
+            if (scannedUserId == request.userId1) {
+                return Result.failure(Exception("You cannot connect with yourself!"))
+            }
+
+            val resolvedTokenAgeMs = redeemedToken?.tokenAgeMs ?: request.tokenAgeMs
+
             // Check if connection already exists
             val existingConnection = checkExistingConnection(
                 request.userId1,
-                request.userId2
+                scannedUserId
             )
 
             if (existingConnection != null) {
@@ -84,15 +113,15 @@ class ConnectionRepository {
             val proximityScore = computeProximityScore(
                 connectionMethod = request.connectionMethod,
                 gpsAvailable = gpsAvailable,
-                tokenAgeMs = request.tokenAgeMs
+                tokenAgeMs = resolvedTokenAgeMs
             )
 
             // Build proximity signals for auditability
             val proximitySignals = buildJsonObject {
                 put("connection_method", request.connectionMethod)
                 put("gps_available", gpsAvailable)
-                if (request.tokenAgeMs != null) {
-                    put("token_age_seconds", request.tokenAgeMs / 1000.0)
+                if (resolvedTokenAgeMs != null) {
+                    put("token_age_seconds", resolvedTokenAgeMs / 1000.0)
                 }
                 if (loc1Valid) {
                     put("initiator_lat", request.locationLat!!)
@@ -101,7 +130,7 @@ class ConnectionRepository {
             }
 
             val connectionInsert = ConnectionInsert(
-                user_ids = listOf(request.userId1, request.userId2),
+                user_ids = listOf(request.userId1, scannedUserId),
                 geo_location = geoLocation,
                 created = now,
                 expiry = expiry,
@@ -323,15 +352,36 @@ class ConnectionRepository {
      */
     suspend fun getUserById(userId: String): Result<User> {
         return try {
-            val user = supabase.from("users")
-                .select {
-                    filter {
-                        eq("id", userId)
-                    }
-                }
-                .decodeSingle<User>()
-
+            val user = supabaseRepository.fetchUsersByIds(listOf(userId)).firstOrNull()
+                ?: return Result.failure(Exception("User not found"))
             Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun redeemQrToken(token: String): Result<RedeemQrTokenResponse> {
+        return try {
+            val response = supabase.postgrest.rpc(
+                "redeem_qr_token",
+                buildJsonObject {
+                    put("p_token", token)
+                }
+            ).decodeSingle<RedeemQrTokenResponse>()
+
+            if (!response.success) {
+                val message = when (response.error) {
+                    "expired" -> "This QR code has expired. Ask them to generate a new one."
+                    "already_used" -> "This QR code was already used. Ask them to generate a new one."
+                    "not_found" -> "This QR code is no longer valid. Ask them to generate a new one."
+                    else -> "Failed to redeem QR code"
+                }
+                Result.failure(Exception(message))
+            } else if (response.userId.isNullOrBlank()) {
+                Result.failure(Exception("Invalid QR code"))
+            } else {
+                Result.success(response)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
