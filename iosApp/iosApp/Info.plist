@@ -8,7 +8,6 @@
 	<array>
 		<string>audio</string>
 		<string>fetch</string>
-		<string>processing</string>
 		<string>location</string>
 		<string>remote-notification</string>
 	</array>
