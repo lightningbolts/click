@@ -18,16 +18,19 @@ BEGIN
     SELECT
         requested.user_id,
         COALESCE(
-            NULLIF(NULLIF(BTRIM(u.full_name), ''), 'Connection'),
-            NULLIF(NULLIF(BTRIM(u.name), ''), 'Connection'),
+            NULLIF(NULLIF(BTRIM(to_jsonb(u) ->> 'full_name'), ''), 'Connection'),
+            NULLIF(NULLIF(BTRIM(to_jsonb(u) ->> 'name'), ''), 'Connection'),
             NULLIF(NULLIF(BTRIM(au.raw_user_meta_data ->> 'full_name'), ''), 'Connection'),
             NULLIF(NULLIF(BTRIM(au.raw_user_meta_data ->> 'name'), ''), 'Connection'),
-            NULLIF(BTRIM(split_part(COALESCE(u.email, au.email, ''), '@', 1)), ''),
+            NULLIF(BTRIM(split_part(COALESCE(to_jsonb(u) ->> 'email', au.email, ''), '@', 1)), ''),
             'Connection'
         ) AS display_name,
-        COALESCE(u.email, au.email) AS email,
-        u.image,
-        u.last_polled
+        COALESCE(to_jsonb(u) ->> 'email', au.email) AS email,
+        to_jsonb(u) ->> 'image' AS image,
+        CASE
+            WHEN (to_jsonb(u) ->> 'last_polled') IS NULL THEN NULL
+            ELSE (to_jsonb(u) ->> 'last_polled')::bigint
+        END AS last_polled
     FROM UNNEST(user_ids) AS requested(user_id)
     LEFT JOIN public.users u ON u.id::text = requested.user_id
     LEFT JOIN auth.users au ON au.id::text = requested.user_id;

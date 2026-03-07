@@ -22,6 +22,12 @@ import kotlinx.serialization.json.put
  */
 class SupabaseRepository {
     private val supabase = SupabaseConfig.client
+    private val userColumnSets = listOf(
+        listOf("id", "name", "full_name", "email", "image", "last_polled"),
+        listOf("id", "name", "email", "image", "last_polled"),
+        listOf("id", "name", "full_name", "email", "image"),
+        listOf("id", "name", "email", "image")
+    )
 
     @Serializable
     private data class DisplayNameRpcRow(
@@ -58,23 +64,7 @@ class SupabaseRepository {
     suspend fun fetchUserById(userId: String): User? {
         return try {
             println("Fetching user with ID: $userId")
-            val result = runCatching {
-                supabase.from("users")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image", "last_polled")) {
-                        filter {
-                            eq("id", userId)
-                        }
-                    }
-                    .decodeList<UserCore>()
-            }.getOrElse {
-                supabase.from("users")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
-                        filter {
-                            eq("id", userId)
-                        }
-                    }
-                    .decodeList<UserCore>()
-            }
+            val result = fetchUserCoresByIds(listOf(userId))
             println("Found ${result.size} user(s)")
             result.firstOrNull()?.toUser()
         } catch (e: Exception) {
@@ -141,22 +131,7 @@ class SupabaseRepository {
         return try {
             val (tableUsers, rpcUsers) = coroutineScope {
                 val tableDeferred = async {
-                    runCatching {
-                        supabase.from("users")
-                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image", "last_polled")) {
-                                filter { isIn("id", userIds) }
-                            }
-                            .decodeList<UserCore>()
-                    }.getOrElse {
-                        // full_name column may not exist yet
-                        runCatching {
-                            supabase.from("users")
-                                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
-                                    filter { isIn("id", userIds) }
-                                }
-                                .decodeList<UserCore>()
-                        }.getOrElse { emptyList() }
-                    }
+                    fetchUserCoresByIds(userIds)
                 }
                 val rpcDeferred = async { fetchDisplayNamesViaRpc(userIds) }
                 tableDeferred.await() to rpcDeferred.await()
@@ -199,6 +174,29 @@ class SupabaseRepository {
             println("Error resolving display names via RPC: ${e.message}")
             emptyList()
         }
+    }
+
+    private suspend fun fetchUserCoresByIds(userIds: List<String>): List<UserCore> {
+        var lastError: Throwable? = null
+
+        for (columns in userColumnSets) {
+            val attempt = runCatching {
+                supabase.from("users")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list(*columns.toTypedArray())) {
+                        filter { isIn("id", userIds) }
+                    }
+                    .decodeList<UserCore>()
+            }
+
+            if (attempt.isSuccess) {
+                return attempt.getOrThrow()
+            }
+
+            lastError = attempt.exceptionOrNull()
+        }
+
+        println("Error fetching users with all schema variants: ${lastError?.message}")
+        return emptyList()
     }
 
     /**
