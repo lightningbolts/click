@@ -424,7 +424,8 @@ object AppDataManager {
         if (unresolvedIds.isEmpty()) return
 
         scope.launch {
-            for (delayMs in listOf(2_000L, 8_000L)) {
+            // More aggressive retry schedule to bridge the gap until the 30-s heartbeat.
+            for (delayMs in listOf(2_000L, 5_000L, 12_000L, 25_000L)) {
                 delay(delayMs)
                 // Stop if nothing left to resolve
                 val stillUnresolved = _connectedUsers.value

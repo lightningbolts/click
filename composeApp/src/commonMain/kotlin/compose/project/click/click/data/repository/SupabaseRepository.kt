@@ -4,10 +4,13 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -125,40 +128,61 @@ class SupabaseRepository {
     }
 
     /**
-     * Fetch multiple users by their IDs
+     * Fetch multiple users by their IDs.
+     * Runs a table query and the display-name RPC in parallel so that
+     * even if the public.users table lacks name/full_name the RPC can
+     * still resolve names from auth metadata.  This eliminates the
+     * sequential dependency that previously left names as "Connection"
+     * when the RPC happened to fail after an already-null table result.
      */
     suspend fun fetchUsersByIds(userIds: List<String>): List<User> {
+        if (userIds.isEmpty()) return emptyList()
+
         return try {
-            if (userIds.isEmpty()) return emptyList()
-
-            val usersWithFullName = runCatching {
-                supabase.from("users")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image", "last_polled")) {
-                        filter {
-                            isIn("id", userIds)
-                        }
-                    }
-                    .decodeList<UserCore>()
-            }.getOrNull()
-
-            val users = usersWithFullName ?: supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
-                    filter {
-                        isIn("id", userIds)
+            val (tableUsers, rpcUsers) = coroutineScope {
+                val tableDeferred = async {
+                    runCatching {
+                        supabase.from("users")
+                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image", "last_polled")) {
+                                filter { isIn("id", userIds) }
+                            }
+                            .decodeList<UserCore>()
+                    }.getOrElse {
+                        // full_name column may not exist yet
+                        runCatching {
+                            supabase.from("users")
+                                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image", "last_polled")) {
+                                    filter { isIn("id", userIds) }
+                                }
+                                .decodeList<UserCore>()
+                        }.getOrElse { emptyList() }
                     }
                 }
-                .decodeList<UserCore>()
+                val rpcDeferred = async { fetchDisplayNamesViaRpc(userIds) }
+                tableDeferred.await() to rpcDeferred.await()
+            }
 
-            val resolvedUsers = users.map { it.toUser() }
-            val unresolvedIds = resolvedUsers
-                .filter { user -> user.name.isNullOrBlank() || user.name == "Connection" }
-                .map { it.id }
+            val tableById = tableUsers.associate { it.id to it.toUser() }
+            val rpcById = rpcUsers.associateBy { it.id }
 
-            if (unresolvedIds.isEmpty()) {
-                resolvedUsers
-            } else {
-                val rpcUsersById = fetchDisplayNamesViaRpc(unresolvedIds).associateBy { it.id }
-                resolvedUsers.map { user -> rpcUsersById[user.id] ?: user }
+            // Merge: prefer RPC-resolved name (checks auth metadata), fall back to table
+            userIds.mapNotNull { userId ->
+                val rpcUser = rpcById[userId]
+                val tableUser = tableById[userId]
+                when {
+                    rpcUser != null && isResolvedDisplayName(rpcUser.name) -> {
+                        // RPC gave a real name — merge with any extra table data
+                        rpcUser.copy(
+                            image = rpcUser.image ?: tableUser?.image,
+                            lastPolled = rpcUser.lastPolled ?: tableUser?.lastPolled,
+                            email = rpcUser.email ?: tableUser?.email
+                        )
+                    }
+                    tableUser != null && isResolvedDisplayName(tableUser.name) -> tableUser
+                    rpcUser != null -> rpcUser
+                    tableUser != null -> tableUser
+                    else -> null
+                }
             }
         } catch (e: Exception) {
             println("Error fetching users: ${e.message}")
