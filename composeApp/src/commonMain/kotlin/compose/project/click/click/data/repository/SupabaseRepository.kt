@@ -4,6 +4,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.models.resolveDisplayName
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -31,7 +32,11 @@ class SupabaseRepository {
     ) {
         fun toUser(): User = User(
             id = id,
-            name = displayName.trim().ifEmpty { "Connection" },
+            name = resolveDisplayName(
+                fullName = displayName,
+                name = null,
+                email = email
+            ),
             email = email,
             image = image,
             createdAt = 0L,

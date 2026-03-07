@@ -1,4 +1,6 @@
 import Foundation
+
+#if canImport(UIKit) && canImport(LiveKit)
 import UIKit
 import LiveKit
 
@@ -317,3 +319,11 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         postState(status: "connected")
     }
 }
+#else
+final class ClickLiveKitBridge {
+    static let shared = ClickLiveKitBridge()
+
+    func start() {
+    }
+}
+#endif

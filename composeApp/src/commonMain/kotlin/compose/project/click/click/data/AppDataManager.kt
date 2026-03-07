@@ -3,6 +3,8 @@ package compose.project.click.click.data
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
+import compose.project.click.click.data.models.isResolvedDisplayName
+import compose.project.click.click.data.models.resolveDisplayName
 import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
@@ -128,7 +130,11 @@ object AppDataManager {
                 // Create user in database if not exists
                 val newUser = User(
                     id = authUser.id,
-                    name = authName ?: authUser.email?.substringBefore('@') ?: "User",
+                    name = resolveDisplayName(
+                        fullName = authName,
+                        name = null,
+                        email = authUser.email
+                    ),
                     email = authUser.email,
                     image = null,
                     createdAt = Clock.System.now().toEpochMilliseconds(),
@@ -142,7 +148,11 @@ object AppDataManager {
                 supabaseRepository.upsertUser(newUser)
                 user = newUser
             } else {
-                val desiredName = authName ?: user.name
+                val desiredName = resolveDisplayName(
+                    fullName = authName,
+                    name = user.name,
+                    email = authUser.email ?: user.email
+                )
                 val desiredEmail = authUser.email ?: user.email
                 val syncedUser = user.copy(
                     name = desiredName,
@@ -382,9 +392,16 @@ object AppDataManager {
         val usersById = users.associateBy { it.id }
 
         _connectedUsers.value = otherUserIds.associateWith { userId ->
-            usersById[userId]
-                ?: existingUsers[userId]
-                ?: User(id = userId, name = "Connection", createdAt = 0L)
+            val fetchedUser = usersById[userId]
+            val existingUser = existingUsers[userId]
+
+            when {
+                fetchedUser != null && isResolvedDisplayName(fetchedUser.name) -> fetchedUser
+                existingUser != null && isResolvedDisplayName(existingUser.name) -> existingUser
+                fetchedUser != null -> fetchedUser
+                existingUser != null -> existingUser
+                else -> User(id = userId, name = "Connection", createdAt = 0L)
+            }
         }
     }
     

@@ -37,7 +37,21 @@ class ChatOperations:
         """
         email = user.get("email")
         email_prefix = email.split("@")[0] if isinstance(email, str) and "@" in email else None
-        display_name = user.get("full_name") or user.get("name") or email_prefix or "Connection"
+
+        def normalize_candidate(value: Any) -> str:
+            if not isinstance(value, str):
+                return ""
+            normalized = value.strip()
+            if not normalized or normalized.lower() == "connection":
+                return ""
+            return normalized
+
+        display_name = (
+            normalize_candidate(user.get("full_name"))
+            or normalize_candidate(user.get("name"))
+            or normalize_candidate(email_prefix)
+            or "Connection"
+        )
 
         return {
             "id": user.get("id"),

@@ -15,6 +15,8 @@ import io.github.jan.supabase.realtime.broadcast
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -30,29 +32,12 @@ class ChatRepository(
     private val tokenStorage: TokenStorage
 ) {
     private val supabase = SupabaseConfig.client
+    private val supabaseRepository = SupabaseRepository()
 
     private suspend fun fetchUsersByIdsSafe(userIds: List<String>): List<User> {
         if (userIds.isEmpty()) return emptyList()
 
-        val usersWithFullName = runCatching {
-            supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "full_name", "email", "image")) {
-                    filter {
-                        isIn("id", userIds)
-                    }
-                }
-                .decodeList<UserCore>()
-        }.getOrNull()
-
-        val rows = usersWithFullName ?: supabase.from("users")
-            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "name", "email", "image")) {
-                filter {
-                    isIn("id", userIds)
-                }
-            }
-            .decodeList<UserCore>()
-
-        return rows.map { it.toUser() }
+        return supabaseRepository.fetchUsersByIds(userIds)
     }
 
     @Serializable
@@ -117,23 +102,21 @@ class ChatRepository(
                 .filter { it != userId }
                 .distinct()
 
-            val authToken = tokenStorage.getJwt()
-            val displayNamesById = if (!authToken.isNullOrBlank() && otherUserIds.isNotEmpty()) {
-                apiClient.getDisplayNames(otherUserIds, authToken).getOrElse { emptyMap() }
-            } else {
-                emptyMap()
+            val (usersById, chats) = coroutineScope {
+                val usersDeferred = async { fetchUsersByIdsSafe(otherUserIds).associateBy { it.id } }
+                val chatsDeferred = async {
+                    supabase.from("chats")
+                        .select {
+                            filter {
+                                isIn("connection_id", connectionIds)
+                            }
+                        }
+                        .decodeList<ChatRow>()
+                }
+
+                usersDeferred.await() to chatsDeferred.await()
             }
 
-            val users = fetchUsersByIdsSafe(otherUserIds)
-            val usersById = users.associateBy { it.id }
-
-            val chats = supabase.from("chats")
-                .select {
-                    filter {
-                        isIn("connection_id", connectionIds)
-                    }
-                }
-                .decodeList<ChatRow>()
             val chatByConnectionId = chats.associateBy { it.connectionId }
 
             val chatIds = chats.map { it.id }
@@ -169,7 +152,7 @@ class ChatRepository(
                 val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
                 val otherUser = usersById[otherUserId] ?: User(
                     id = otherUserId,
-                    name = displayNamesById[otherUserId] ?: "Connection",
+                    name = "Connection",
                     email = null,
                     image = null,
                     createdAt = 0L

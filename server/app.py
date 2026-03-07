@@ -388,10 +388,18 @@ def get_display_names():
 
         def normalize_display_name(full_name, name, email):
             email_prefix = email.split("@")[0] if isinstance(email, str) and "@" in email else None
+            def normalize_candidate(value):
+                if not isinstance(value, str):
+                    return ""
+                normalized = value.strip()
+                if not normalized or normalized.lower() == "connection":
+                    return ""
+                return normalized
+
             return (
-                (full_name or "").strip()
-                or (name or "").strip()
-                or (email_prefix or "").strip()
+                normalize_candidate(full_name)
+                or normalize_candidate(name)
+                or normalize_candidate(email_prefix)
                 or "Connection"
             )
 

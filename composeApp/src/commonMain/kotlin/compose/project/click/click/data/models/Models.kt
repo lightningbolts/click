@@ -96,10 +96,11 @@ data class UserCore(
      * Resolves display name: full_name > name > email prefix > "Connection".
      */
     fun toUser(): User {
-        val resolvedName = full_name?.trim()?.takeIf { it.isNotEmpty() }
-            ?: name?.trim()?.takeIf { it.isNotEmpty() }
-            ?: email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
-            ?: "Connection"
+        val resolvedName = resolveDisplayName(
+            fullName = full_name,
+            name = name,
+            email = email
+        )
         return User(
             id = id,
             name = resolvedName,
@@ -113,6 +114,30 @@ data class UserCore(
             last_paired = null
         )
     }
+}
+
+fun resolveDisplayName(
+    fullName: String?,
+    name: String?,
+    email: String?
+): String {
+    fun normalizedCandidate(value: String?): String? {
+        return value
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() && !it.equals("Connection", ignoreCase = true) }
+    }
+
+    return normalizedCandidate(fullName)
+        ?: normalizedCandidate(name)
+        ?: normalizedCandidate(email?.substringBefore('@'))
+        ?: "Connection"
+}
+
+fun isResolvedDisplayName(value: String?): Boolean {
+    return value
+        ?.trim()
+        ?.let { it.isNotEmpty() && !it.equals("Connection", ignoreCase = true) }
+        ?: false
 }
 
 @Serializable

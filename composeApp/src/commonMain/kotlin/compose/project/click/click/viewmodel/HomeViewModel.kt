@@ -95,7 +95,7 @@ class HomeViewModel(
                 AppDataManager.isLoading,
                 AppDataManager.isDataLoaded
             ) { user, connections, connectedUsers, isLoading, isDataLoaded ->
-                Quintuple(user, connections, connectedUsers, isLoading, isDataLoaded)
+                HomeSnapshot(user, connections, connectedUsers, isLoading, isDataLoaded)
             }.collectLatest { (user, connections, connectedUsers, isLoading, isDataLoaded) ->
                 
                 when {
@@ -130,8 +130,9 @@ class HomeViewModel(
                         // Load additional data only once
                         if (!dataLoaded) {
                             dataLoaded = true
-                            loadReconnectReminders(user.id, connections)
-                            loadConnectionInsights(user.id, connections)
+                            viewModelScope.launch {
+                                preloadDerivedHomeData(user.id, connections)
+                            }
                         }
                     }
                     !isDataLoaded || isLoading -> {
@@ -146,21 +147,41 @@ class HomeViewModel(
     }
     
     /**
+     * Preload chat-derived home data without repeatedly refetching the full chat list.
+     */
+    private suspend fun preloadDerivedHomeData(userId: String, connections: List<Connection>) {
+        try {
+            val chats = chatRepository.fetchUserChatsWithDetails(userId)
+            val lastMessageByConnectionId = chats.associate { chatWithDetails ->
+                chatWithDetails.connection.id to (
+                    chatWithDetails.lastMessage?.timeCreated
+                        ?: chatWithDetails.connection.created
+                )
+            }
+
+            loadReconnectReminders(userId, connections, lastMessageByConnectionId)
+            loadConnectionInsights(userId, connections, lastMessageByConnectionId)
+        } catch (e: Exception) {
+            println("Error preloading home derived data: ${e.message}")
+            _reconnectReminders.value = emptyList()
+            _connectionInsights.value = null
+        }
+    }
+
+    /**
      * Load reconnect reminders for dormant connections
      */
-    private suspend fun loadReconnectReminders(userId: String, connections: List<Connection>) {
+    private suspend fun loadReconnectReminders(
+        userId: String,
+        connections: List<Connection>,
+        lastMessageByConnectionId: Map<String, Long>
+    ) {
         try {
             val usersMap = AppDataManager.connectedUsers.value
             
             // Get last message time for each connection
             val connectionsWithLastMessage = connections.map { connection ->
-                val chats = chatRepository.fetchUserChatsWithDetails(userId)
-                val lastMessageTime = chats
-                    .find { it.connection.id == connection.id }
-                    ?.lastMessage?.timeCreated
-                    ?: connection.created
-                
-                connection to lastMessageTime
+                connection to (lastMessageByConnectionId[connection.id] ?: connection.created)
             }
             
             // Calculate reminders
@@ -181,19 +202,17 @@ class HomeViewModel(
     /**
      * Load connection insights statistics
      */
-    private suspend fun loadConnectionInsights(userId: String, connections: List<Connection>) {
+    private suspend fun loadConnectionInsights(
+        userId: String,
+        connections: List<Connection>,
+        lastMessageByConnectionId: Map<String, Long>
+    ) {
         try {
             val usersMap = AppDataManager.connectedUsers.value
-            
-            // Get last message times
-            val chats = chatRepository.fetchUserChatsWithDetails(userId)
-            val messagesPerConnection = chats.associate { chatWithDetails ->
-                chatWithDetails.connection.id to (chatWithDetails.lastMessage?.timeCreated ?: chatWithDetails.connection.created)
-            }
-            
+
             val insights = ReconnectHelper.calculateInsights(
                 connections = connections,
-                messagesPerConnection = messagesPerConnection,
+                messagesPerConnection = lastMessageByConnectionId,
                 currentUserId = userId,
                 users = usersMap
             )
@@ -318,7 +337,7 @@ class HomeViewModel(
     }
 }
 
-private data class Quintuple<A, B, C, D, E>(
+private data class HomeSnapshot<A, B, C, D, E>(
     val first: A,
     val second: B,
     val third: C,

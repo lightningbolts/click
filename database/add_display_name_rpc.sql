@@ -18,10 +18,11 @@ BEGIN
     SELECT
         requested.user_id,
         COALESCE(
-            NULLIF(BTRIM(u.full_name), ''),
-            NULLIF(BTRIM(u.name), ''),
-            NULLIF(BTRIM(COALESCE(au.raw_user_meta_data ->> 'full_name', au.raw_user_meta_data ->> 'name')), ''),
-            NULLIF(BTRIM(COALESCE(u.email, au.email)), ''),
+            NULLIF(NULLIF(BTRIM(u.full_name), ''), 'Connection'),
+            NULLIF(NULLIF(BTRIM(u.name), ''), 'Connection'),
+            NULLIF(NULLIF(BTRIM(au.raw_user_meta_data ->> 'full_name'), ''), 'Connection'),
+            NULLIF(NULLIF(BTRIM(au.raw_user_meta_data ->> 'name'), ''), 'Connection'),
+            NULLIF(BTRIM(split_part(COALESCE(u.email, au.email, ''), '@', 1)), ''),
             'Connection'
         ) AS display_name,
         COALESCE(u.email, au.email) AS email,

@@ -586,10 +586,11 @@ class ChatApiClient(
     }
 
     private fun UserApiModel.toUser(): User {
-        val resolvedName = full_name?.trim()?.takeIf { it.isNotEmpty() }
-            ?: name?.trim()?.takeIf { it.isNotEmpty() }
-            ?: email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
-            ?: "Connection"
+        val resolvedName = resolveDisplayName(
+            fullName = full_name,
+            name = name,
+            email = email
+        )
 
         return User(
             id = id,
