@@ -40,7 +40,12 @@ import compose.project.click.click.calls.CallOverlayState
 import compose.project.click.click.calls.CallPreviewOverlay
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.NoiseLevelCategory
+import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
+import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.viewmodel.AuthViewModel
@@ -49,6 +54,7 @@ import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.rememberNfcManager
+import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
@@ -59,13 +65,16 @@ import kotlinx.coroutines.launch
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.viewmodel.ConnectionState
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.AppDataManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
 fun App() {
+    data class PendingQrConnection(
+        val userId: String,
+        val qrToken: String?
+    )
+
     // Default to dark until persisted preference is loaded.
     var isDarkMode by remember { mutableStateOf(true) }
 
@@ -80,6 +89,7 @@ fun App() {
 
     // Auth ViewModel with TokenStorage
     val tokenStorage = remember { createTokenStorage() }
+    val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
     val appScope = rememberCoroutineScope()
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
@@ -92,17 +102,26 @@ fun App() {
         else -> User(id = "", name = "", createdAt = 0L)
     }
 
+    var ambientNoiseOptIn by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         val persisted = tokenStorage.getDarkModeEnabled()
         if (persisted != null) {
             isDarkMode = persisted
         }
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
     }
 
     // Coroutine scope for location-aware connection
     val connectionScope = rememberCoroutineScope()
 
-    fun connectWithUser(userId: String, qrToken: String? = null, tokenAgeMs: Long? = null) {
+    fun connectWithUser(
+        userId: String,
+        qrToken: String? = null,
+        tokenAgeMs: Long? = null,
+        contextTagObject: ContextTag? = null,
+        noiseLevelCategory: NoiseLevelCategory? = null
+    ) {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
                 // Attempt to capture location for proximity verification + semantic location
@@ -117,9 +136,11 @@ fun App() {
                     currentUserId = currentUser.id,
                     latitude = location?.latitude,
                     longitude = location?.longitude,
+                    contextTagObject = contextTagObject,
                     connectionMethod = "qr",
                     tokenAgeMs = tokenAgeMs,
-                    qrToken = qrToken
+                    qrToken = qrToken,
+                    noiseLevelCategory = noiseLevelCategory
                 )
             }
         }
@@ -128,6 +149,7 @@ fun App() {
     // Navigation state
     var showMyQRCode by remember { mutableStateOf(false) }
     var showQRScanner by remember { mutableStateOf(false) }
+    var pendingQrConnection by remember { mutableStateOf<PendingQrConnection?>(null) }
     val isIOS = remember {
         getPlatform().name.contains("iOS", ignoreCase = true)
     }
@@ -407,6 +429,7 @@ fun App() {
                     showMyQRCode -> showMyQRCode = false
                     showQRScanner -> showQRScanner = false
                     showNfcScreen -> showNfcScreen = false
+                    pendingQrConnection != null -> pendingQrConnection = null
                     pendingChatId != null -> pendingChatId = null // close open chat first
                     else -> navigateBack()
                 }
@@ -612,15 +635,19 @@ fun App() {
                                             onQRCodeScanned = { userId ->
                                                 showQRScanner = false
                                                 if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    connectWithUser(userId)
-                                                    navigateTo(NavigationItem.Connections.route)
+                                                    pendingQrConnection = PendingQrConnection(
+                                                        userId = userId,
+                                                        qrToken = null
+                                                    )
                                                 }
                                             },
                                             onQRCodeScannedWithToken = { userId, qrToken ->
                                                 showQRScanner = false
                                                 if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    connectWithUser(userId, qrToken = qrToken)
-                                                    navigateTo(NavigationItem.Connections.route)
+                                                    pendingQrConnection = PendingQrConnection(
+                                                        userId = userId,
+                                                        qrToken = qrToken
+                                                    )
                                                 }
                                             },
                                             onNavigateBack = {
@@ -801,6 +828,35 @@ fun App() {
                             label = "app_screen_transition"
                         ) { animatedScreen ->
                             renderScreen(animatedScreen)
+                        }
+
+                        pendingQrConnection?.let { pending ->
+                            ConnectionContextSheet(
+                                otherUserName = null,
+                                locationName = null,
+                                initialNoiseOptIn = ambientNoiseOptIn,
+                                noisePermissionGranted = ambientNoiseMonitor.hasPermission,
+                                onDismiss = { pendingQrConnection = null },
+                                onConfirm = { contextTag, noiseOptIn ->
+                                    connectionScope.launch {
+                                        ambientNoiseOptIn = noiseOptIn
+                                        tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+                                        val noiseLevel = if (noiseOptIn) {
+                                            ambientNoiseMonitor.sampleNoiseLevel()
+                                        } else {
+                                            null
+                                        }
+                                        pendingQrConnection = null
+                                        connectWithUser(
+                                            userId = pending.userId,
+                                            qrToken = pending.qrToken,
+                                            contextTagObject = contextTag,
+                                            noiseLevelCategory = noiseLevel
+                                        )
+                                        navigateTo(NavigationItem.Connections.route)
+                                    }
+                                }
+                            )
                         }
 
                         when (val overlayState = globalCallOverlayState) {

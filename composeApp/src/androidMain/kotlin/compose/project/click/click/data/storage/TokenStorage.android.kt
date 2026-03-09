@@ -58,6 +58,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
+        private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -100,6 +101,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     override suspend fun getDarkModeEnabled(): Boolean? {
         return if (sharedPreferences.contains(KEY_DARK_MODE_ENABLED)) {
             sharedPreferences.getBoolean(KEY_DARK_MODE_ENABLED, true)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveAmbientNoiseOptIn(enabled: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_AMBIENT_NOISE_OPT_IN, enabled)
+            apply()
+        }
+    }
+
+    override suspend fun getAmbientNoiseOptIn(): Boolean? {
+        return if (sharedPreferences.contains(KEY_AMBIENT_NOISE_OPT_IN)) {
+            sharedPreferences.getBoolean(KEY_AMBIENT_NOISE_OPT_IN, false)
         } else {
             null
         }

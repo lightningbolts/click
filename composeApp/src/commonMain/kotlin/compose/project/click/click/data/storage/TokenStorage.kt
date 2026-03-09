@@ -19,6 +19,10 @@ interface TokenStorage {
     // Theme preference persistence (true = dark mode, false = light mode)
     suspend fun saveDarkModeEnabled(isDarkMode: Boolean)
     suspend fun getDarkModeEnabled(): Boolean?
+
+    // One-time opt-in for ambient noise enrichment at connection time
+    suspend fun saveAmbientNoiseOptIn(enabled: Boolean)
+    suspend fun getAmbientNoiseOptIn(): Boolean?
 }
 
 expect fun createTokenStorage(): TokenStorage

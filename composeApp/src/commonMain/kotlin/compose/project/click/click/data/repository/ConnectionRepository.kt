@@ -1,10 +1,15 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.OpenMeteoWeatherService
+import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
+import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.GeoLocationInsert
+import compose.project.click.click.data.models.GeoLocation
+import compose.project.click.click.data.models.MemoryCapsule
 import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
@@ -21,6 +26,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -35,10 +41,30 @@ sealed class ProximityResult {
     data class Error(val message: String) : ProximityResult()
 }
 
-class ConnectionRepository {
+class ConnectionRepository(
+    private val weatherService: WeatherService = OpenMeteoWeatherService()
+) {
     private val supabase = SupabaseConfig.client
     private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
+
+    private fun normalizeContextTag(
+        contextTagObject: ContextTag?,
+        contextTag: String?
+    ): ContextTag? {
+        return contextTagObject ?: contextTag
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { ContextTag(id = "custom", label = it, emoji = "✏️") }
+    }
+
+    private fun resolveContextTagId(contextTag: ContextTag?): String? {
+        return when {
+            contextTag == null -> null
+            contextTag.id == "custom" -> contextTag.label
+            else -> contextTag.id
+        }
+    }
 
     @Serializable
     private data class RedeemQrTokenResponse(
@@ -129,6 +155,22 @@ class ConnectionRepository {
                 }
             }
 
+            val normalizedContextTag = normalizeContextTag(
+                contextTagObject = request.contextTagObject,
+                contextTag = request.contextTag
+            )
+            val contextTagId = resolveContextTagId(normalizedContextTag)
+            val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
+                "qr" -> scannedUserId
+                "nfc" -> if (request.userId1 == scannedUserId) request.userId2 else scannedUserId
+                else -> null
+            }
+            val responderId = request.responderId ?: when (request.connectionMethod) {
+                "qr" -> request.userId1
+                "nfc" -> if (initiatorId == request.userId1) scannedUserId else request.userId1
+                else -> null
+            }
+
             val connectionInsert = ConnectionInsert(
                 user_ids = listOf(request.userId1, scannedUserId),
                 geo_location = geoLocation,
@@ -137,7 +179,9 @@ class ConnectionRepository {
                 should_continue = listOf(false, false),
                 has_begun = false,
                 expiry_state = "pending",
-                context_tag = request.contextTag
+                context_tag_id = contextTagId,
+                initiator_id = initiatorId,
+                responder_id = responderId
             )
 
             val result = supabase.from("connections")
@@ -146,26 +190,9 @@ class ConnectionRepository {
                 }
                 .decodeSingle<Connection>()
 
-            // After successful insert, update proximity fields
-            // (ConnectionInsert doesn't have these fields, so we update separately)
-            try {
-                supabase.from("connections")
-                    .update(buildJsonObject {
-                        put("proximity_confidence", proximityScore)
-                        put("proximity_signals", proximitySignals)
-                        put("connection_method", request.connectionMethod)
-                        put("flagged", proximityScore < 20)
-                    }) {
-                        filter {
-                            eq("id", result.id)
-                        }
-                    }
-            } catch (e: Exception) {
-                println("ConnectionRepository: Failed to update proximity fields: ${e.message}")
-                // Non-fatal — connection was created
-            }
+            var semanticLocationName: String? = null
+            var fullLocationMap: Map<String, String>? = null
 
-            // Resolve semantic location from GPS coordinates via Nominatim
             if (loc1Valid) {
                 try {
                     val semanticResult = resolveSemanticLocation(
@@ -173,25 +200,60 @@ class ConnectionRepository {
                         lon = request.locationLng!!
                     )
                     if (semanticResult != null) {
-                        supabase.from("connections")
-                            .update(buildJsonObject {
-                                put("semantic_location", semanticResult.first)
-                                put("full_location", kotlinx.serialization.json.JsonObject(
-                                    semanticResult.second.mapValues { (_, v) ->
-                                        kotlinx.serialization.json.JsonPrimitive(v)
-                                    }
-                                ))
-                            }) {
-                                filter {
-                                    eq("id", result.id)
-                                }
-                            }
-                        println("ConnectionRepository: Semantic location set to '${semanticResult.first}'")
+                        semanticLocationName = semanticResult.first
+                        fullLocationMap = semanticResult.second
                     }
                 } catch (e: Exception) {
                     println("ConnectionRepository: Failed to resolve semantic location: ${e.message}")
-                    // Non-fatal — connection was created
                 }
+            }
+
+            val weatherSnapshot = if (loc1Valid) {
+                weatherService.fetchWeather(request.locationLat!!, request.locationLng!!)
+            } else {
+                null
+            }
+
+            val memoryCapsule = MemoryCapsule(
+                connectionId = result.id,
+                locationName = semanticLocationName,
+                geoLocation = if (loc1Valid) {
+                    GeoLocation(lat = request.locationLat!!, lon = request.locationLng!!)
+                } else {
+                    null
+                },
+                connectedAtMs = now,
+                weatherSnapshot = weatherSnapshot,
+                contextTag = normalizedContextTag,
+                noiseLevelCategory = request.noiseLevelCategory
+            )
+
+            try {
+                supabase.from("connections")
+                    .update(buildJsonObject {
+                        put("proximity_confidence", proximityScore)
+                        put("proximity_signals", proximitySignals)
+                        put("connection_method", request.connectionMethod)
+                        put("flagged", proximityScore < 20)
+                        contextTagId?.let { put("context_tag_id", it) }
+                        put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
+                        request.noiseLevelCategory?.name?.let { put("noise_level", it) }
+                        weatherSnapshot?.condition?.let { put("weather_condition", it) }
+                        semanticLocationName?.let { put("semantic_location", it) }
+                        fullLocationMap?.let { addressMap ->
+                            put(
+                                "full_location",
+                                JsonObject(addressMap.mapValues { (_, value) -> JsonPrimitive(value) })
+                            )
+                        }
+                    }) {
+                        filter {
+                            eq("id", result.id)
+                        }
+                    }
+            } catch (e: Exception) {
+                println("ConnectionRepository: Failed to update connection metadata: ${e.message}")
+                // Non-fatal — connection was created
             }
 
             // Create chat row for this connection

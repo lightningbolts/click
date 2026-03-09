@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.ui.components.WaitlistDialog
 import compose.project.click.click.ui.theme.*
 import androidx.compose.ui.zIndex
 
@@ -59,6 +60,7 @@ fun SignUpScreen(
                     password.length >= 6
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var showWaitlist by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -126,6 +128,24 @@ fun SignUpScreen(
             )
 
             Spacer(modifier = Modifier.height(40.dp))
+
+            OutlinedButton(
+                onClick = { showWaitlist = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            ) {
+                Text(
+                    text = "Join Waitlist",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Name TextField
             OutlinedTextField(
@@ -329,6 +349,13 @@ fun SignUpScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (showWaitlist) {
+            WaitlistDialog(
+                source = "mobile_signup",
+                onDismiss = { showWaitlist = false }
+            )
         }
     }
 }

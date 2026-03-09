@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
+import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.nfc.NfcManager
@@ -31,6 +33,11 @@ class NfcViewModel(
     private val repository: ConnectionRepository = ConnectionRepository()
 ) : ViewModel() {
 
+    private enum class NfcInteractionRole {
+        WRITER,
+        READER
+    }
+
     private val _connectionState = MutableStateFlow<NfcConnectionState>(NfcConnectionState.Idle)
     val connectionState: StateFlow<NfcConnectionState> = _connectionState.asStateFlow()
 
@@ -38,6 +45,7 @@ class NfcViewModel(
     val currentLocation: StateFlow<LocationResult?> = _currentLocation.asStateFlow()
 
     private var currentUserId: String? = null
+    private var currentRole: NfcInteractionRole = NfcInteractionRole.READER
 
     init {
         // Observe NFC state changes
@@ -83,6 +91,7 @@ class NfcViewModel(
 
         // First, fetch the real location
         _connectionState.value = NfcConnectionState.FetchingLocation
+        currentRole = NfcInteractionRole.READER
 
         viewModelScope.launch {
             try {
@@ -124,7 +133,12 @@ class NfcViewModel(
      * Create a connection using the Supabase ConnectionRepository directly.
      * This ensures the contextTag, location, and all fields are persisted correctly.
      */
-    fun createConnection(otherUserId: String, contextTag: String? = null) {
+    fun createConnection(
+        otherUserId: String,
+        contextTag: String? = null,
+        contextTagObject: ContextTag? = null,
+        noiseLevelCategory: NoiseLevelCategory? = null
+    ) {
         val userId = currentUserId
 
         if (userId == null) {
@@ -153,8 +167,12 @@ class NfcViewModel(
                     userId2 = otherUserId,
                     locationLat = location?.latitude,
                     locationLng = location?.longitude,
-                    contextTag = contextTag,
-                    connectionMethod = "nfc"
+                    contextTag = contextTagObject?.label ?: contextTag,
+                    contextTagObject = contextTagObject,
+                    connectionMethod = "nfc",
+                    initiatorId = if (currentRole == NfcInteractionRole.WRITER) userId else otherUserId,
+                    responderId = if (currentRole == NfcInteractionRole.WRITER) otherUserId else userId,
+                    noiseLevelCategory = noiseLevelCategory
                 )
 
                 val result = repository.createConnection(request)

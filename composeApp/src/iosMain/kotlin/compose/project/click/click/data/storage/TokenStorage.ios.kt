@@ -41,6 +41,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
+        private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -182,6 +183,19 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getDarkModeEnabled(): Boolean? {
         return if (userDefaults.objectForKey(KEY_DARK_MODE_ENABLED) != null) {
             userDefaults.boolForKey(KEY_DARK_MODE_ENABLED)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveAmbientNoiseOptIn(enabled: Boolean) {
+        userDefaults.setBool(enabled, KEY_AMBIENT_NOISE_OPT_IN)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getAmbientNoiseOptIn(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_AMBIENT_NOISE_OPT_IN) != null) {
+            userDefaults.boolForKey(KEY_AMBIENT_NOISE_OPT_IN)
         } else {
             null
         }

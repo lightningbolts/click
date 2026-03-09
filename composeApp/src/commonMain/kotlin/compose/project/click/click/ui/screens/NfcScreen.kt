@@ -25,12 +25,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.NfcManager
+import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.viewmodel.NfcConnectionState
 import compose.project.click.click.viewmodel.NfcViewModel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 @Composable
@@ -43,6 +47,15 @@ fun NfcScreen(
 ) {
     val viewModel: NfcViewModel = viewModel { NfcViewModel(nfcManager) }
     val connectionState by viewModel.connectionState.collectAsState()
+    val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
+    val tokenStorage = remember { createTokenStorage() }
+    val scope = rememberCoroutineScope()
+    var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var pendingUser by remember { mutableStateOf<Pair<String, String?>?>(null) }
+
+    LaunchedEffect(Unit) {
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+    }
 
     LaunchedEffect(userId) {
         viewModel.setCurrentUser(userId)
@@ -118,7 +131,7 @@ fun NfcScreen(
                             NfcUserDetectedContent(
                                 userId = state.userId,
                                 userName = state.userName,
-                                onConfirm = { viewModel.createConnection(state.userId) },
+                                onConfirm = { pendingUser = state.userId to state.userName },
                                 onCancel = { viewModel.resetState() }
                             )
                         }
@@ -146,6 +159,34 @@ fun NfcScreen(
                             )
                         }
                     }
+                }
+
+                pendingUser?.let { (detectedUserId, detectedUserName) ->
+                    ConnectionContextSheet(
+                        otherUserName = detectedUserName,
+                        locationName = null,
+                        initialNoiseOptIn = ambientNoiseOptIn,
+                        noisePermissionGranted = ambientNoiseMonitor.hasPermission,
+                        onDismiss = { pendingUser = null },
+                        onConfirm = { contextTag, noiseOptIn ->
+                            scope.launch {
+                                ambientNoiseOptIn = noiseOptIn
+                                tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+                                val noiseLevel = if (noiseOptIn) {
+                                    ambientNoiseMonitor.sampleNoiseLevel()
+                                } else {
+                                    null
+                                }
+                                pendingUser = null
+                                viewModel.createConnection(
+                                    otherUserId = detectedUserId,
+                                    contextTag = contextTag?.label,
+                                    contextTagObject = contextTag,
+                                    noiseLevelCategory = noiseLevel
+                                )
+                            }
+                        }
+                    )
                 }
 
                 // Instructions at bottom
@@ -602,7 +643,7 @@ private fun NfcSuccessContent(
         }
 
         // ---- Context Tag / Location Info ----
-        if (connection.semantic_location != null || connection.context_tag != null) {
+        if (connection.semantic_location != null || connection.displayLocationLabel != null) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -619,7 +660,7 @@ private fun NfcSuccessContent(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = connection.context_tag ?: connection.semantic_location ?: "",
+                        text = connection.displayLocationLabel ?: "",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

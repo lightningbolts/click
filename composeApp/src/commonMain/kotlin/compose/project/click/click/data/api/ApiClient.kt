@@ -152,7 +152,7 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                 parameter("id2", user2Id)
                 parameter("lat", latitude)
                 parameter("long", longitude)
-                contextTag?.let { parameter("context_tag", it) }
+                contextTag?.let { parameter("context_tag_id", it) }
             }
 
             if (response.status.value in 200..299) {

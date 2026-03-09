@@ -153,7 +153,7 @@ fun Connection.toMapPoint(): ConnectionMapPoint {
     val timeState = calculateTimeState(created)
     
     val displayName = semantic_location 
-        ?: context_tag 
+        ?: displayLocationLabel
         ?: "Connection"
     
     val formattedDate = formatTimestamp(created)

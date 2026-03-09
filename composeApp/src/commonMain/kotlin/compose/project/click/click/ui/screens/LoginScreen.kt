@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.ui.components.WaitlistDialog
 import compose.project.click.click.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +43,7 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var showWaitlist by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     Box(
@@ -90,6 +92,24 @@ fun LoginScreen(
             )
 
             Spacer(modifier = Modifier.height(48.dp))
+
+            OutlinedButton(
+                onClick = { showWaitlist = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            ) {
+                Text(
+                    text = "Join Waitlist",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Email TextField
             OutlinedTextField(
@@ -238,6 +258,13 @@ fun LoginScreen(
                     )
                 }
             }
+        }
+
+        if (showWaitlist) {
+            WaitlistDialog(
+                source = "mobile_login",
+                onDismiss = { showWaitlist = false }
+            )
         }
     }
 }

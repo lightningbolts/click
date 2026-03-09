@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
+import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ConnectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,9 +48,11 @@ class ConnectionViewModel : ViewModel() {
         latitude: Double? = null,
         longitude: Double? = null,
         contextTag: String? = null,
+        contextTagObject: ContextTag? = null,
         connectionMethod: String = "qr",
         tokenAgeMs: Long? = null,
-        qrToken: String? = null
+        qrToken: String? = null,
+        noiseLevelCategory: NoiseLevelCategory? = null
     ) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
@@ -66,10 +70,14 @@ class ConnectionViewModel : ViewModel() {
                     userId2 = scannedUserId,
                     locationLat = latitude,
                     locationLng = longitude,
-                    contextTag = contextTag,
+                    contextTag = contextTagObject?.label ?: contextTag,
+                    contextTagObject = contextTagObject,
                     connectionMethod = connectionMethod,
                     tokenAgeMs = tokenAgeMs,
-                    qrToken = qrToken
+                    qrToken = qrToken,
+                    initiatorId = if (connectionMethod == "qr") scannedUserId else null,
+                    responderId = if (connectionMethod == "qr") currentUserId else null,
+                    noiseLevelCategory = noiseLevelCategory
                 )
 
                 // Create the connection

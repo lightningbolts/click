@@ -33,7 +33,10 @@ data class ConnectionInsert(
     val should_continue: List<Boolean>,
     val has_begun: Boolean,
     val expiry_state: String,
-    val context_tag: String? = null
+    @SerialName("context_tag_id")
+    val context_tag_id: String? = null,
+    val initiator_id: String? = null,
+    val responder_id: String? = null
 )
 
 @Serializable
@@ -173,9 +176,13 @@ data class ConnectionRequest(
     val locationLat: Double? = null,
     val locationLng: Double? = null,
     val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
+    val contextTagObject: ContextTag? = null,
     val connectionMethod: String = "qr", // "qr" or "nfc"
     val tokenAgeMs: Long? = null, // Milliseconds since QR token was created (null for NFC/legacy)
-    val qrToken: String? = null
+    val qrToken: String? = null,
+    val initiatorId: String? = null,
+    val responderId: String? = null,
+    val noiseLevelCategory: NoiseLevelCategory? = null
 )
 
 @Serializable
@@ -201,8 +208,18 @@ data class Connection(
     val full_location: Map<String, String>? = null,
     // Display name from the semantic location lookup (e.g., "Red Square")
     val semantic_location: String? = null,
-    // User-defined context tag (e.g., "Met at Dawg Daze", "CSE 142")
-    val context_tag: String? = null,
+    @SerialName("context_tag_id")
+    val contextTagId: String? = null,
+    @SerialName("initiator_id")
+    val initiatorId: String? = null,
+    @SerialName("responder_id")
+    val responderId: String? = null,
+    @SerialName("memory_capsule")
+    val memoryCapsule: MemoryCapsule? = null,
+    @SerialName("noise_level")
+    val noiseLevel: String? = null,
+    @SerialName("weather_condition")
+    val weatherCondition: String? = null,
     val user_ids: List<String>,
     val chat: Chat = Chat(),
     val should_continue: List<Boolean> = listOf(false, false),
@@ -223,6 +240,18 @@ data class Connection(
         // 48 hours in milliseconds for the pending "Say Hi" window
         const val PENDING_DURATION_MS = 48L * 60 * 60 * 1000
     }
+
+    val context_tag: String?
+        get() = memoryCapsule?.contextTag?.label ?: contextTagId
+
+    val resolvedNoiseLevel: String?
+        get() = noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
+
+    val resolvedWeatherCondition: String?
+        get() = weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition
+
+    val displayLocationLabel: String?
+        get() = context_tag ?: semantic_location
     
     /** Connection is awaiting first message (48h window). */
     fun isPending(): Boolean = expiry_state == "pending"
