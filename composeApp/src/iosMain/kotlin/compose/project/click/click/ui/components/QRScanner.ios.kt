@@ -312,11 +312,9 @@ private fun CameraPreviewContent(
                                 normalizedSize = 0.5f
                             )
                         )
-                        // Use the callback holder to invoke the latest callback
                         callbackHolder.onDetected?.invoke(value)
                     } ?: callbackHolder.onDetectionChanged?.invoke(null)
                 } ?: callbackHolder.onDetectionChanged?.invoke(null)
-                }
             }
         }
     }
