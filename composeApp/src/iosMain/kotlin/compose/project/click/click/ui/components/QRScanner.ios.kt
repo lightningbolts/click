@@ -122,6 +122,8 @@ private sealed class CameraPermissionState {
 @Composable
 actual fun QRScanner(
     modifier: Modifier,
+    isActive: Boolean,
+    onDetectionChanged: (QrScannerDetection?) -> Unit,
     onResult: (String) -> Unit
 ) {
     var permissionState by remember { mutableStateOf<CameraPermissionState>(CameraPermissionState.Checking) }
@@ -133,6 +135,13 @@ actual fun QRScanner(
     LaunchedEffect(scannedValue) {
         scannedValue?.let { value ->
             onResult(value)
+        }
+    }
+
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            scannedValue = null
+            onDetectionChanged(null)
         }
     }
     
@@ -161,6 +170,9 @@ actual fun QRScanner(
     
     when (permissionState) {
         is CameraPermissionState.Checking, is CameraPermissionState.NotDetermined -> {
+            LaunchedEffect(Unit) {
+                onDetectionChanged(null)
+            }
             // Show loading while checking permissions
             Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
                 Column(
@@ -178,6 +190,9 @@ actual fun QRScanner(
         }
         
         is CameraPermissionState.Denied -> {
+            LaunchedEffect(Unit) {
+                onDetectionChanged(null)
+            }
             // Show permission denied message
             Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
                 Column(
@@ -212,9 +227,11 @@ actual fun QRScanner(
         is CameraPermissionState.Granted -> {
             CameraPreviewContent(
                 modifier = modifier,
+                isActive = isActive,
+                onDetectionChanged = onDetectionChanged,
                 onResult = { value ->
                     // Only process if we haven't scanned yet
-                    if (scannedValue == null) {
+                    if (isActive && scannedValue == null) {
                         scannedValue = value
                     }
                 }
@@ -227,6 +244,8 @@ actual fun QRScanner(
 @Composable
 private fun CameraPreviewContent(
     modifier: Modifier,
+    isActive: Boolean,
+    onDetectionChanged: (QrScannerDetection?) -> Unit,
     onResult: (String) -> Unit
 ) {
     val device = remember { AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo) }
@@ -242,6 +261,14 @@ private fun CameraPreviewContent(
             onResult(detectedValue!!)
         }
     }
+
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            detectedValue = null
+            hasProcessed = false
+            onDetectionChanged(null)
+        }
+    }
     
     // Create capture session and related objects
     val captureSession = remember { AVCaptureSession() }
@@ -255,15 +282,17 @@ private fun CameraPreviewContent(
     val callbackHolder = remember { 
         object {
             var onDetected: ((String) -> Unit)? = null
+            var onDetectionChanged: ((QrScannerDetection?) -> Unit)? = null
         }
     }
     
     // Update the callback when it changes
     callbackHolder.onDetected = { value: String ->
-        if (detectedValue == null) {
+        if (isActive && detectedValue == null) {
             detectedValue = value
         }
     }
+    callbackHolder.onDetectionChanged = onDetectionChanged
     
     // Remember the delegate to prevent garbage collection
     val metadataDelegate = remember {
@@ -276,9 +305,17 @@ private fun CameraPreviewContent(
                 didOutputMetadataObjects.firstOrNull()?.let { metadataObject ->
                     val readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
                     readableObject?.stringValue?.let { value ->
+                        callbackHolder.onDetectionChanged?.invoke(
+                            QrScannerDetection(
+                                normalizedCenterX = 0.5f,
+                                normalizedCenterY = 0.5f,
+                                normalizedSize = 0.5f
+                            )
+                        )
                         // Use the callback holder to invoke the latest callback
                         callbackHolder.onDetected?.invoke(value)
-                    }
+                    } ?: callbackHolder.onDetectionChanged?.invoke(null)
+                } ?: callbackHolder.onDetectionChanged?.invoke(null)
                 }
             }
         }

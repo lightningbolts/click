@@ -44,6 +44,9 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
+import compose.project.click.click.ui.components.ConnectionRevealOverlay
+import compose.project.click.click.ui.components.ConnectionRevealPhase
+import compose.project.click.click.ui.components.ConnectionRevealUiState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.screens.*
@@ -61,6 +64,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
@@ -150,6 +154,7 @@ fun App() {
     var showMyQRCode by remember { mutableStateOf(false) }
     var showQRScanner by remember { mutableStateOf(false) }
     var pendingQrConnection by remember { mutableStateOf<PendingQrConnection?>(null) }
+    var connectionRevealState by remember { mutableStateOf<ConnectionRevealUiState?>(null) }
     val isIOS = remember {
         getPlatform().name.contains("iOS", ignoreCase = true)
     }
@@ -410,10 +415,21 @@ fun App() {
             LaunchedEffect(connectionState) {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
-                        snackbarHostState.showSnackbar("Connected with ${state.connectedUser.name ?: "user"}!")
+                        if (connectionRevealState != null) {
+                            connectionRevealState = connectionRevealState?.copy(
+                                phase = ConnectionRevealPhase.Success,
+                                connectedName = state.connectedUser.name
+                            )
+                            delay(900)
+                            navigateTo(NavigationItem.Connections.route)
+                            connectionRevealState = null
+                        } else {
+                            snackbarHostState.showSnackbar("Connected with ${state.connectedUser.name ?: "user"}!")
+                        }
                         connectionViewModel.resetConnectionState()
                     }
                     is ConnectionState.Error -> {
+                        connectionRevealState = null
                         snackbarHostState.showSnackbar(state.message)
                         connectionViewModel.resetConnectionState()
                     }
@@ -847,15 +863,25 @@ fun App() {
                                             null
                                         }
                                         pendingQrConnection = null
+                                        connectionRevealState = ConnectionRevealUiState(
+                                            methodLabel = "QR",
+                                            phase = ConnectionRevealPhase.Connecting
+                                        )
                                         connectWithUser(
                                             userId = pending.userId,
                                             qrToken = pending.qrToken,
                                             contextTagObject = contextTag,
                                             noiseLevelCategory = noiseLevel
                                         )
-                                        navigateTo(NavigationItem.Connections.route)
                                     }
                                 }
+                            )
+                        }
+
+                        connectionRevealState?.let { revealState ->
+                            ConnectionRevealOverlay(
+                                state = revealState,
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
 

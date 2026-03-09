@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.NfcManager
+import compose.project.click.click.nfc.NfcSupportProfile
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
@@ -47,6 +48,7 @@ fun NfcScreen(
 ) {
     val viewModel: NfcViewModel = viewModel { NfcViewModel(nfcManager) }
     val connectionState by viewModel.connectionState.collectAsState()
+    val supportProfile = remember(nfcManager) { nfcManager.supportProfile() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
     val tokenStorage = remember { createTokenStorage() }
     val scope = rememberCoroutineScope()
@@ -79,7 +81,11 @@ fun NfcScreen(
                 Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                     PageHeader(
                         title = "Tap to Connect",
-                        subtitle = "Hold near another phone",
+                        subtitle = if (supportProfile.supportsPhoneToPhoneExchange) {
+                            "Hold near another phone"
+                        } else {
+                            "Near-field connection tools"
+                        },
                         navigationIcon = {
                             IconButton(onClick = onBackPressed) {
                                 Icon(
@@ -115,6 +121,7 @@ fun NfcScreen(
                                 onStartScanning = { viewModel.startScanning() },
                                 isNfcAvailable = viewModel.isNfcAvailable(),
                                 isNfcEnabled = viewModel.isNfcEnabled(),
+                                supportProfile = supportProfile,
                                 onOpenSettings = { viewModel.openNfcSettings() }
                             )
                         }
@@ -205,7 +212,11 @@ fun NfcScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Hold your phone near another device",
+                                text = if (supportProfile.supportsPhoneToPhoneExchange) {
+                                    "Hold your phone near another device"
+                                } else {
+                                    "Hold near a compatible NFC tag or supported reader"
+                                },
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center
@@ -232,6 +243,7 @@ private fun NfcIdleContent(
     onStartScanning: () -> Unit,
     isNfcAvailable: Boolean,
     isNfcEnabled: Boolean,
+    supportProfile: NfcSupportProfile,
     onOpenSettings: () -> Unit
 ) {
     Column(
@@ -268,13 +280,41 @@ private fun NfcIdleContent(
             text = when {
                 !isNfcAvailable -> "Your device doesn't support NFC"
                 !isNfcEnabled -> "Enable NFC to connect with others"
-                else -> "Tap phones together to create a connection"
+                supportProfile.supportsPhoneToPhoneExchange -> "Tap phones together to create a connection"
+                supportProfile.canReadTags -> "This build can read compatible NFC tags, but direct phone-to-phone taps are still limited."
+                else -> supportProfile.note
             },
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             modifier = Modifier.padding(horizontal = 32.dp)
         )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(0.86f),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Current NFC support",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = supportProfile.note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -291,7 +331,14 @@ private fun NfcIdleContent(
             ) {
                 Icon(Icons.Default.Nfc, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Start Scanning", fontSize = 18.sp)
+                Text(
+                    if (supportProfile.supportsPhoneToPhoneExchange) {
+                        "Start Scanning"
+                    } else {
+                        "Start NFC Reader"
+                    },
+                    fontSize = 18.sp
+                )
             }
         } else {
             Button(

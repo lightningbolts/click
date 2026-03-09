@@ -37,6 +37,15 @@ class AndroidNfcManager(private val context: Context) : NfcManager {
         return nfcAdapter?.isEnabled == true
     }
 
+    override fun supportProfile(): NfcSupportProfile {
+        return NfcSupportProfile(
+            canReadTags = true,
+            canWriteTags = true,
+            supportsPhoneToPhoneExchange = false,
+            note = "This Android build can read and write NDEF tags, but it does not yet emulate a phone as a Click tag for direct phone-to-phone tap exchange."
+        )
+    }
+
     override fun startNfcReader(userId: String) {
         if (!isNfcAvailable()) {
             _nfcState.value = NfcState.Error("NFC not available on this device")

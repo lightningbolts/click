@@ -21,17 +21,24 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import kotlin.math.max
+import kotlin.math.min
 
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @Composable
 actual fun QRScanner(
     modifier: Modifier,
+    isActive: Boolean,
+    onDetectionChanged: (QrScannerDetection?) -> Unit,
     onResult: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scanner = remember { BarcodeScanning.getClient() }
+    var lastDeliveredResult by remember { mutableStateOf<String?>(null) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -54,6 +61,13 @@ actual fun QRScanner(
         }
     }
 
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            onDetectionChanged(null)
+            lastDeliveredResult = null
+        }
+    }
+
     if (hasCameraPermission) {
         AndroidView(
             factory = { ctx ->
@@ -73,15 +87,40 @@ actual fun QRScanner(
                         .build()
 
                     imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
+                        if (!isActive) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
+
                         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                         val mediaImage = imageProxy.image
                         if (mediaImage != null) {
                             val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-                            val scanner = BarcodeScanning.getClient()
                             scanner.process(image)
                                 .addOnSuccessListener { barcodes ->
-                                    for (barcode in barcodes) {
-                                        barcode.rawValue?.let { value ->
+                                    val qrBarcode = barcodes.firstOrNull { barcode ->
+                                        barcode.format == Barcode.FORMAT_QR_CODE
+                                    } ?: barcodes.firstOrNull()
+
+                                    onDetectionChanged(
+                                        qrBarcode?.boundingBox?.let { bounds ->
+                                            val centerX = bounds.exactCenterX() / image.width.toFloat()
+                                            val centerY = bounds.exactCenterY() / image.height.toFloat()
+                                            val normalizedSize = max(
+                                                bounds.width().toFloat() / image.width.toFloat(),
+                                                bounds.height().toFloat() / image.height.toFloat()
+                                            )
+                                            QrScannerDetection(
+                                                normalizedCenterX = min(1f, max(0f, centerX)),
+                                                normalizedCenterY = min(1f, max(0f, centerY)),
+                                                normalizedSize = min(1f, max(0f, normalizedSize))
+                                            )
+                                        }
+                                    )
+
+                                    qrBarcode?.rawValue?.let { value ->
+                                        if (lastDeliveredResult != value) {
+                                            lastDeliveredResult = value
                                             onResult(value)
                                         }
                                     }

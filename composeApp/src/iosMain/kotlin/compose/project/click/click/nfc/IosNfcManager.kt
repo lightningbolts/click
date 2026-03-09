@@ -36,6 +36,15 @@ class IosNfcManager : NfcManager {
         return isNfcAvailable()
     }
 
+    override fun supportProfile(): NfcSupportProfile {
+        return NfcSupportProfile(
+            canReadTags = true,
+            canWriteTags = false,
+            supportsPhoneToPhoneExchange = false,
+            note = "Core NFC on iPhone can read supported tags, but it cannot publish a Click profile for direct iPhone-to-phone tap exchange."
+        )
+    }
+
     override fun startNfcReader(userId: String) {
         currentUserId = userId
 

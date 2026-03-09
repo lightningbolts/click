@@ -22,6 +22,11 @@ interface NfcManager {
     fun isNfcEnabled(): Boolean
 
     /**
+     * Report what this platform implementation can actually do.
+     */
+    fun supportProfile(): NfcSupportProfile
+
+    /**
      * Start listening for NFC tags (reader mode)
      * @param userId The current user's ID to share
      */
@@ -69,6 +74,13 @@ data class NfcUserData(
     val userName: String?,
     val email: String?,
     val timestamp: Long
+)
+
+data class NfcSupportProfile(
+    val canReadTags: Boolean,
+    val canWriteTags: Boolean,
+    val supportsPhoneToPhoneExchange: Boolean,
+    val note: String
 )
 
 /**
