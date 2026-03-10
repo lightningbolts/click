@@ -8,6 +8,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.CoreMotion.CMAltimeter
 import platform.Foundation.NSOperationQueue
+import platform.darwin.DISPATCH_TIME_NOW
+import platform.darwin.dispatch_after
+import platform.darwin.dispatch_get_main_queue
+import platform.darwin.dispatch_time
+import platform.darwin.NSEC_PER_MSEC
 import kotlin.coroutines.resume
 import kotlin.math.pow
 
@@ -57,6 +62,13 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
                         }
                     }
                 )
+
+                dispatch_after(
+                    dispatch_time(DISPATCH_TIME_NOW, durationMs.toLong() * NSEC_PER_MSEC.toLong()),
+                    dispatch_get_main_queue()
+                ) {
+                    finish()
+                }
 
                 continuation.invokeOnCancellation {
                     altimeter.stopRelativeAltitudeUpdates()
