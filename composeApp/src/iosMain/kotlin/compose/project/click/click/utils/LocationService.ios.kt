@@ -18,11 +18,18 @@ import kotlin.coroutines.resume
  * iOS implementation of LocationService using CLLocationManager.
  */
 actual class LocationService {
+    private companion object {
+        const val REQUEST_TIMEOUT_MS = 6_000L
+        const val PREFERRED_ACCURACY_METERS = 100.0
+        const val FALLBACK_ACCURACY_METERS = 300.0
+        const val CACHED_ACCURACY_METERS = 150.0
+    }
+
     private val locationManager = CLLocationManager()
     private var activeDelegate: NSObject? = null
 
     actual suspend fun getCurrentLocation(): LocationResult? {
-        return withTimeoutOrNull(4_000L) {
+        return withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
             suspendCancellableCoroutine { continuation ->
                 fun finish(result: LocationResult?) {
                     locationManager.stopUpdatingLocation()
@@ -37,28 +44,16 @@ actual class LocationService {
                     override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
                         val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
                         val location = candidates.firstOrNull { loc ->
-                            loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 100.0
+                            loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= PREFERRED_ACCURACY_METERS
                         } ?: candidates.firstOrNull { loc ->
-                            loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 300.0
+                            loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= FALLBACK_ACCURACY_METERS
                         }
 
-                        if (location != null) {
-                            @OptIn(ExperimentalForeignApi::class)
-                            val result = location.coordinate.useContents {
-                                LocationResult(
-                                    latitude = this.latitude,
-                                    longitude = this.longitude,
-                                    altitudeMeters = location.altitude.takeIf { location.verticalAccuracy >= 0.0 }
-                                )
-                            }
-                            finish(result)
-                        } else {
-                            finish(null)
-                        }
+                        finish(location?.toLocationResult() ?: cachedLocationResult())
                     }
 
                     override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
-                        finish(null)
+                        finish(cachedLocationResult())
                     }
                 }
 
@@ -79,7 +74,7 @@ actual class LocationService {
                     activeDelegate = null
                 }
             }
-        }
+        } ?: cachedLocationResult()
     }
 
     actual fun hasLocationPermission(): Boolean {
@@ -90,5 +85,23 @@ actual class LocationService {
 
     actual fun requestLocationPermission() {
         locationManager.requestWhenInUseAuthorization()
+    }
+
+    private fun cachedLocationResult(): LocationResult? {
+        val cached = locationManager.location ?: return null
+        if (cached.horizontalAccuracy <= 0.0 || cached.horizontalAccuracy > CACHED_ACCURACY_METERS) {
+            return null
+        }
+
+        return cached.toLocationResult()
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    private fun CLLocation.toLocationResult(): LocationResult = coordinate.useContents {
+        LocationResult(
+            latitude = latitude,
+            longitude = longitude,
+            altitudeMeters = this@toLocationResult.altitude.takeIf { this@toLocationResult.verticalAccuracy >= 0.0 }
+        )
     }
 }

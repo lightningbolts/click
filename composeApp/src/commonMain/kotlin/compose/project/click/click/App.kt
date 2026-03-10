@@ -128,6 +128,7 @@ fun App() {
         qrToken: String? = null,
         tokenAgeMs: Long? = null,
         contextTagObject: ContextTag? = null,
+        capturedLocation: compose.project.click.click.utils.LocationResult? = null,
         heightCategory: HeightCategory? = null,
         exactBarometricElevationMeters: Double? = null,
         noiseLevelCategory: NoiseLevelCategory? = null,
@@ -136,7 +137,7 @@ fun App() {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
                 // Attempt to capture location for proximity verification + semantic location
-                val location = try {
+                val location = capturedLocation ?: try {
                     locationService.getCurrentLocation()
                 } catch (e: Exception) {
                     println("App: Failed to get location: ${e.message}")
@@ -868,6 +869,14 @@ fun App() {
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+                                        val locationDeferred = async {
+                                            try {
+                                                locationService.getCurrentLocation()
+                                            } catch (e: Exception) {
+                                                println("App: Failed to prefetch location: ${e.message}")
+                                                null
+                                            }
+                                        }
                                         val noiseSampleDeferred = async {
                                             if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
                                         }
@@ -876,6 +885,7 @@ fun App() {
                                         }
                                         val noiseSample = noiseSampleDeferred.await()
                                         val barometricSample = barometricSampleDeferred.await()
+                                        val capturedLocation = locationDeferred.await()
                                         pendingQrConnection = null
                                         connectionRevealState = ConnectionRevealUiState(
                                             methodLabel = "QR",
@@ -885,6 +895,7 @@ fun App() {
                                             userId = pending.userId,
                                             qrToken = pending.qrToken,
                                             contextTagObject = contextTag,
+                                            capturedLocation = capturedLocation,
                                             heightCategory = barometricSample?.category,
                                             exactBarometricElevationMeters = barometricSample?.elevationMeters,
                                             noiseLevelCategory = noiseSample?.category,

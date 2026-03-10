@@ -17,6 +17,8 @@ DROP TABLE IF EXISTS connections CASCADE;
 CREATE TABLE connections (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created BIGINT NOT NULL,
+    created_utc TIMESTAMPTZ,
+    time_of_day_utc TEXT,
     expiry BIGINT NOT NULL,
     -- Geographic location stored as JSONB with lat/lon
     geo_location JSONB NOT NULL,

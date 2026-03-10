@@ -205,6 +205,10 @@ data class Chat(
 data class Connection(
     val id: String,
     val created: Long,
+    @SerialName("created_utc")
+    val createdUtc: String? = null,
+    @SerialName("time_of_day_utc")
+    val timeOfDayUtc: String? = null,
     val expiry: Long,
     // Geographic location as lat/lon coordinate pair
     val geo_location: GeoLocation,

@@ -53,7 +53,10 @@ class Connection:
                 setattr(self, key, value)
             return
         self.id = uuid.uuid4()
+        created_utc = datetime.datetime.now(datetime.timezone.utc)
         self.created = time.time()
+        self.created_utc = created_utc.isoformat()
+        self.time_of_day_utc = created_utc.strftime("%H:%M:%S UTC")
         self.expiry = time.time() + 30 * 24 * 3600
         #location is a lat + long coordinate pair. But is this right? may want to change to a semantic location ie "Red Square"
         self.geo_location = geo_location

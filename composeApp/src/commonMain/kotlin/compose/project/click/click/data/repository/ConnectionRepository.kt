@@ -20,6 +20,8 @@ import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.statement.bodyAsText
 import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -32,6 +34,17 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.math.*
+
+private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
+    val utcTime = Clock.System
+        .now()
+        .let { kotlinx.datetime.Instant.fromEpochMilliseconds(epochMillis) }
+        .toLocalDateTime(TimeZone.UTC)
+
+    fun Int.twoDigits(): String = toString().padStart(2, '0')
+
+    return "${utcTime.hour.twoDigits()}:${utcTime.minute.twoDigits()}:${utcTime.second.twoDigits()} UTC"
+}
 
 /**
  * Proximity verification result from server-side validation.
@@ -112,8 +125,11 @@ class ConnectionRepository(
                 return Result.failure(Exception("Connection already exists"))
             }
 
-            val now = Clock.System.now().toEpochMilliseconds()
+            val nowInstant = Clock.System.now()
+            val now = nowInstant.toEpochMilliseconds()
             val expiry = now + (30L * 24 * 60 * 60 * 1000) // 30 days
+            val createdUtc = nowInstant.toString()
+            val timeOfDayUtc = buildUtcTimeOfDayLabel(now)
 
             // ── Proximity validation ──
 
@@ -160,7 +176,7 @@ class ConnectionRepository(
                 contextTagObject = request.contextTagObject,
                 contextTag = request.contextTag
             )
-            val exactBarometricElevationMeters = request.exactBarometricElevationMeters
+            val exactBarometricElevationMeters = request.altitudeMeters ?: request.exactBarometricElevationMeters
             val heightCategory = request.heightCategory
                 ?: deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
             val contextTagId = resolveContextTagId(normalizedContextTag)
@@ -242,6 +258,8 @@ class ConnectionRepository(
                         put("proximity_signals", proximitySignals)
                         put("connection_method", request.connectionMethod)
                         put("flagged", proximityScore < 20)
+                        put("created_utc", createdUtc)
+                        put("time_of_day_utc", timeOfDayUtc)
                         contextTagId?.let { put("context_tag_id", it) }
                         put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
                         request.noiseLevelCategory?.name?.let { put("noise_level", it) }
