@@ -50,12 +50,14 @@ class ConnectionViewModel : ViewModel() {
         longitude: Double? = null,
         altitudeMeters: Double? = null,
         heightCategory: HeightCategory? = null,
+        exactBarometricElevationMeters: Double? = null,
         contextTag: String? = null,
         contextTagObject: ContextTag? = null,
         connectionMethod: String = "qr",
         tokenAgeMs: Long? = null,
         qrToken: String? = null,
-        noiseLevelCategory: NoiseLevelCategory? = null
+        noiseLevelCategory: NoiseLevelCategory? = null,
+        exactNoiseLevelDb: Double? = null
     ) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
@@ -75,6 +77,7 @@ class ConnectionViewModel : ViewModel() {
                     locationLng = longitude,
                     altitudeMeters = altitudeMeters,
                     heightCategory = heightCategory,
+                    exactBarometricElevationMeters = exactBarometricElevationMeters,
                     contextTag = contextTagObject?.label ?: contextTag,
                     contextTagObject = contextTagObject,
                     connectionMethod = connectionMethod,
@@ -82,7 +85,8 @@ class ConnectionViewModel : ViewModel() {
                     qrToken = qrToken,
                     initiatorId = if (connectionMethod == "qr") scannedUserId else null,
                     responderId = if (connectionMethod == "qr") currentUserId else null,
-                    noiseLevelCategory = noiseLevelCategory
+                    noiseLevelCategory = noiseLevelCategory,
+                    exactNoiseLevelDb = exactNoiseLevelDb
                 )
 
                 // Create the connection

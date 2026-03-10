@@ -12,14 +12,18 @@ data class MemoryCapsule(
     val contextTag: ContextTag? = null,
     val photoUri: String? = null,
     val noiseLevelCategory: NoiseLevelCategory? = null,
-    val heightCategory: HeightCategory? = null
+    val exactNoiseLevelDb: Double? = null,
+    val heightCategory: HeightCategory? = null,
+    val exactBarometricElevationMeters: Double? = null
 )
 
 @Serializable
 data class WeatherSnapshot(
     val condition: String,
     val temperatureCelsius: Float,
-    val iconCode: String? = null
+    val iconCode: String? = null,
+    val windSpeedKph: Float? = null,
+    val windDirectionDegrees: Int? = null
 )
 
 @Serializable

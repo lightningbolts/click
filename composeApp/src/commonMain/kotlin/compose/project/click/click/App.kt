@@ -129,7 +129,9 @@ fun App() {
         tokenAgeMs: Long? = null,
         contextTagObject: ContextTag? = null,
         heightCategory: HeightCategory? = null,
-        noiseLevelCategory: NoiseLevelCategory? = null
+        exactBarometricElevationMeters: Double? = null,
+        noiseLevelCategory: NoiseLevelCategory? = null,
+        exactNoiseLevelDb: Double? = null
     ) {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
@@ -147,11 +149,13 @@ fun App() {
                     longitude = location?.longitude,
                     altitudeMeters = location?.altitudeMeters,
                     heightCategory = heightCategory,
+                    exactBarometricElevationMeters = exactBarometricElevationMeters,
                     contextTagObject = contextTagObject,
                     connectionMethod = "qr",
                     tokenAgeMs = tokenAgeMs,
                     qrToken = qrToken,
-                    noiseLevelCategory = noiseLevelCategory
+                    noiseLevelCategory = noiseLevelCategory,
+                    exactNoiseLevelDb = exactNoiseLevelDb
                 )
             }
         }
@@ -864,14 +868,14 @@ fun App() {
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                        val noiseLevelDeferred = async {
-                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseLevel() else null
+                                        val noiseSampleDeferred = async {
+                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
                                         }
-                                        val heightCategoryDeferred = async {
-                                            barometricHeightMonitor.sampleHeightCategory()
+                                        val barometricSampleDeferred = async {
+                                            barometricHeightMonitor.sampleHeightReading()
                                         }
-                                        val noiseLevel = noiseLevelDeferred.await()
-                                        val heightCategory = heightCategoryDeferred.await()
+                                        val noiseSample = noiseSampleDeferred.await()
+                                        val barometricSample = barometricSampleDeferred.await()
                                         pendingQrConnection = null
                                         connectionRevealState = ConnectionRevealUiState(
                                             methodLabel = "QR",
@@ -881,8 +885,10 @@ fun App() {
                                             userId = pending.userId,
                                             qrToken = pending.qrToken,
                                             contextTagObject = contextTag,
-                                            heightCategory = heightCategory,
-                                            noiseLevelCategory = noiseLevel
+                                            heightCategory = barometricSample?.category,
+                                            exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                            noiseLevelCategory = noiseSample?.category,
+                                            exactNoiseLevelDb = noiseSample?.decibels
                                         )
                                     }
                                 }

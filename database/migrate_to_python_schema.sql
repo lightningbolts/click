@@ -24,6 +24,8 @@ CREATE TABLE connections (
     full_location JSONB,
     -- Human-readable location name
     semantic_location TEXT,
+    exact_noise_level_db DOUBLE PRECISION,
+    exact_barometric_elevation_m DOUBLE PRECISION,
     -- Array of user IDs (replacing user1_id, user2_id)
     user_ids TEXT[] NOT NULL,
     -- Embedded chat data

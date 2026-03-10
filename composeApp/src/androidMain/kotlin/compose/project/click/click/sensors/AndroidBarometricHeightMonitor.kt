@@ -24,7 +24,7 @@ class AndroidBarometricHeightMonitor(
     override val isAvailable: Boolean
         get() = sensorManager != null && pressureSensor != null
 
-    override suspend fun sampleHeightCategory(durationMs: Int): HeightCategory? {
+    override suspend fun sampleHeightReading(durationMs: Int): BarometricHeightSample? {
         val manager = sensorManager ?: return null
         val sensor = pressureSensor ?: return null
 
@@ -50,7 +50,13 @@ class AndroidBarometricHeightMonitor(
                     SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, it)
                 }?.toDouble()
                 if (continuation.isActive) {
-                    continuation.resume(deriveHeightCategory(altitudeMeters))
+                    val sample = altitudeMeters
+                        ?.let { elevation ->
+                            deriveHeightCategory(elevation)?.let { category ->
+                                BarometricHeightSample(category = category, elevationMeters = elevation)
+                            }
+                        }
+                    continuation.resume(sample)
                 }
             }
 

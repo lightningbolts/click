@@ -39,7 +39,9 @@ class OpenMeteoWeatherService(
             WeatherSnapshot(
                 condition = current.weatherCode.toConditionLabel(),
                 temperatureCelsius = current.temperature.toFloat(),
-                iconCode = current.weatherCode.toIconCode()
+                iconCode = current.weatherCode.toIconCode(),
+                windSpeedKph = current.windspeed?.toFloat(),
+                windDirectionDegrees = current.winddirection?.toInt()
             )
         } catch (error: Exception) {
             println("OpenMeteoWeatherService: Failed to fetch weather: ${error.message}")
@@ -58,7 +60,9 @@ private data class OpenMeteoResponse(
 private data class OpenMeteoCurrentWeather(
     val temperature: Double,
     @SerialName("weathercode")
-    val weatherCode: Int
+    val weatherCode: Int,
+    val windspeed: Double? = null,
+    val winddirection: Double? = null
 )
 
 private fun Int.toConditionLabel(): String = when (this) {

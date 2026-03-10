@@ -399,14 +399,23 @@ private fun ScannerLensOverlay(
 
     BoxWithConstraints(modifier = modifier) {
         val density = LocalDensity.current
-        val framePadding = 44.dp
-        val frameWidth = maxWidth - (framePadding * 2)
-        val frameHeight = maxHeight - (framePadding * 2)
+        val badgeTopPadding = 18.dp
+        val badgeBottomSpacing = 18.dp
+        val frameHorizontalPadding = 44.dp
+        val frameBottomPadding = 44.dp
+        val frameTopPadding = badgeTopPadding + 40.dp + badgeBottomSpacing
+        val frameWidth = maxWidth - (frameHorizontalPadding * 2)
+        val frameHeight = maxHeight - frameTopPadding - frameBottomPadding
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(framePadding)
+                .padding(
+                    start = frameHorizontalPadding,
+                    top = frameTopPadding,
+                    end = frameHorizontalPadding,
+                    bottom = frameBottomPadding
+                )
                 .border(
                     width = 1.5.dp,
                     brush = Brush.linearGradient(
@@ -436,8 +445,8 @@ private fun ScannerLensOverlay(
         if (state != QrScannerPresentationState.Error) {
             Box(
                 modifier = Modifier
-                    .padding(horizontal = framePadding + 20.dp)
-                    .offset(y = framePadding + (frameHeight * scanLineProgress) - 2.dp)
+                    .padding(horizontal = frameHorizontalPadding + 20.dp)
+                    .offset(y = frameTopPadding + (frameHeight * scanLineProgress) - 2.dp)
                     .fillMaxWidth()
                     .height(3.dp)
                     .background(
@@ -456,10 +465,10 @@ private fun ScannerLensOverlay(
         if (detection != null && state != QrScannerPresentationState.Error) {
             val targetSize = 84.dp + (detection.normalizedSize * 60f).dp
             val xOffset = with(density) {
-                (framePadding + (frameWidth * detection.normalizedCenterX) - (targetSize / 2)).roundToPx()
+                (frameHorizontalPadding + (frameWidth * detection.normalizedCenterX) - (targetSize / 2)).roundToPx()
             }
             val yOffset = with(density) {
-                (framePadding + (frameHeight * detection.normalizedCenterY) - (targetSize / 2)).roundToPx()
+                (frameTopPadding + (frameHeight * detection.normalizedCenterY) - (targetSize / 2)).roundToPx()
             }
 
             Box(
@@ -475,24 +484,26 @@ private fun ScannerLensOverlay(
             )
         }
 
-        Surface(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 18.dp),
-            shape = RoundedCornerShape(999.dp),
-            color = Color.Black.copy(alpha = 0.28f)
-        ) {
-            Text(
-                text = when (state) {
-                    QrScannerPresentationState.Searching -> "Searching"
-                    QrScannerPresentationState.TargetAcquired -> "Target acquired"
-                    QrScannerPresentationState.Connecting -> "Revealing connection"
-                    QrScannerPresentationState.Error -> "Try again"
-                },
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White
-            )
+        if (state != QrScannerPresentationState.Error) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = badgeTopPadding),
+                shape = RoundedCornerShape(999.dp),
+                color = Color.Black.copy(alpha = 0.28f)
+            ) {
+                Text(
+                    text = when (state) {
+                        QrScannerPresentationState.Searching -> "Searching"
+                        QrScannerPresentationState.TargetAcquired -> "Target acquired"
+                        QrScannerPresentationState.Connecting -> "Revealing connection"
+                        QrScannerPresentationState.Error -> "Try again"
+                    },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White
+                )
+            }
         }
     }
 }

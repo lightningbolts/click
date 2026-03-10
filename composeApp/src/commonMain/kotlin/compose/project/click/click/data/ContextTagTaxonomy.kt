@@ -6,6 +6,7 @@ object ContextTagTaxonomy {
     val all: List<ContextTag> = listOf(
         ContextTag("lecture", "Lecture / Class", "🎓"),
         ContextTag("study", "Study Session", "📚"),
+        ContextTag("dorm", "Dorms / Residence Hall", "🛏️"),
         ContextTag("party", "Party", "🎉"),
         ContextTag("cafe", "Cafe / Coffee", "☕"),
         ContextTag("bar", "Bar / Nightlife", "🍻"),
@@ -29,6 +30,10 @@ object ContextTagTaxonomy {
         }
 
         when {
+            normalizedLocation.containsAny("dorm", "residence", "residential", "housing", "apartment", "suite") -> {
+                add("dorm")
+                add("study")
+            }
             normalizedLocation.containsAny("hall", "building", "classroom", "lecture", "school", "campus") -> {
                 add("lecture")
                 add("study")
@@ -79,6 +84,7 @@ object ContextTagTaxonomy {
         if (hourOfDay in 17..21) {
             add("event")
             add("club")
+            add("dorm")
         }
 
         if (suggestions.isEmpty()) {

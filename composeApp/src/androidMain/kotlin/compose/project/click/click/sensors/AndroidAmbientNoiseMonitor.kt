@@ -27,7 +27,7 @@ class AndroidAmbientNoiseMonitor(
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
-    override suspend fun sampleNoiseLevel(durationMs: Int): NoiseLevelCategory? = withContext(Dispatchers.Default) {
+    override suspend fun sampleNoiseReading(durationMs: Int): AmbientNoiseSample? = withContext(Dispatchers.Default) {
         if (!hasPermission) return@withContext null
 
         val sampleRate = 16_000
@@ -92,12 +92,15 @@ class AndroidAmbientNoiseMonitor(
         }
 
         val averageDb = readings.average().takeIf { !it.isNaN() } ?: return@withContext null
-        when {
-            averageDb < 45.0 -> NoiseLevelCategory.QUIET
-            averageDb < 65.0 -> NoiseLevelCategory.MODERATE
-            averageDb < 80.0 -> NoiseLevelCategory.LOUD
-            else -> NoiseLevelCategory.VERY_LOUD
-        }
+        AmbientNoiseSample(
+            category = when {
+                averageDb < 45.0 -> NoiseLevelCategory.QUIET
+                averageDb < 65.0 -> NoiseLevelCategory.MODERATE
+                averageDb < 80.0 -> NoiseLevelCategory.LOUD
+                else -> NoiseLevelCategory.VERY_LOUD
+            },
+            decibels = averageDb
+        )
     }
 }
 

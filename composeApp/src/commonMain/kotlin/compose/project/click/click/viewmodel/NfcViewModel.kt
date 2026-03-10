@@ -139,7 +139,9 @@ class NfcViewModel(
         contextTag: String? = null,
         contextTagObject: ContextTag? = null,
         heightCategory: HeightCategory? = null,
-        noiseLevelCategory: NoiseLevelCategory? = null
+        exactBarometricElevationMeters: Double? = null,
+        noiseLevelCategory: NoiseLevelCategory? = null,
+        exactNoiseLevelDb: Double? = null
     ) {
         val userId = currentUserId
 
@@ -171,12 +173,14 @@ class NfcViewModel(
                     locationLng = location?.longitude,
                     altitudeMeters = location?.altitudeMeters,
                     heightCategory = heightCategory,
+                    exactBarometricElevationMeters = exactBarometricElevationMeters,
                     contextTag = contextTagObject?.label ?: contextTag,
                     contextTagObject = contextTagObject,
                     connectionMethod = "nfc",
                     initiatorId = if (currentRole == NfcInteractionRole.WRITER) userId else otherUserId,
                     responderId = if (currentRole == NfcInteractionRole.WRITER) otherUserId else userId,
-                    noiseLevelCategory = noiseLevelCategory
+                    noiseLevelCategory = noiseLevelCategory,
+                    exactNoiseLevelDb = exactNoiseLevelDb
                 )
 
                 val result = repository.createConnection(request)

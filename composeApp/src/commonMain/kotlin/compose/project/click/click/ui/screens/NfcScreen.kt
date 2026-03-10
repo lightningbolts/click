@@ -182,21 +182,23 @@ fun NfcScreen(
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                val noiseLevelDeferred = async {
-                                    if (noiseOptIn) ambientNoiseMonitor.sampleNoiseLevel() else null
+                                val noiseSampleDeferred = async {
+                                    if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
                                 }
-                                val heightCategoryDeferred = async {
-                                    barometricHeightMonitor.sampleHeightCategory()
+                                val barometricSampleDeferred = async {
+                                    barometricHeightMonitor.sampleHeightReading()
                                 }
-                                val noiseLevel = noiseLevelDeferred.await()
-                                val heightCategory = heightCategoryDeferred.await()
+                                val noiseSample = noiseSampleDeferred.await()
+                                val barometricSample = barometricSampleDeferred.await()
                                 pendingUser = null
                                 viewModel.createConnection(
                                     otherUserId = detectedUserId,
                                     contextTag = contextTag?.label,
                                     contextTagObject = contextTag,
-                                    heightCategory = heightCategory,
-                                    noiseLevelCategory = noiseLevel
+                                    heightCategory = barometricSample?.category,
+                                    exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                    noiseLevelCategory = noiseSample?.category,
+                                    exactNoiseLevelDb = noiseSample?.decibels
                                 )
                             }
                         }

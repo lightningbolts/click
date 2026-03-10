@@ -15,7 +15,7 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
     override val isAvailable: Boolean
         get() = CMAltimeter.isRelativeAltitudeAvailable()
 
-    override suspend fun sampleHeightCategory(durationMs: Int): HeightCategory? {
+    override suspend fun sampleHeightReading(durationMs: Int): BarometricHeightSample? {
         if (!isAvailable) return null
 
         return withTimeoutOrNull(durationMs.toLong() + 750L) {
@@ -34,7 +34,13 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
                         44330.0 * (1.0 - (pressure / 1013.25).pow(0.1903))
                     }
                     if (continuation.isActive) {
-                        continuation.resume(deriveHeightCategory(altitudeMeters))
+                        val sample = altitudeMeters
+                            ?.let { elevation ->
+                                deriveHeightCategory(elevation)?.let { category ->
+                                    BarometricHeightSample(category = category, elevationMeters = elevation)
+                                }
+                            }
+                        continuation.resume(sample)
                     }
                 }
 

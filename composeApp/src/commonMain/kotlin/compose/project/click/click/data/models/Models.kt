@@ -177,6 +177,7 @@ data class ConnectionRequest(
     val locationLng: Double? = null,
     val altitudeMeters: Double? = null,
     val heightCategory: HeightCategory? = null,
+    val exactBarometricElevationMeters: Double? = null,
     val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
     val contextTagObject: ContextTag? = null,
     val connectionMethod: String = "qr", // "qr" or "nfc"
@@ -184,7 +185,8 @@ data class ConnectionRequest(
     val qrToken: String? = null,
     val initiatorId: String? = null,
     val responderId: String? = null,
-    val noiseLevelCategory: NoiseLevelCategory? = null
+    val noiseLevelCategory: NoiseLevelCategory? = null,
+    val exactNoiseLevelDb: Double? = null
 )
 
 @Serializable
@@ -220,8 +222,12 @@ data class Connection(
     val memoryCapsule: MemoryCapsule? = null,
     @SerialName("noise_level")
     val noiseLevel: String? = null,
+    @SerialName("exact_noise_level_db")
+    val exactNoiseLevelDb: Double? = null,
     @SerialName("height_category")
     val heightCategory: String? = null,
+    @SerialName("exact_barometric_elevation_m")
+    val exactBarometricElevationM: Double? = null,
     @SerialName("weather_condition")
     val weatherCondition: String? = null,
     val user_ids: List<String>,
@@ -251,8 +257,14 @@ data class Connection(
     val resolvedNoiseLevel: String?
         get() = noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
 
+    val resolvedExactNoiseLevelDb: Double?
+        get() = exactNoiseLevelDb ?: memoryCapsule?.exactNoiseLevelDb
+
     val resolvedHeightCategory: String?
         get() = heightCategory ?: memoryCapsule?.heightCategory?.name
+
+    val resolvedExactBarometricElevationM: Double?
+        get() = exactBarometricElevationM ?: memoryCapsule?.exactBarometricElevationMeters
 
     val resolvedWeatherCondition: String?
         get() = weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition

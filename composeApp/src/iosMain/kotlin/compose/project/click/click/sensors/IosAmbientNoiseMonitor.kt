@@ -28,7 +28,7 @@ class IosAmbientNoiseMonitor : AmbientNoiseMonitor {
     override val hasPermission: Boolean
         get() = AVAudioSession.sharedInstance().recordPermission == AVAudioSessionRecordPermissionGranted
 
-    override suspend fun sampleNoiseLevel(durationMs: Int): NoiseLevelCategory? {
+    override suspend fun sampleNoiseReading(durationMs: Int): AmbientNoiseSample? {
         if (!ensureRecordPermission()) {
             return null
         }
@@ -59,12 +59,17 @@ class IosAmbientNoiseMonitor : AmbientNoiseMonitor {
         recorder.stop()
         NSFileManager.defaultManager.removeItemAtURL(temporaryUrl, error = null)
 
-        return when {
-            averagePower < -50.0f -> NoiseLevelCategory.QUIET
-            averagePower < -30.0f -> NoiseLevelCategory.MODERATE
-            averagePower < -15.0f -> NoiseLevelCategory.LOUD
-            else -> NoiseLevelCategory.VERY_LOUD
-        }
+        val approximateDb = (averagePower.toDouble() + 90.0).coerceIn(0.0, 100.0)
+
+        return AmbientNoiseSample(
+            category = when {
+                averagePower < -50.0f -> NoiseLevelCategory.QUIET
+                averagePower < -30.0f -> NoiseLevelCategory.MODERATE
+                averagePower < -15.0f -> NoiseLevelCategory.LOUD
+                else -> NoiseLevelCategory.VERY_LOUD
+            },
+            decibels = approximateDb
+        )
     }
 
     private suspend fun ensureRecordPermission(): Boolean {

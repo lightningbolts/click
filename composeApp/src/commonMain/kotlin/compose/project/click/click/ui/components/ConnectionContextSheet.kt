@@ -29,12 +29,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
 import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.models.ContextTag
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+
+private const val CUSTOM_CONTEXT_MAX_LENGTH = 48
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +62,7 @@ fun ConnectionContextSheet(
     var customTagText by remember { mutableStateOf("") }
     var ambientNoiseOptIn by remember(initialNoiseOptIn) { mutableStateOf(initialNoiseOptIn) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isCustomSelectionInvalid = selectedTagId == "custom" && customTagText.isBlank()
 
     fun resolveSelectedTag(): ContextTag? {
         return if (selectedTagId == "custom") {
@@ -143,16 +149,56 @@ fun ConnectionContextSheet(
                 }
             }
 
-            if (selectedTagId == "custom") {
-                OutlinedTextField(
-                    value = customTagText,
-                    onValueChange = { customTagText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Custom context") },
-                    placeholder = { Text("Lecture afterparty, coffee line, hackathon...") },
-                    singleLine = true
+            HorizontalDivider()
+
+            Text(
+                text = "Custom activity",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Text(
+                text = "If none of the presets fit, write what you were doing. Short, natural labels work best.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            FilterChip(
+                selected = selectedTagId == "custom",
+                onClick = { selectedTagId = "custom" },
+                label = { Text("✏️ Write your own") }
+            )
+
+            OutlinedTextField(
+                value = customTagText,
+                onValueChange = { input ->
+                    customTagText = input
+                        .replace(Regex("\\s+"), " ")
+                        .trimStart()
+                        .take(CUSTOM_CONTEXT_MAX_LENGTH)
+                    if (customTagText.isNotBlank()) {
+                        selectedTagId = "custom"
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Custom activity") },
+                placeholder = { Text("Dorm lounge, coffee line, hackathon kickoff...") },
+                supportingText = {
+                    Text(
+                        text = if (isCustomSelectionInvalid) {
+                            "Add a quick label before continuing."
+                        } else {
+                            "${customTagText.length}/$CUSTOM_CONTEXT_MAX_LENGTH characters"
+                        }
+                    )
+                },
+                isError = isCustomSelectionInvalid,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Words,
+                    imeAction = ImeAction.Done
                 )
-            }
+            )
 
             HorizontalDivider()
 
@@ -200,7 +246,8 @@ fun ConnectionContextSheet(
                 }
                 Button(
                     onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !isCustomSelectionInvalid
                 ) {
                     Text("Continue")
                 }

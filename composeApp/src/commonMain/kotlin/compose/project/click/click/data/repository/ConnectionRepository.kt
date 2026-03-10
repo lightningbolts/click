@@ -160,7 +160,9 @@ class ConnectionRepository(
                 contextTagObject = request.contextTagObject,
                 contextTag = request.contextTag
             )
-            val heightCategory = request.heightCategory ?: deriveHeightCategory(request.altitudeMeters)
+            val exactBarometricElevationMeters = request.exactBarometricElevationMeters
+            val heightCategory = request.heightCategory
+                ?: deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
             val contextTagId = resolveContextTagId(normalizedContextTag)
             val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
                 "qr" -> scannedUserId
@@ -228,7 +230,9 @@ class ConnectionRepository(
                 weatherSnapshot = weatherSnapshot,
                 contextTag = normalizedContextTag,
                 noiseLevelCategory = request.noiseLevelCategory,
-                heightCategory = heightCategory
+                exactNoiseLevelDb = request.exactNoiseLevelDb,
+                heightCategory = heightCategory,
+                exactBarometricElevationMeters = exactBarometricElevationMeters
             )
 
             try {
@@ -241,7 +245,9 @@ class ConnectionRepository(
                         contextTagId?.let { put("context_tag_id", it) }
                         put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
                         request.noiseLevelCategory?.name?.let { put("noise_level", it) }
+                        request.exactNoiseLevelDb?.let { put("exact_noise_level_db", it) }
                         heightCategory?.name?.let { put("height_category", it) }
+                        exactBarometricElevationMeters?.let { put("exact_barometric_elevation_m", it) }
                         weatherSnapshot?.condition?.let { put("weather_condition", it) }
                         semanticLocationName?.let { put("semantic_location", it) }
                         fullLocationMap?.let { addressMap ->
