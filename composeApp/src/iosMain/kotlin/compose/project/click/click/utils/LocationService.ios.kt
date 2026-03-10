@@ -45,7 +45,11 @@ actual class LocationService {
                         if (location != null) {
                             @OptIn(ExperimentalForeignApi::class)
                             val result = location.coordinate.useContents {
-                                LocationResult(latitude = this.latitude, longitude = this.longitude)
+                                LocationResult(
+                                    latitude = this.latitude,
+                                    longitude = this.longitude,
+                                    altitudeMeters = location.altitude.takeIf { location.verticalAccuracy >= 0.0 }
+                                )
                             }
                             finish(result)
                         } else {

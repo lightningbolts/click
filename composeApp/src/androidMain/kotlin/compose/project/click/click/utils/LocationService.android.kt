@@ -151,7 +151,11 @@ actual class LocationService {
 
         if (hasAccuracy() && accuracy > maxAccuracyMeters) return null
 
-        return LocationResult(latitude = latitude, longitude = longitude)
+        return LocationResult(
+            latitude = latitude,
+            longitude = longitude,
+            altitudeMeters = if (hasAltitude()) altitude else null
+        )
     }
 }
 

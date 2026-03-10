@@ -5,7 +5,8 @@ package compose.project.click.click.utils
  */
 data class LocationResult(
     val latitude: Double,
-    val longitude: Double
+    val longitude: Double,
+    val altitudeMeters: Double? = null
 )
 
 /**

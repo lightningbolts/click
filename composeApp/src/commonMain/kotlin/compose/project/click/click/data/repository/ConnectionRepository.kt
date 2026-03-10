@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.MemoryCapsule
@@ -159,6 +160,7 @@ class ConnectionRepository(
                 contextTagObject = request.contextTagObject,
                 contextTag = request.contextTag
             )
+            val heightCategory = deriveHeightCategory(request.altitudeMeters)
             val contextTagId = resolveContextTagId(normalizedContextTag)
             val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
                 "qr" -> scannedUserId
@@ -225,7 +227,8 @@ class ConnectionRepository(
                 connectedAtMs = now,
                 weatherSnapshot = weatherSnapshot,
                 contextTag = normalizedContextTag,
-                noiseLevelCategory = request.noiseLevelCategory
+                noiseLevelCategory = request.noiseLevelCategory,
+                heightCategory = heightCategory
             )
 
             try {
@@ -238,6 +241,7 @@ class ConnectionRepository(
                         contextTagId?.let { put("context_tag_id", it) }
                         put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
                         request.noiseLevelCategory?.name?.let { put("noise_level", it) }
+                        heightCategory?.name?.let { put("height_category", it) }
                         weatherSnapshot?.condition?.let { put("weather_condition", it) }
                         semanticLocationName?.let { put("semantic_location", it) }
                         fullLocationMap?.let { addressMap ->

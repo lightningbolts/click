@@ -140,6 +140,7 @@ fun App() {
                     currentUserId = currentUser.id,
                     latitude = location?.latitude,
                     longitude = location?.longitude,
+                    altitudeMeters = location?.altitudeMeters,
                     contextTagObject = contextTagObject,
                     connectionMethod = "qr",
                     tokenAgeMs = tokenAgeMs,

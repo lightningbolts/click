@@ -64,6 +64,7 @@ class Connection:
         self.responder_id = user2.id
         self.memory_capsule = None
         self.noise_level = None
+        self.height_category = None
         self.weather_condition = None
         self.user_ids = (user1.id, user2.id)
         #todo: is this right?

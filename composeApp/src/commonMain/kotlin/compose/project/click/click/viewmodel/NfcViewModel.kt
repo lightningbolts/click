@@ -167,6 +167,7 @@ class NfcViewModel(
                     userId2 = otherUserId,
                     locationLat = location?.latitude,
                     locationLng = location?.longitude,
+                    altitudeMeters = location?.altitudeMeters,
                     contextTag = contextTagObject?.label ?: contextTag,
                     contextTagObject = contextTagObject,
                     connectionMethod = "nfc",

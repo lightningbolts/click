@@ -175,6 +175,7 @@ data class ConnectionRequest(
     val userId2: String,
     val locationLat: Double? = null,
     val locationLng: Double? = null,
+    val altitudeMeters: Double? = null,
     val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
     val contextTagObject: ContextTag? = null,
     val connectionMethod: String = "qr", // "qr" or "nfc"
@@ -218,6 +219,8 @@ data class Connection(
     val memoryCapsule: MemoryCapsule? = null,
     @SerialName("noise_level")
     val noiseLevel: String? = null,
+    @SerialName("height_category")
+    val heightCategory: String? = null,
     @SerialName("weather_condition")
     val weatherCondition: String? = null,
     val user_ids: List<String>,
@@ -246,6 +249,9 @@ data class Connection(
 
     val resolvedNoiseLevel: String?
         get() = noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
+
+    val resolvedHeightCategory: String?
+        get() = heightCategory ?: memoryCapsule?.heightCategory?.name
 
     val resolvedWeatherCondition: String?
         get() = weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition

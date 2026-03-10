@@ -11,7 +11,8 @@ data class MemoryCapsule(
     val weatherSnapshot: WeatherSnapshot? = null,
     val contextTag: ContextTag? = null,
     val photoUri: String? = null,
-    val noiseLevelCategory: NoiseLevelCategory? = null
+    val noiseLevelCategory: NoiseLevelCategory? = null,
+    val heightCategory: HeightCategory? = null
 )
 
 @Serializable
@@ -27,6 +28,24 @@ enum class NoiseLevelCategory {
     MODERATE,
     LOUD,
     VERY_LOUD
+}
+
+@Serializable
+enum class HeightCategory {
+    BELOW_GROUND,
+    GROUND_LEVEL,
+    ELEVATED,
+    HIGH_RISE
+}
+
+fun deriveHeightCategory(altitudeMeters: Double?): HeightCategory? {
+    val altitude = altitudeMeters ?: return null
+    return when {
+        altitude < -3.0 -> HeightCategory.BELOW_GROUND
+        altitude < 8.0 -> HeightCategory.GROUND_LEVEL
+        altitude < 35.0 -> HeightCategory.ELEVATED
+        else -> HeightCategory.HIGH_RISE
+    }
 }
 
 @Serializable

@@ -139,6 +139,8 @@ class ChatViewModel(
             ) { connections, connectedUsers ->
                 connections to connectedUsers
             }.collect { (connections, connectedUsers) ->
+                val currentUserId = _currentUserId.value
+
                 // Always patch the open chat screen with the freshest user name.
                 val currentMessages = _chatMessagesState.value as? ChatMessagesState.Success
                 if (currentMessages != null) {
@@ -155,29 +157,55 @@ class ChatViewModel(
                 // waiting for a full API round-trip. Doing this avoids the 30-second heartbeat
                 // cycle that previously kept "Connection" visible until the next presence tick.
                 val currentListState = _chatListState.value as? ChatListState.Success
-                if (currentListState != null && connectedUsers.isNotEmpty()) {
-                    val updatedChats = currentListState.chats.map { chat ->
-                        val freshUser = connectedUsers[chat.otherUser.id]
-                        if (freshUser != null &&
-                            isResolvedDisplayName(freshUser.name) &&
-                            !isResolvedDisplayName(chat.otherUser.name)
-                        ) {
-                            chat.copy(otherUser = freshUser)
-                        } else {
-                            chat
+                if (currentListState != null && currentUserId != null) {
+                    val cachedChatsByConnectionId = buildCachedChats(connections, connectedUsers, currentUserId)
+                        .associateBy { it.connection.id }
+                    val visibleConnectionIds = connections.map { it.id }.toSet()
+
+                    val mergedChats = currentListState.chats
+                        .filter { it.connection.id in visibleConnectionIds }
+                        .map { chat ->
+                            val cachedChat = cachedChatsByConnectionId[chat.connection.id]
+                            val freshUser = cachedChat?.otherUser ?: connectedUsers[chat.otherUser.id]
+                            when {
+                                cachedChat != null &&
+                                    freshUser != null &&
+                                    freshUser != chat.otherUser &&
+                                    (isResolvedDisplayName(freshUser.name) || !isResolvedDisplayName(chat.otherUser.name)) -> {
+                                    chat.copy(
+                                        connection = cachedChat.connection,
+                                        otherUser = freshUser
+                                    )
+                                }
+                                cachedChat != null && cachedChat.connection != chat.connection -> {
+                                    chat.copy(connection = cachedChat.connection)
+                                }
+                                else -> chat
+                            }
                         }
+
+                    val currentConnectionIds = mergedChats.map { it.connection.id }.toSet()
+                    val missingChats = cachedChatsByConnectionId.values
+                        .filter { it.connection.id !in currentConnectionIds }
+                        .sortedByDescending { it.connection.created }
+
+                    val reconciledChats = applyConnectionVisibilityFilters(
+                        (missingChats + mergedChats).distinctBy { it.connection.id }
+                    )
+
+                    if (reconciledChats != currentListState.chats) {
+                        _chatListState.value = ChatListState.Success(reconciledChats)
                     }
-                    if (updatedChats != currentListState.chats) {
-                        _chatListState.value = ChatListState.Success(
-                            applyConnectionVisibilityFilters(updatedChats)
-                        )
+
+                    if (missingChats.isNotEmpty()) {
+                        loadChats(isForced = true)
                     }
                 }
 
                 // Only trigger a full chat-list load when we don't already have real data.
                 // Previously this called loadChats(isForced = true) on every connectedUsers
                 // emission (including the 30-second heartbeat), causing redundant full fetches.
-                if (_currentUserId.value != null &&
+                if (currentUserId != null &&
                     connections.isNotEmpty() &&
                     connectedUsers.isNotEmpty() &&
                     _chatListState.value !is ChatListState.Success
