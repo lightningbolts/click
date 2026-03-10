@@ -3,6 +3,7 @@ package compose.project.click.click.utils
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import platform.CoreLocation.CLLocationManager
 import platform.CoreLocation.CLLocationManagerDelegateProtocol
 import platform.CoreLocation.CLLocation
@@ -18,58 +19,61 @@ import kotlin.coroutines.resume
  */
 actual class LocationService {
     private val locationManager = CLLocationManager()
+    private var activeDelegate: NSObject? = null
 
     actual suspend fun getCurrentLocation(): LocationResult? {
-        return suspendCancellableCoroutine { continuation ->
-            val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
-                override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
-                    val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
-                    val location = candidates.firstOrNull { loc ->
-                        loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 100.0
-                    } ?: candidates.firstOrNull { loc ->
-                        loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 300.0
-                    }
-
-                    manager.stopUpdatingLocation()
-                    manager.delegate = null
-                    if (location != null) {
-                        @OptIn(ExperimentalForeignApi::class)
-                        val result = location.coordinate.useContents {
-                            LocationResult(latitude = this.latitude, longitude = this.longitude)
-                        }
-                        if (continuation.isActive) {
-                            continuation.resume(result)
-                        }
-                    } else {
-                        if (continuation.isActive) {
-                            continuation.resume(null)
-                        }
-                    }
-                }
-
-                override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
-                    manager.stopUpdatingLocation()
-                    manager.delegate = null
+        return withTimeoutOrNull(4_000L) {
+            suspendCancellableCoroutine { continuation ->
+                fun finish(result: LocationResult?) {
+                    locationManager.stopUpdatingLocation()
+                    locationManager.delegate = null
+                    activeDelegate = null
                     if (continuation.isActive) {
-                        continuation.resume(null)
+                        continuation.resume(result)
                     }
                 }
-            }
 
-            locationManager.delegate = delegate
-            locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
+                    override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
+                        val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
+                        val location = candidates.firstOrNull { loc ->
+                            loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 100.0
+                        } ?: candidates.firstOrNull { loc ->
+                            loc.horizontalAccuracy > 0.0 && loc.horizontalAccuracy <= 300.0
+                        }
 
-            if (hasLocationPermission()) {
-                // Single-shot request avoids long-running updates and reduces stale values.
-                locationManager.requestLocation()
-            } else {
-                // If no permission, return null — caller should request first
-                continuation.resume(null)
-            }
+                        if (location != null) {
+                            @OptIn(ExperimentalForeignApi::class)
+                            val result = location.coordinate.useContents {
+                                LocationResult(latitude = this.latitude, longitude = this.longitude)
+                            }
+                            finish(result)
+                        } else {
+                            finish(null)
+                        }
+                    }
 
-            continuation.invokeOnCancellation {
-                locationManager.stopUpdatingLocation()
-                locationManager.delegate = null
+                    override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
+                        finish(null)
+                    }
+                }
+
+                activeDelegate = delegate
+                locationManager.delegate = delegate
+                locationManager.desiredAccuracy = kCLLocationAccuracyBest
+
+                if (hasLocationPermission()) {
+                    // Single-shot request avoids long-running updates and reduces stale values.
+                    locationManager.requestLocation()
+                } else {
+                    finish(null)
+                }
+
+                continuation.invokeOnCancellation {
+                    locationManager.stopUpdatingLocation()
+                    locationManager.delegate = null
+                    activeDelegate = null
+                }
             }
         }
     }
