@@ -6,6 +6,7 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ConnectionRepository
@@ -48,6 +49,7 @@ class ConnectionViewModel : ViewModel() {
         latitude: Double? = null,
         longitude: Double? = null,
         altitudeMeters: Double? = null,
+        heightCategory: HeightCategory? = null,
         contextTag: String? = null,
         contextTagObject: ContextTag? = null,
         connectionMethod: String = "qr",
@@ -72,6 +74,7 @@ class ConnectionViewModel : ViewModel() {
                     locationLat = latitude,
                     locationLng = longitude,
                     altitudeMeters = altitudeMeters,
+                    heightCategory = heightCategory,
                     contextTag = contextTagObject?.label ?: contextTag,
                     contextTagObject = contextTagObject,
                     connectionMethod = connectionMethod,

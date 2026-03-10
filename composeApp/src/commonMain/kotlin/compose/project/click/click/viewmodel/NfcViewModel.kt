@@ -6,6 +6,7 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ConnectionRepository
@@ -137,6 +138,7 @@ class NfcViewModel(
         otherUserId: String,
         contextTag: String? = null,
         contextTagObject: ContextTag? = null,
+        heightCategory: HeightCategory? = null,
         noiseLevelCategory: NoiseLevelCategory? = null
     ) {
         val userId = currentUserId
@@ -168,6 +170,7 @@ class NfcViewModel(
                     locationLat = location?.latitude,
                     locationLng = location?.longitude,
                     altitudeMeters = location?.altitudeMeters,
+                    heightCategory = heightCategory,
                     contextTag = contextTagObject?.label ?: contextTag,
                     contextTagObject = contextTagObject,
                     connectionMethod = "nfc",

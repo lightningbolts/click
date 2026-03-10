@@ -160,7 +160,7 @@ class ConnectionRepository(
                 contextTagObject = request.contextTagObject,
                 contextTag = request.contextTag
             )
-            val heightCategory = deriveHeightCategory(request.altitudeMeters)
+            val heightCategory = request.heightCategory ?: deriveHeightCategory(request.altitudeMeters)
             val contextTagId = resolveContextTagId(normalizedContextTag)
             val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
                 "qr" -> scannedUserId

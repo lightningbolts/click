@@ -29,6 +29,8 @@ import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.NfcManager
 import compose.project.click.click.nfc.NfcSupportProfile
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
+import compose.project.click.click.sensors.rememberBarometricHeightMonitor
+import kotlinx.coroutines.async
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
@@ -50,6 +52,7 @@ fun NfcScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val supportProfile = remember(nfcManager) { nfcManager.supportProfile() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
+    val barometricHeightMonitor = rememberBarometricHeightMonitor()
     val tokenStorage = remember { createTokenStorage() }
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
@@ -179,16 +182,20 @@ fun NfcScreen(
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                val noiseLevel = if (noiseOptIn) {
-                                    ambientNoiseMonitor.sampleNoiseLevel()
-                                } else {
-                                    null
+                                val noiseLevelDeferred = async {
+                                    if (noiseOptIn) ambientNoiseMonitor.sampleNoiseLevel() else null
                                 }
+                                val heightCategoryDeferred = async {
+                                    barometricHeightMonitor.sampleHeightCategory()
+                                }
+                                val noiseLevel = noiseLevelDeferred.await()
+                                val heightCategory = heightCategoryDeferred.await()
                                 pendingUser = null
                                 viewModel.createConnection(
                                     otherUserId = detectedUserId,
                                     contextTag = contextTag?.label,
                                     contextTagObject = contextTag,
+                                    heightCategory = heightCategory,
                                     noiseLevelCategory = noiseLevel
                                 )
                             }

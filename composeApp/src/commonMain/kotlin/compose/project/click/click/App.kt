@@ -42,6 +42,7 @@ import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.ConnectionRevealOverlay
@@ -58,6 +59,8 @@ import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.rememberNfcManager
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
+import compose.project.click.click.sensors.rememberBarometricHeightMonitor
+import kotlinx.coroutines.async
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
@@ -94,6 +97,7 @@ fun App() {
     // Auth ViewModel with TokenStorage
     val tokenStorage = remember { createTokenStorage() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
+    val barometricHeightMonitor = rememberBarometricHeightMonitor()
     val appScope = rememberCoroutineScope()
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
@@ -124,6 +128,7 @@ fun App() {
         qrToken: String? = null,
         tokenAgeMs: Long? = null,
         contextTagObject: ContextTag? = null,
+        heightCategory: HeightCategory? = null,
         noiseLevelCategory: NoiseLevelCategory? = null
     ) {
         if (currentUser.id.isNotEmpty()) {
@@ -141,6 +146,7 @@ fun App() {
                     latitude = location?.latitude,
                     longitude = location?.longitude,
                     altitudeMeters = location?.altitudeMeters,
+                    heightCategory = heightCategory,
                     contextTagObject = contextTagObject,
                     connectionMethod = "qr",
                     tokenAgeMs = tokenAgeMs,
@@ -858,11 +864,14 @@ fun App() {
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                        val noiseLevel = if (noiseOptIn) {
-                                            ambientNoiseMonitor.sampleNoiseLevel()
-                                        } else {
-                                            null
+                                        val noiseLevelDeferred = async {
+                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseLevel() else null
                                         }
+                                        val heightCategoryDeferred = async {
+                                            barometricHeightMonitor.sampleHeightCategory()
+                                        }
+                                        val noiseLevel = noiseLevelDeferred.await()
+                                        val heightCategory = heightCategoryDeferred.await()
                                         pendingQrConnection = null
                                         connectionRevealState = ConnectionRevealUiState(
                                             methodLabel = "QR",
@@ -872,6 +881,7 @@ fun App() {
                                             userId = pending.userId,
                                             qrToken = pending.qrToken,
                                             contextTagObject = contextTag,
+                                            heightCategory = heightCategory,
                                             noiseLevelCategory = noiseLevel
                                         )
                                     }
