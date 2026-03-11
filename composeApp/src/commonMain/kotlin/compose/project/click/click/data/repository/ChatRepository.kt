@@ -4,6 +4,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.*
 import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.notifications.ChatPushNotifier
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
@@ -33,6 +34,7 @@ class ChatRepository(
 ) {
     private val supabase = SupabaseConfig.client
     private val supabaseRepository = SupabaseRepository()
+    private val chatPushNotifier = ChatPushNotifier(tokenStorage)
 
     private suspend fun fetchUsersByIdsSafe(userIds: List<String>): List<User> {
         if (userIds.isEmpty()) return emptyList()
@@ -247,6 +249,16 @@ class ChatRepository(
                         }
                     }
             } catch (_: Exception) {
+            }
+
+            runCatching {
+                chatPushNotifier.notifyNewMessage(
+                    chatId = chatId,
+                    messageId = inserted.id,
+                    senderUserId = userId,
+                ).getOrThrow()
+            }.onFailure {
+                println("ChatRepository: Failed to dispatch chat push: ${it.message}")
             }
 
             inserted

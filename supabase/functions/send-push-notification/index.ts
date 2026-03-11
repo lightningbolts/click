@@ -10,6 +10,13 @@ const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const APNS_URL = "https://api.push.apple.com/3/device";
 
 interface PushRequestBody {
+  recipient_user_id?: string;
+  title?: string;
+  body?: string;
+  data?: Record<string, unknown>;
+}
+
+interface ResolvedPushRequestBody {
   recipient_user_id: string;
   title: string;
   body: string;
@@ -28,6 +35,12 @@ interface PushTokenRow {
 interface NotificationPreferenceRow {
   message_push_enabled: boolean;
   call_push_enabled: boolean;
+}
+
+interface UserProfileRow {
+  name?: string | null;
+  full_name?: string | null;
+  email?: string | null;
 }
 
 interface FcmServiceAccount {
@@ -213,6 +226,33 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
   return requestBody.data?.type === "incoming_call" ? "incoming_call" : "chat_message";
 }
 
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function resolveUserDisplayName(profile: UserProfileRow | null | undefined): string {
+  const candidates = [profile?.full_name, profile?.name, profile?.email?.split("@")[0]];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  return "Someone";
+}
+
+function buildMessagePreview(content: string | null): string {
+  const normalized = content?.trim();
+  if (!normalized) {
+    return "Open Click to view the latest message";
+  }
+  return normalized.slice(0, 120);
+}
+
+function getBearerToken(req: Request): string | null {
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  return authHeader?.replace(/^Bearer\s+/i, "") ?? null;
+}
+
 async function validateIncomingCallRequest(
   req: Request,
   supabase: ReturnType<typeof createClient>,
@@ -220,8 +260,7 @@ async function validateIncomingCallRequest(
 ): Promise<void> {
   if (getPushCategory(requestBody) !== "incoming_call") return;
 
-  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  const token = authHeader?.replace(/^Bearer\s+/i, "");
+  const token = getBearerToken(req);
   if (!token) {
     throw new Error("Authorization header is required for incoming call pushes");
   }
@@ -264,9 +303,152 @@ async function validateIncomingCallRequest(
   }
 }
 
-async function recipientAllowsPush(
+async function resolveChatMessageRequest(
+  req: Request,
   supabase: ReturnType<typeof createClient>,
   requestBody: PushRequestBody,
+): Promise<ResolvedPushRequestBody> {
+  const providedRecipientUserId = asNonEmptyString(requestBody.recipient_user_id);
+  const providedTitle = asNonEmptyString(requestBody.title);
+  const providedBody = asNonEmptyString(requestBody.body);
+
+  if (providedRecipientUserId && providedTitle && providedBody) {
+    return {
+      recipient_user_id: providedRecipientUserId,
+      title: providedTitle,
+      body: providedBody,
+      data: requestBody.data,
+    };
+  }
+
+  const token = getBearerToken(req);
+  if (!token) {
+    throw new Error("Authorization header is required for direct chat message pushes");
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) {
+    throw new Error(`Unable to authenticate chat message push: ${authError?.message ?? "missing user"}`);
+  }
+
+  const data = requestBody.data ?? {};
+  const chatId = asNonEmptyString(data.chat_id);
+  const senderUserId = asNonEmptyString(data.sender_user_id);
+  const messageId = asNonEmptyString(data.message_id);
+
+  if (!chatId || !senderUserId) {
+    throw new Error("chat_message pushes require chat_id and sender_user_id");
+  }
+
+  if (authData.user.id !== senderUserId) {
+    throw new Error("Authenticated user does not match sender_user_id");
+  }
+
+  let messageContent = providedBody;
+  if (messageId) {
+    const { data: message, error: messageError } = await supabase
+      .from("messages")
+      .select("id, chat_id, user_id, content")
+      .eq("id", messageId)
+      .maybeSingle();
+
+    if (messageError || !message) {
+      throw new Error(`Unable to validate chat message push message: ${messageError?.message ?? "missing message"}`);
+    }
+
+    if (message.chat_id !== chatId || message.user_id !== senderUserId) {
+      throw new Error("Message does not belong to the provided chat_id and sender_user_id");
+    }
+
+    messageContent = asNonEmptyString(message.content) ?? messageContent;
+  }
+
+  const { data: chat, error: chatError } = await supabase
+    .from("chats")
+    .select("id, connection_id")
+    .eq("id", chatId)
+    .maybeSingle();
+
+  if (chatError || !chat?.connection_id) {
+    throw new Error(`Unable to validate chat message push chat: ${chatError?.message ?? "missing chat"}`);
+  }
+
+  const { data: connection, error: connectionError } = await supabase
+    .from("connections")
+    .select("id, user_ids")
+    .eq("id", chat.connection_id)
+    .maybeSingle();
+
+  if (connectionError || !connection) {
+    throw new Error(`Unable to validate chat message push connection: ${connectionError?.message ?? "missing connection"}`);
+  }
+
+  const connectionUserIds = Array.isArray(connection.user_ids) ? connection.user_ids.map(String) : [];
+  if (!connectionUserIds.includes(senderUserId)) {
+    throw new Error("Chat connection does not contain sender_user_id");
+  }
+
+  const recipientUserId = providedRecipientUserId ?? connectionUserIds.find((id: string) => id !== senderUserId) ?? null;
+  if (!recipientUserId) {
+    throw new Error("Unable to determine recipient_user_id for chat message push");
+  }
+
+  if (!connectionUserIds.includes(recipientUserId)) {
+    throw new Error("recipient_user_id does not belong to the chat connection");
+  }
+
+  let resolvedTitle = providedTitle;
+  if (!resolvedTitle) {
+    const { data: senderProfile, error: senderProfileError } = await supabase
+      .from("users")
+      .select("name, full_name, email")
+      .eq("id", senderUserId)
+      .maybeSingle<UserProfileRow>();
+
+    if (senderProfileError) {
+      throw new Error(`Unable to resolve sender display name: ${senderProfileError.message}`);
+    }
+
+    resolvedTitle = `New message from ${resolveUserDisplayName(senderProfile)}`;
+  }
+
+  return {
+    recipient_user_id: recipientUserId,
+    title: resolvedTitle,
+    body: buildMessagePreview(messageContent),
+    data: requestBody.data,
+  };
+}
+
+async function resolvePushRequest(
+  req: Request,
+  supabase: ReturnType<typeof createClient>,
+  requestBody: PushRequestBody,
+): Promise<ResolvedPushRequestBody> {
+  if (getPushCategory(requestBody) === "incoming_call") {
+    await validateIncomingCallRequest(req, supabase, requestBody);
+
+    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
+    const title = asNonEmptyString(requestBody.title);
+    const body = asNonEmptyString(requestBody.body);
+    if (!recipientUserId || !title || !body) {
+      throw new Error("incoming_call pushes require recipient_user_id, title, and body");
+    }
+
+    return {
+      recipient_user_id: recipientUserId,
+      title,
+      body,
+      data: requestBody.data,
+    };
+  }
+
+  return resolveChatMessageRequest(req, supabase, requestBody);
+}
+
+async function recipientAllowsPush(
+  supabase: ReturnType<typeof createClient>,
+  requestBody: ResolvedPushRequestBody,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("notification_preferences")
@@ -293,20 +475,14 @@ Deno.serve(async (req: Request) => {
 
   try {
     const requestBody = await req.json() as PushRequestBody;
-    if (!requestBody.recipient_user_id || !requestBody.title || !requestBody.body) {
-      return new Response(
-        JSON.stringify({ success: false, sent: 0, error: "recipient_user_id, title, and body are required" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    await validateIncomingCallRequest(req, supabase, requestBody);
+    const resolvedRequestBody = await resolvePushRequest(req, supabase, requestBody);
 
-    if (!(await recipientAllowsPush(supabase, requestBody))) {
+    if (!(await recipientAllowsPush(supabase, resolvedRequestBody))) {
       return new Response(JSON.stringify({ success: true, sent: 0, skipped: true }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -316,7 +492,7 @@ Deno.serve(async (req: Request) => {
     const { data: tokens, error } = await supabase
       .from("push_tokens")
       .select("*")
-      .eq("user_id", requestBody.recipient_user_id);
+      .eq("user_id", resolvedRequestBody.recipient_user_id);
 
     if (error) {
       throw new Error(`Failed to fetch recipient push tokens: ${error.message}`);
@@ -336,7 +512,7 @@ Deno.serve(async (req: Request) => {
     let sent = 0;
 
     const pushTokens = (tokens ?? []) as PushTokenRow[];
-    const hasVoipIosToken = getPushCategory(requestBody) === "incoming_call" &&
+    const hasVoipIosToken = getPushCategory(resolvedRequestBody) === "incoming_call" &&
       pushTokens.some((token) => token.platform === "ios" && token.token_type === "voip");
 
     for (const token of pushTokens) {
@@ -352,9 +528,9 @@ Deno.serve(async (req: Request) => {
             fcmProjectId = fcmAuth.projectId;
           }
 
-          await sendAndroidPush(token, requestBody, fcmAccessToken, fcmProjectId);
+          await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken, fcmProjectId);
         } else {
-          if (hasVoipIosToken && token.token_type !== "voip" && getPushCategory(requestBody) === "incoming_call") {
+          if (hasVoipIosToken && token.token_type !== "voip" && getPushCategory(resolvedRequestBody) === "incoming_call") {
             continue;
           }
 
@@ -362,7 +538,7 @@ Deno.serve(async (req: Request) => {
             apnsJwt = await getApnsJwt();
           }
 
-          await sendIosPush(token, requestBody, apnsJwt);
+          await sendIosPush(token, resolvedRequestBody, apnsJwt);
         }
 
         sent += 1;
