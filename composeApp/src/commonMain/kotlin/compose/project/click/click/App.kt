@@ -123,6 +123,39 @@ fun App() {
     // Coroutine scope for location-aware connection
     val connectionScope = rememberCoroutineScope()
 
+    fun hasUsableLocation(location: compose.project.click.click.utils.LocationResult?): Boolean {
+        return location != null &&
+            location.latitude.isFinite() &&
+            location.longitude.isFinite() &&
+            !(location.latitude == 0.0 && location.longitude == 0.0)
+    }
+
+    suspend fun resolveConnectionLocation(
+        initialLocation: compose.project.click.click.utils.LocationResult? = null,
+        maxAttempts: Int = 3
+    ): compose.project.click.click.utils.LocationResult? {
+        if (hasUsableLocation(initialLocation)) return initialLocation
+
+        repeat(maxAttempts) { attempt ->
+            val refreshedLocation = try {
+                locationService.getCurrentLocation()
+            } catch (e: Exception) {
+                println("App: Failed to get location on attempt ${attempt + 1}: ${e.message}")
+                null
+            }
+
+            if (hasUsableLocation(refreshedLocation)) {
+                return refreshedLocation
+            }
+
+            if (attempt < maxAttempts - 1) {
+                delay(450)
+            }
+        }
+
+        return initialLocation.takeIf(::hasUsableLocation)
+    }
+
     fun connectWithUser(
         userId: String,
         qrToken: String? = null,
@@ -137,12 +170,7 @@ fun App() {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
                 // Attempt to capture location for proximity verification + semantic location
-                val location = capturedLocation ?: try {
-                    locationService.getCurrentLocation()
-                } catch (e: Exception) {
-                    println("App: Failed to get location: ${e.message}")
-                    null
-                }
+                val location = resolveConnectionLocation(capturedLocation)
                 connectionViewModel.connectWithUser(
                     scannedUserId = userId,
                     currentUserId = currentUser.id,
@@ -870,12 +898,7 @@ fun App() {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                                         val locationDeferred = async {
-                                            try {
-                                                locationService.getCurrentLocation()
-                                            } catch (e: Exception) {
-                                                println("App: Failed to prefetch location: ${e.message}")
-                                                null
-                                            }
+                                            resolveConnectionLocation()
                                         }
                                         val noiseSampleDeferred = async {
                                             if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null

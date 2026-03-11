@@ -176,7 +176,7 @@ class ConnectionRepository(
                 contextTagObject = request.contextTagObject,
                 contextTag = request.contextTag
             )
-            val exactBarometricElevationMeters = request.altitudeMeters ?: request.exactBarometricElevationMeters
+            val exactBarometricElevationMeters = request.exactBarometricElevationMeters
             val heightCategory = request.heightCategory
                 ?: deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
             val contextTagId = resolveContextTagId(normalizedContextTag)
