@@ -66,6 +66,7 @@ sealed class CallOverlayState {
 object CallSessionManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val coordinator = CallCoordinator()
+    private val callPushNotifier = CallPushNotifier()
     private val internalCallManager = createCallManager()
     private val outboundChannels = mutableMapOf<String, RealtimeChannel>()
 
@@ -77,6 +78,8 @@ object CallSessionManager {
 
     private var currentUserId: String? = null
     private var currentUserName: String? = null
+    private var pendingSystemInvite: CallInvite? = null
+    private var pendingSystemAction: SystemIncomingCallAction? = null
     private val _activeInvite = MutableStateFlow<CallInvite?>(null)
     val activeInvite: StateFlow<CallInvite?> = _activeInvite.asStateFlow()
     private var activeInviteValue: CallInvite? = null
@@ -91,6 +94,11 @@ object CallSessionManager {
     val callState: StateFlow<CallState> = internalCallManager.callState
     val callManager: CallManager
         get() = internalCallManager
+
+    private enum class SystemIncomingCallAction {
+        Accept,
+        Decline,
+    }
 
     init {
         scope.launch {
@@ -107,11 +115,17 @@ object CallSessionManager {
 
                     is CallState.Ended -> {
                         CallRingtonePlayer.stop()
+                        activeInviteValue?.let { invite ->
+                            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, state.reason)
+                        }
                         _overlayState.value = CallOverlayState.Ended(activeInviteValue, state.reason ?: "Call ended")
                     }
 
                     is CallState.Connected -> {
                         CallRingtonePlayer.stop()
+                        activeInviteValue?.let { invite ->
+                            PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
+                        }
                         if (_overlayState.value is CallOverlayState.Connecting) {
                             _overlayState.value = CallOverlayState.Idle
                         }
@@ -139,6 +153,7 @@ object CallSessionManager {
         clearSubscriptions()
         currentUserId = userId
         subscribeToIncoming(userId)
+        processPendingSystemInviteIfPossible()
     }
 
     fun clearUser() {
@@ -146,6 +161,8 @@ object CallSessionManager {
         internalCallManager.endCall()
         currentUserId = null
         currentUserName = null
+        pendingSystemInvite = null
+        pendingSystemAction = null
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
         clearSubscriptions()
@@ -184,6 +201,10 @@ object CallSessionManager {
         scope.launch {
             sendInvite(invite)
         }
+        scope.launch {
+            callPushNotifier.notifyIncomingCall(invite)
+                .onFailure { println("CallSessionManager: Failed to dispatch incoming call push: ${it.message}") }
+        }
 
         timeoutJob?.cancel()
         timeoutJob = scope.launch {
@@ -200,6 +221,7 @@ object CallSessionManager {
 
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
+        PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
         _overlayState.value = CallOverlayState.Connecting(invite)
 
         scope.launch {
@@ -213,6 +235,7 @@ object CallSessionManager {
 
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
+        PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "Declined")
         scope.launch {
             sendResponse(invite, accepted = false, busy = false)
         }
@@ -240,6 +263,9 @@ object CallSessionManager {
             }
         }
 
+        if (invite != null) {
+            PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
+        }
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
     }
@@ -251,6 +277,7 @@ object CallSessionManager {
                 val peerId = if (currentUserId == invite.callerId) invite.calleeId else invite.callerId
                 sendCancel(invite, peerId, "ended")
             }
+            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "ended")
         }
         internalCallManager.endCall()
         activeInviteValue = null
@@ -264,6 +291,35 @@ object CallSessionManager {
         }
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
+    }
+
+    fun receiveIncomingPush(invite: CallInvite, autoAnswer: Boolean = false, autoDecline: Boolean = false) {
+        pendingSystemInvite = invite
+        pendingSystemAction = when {
+            autoAnswer -> SystemIncomingCallAction.Accept
+            autoDecline -> SystemIncomingCallAction.Decline
+            else -> pendingSystemAction
+        }
+
+        val activeInvite = activeInviteValue
+        if (activeInvite?.callId == invite.callId) {
+            processPendingSystemInviteIfPossible()
+            return
+        }
+
+        if (currentUserId != null && invite.calleeId != currentUserId) {
+            return
+        }
+
+        if (_overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle) {
+            return
+        }
+
+        activeInviteValue = invite
+        _overlayState.value = CallOverlayState.Incoming(invite)
+        CallRingtonePlayer.startIncoming()
+        PlatformIncomingCallUi.showIncomingCall(invite)
+        processPendingSystemInviteIfPossible()
     }
 
     private fun subscribeToIncoming(userId: String) {
@@ -337,6 +393,8 @@ object CallSessionManager {
         activeInviteValue = invite
         _overlayState.value = CallOverlayState.Incoming(invite)
         CallRingtonePlayer.startIncoming()
+        PlatformIncomingCallUi.showIncomingCall(invite)
+        processPendingSystemInviteIfPossible()
     }
 
     private fun handleResponse(response: CallResponse) {
@@ -346,6 +404,7 @@ object CallSessionManager {
 
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
+        PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
 
         when {
             response.accepted -> {
@@ -366,6 +425,7 @@ object CallSessionManager {
 
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
+        PlatformIncomingCallUi.dismissIncomingCall(invite.callId, cancel.reason)
 
         if (callState.value is CallState.Connected) {
             internalCallManager.endCall()
@@ -476,7 +536,37 @@ object CallSessionManager {
 
     private fun failCall(invite: CallInvite?, reason: String) {
         CallRingtonePlayer.stop()
+        invite?.let { PlatformIncomingCallUi.dismissIncomingCall(it.callId, reason) }
         activeInviteValue = invite
         _overlayState.value = CallOverlayState.Ended(invite, reason)
+    }
+
+    private fun processPendingSystemInviteIfPossible() {
+        val userId = currentUserId ?: return
+        val invite = pendingSystemInvite ?: return
+        if (invite.calleeId != userId) return
+
+        if (activeInviteValue?.callId != invite.callId) {
+            activeInviteValue = invite
+            _overlayState.value = CallOverlayState.Incoming(invite)
+            CallRingtonePlayer.startIncoming()
+            PlatformIncomingCallUi.showIncomingCall(invite)
+        }
+
+        when (pendingSystemAction) {
+            SystemIncomingCallAction.Accept -> {
+                pendingSystemInvite = null
+                pendingSystemAction = null
+                acceptIncomingCall()
+            }
+
+            SystemIncomingCallAction.Decline -> {
+                pendingSystemInvite = null
+                pendingSystemAction = null
+                declineIncomingCall()
+            }
+
+            null -> Unit
+        }
     }
 }

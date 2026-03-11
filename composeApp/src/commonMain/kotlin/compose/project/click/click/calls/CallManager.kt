@@ -9,6 +9,8 @@ expect class CallManager() {
 
     fun setMicrophoneEnabled(enabled: Boolean)
 
+    fun setSpeakerEnabled(enabled: Boolean)
+
     fun setCameraEnabled(enabled: Boolean)
 
     fun endCall()

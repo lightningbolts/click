@@ -5,6 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import platform.Foundation.NSNotificationCenter
+
+private const val IOS_REQUEST_PUSH_PERMISSION_NOTIFICATION = "ClickRequestNotificationPermission"
 
 private class IosPushNotificationService : PushNotificationService {
     override fun registerToken(userId: String) {
@@ -19,6 +22,10 @@ private class IosPushNotificationService : PushNotificationService {
     }
 
     override fun requestPermission() {
+        NSNotificationCenter.defaultCenter.postNotificationName(
+            aName = IOS_REQUEST_PUSH_PERMISSION_NOTIFICATION,
+            `object` = null,
+        )
     }
 }
 

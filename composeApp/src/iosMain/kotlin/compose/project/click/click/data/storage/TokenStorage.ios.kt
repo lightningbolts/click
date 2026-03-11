@@ -41,6 +41,8 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
+        private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
+        private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
     }
 
@@ -183,6 +185,32 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getDarkModeEnabled(): Boolean? {
         return if (userDefaults.objectForKey(KEY_DARK_MODE_ENABLED) != null) {
             userDefaults.boolForKey(KEY_DARK_MODE_ENABLED)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveMessageNotificationsEnabled(enabled: Boolean) {
+        userDefaults.setBool(enabled, KEY_MESSAGE_NOTIFICATIONS_ENABLED)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getMessageNotificationsEnabled(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_MESSAGE_NOTIFICATIONS_ENABLED) != null) {
+            userDefaults.boolForKey(KEY_MESSAGE_NOTIFICATIONS_ENABLED)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveCallNotificationsEnabled(enabled: Boolean) {
+        userDefaults.setBool(enabled, KEY_CALL_NOTIFICATIONS_ENABLED)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getCallNotificationsEnabled(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_CALL_NOTIFICATIONS_ENABLED) != null) {
+            userDefaults.boolForKey(KEY_CALL_NOTIFICATIONS_ENABLED)
         } else {
             null
         }

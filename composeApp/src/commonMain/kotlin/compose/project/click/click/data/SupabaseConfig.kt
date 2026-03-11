@@ -20,6 +20,8 @@ object SupabaseConfig {
     private const val SUPABASE_URL = "https://lrgcwnmcscimkmslihxp.supabase.co"
     private const val SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxyZ2N3bm1jc2NpbWttc2xpaHhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MTgwNDksImV4cCI6MjA3NjA5NDA0OX0.-_LAhv-gUeCvViwTt8QZwM13U7jMIgTbiMZDkFf-oXk"
 
+    fun functionUrl(functionName: String): String = "$SUPABASE_URL/functions/v1/$functionName"
+
     // Create a persistent Settings instance for session storage
     private val settings: Settings by lazy { Settings() }
 

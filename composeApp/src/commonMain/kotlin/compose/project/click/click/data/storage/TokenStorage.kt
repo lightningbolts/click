@@ -20,6 +20,12 @@ interface TokenStorage {
     suspend fun saveDarkModeEnabled(isDarkMode: Boolean)
     suspend fun getDarkModeEnabled(): Boolean?
 
+    // Push notification preferences
+    suspend fun saveMessageNotificationsEnabled(enabled: Boolean)
+    suspend fun getMessageNotificationsEnabled(): Boolean?
+    suspend fun saveCallNotificationsEnabled(enabled: Boolean)
+    suspend fun getCallNotificationsEnabled(): Boolean?
+
     // One-time opt-in for ambient noise enrichment at connection time
     suspend fun saveAmbientNoiseOptIn(enabled: Boolean)
     suspend fun getAmbientNoiseOptIn(): Boolean?

@@ -58,6 +58,8 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
+        private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
+        private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
     }
     
@@ -101,6 +103,36 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     override suspend fun getDarkModeEnabled(): Boolean? {
         return if (sharedPreferences.contains(KEY_DARK_MODE_ENABLED)) {
             sharedPreferences.getBoolean(KEY_DARK_MODE_ENABLED, true)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveMessageNotificationsEnabled(enabled: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_MESSAGE_NOTIFICATIONS_ENABLED, enabled)
+            apply()
+        }
+    }
+
+    override suspend fun getMessageNotificationsEnabled(): Boolean? {
+        return if (sharedPreferences.contains(KEY_MESSAGE_NOTIFICATIONS_ENABLED)) {
+            sharedPreferences.getBoolean(KEY_MESSAGE_NOTIFICATIONS_ENABLED, true)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveCallNotificationsEnabled(enabled: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_CALL_NOTIFICATIONS_ENABLED, enabled)
+            apply()
+        }
+    }
+
+    override suspend fun getCallNotificationsEnabled(): Boolean? {
+        return if (sharedPreferences.contains(KEY_CALL_NOTIFICATIONS_ENABLED)) {
+            sharedPreferences.getBoolean(KEY_CALL_NOTIFICATIONS_ENABLED, true)
         } else {
             null
         }

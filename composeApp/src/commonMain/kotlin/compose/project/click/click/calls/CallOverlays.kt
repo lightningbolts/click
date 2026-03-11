@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.SpeakerPhone
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -249,6 +250,7 @@ fun ActiveCallOverlay(
     onEndCall: () -> Unit,
 ) {
     val isMuted = (state as? CallState.Connected)?.microphoneEnabled == false
+    val isSpeakerEnabled = (state as? CallState.Connected)?.speakerEnabled == true
     val isVideoEnabled = (state as? CallState.Connected)?.cameraEnabled == true
     val isVideoCall = when (state) {
         is CallState.Connecting -> state.videoRequested
@@ -373,6 +375,16 @@ fun ActiveCallOverlay(
                             imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
                             contentDescription = if (isMuted) "Unmute" else "Mute",
                             tint = Color.White
+                        )
+                    }
+                    FilledTonalIconButton(
+                        onClick = { callManager.setSpeakerEnabled(!isSpeakerEnabled) },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SpeakerPhone,
+                            contentDescription = if (isSpeakerEnabled) "Turn speaker off" else "Turn speaker on",
+                            tint = if (isSpeakerEnabled) LightBlue else Color.White,
                         )
                     }
                     FilledTonalIconButton(

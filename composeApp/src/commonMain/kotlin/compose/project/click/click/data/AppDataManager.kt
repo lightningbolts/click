@@ -5,7 +5,10 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
+import compose.project.click.click.data.repository.NotificationPreferences
+import compose.project.click.click.data.repository.NotificationPreferencesRepository
 import compose.project.click.click.notifications.createPushNotificationService
+import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -34,6 +37,7 @@ object AppDataManager {
     private val authRepository = AuthRepository()
     private val supabaseRepository = SupabaseRepository()
     private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
+    private val notificationPreferencesRepository = NotificationPreferencesRepository()
     private val tokenStorage = createTokenStorage() // For local preferences storage
     private val pushNotificationService = createPushNotificationService()
     
@@ -73,6 +77,9 @@ object AppDataManager {
     // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
     private val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
+
+    private val _notificationPreferences = MutableStateFlow(NotificationPreferences())
+    val notificationPreferences: StateFlow<NotificationPreferences> = _notificationPreferences.asStateFlow()
     
     /**
      * Toggle Ghost Mode on/off.
@@ -171,13 +178,43 @@ object AppDataManager {
             println("AppDataManager: Current user set to: ${user.name}")
             startPresenceHeartbeat(user.id)
 
+            val localNotificationPreferences = NotificationPreferences(
+                messagePushEnabled = tokenStorage.getMessageNotificationsEnabled() ?: true,
+                callPushEnabled = tokenStorage.getCallNotificationsEnabled() ?: true,
+            )
+            _notificationPreferences.value = localNotificationPreferences
+            NotificationRuntimeState.setNotificationPreferences(
+                messageEnabled = localNotificationPreferences.messagePushEnabled,
+                callEnabled = localNotificationPreferences.callPushEnabled,
+            )
+
             // Push registration is non-critical for first paint. Keep it off the main
             // startup path so chats/connections do not wait on permission or token work.
+            if (localNotificationPreferences.messagePushEnabled || localNotificationPreferences.callPushEnabled) {
+                scope.launch {
+                    runCatching { pushNotificationService.requestPermission() }
+                        .onFailure { println("AppDataManager: Push permission request failed: ${it.message}") }
+                    runCatching { pushNotificationService.registerToken(user.id) }
+                        .onFailure { println("AppDataManager: Push token registration failed: ${it.message}") }
+                }
+            }
+
             scope.launch {
-                runCatching { pushNotificationService.requestPermission() }
-                    .onFailure { println("AppDataManager: Push permission request failed: ${it.message}") }
-                runCatching { pushNotificationService.registerToken(user.id) }
-                    .onFailure { println("AppDataManager: Push token registration failed: ${it.message}") }
+                val remotePreferences = notificationPreferencesRepository.fetchPreferences(user.id)
+                _notificationPreferences.value = remotePreferences
+                NotificationRuntimeState.setNotificationPreferences(
+                    messageEnabled = remotePreferences.messagePushEnabled,
+                    callEnabled = remotePreferences.callPushEnabled,
+                )
+                tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
+                tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)
+
+                if (remotePreferences.messagePushEnabled || remotePreferences.callPushEnabled) {
+                    runCatching { pushNotificationService.requestPermission() }
+                        .onFailure { println("AppDataManager: Push permission request failed after sync: ${it.message}") }
+                    runCatching { pushNotificationService.registerToken(user.id) }
+                        .onFailure { println("AppDataManager: Push token registration failed after sync: ${it.message}") }
+                }
             }
             
             // Load availability from local storage first for immediate display
@@ -262,6 +299,8 @@ object AppDataManager {
         _isDataLoaded.value = false
         _isLoading.value = false
         _error.value = null
+        _notificationPreferences.value = NotificationPreferences()
+        NotificationRuntimeState.setNotificationPreferences(messageEnabled = true, callEnabled = true)
     }
 
     /**
@@ -315,6 +354,40 @@ object AppDataManager {
      */
     fun removeConnection(connectionId: String) {
         _connections.value = _connections.value.filter { it.id != connectionId }
+    }
+
+    fun setMessageNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(messagePushEnabled = enabled)
+        )
+    }
+
+    fun setCallNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(callPushEnabled = enabled)
+        )
+    }
+
+    private fun updateNotificationPreferences(preferences: NotificationPreferences) {
+        val userId = _currentUser.value?.id ?: return
+        _notificationPreferences.value = preferences
+        NotificationRuntimeState.setNotificationPreferences(
+            messageEnabled = preferences.messagePushEnabled,
+            callEnabled = preferences.callPushEnabled,
+        )
+
+        scope.launch {
+            tokenStorage.saveMessageNotificationsEnabled(preferences.messagePushEnabled)
+            tokenStorage.saveCallNotificationsEnabled(preferences.callPushEnabled)
+            notificationPreferencesRepository.savePreferences(userId, preferences)
+
+            if (preferences.messagePushEnabled || preferences.callPushEnabled) {
+                runCatching { pushNotificationService.requestPermission() }
+                    .onFailure { println("AppDataManager: Push permission request failed after settings update: ${it.message}") }
+                runCatching { pushNotificationService.registerToken(userId) }
+                    .onFailure { println("AppDataManager: Push token registration failed after settings update: ${it.message}") }
+            }
+        }
     }
     
     /**

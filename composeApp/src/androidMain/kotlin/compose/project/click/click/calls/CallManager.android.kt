@@ -2,8 +2,10 @@ package compose.project.click.click.calls
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context.AUDIO_SERVICE
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.view.View
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -28,7 +30,7 @@ import java.lang.ref.WeakReference
 
 private const val CALL_PERMISSION_REQUEST_CODE = 4013
 
-private object AndroidCallRuntime {
+internal object AndroidCallRuntime {
     private var applicationContext: Context? = null
     private var currentActivityRef: WeakReference<Activity>? = null
 
@@ -51,6 +53,7 @@ actual class CallManager {
     private var room: Room? = null
     private var eventsJob: Job? = null
     private var microphoneEnabled = true
+    private var speakerEnabled = false
     private var cameraEnabled = false
     private var videoRequested = false
     private val rendererBindings = linkedMapOf<TextureViewRenderer, Boolean>()
@@ -87,8 +90,10 @@ actual class CallManager {
 
         cleanupRoom()
         microphoneEnabled = true
+        speakerEnabled = videoEnabled
         cameraEnabled = videoEnabled
         videoRequested = videoEnabled
+        updateAudioRoute(videoEnabled)
         _callState.value = CallState.Connecting(videoRequested = videoEnabled)
 
         val liveKitRoom = LiveKit.create(
@@ -158,6 +163,12 @@ actual class CallManager {
         }
     }
 
+    actual fun setSpeakerEnabled(enabled: Boolean) {
+        speakerEnabled = enabled
+        updateAudioRoute(enabled)
+        syncStateFromRoom()
+    }
+
     actual fun setCameraEnabled(enabled: Boolean) {
         val activeRoom = room ?: return
         scope.launch(Dispatchers.IO) {
@@ -199,6 +210,7 @@ actual class CallManager {
         _callState.value = CallState.Connected(
             videoRequested = videoRequested,
             microphoneEnabled = microphoneEnabled,
+            speakerEnabled = speakerEnabled,
             cameraEnabled = cameraEnabled,
             remoteVideoAvailable = remoteTrack != null,
             localVideoAvailable = localTrack != null,
@@ -269,9 +281,23 @@ actual class CallManager {
 
         if (releaseState) {
             microphoneEnabled = true
+            speakerEnabled = false
             cameraEnabled = false
             videoRequested = false
+            updateAudioRoute(false, reset = true)
         }
+    }
+
+    private fun updateAudioRoute(enabled: Boolean, reset: Boolean = false) {
+        val audioManager = AndroidCallRuntime.appContext()?.getSystemService(AUDIO_SERVICE) as? AudioManager ?: return
+        if (reset) {
+            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.isSpeakerphoneOn = false
+            return
+        }
+
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioManager.isSpeakerphoneOn = enabled
     }
 }
 

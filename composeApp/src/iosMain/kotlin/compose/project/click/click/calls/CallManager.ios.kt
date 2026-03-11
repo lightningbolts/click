@@ -12,6 +12,7 @@ import platform.Foundation.NSNumber
 private const val CALL_START_NOTIFICATION = "ClickCallStart"
 private const val CALL_END_NOTIFICATION = "ClickCallEnd"
 private const val CALL_SET_MIC_NOTIFICATION = "ClickCallSetMicrophone"
+private const val CALL_SET_SPEAKER_NOTIFICATION = "ClickCallSetSpeaker"
 private const val CALL_SET_CAMERA_NOTIFICATION = "ClickCallSetCamera"
 private const val CALL_STATE_DID_CHANGE_NOTIFICATION = "ClickCallStateDidChange"
 
@@ -50,6 +51,14 @@ actual class CallManager {
         )
     }
 
+    actual fun setSpeakerEnabled(enabled: Boolean) {
+        notificationCenter.postNotificationName(
+            aName = CALL_SET_SPEAKER_NOTIFICATION,
+            `object` = null,
+            userInfo = mapOf("enabled" to enabled)
+        )
+    }
+
     actual fun setCameraEnabled(enabled: Boolean) {
         videoRequested = enabled || videoRequested
         notificationCenter.postNotificationName(
@@ -75,6 +84,7 @@ actual class CallManager {
             val userInfo = notification?.userInfo ?: return@addObserverForName
             val status = userInfo["status"] as? String ?: return@addObserverForName
             val microphoneEnabled = userInfo.boolValue("microphoneEnabled") ?: true
+            val speakerEnabled = userInfo.boolValue("speakerEnabled") ?: false
             val cameraEnabled = userInfo.boolValue("cameraEnabled") ?: false
             val remoteVideoAvailable = userInfo.boolValue("remoteVideoAvailable") ?: false
             val localVideoAvailable = userInfo.boolValue("localVideoAvailable") ?: false
@@ -86,6 +96,7 @@ actual class CallManager {
                 "connected" -> CallState.Connected(
                     videoRequested = reportedVideoRequested,
                     microphoneEnabled = microphoneEnabled,
+                    speakerEnabled = speakerEnabled,
                     cameraEnabled = cameraEnabled,
                     remoteVideoAvailable = remoteVideoAvailable,
                     localVideoAvailable = localVideoAvailable,

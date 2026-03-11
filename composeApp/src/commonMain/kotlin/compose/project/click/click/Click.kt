@@ -3,6 +3,8 @@ package compose.project.click.click
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.PushTokenRepository
+import compose.project.click.click.calls.CallInvite
+import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.savePendingPushToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,4 +28,34 @@ fun savePushToken(token: String, platform: String) {
             platform = platform
         )
     }
+}
+
+fun handleIncomingCallPush(
+    callId: String,
+    connectionId: String,
+    roomName: String,
+    callerId: String,
+    callerName: String,
+    calleeId: String,
+    calleeName: String,
+    videoEnabled: Boolean,
+    createdAt: Long,
+    autoAnswer: Boolean = false,
+    autoDecline: Boolean = false,
+) {
+    CallSessionManager.receiveIncomingPush(
+        invite = CallInvite(
+            callId = callId,
+            connectionId = connectionId,
+            roomName = roomName,
+            callerId = callerId,
+            callerName = callerName,
+            calleeId = calleeId,
+            calleeName = calleeName,
+            videoEnabled = videoEnabled,
+            createdAt = createdAt,
+        ),
+        autoAnswer = autoAnswer,
+        autoDecline = autoDecline,
+    )
 }

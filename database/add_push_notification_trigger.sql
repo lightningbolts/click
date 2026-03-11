@@ -7,6 +7,7 @@ DECLARE
     recipient_user_id UUID;
     sender_name TEXT;
     preview_body TEXT;
+    recipient_pref_enabled BOOLEAN;
 BEGIN
     SELECT u.id::uuid
       INTO recipient_user_id
@@ -18,6 +19,15 @@ BEGIN
      LIMIT 1;
 
     IF recipient_user_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT COALESCE(np.message_push_enabled, TRUE)
+      INTO recipient_pref_enabled
+      FROM notification_preferences np
+     WHERE np.user_id = recipient_user_id;
+
+    IF recipient_pref_enabled = FALSE THEN
         RETURN NEW;
     END IF;
 
@@ -40,6 +50,8 @@ BEGIN
             'title', 'New message from ' || sender_name,
             'body', preview_body,
             'data', jsonb_build_object(
+                'type', 'chat_message',
+                'connection_id', (SELECT connection_id FROM chats WHERE id = NEW.chat_id),
                 'chat_id', NEW.chat_id,
                 'message_id', NEW.id,
                 'sender_user_id', NEW.user_id

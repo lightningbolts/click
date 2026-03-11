@@ -13,6 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import compose.project.click.click.calls.CallInvite
+import compose.project.click.click.calls.PlatformIncomingCallUi
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
 private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
@@ -33,6 +35,31 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         ensureNotificationChannel(applicationContext)
+
+        val type = message.data["type"]
+        if (type == "incoming_call") {
+            if (!NotificationRuntimeState.getNotificationPreferences().callNotificationsEnabled) {
+                return
+            }
+
+            if (AndroidPushNotificationRuntime.isAppInForeground()) {
+                return
+            }
+
+            message.toIncomingCallInvite()?.let { invite ->
+                PlatformIncomingCallUi.showIncomingCall(invite)
+            }
+            return
+        }
+
+        if (!NotificationRuntimeState.getNotificationPreferences().messageNotificationsEnabled) {
+            return
+        }
+
+        val activeChatId = NotificationRuntimeState.getActiveChatId()
+        if (!activeChatId.isNullOrBlank() && activeChatId == message.data["chat_id"]) {
+            return
+        }
 
         val title = message.notification?.title ?: message.data["title"] ?: "New message"
         val body = message.notification?.body ?: message.data["body"] ?: "Open Click to view it"
@@ -66,6 +93,28 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
 
         NotificationManagerCompat.from(this).notify(message.messageId?.hashCode() ?: body.hashCode(), notification)
     }
+}
+
+private fun RemoteMessage.toIncomingCallInvite(): CallInvite? {
+    val callId = data["call_id"] ?: return null
+    val connectionId = data["connection_id"] ?: return null
+    val roomName = data["room_name"] ?: return null
+    val callerId = data["caller_id"] ?: return null
+    val callerName = data["caller_name"] ?: return null
+    val calleeId = data["callee_id"] ?: return null
+    val calleeName = data["callee_name"] ?: return null
+
+    return CallInvite(
+        callId = callId,
+        connectionId = connectionId,
+        roomName = roomName,
+        callerId = callerId,
+        callerName = callerName,
+        calleeId = calleeId,
+        calleeName = calleeName,
+        videoEnabled = data["video_enabled"]?.toBooleanStrictOrNull() ?: false,
+        createdAt = data["created_at"]?.toLongOrNull() ?: 0L,
+    )
 }
 
 private fun ensureNotificationChannel(context: Context) {

@@ -24,6 +24,7 @@ private const val PUSH_PERMISSION_REQUEST_CODE = 4012
 internal object AndroidPushNotificationRuntime {
     private var applicationContext: Context? = null
     private var currentActivityRef: WeakReference<Activity>? = null
+    private var appInForeground: Boolean = false
 
     fun init(context: Context, activity: Activity? = null) {
         applicationContext = context.applicationContext
@@ -35,6 +36,12 @@ internal object AndroidPushNotificationRuntime {
     fun requireContext(): Context? = applicationContext
 
     fun currentActivity(): Activity? = currentActivityRef?.get()
+
+    fun setAppInForeground(isForeground: Boolean) {
+        appInForeground = isForeground
+    }
+
+    fun isAppInForeground(): Boolean = appInForeground
 
     fun storeUserId(userId: String) {
         val context = applicationContext ?: return

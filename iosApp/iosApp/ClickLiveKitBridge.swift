@@ -1,13 +1,15 @@
 import Foundation
 
-#if canImport(UIKit) && canImport(LiveKit)
+#if canImport(UIKit) && canImport(LiveKit) && canImport(AVFAudio)
 import UIKit
 import LiveKit
+import AVFAudio
 
 private enum ClickCallNotifications {
     static let start = Notification.Name("ClickCallStart")
     static let end = Notification.Name("ClickCallEnd")
     static let setMicrophone = Notification.Name("ClickCallSetMicrophone")
+    static let setSpeaker = Notification.Name("ClickCallSetSpeaker")
     static let setCamera = Notification.Name("ClickCallSetCamera")
     static let stateDidChange = Notification.Name("ClickCallStateDidChange")
     static let registerVideoView = Notification.Name("ClickCallRegisterVideoView")
@@ -26,6 +28,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     private weak var remoteContainer: UIView?
     private var videoRequested = false
     private var microphoneEnabled = true
+    private var speakerEnabled = false
     private var cameraEnabled = false
     private var endingLocally = false
     private var started = false
@@ -51,6 +54,11 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         observers.append(center.addObserver(forName: ClickCallNotifications.setMicrophone, object: nil, queue: .main) { [weak self] notification in
             Task { @MainActor in
                 self?.handleSetMicrophone(notification)
+            }
+        })
+        observers.append(center.addObserver(forName: ClickCallNotifications.setSpeaker, object: nil, queue: .main) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleSetSpeaker(notification)
             }
         })
         observers.append(center.addObserver(forName: ClickCallNotifications.setCamera, object: nil, queue: .main) { [weak self] notification in
@@ -82,8 +90,10 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
 
         videoRequested = videoEnabled
         microphoneEnabled = true
+        speakerEnabled = videoEnabled
         cameraEnabled = videoEnabled
         endingLocally = false
+        configureAudioSession()
         postState(status: "connecting")
 
         Task {
@@ -135,6 +145,13 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
                 }
             }
         }
+    }
+
+    private func handleSetSpeaker(_ notification: Notification) {
+        guard let enabled = notification.userInfo?["enabled"] as? Bool else { return }
+        speakerEnabled = enabled
+        configureAudioSession()
+        postState(status: room == nil ? "connecting" : "connected")
     }
 
     private func handleSetCamera(_ notification: Notification) {
@@ -234,6 +251,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
                 "reason": reason as Any,
                 "videoRequested": videoRequested,
                 "microphoneEnabled": microphoneEnabled,
+                "speakerEnabled": speakerEnabled,
                 "cameraEnabled": cameraEnabled,
                 "localVideoAvailable": currentLocalVideoTrack() != nil,
                 "remoteVideoAvailable": currentRemoteVideoTrack() != nil,
@@ -262,8 +280,32 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         }
         cameraEnabled = false
         microphoneEnabled = true
+        speakerEnabled = false
+        deactivateAudioSession()
         if reportIdle {
             postState(status: "idle")
+        }
+    }
+
+    private func configureAudioSession() {
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            let options: AVAudioSession.CategoryOptions = speakerEnabled || videoRequested
+                ? [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                : [.allowBluetooth, .allowBluetoothA2DP]
+            try audioSession.setCategory(.playAndRecord, mode: videoRequested ? .videoChat : .voiceChat, options: options)
+            try audioSession.setActive(true)
+            try audioSession.overrideOutputAudioPort(speakerEnabled || videoRequested ? .speaker : .none)
+        } catch {
+            print("ClickLiveKitBridge audio session configuration failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func deactivateAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false)
+        } catch {
+            print("ClickLiveKitBridge audio session deactivation failed: \(error.localizedDescription)")
         }
     }
 

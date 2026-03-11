@@ -56,6 +56,7 @@ import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.getPlatform
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
@@ -784,6 +785,14 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         viewModel.loadChatMessages(chatId)
     }
 
+    val activeApiChatId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.chat?.id
+    DisposableEffect(activeApiChatId) {
+        NotificationRuntimeState.setActiveChatId(activeApiChatId)
+        onDispose {
+            NotificationRuntimeState.setActiveChatId(null)
+        }
+    }
+
     // Scroll to bottom when new messages arrive
     LaunchedEffect(chatMessagesState) {
         if (chatMessagesState is ChatMessagesState.Success) {
@@ -1036,26 +1045,33 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             }
                         }
                     } else {
+                        val timelineEntries = remember(messages) { buildChatTimelineEntries(messages) }
                         LazyColumn(
                             state = listState,
                             modifier = messageContentModifier,
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(messages, key = { it.message.id }) { messageWithUser ->
-                                val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
-                                ChatMessageBubble(
-                                    messageWithUser = messageWithUser,
-                                    currentUserId = viewModel.currentUserId.collectAsState().value,
-                                    reactions = msgReactions,
-                                    onToggleReaction = { reaction ->
-                                        viewModel.toggleReaction(messageWithUser.message.id, reaction)
-                                    },
-                                    onForward = { msgId ->
-                                        forwardMessageId = msgId
-                                    },
-                                    onLongPress = { contextMenuMessage = messageWithUser }
-                                )
+                            items(timelineEntries, key = { it.key }) { entry ->
+                                when (entry) {
+                                    is ChatTimelineEntry.DaySeparator -> ConversationDaySeparator(entry.label)
+                                    is ChatTimelineEntry.MessageEntry -> {
+                                        val messageWithUser = entry.messageWithUser
+                                        val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
+                                        ChatMessageBubble(
+                                            messageWithUser = messageWithUser,
+                                            currentUserId = viewModel.currentUserId.collectAsState().value,
+                                            reactions = msgReactions,
+                                            onToggleReaction = { reaction ->
+                                                viewModel.toggleReaction(messageWithUser.message.id, reaction)
+                                            },
+                                            onForward = { msgId ->
+                                                forwardMessageId = msgId
+                                            },
+                                            onLongPress = { contextMenuMessage = messageWithUser }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1314,6 +1330,96 @@ private fun ExpiryBanner(
 
 private fun Connection.hoursUntilExpiry(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Int {
     return ((expiry - nowMs) / 3_600_000L).toInt()
+}
+
+private sealed interface ChatTimelineEntry {
+    val key: String
+
+    data class DaySeparator(
+        override val key: String,
+        val label: String,
+    ) : ChatTimelineEntry
+
+    data class MessageEntry(
+        override val key: String,
+        val messageWithUser: MessageWithUser,
+    ) : ChatTimelineEntry
+}
+
+private fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<ChatTimelineEntry> {
+    if (messages.isEmpty()) return emptyList()
+
+    val timeline = mutableListOf<ChatTimelineEntry>()
+    var previousDayKey: String? = null
+    messages.forEach { messageWithUser ->
+        val dayKey = messageDayKey(messageWithUser.message.timeCreated)
+        if (dayKey != previousDayKey) {
+            timeline += ChatTimelineEntry.DaySeparator(
+                key = "separator-$dayKey-${messageWithUser.message.id}",
+                label = formatConversationDayLabel(messageWithUser.message.timeCreated)
+            )
+            previousDayKey = dayKey
+        }
+        timeline += ChatTimelineEntry.MessageEntry(
+            key = messageWithUser.message.id,
+            messageWithUser = messageWithUser,
+        )
+    }
+    return timeline
+}
+
+@Composable
+private fun ConversationDaySeparator(label: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        )
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 12.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        )
+    }
+}
+
+private fun messageDayKey(timestamp: Long): String {
+    val dateTime = Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(TimeZone.currentSystemDefault())
+    return "${dateTime.year}-${dateTime.monthNumber}-${dateTime.dayOfMonth}"
+}
+
+private fun formatConversationDayLabel(timestamp: Long, nowMs: Long = Clock.System.now().toEpochMilliseconds()): String {
+    val zone = TimeZone.currentSystemDefault()
+    val dateTime = Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(zone)
+    val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone)
+
+    val dayDifference = (now.date.toEpochDays() - dateTime.date.toEpochDays())
+    return when (dayDifference) {
+        0 -> "Today"
+        1 -> "Yesterday"
+        else -> {
+            val weekday = dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+            val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }
+            val hour = when (val value = dateTime.hour % 12) {
+                0 -> 12
+                else -> value
+            }
+            val minute = dateTime.minute.toString().padStart(2, '0')
+            val period = if (dateTime.hour >= 12) "PM" else "AM"
+            "$weekday, $month ${dateTime.dayOfMonth} at $hour:$minute $period"
+        }
+    }
 }
 
 private fun Connection.isExpiredConnection(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
