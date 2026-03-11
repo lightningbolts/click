@@ -15,6 +15,10 @@ private val pushTokenScope = CoroutineScope(SupervisorJob() + Dispatchers.Defaul
 private val pushTokenRepository = PushTokenRepository()
 
 fun savePushToken(token: String, platform: String) {
+    savePushToken(token, platform, "standard")
+}
+
+fun savePushToken(token: String, platform: String, tokenType: String) {
     pushTokenScope.launch {
         val currentUserId = AppDataManager.currentUser.value?.id ?: AuthRepository().getCurrentUser()?.id
         if (currentUserId.isNullOrBlank()) {
@@ -25,7 +29,8 @@ fun savePushToken(token: String, platform: String) {
         pushTokenRepository.savePushToken(
             userId = currentUserId,
             token = token,
-            platform = platform
+            platform = platform,
+            tokenType = tokenType,
         )
     }
 }

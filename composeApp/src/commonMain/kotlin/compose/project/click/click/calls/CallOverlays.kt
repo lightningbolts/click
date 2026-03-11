@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
@@ -92,32 +95,24 @@ fun CallPreviewOverlay(
         label = "call_preview_inner",
     )
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF050816).copy(alpha = 0.96f)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        contentAlignment = Alignment.TopEnd,
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size((260.dp * pulseOuter))
-                    .clip(RoundedCornerShape(130.dp))
-                    .background(PrimaryBlue.copy(alpha = 0.12f))
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size((210.dp * pulseInner))
-                    .clip(RoundedCornerShape(105.dp))
-                    .background(LightBlue.copy(alpha = 0.12f))
-            )
-
+        Surface(
+            modifier = Modifier
+                .widthIn(max = 340.dp)
+                .fillMaxWidth(0.92f),
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF08101F).copy(alpha = 0.94f),
+            tonalElevation = 12.dp,
+            shadowElevation = 20.dp,
+        ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 28.dp, vertical = 42.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
             ) {
                 Text(
                     text = when (overlayState) {
@@ -130,41 +125,49 @@ fun CallPreviewOverlay(
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.72f),
                 )
-                Spacer(modifier = Modifier.height(20.dp))
                 Box(
                     modifier = Modifier
-                        .size(150.dp)
-                        .clip(RoundedCornerShape(75.dp))
+                        .padding(top = 18.dp)
+                        .size(92.dp)
+                        .clip(RoundedCornerShape(46.dp))
                         .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(75.dp)),
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(46.dp))
+                        .alpha(pulseInner),
                     contentAlignment = Alignment.Center,
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size((118.dp * pulseOuter))
+                            .clip(RoundedCornerShape(59.dp))
+                            .background(PrimaryBlue.copy(alpha = 0.08f))
+                    )
                     Text(
                         text = otherUserName.firstOrNull()?.uppercase() ?: "?",
                         color = Color.White,
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                Spacer(modifier = Modifier.height(18.dp))
                 Text(
                     text = otherUserName,
+                    modifier = Modifier.padding(top = 14.dp),
                     style = MaterialTheme.typography.headlineSmall,
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = if (isVideoCall) "Video call" else "Voice call",
+                    modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.68f),
                 )
-                Spacer(modifier = Modifier.height(30.dp))
 
                 if (overlayState is CallOverlayState.Connecting) {
+                    Spacer(modifier = Modifier.height(18.dp))
                     CircularProgressIndicator(color = LightBlue)
-                    Spacer(modifier = Modifier.height(24.dp))
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                 when (overlayState) {
                     is CallOverlayState.Outgoing,
@@ -173,8 +176,8 @@ fun CallPreviewOverlay(
                         IconButton(
                             onClick = onCancel,
                             modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(36.dp))
+                                .size(60.dp)
+                                .clip(RoundedCornerShape(30.dp))
                                 .background(MaterialTheme.colorScheme.error)
                         ) {
                             Icon(
@@ -193,8 +196,8 @@ fun CallPreviewOverlay(
                             IconButton(
                                 onClick = onDecline,
                                 modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(RoundedCornerShape(36.dp))
+                                    .size(60.dp)
+                                    .clip(RoundedCornerShape(30.dp))
                                     .background(MaterialTheme.colorScheme.error)
                             ) {
                                 Icon(
@@ -206,8 +209,8 @@ fun CallPreviewOverlay(
                             IconButton(
                                 onClick = onAccept,
                                 modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(RoundedCornerShape(36.dp))
+                                    .size(60.dp)
+                                    .clip(RoundedCornerShape(30.dp))
                                     .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
                             ) {
                                 Icon(
@@ -223,8 +226,8 @@ fun CallPreviewOverlay(
                         IconButton(
                             onClick = onDismissEnded,
                             modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(36.dp))
+                                .size(60.dp)
+                                .clip(RoundedCornerShape(30.dp))
                                 .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
                         ) {
                             Icon(
@@ -261,15 +264,23 @@ fun ActiveCallOverlay(
     val hasLocalVideo = (state as? CallState.Connected)?.localVideoAvailable == true
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.Black.copy(alpha = 0.94f)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.BottomEnd,
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(0.94f),
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF050A16).copy(alpha = 0.94f),
+            tonalElevation = 12.dp,
+            shadowElevation = 24.dp,
+        ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -282,35 +293,21 @@ fun ActiveCallOverlay(
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.75f)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Box(
-                    modifier = Modifier
-                        .size(140.dp)
-                        .clip(RoundedCornerShape(70.dp))
-                        .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = otherUserName.firstOrNull()?.uppercase() ?: "?",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(18.dp))
                 Text(
                     text = otherUserName,
+                    modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.headlineSmall,
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 if (isVideoCall) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
+                            .heightIn(min = 180.dp)
+                            .aspectRatio(1.2f)
                             .clip(RoundedCornerShape(28.dp))
                             .background(Color.White.copy(alpha = 0.08f))
                             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp)),
@@ -335,8 +332,8 @@ fun ActiveCallOverlay(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(16.dp)
-                                .size(width = 110.dp, height = 160.dp)
+                                .padding(12.dp)
+                                .size(width = 96.dp, height = 136.dp)
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(Color.White.copy(alpha = 0.1f))
                                 .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(20.dp)),
@@ -358,18 +355,48 @@ fun ActiveCallOverlay(
                         }
                     }
                 } else {
-                    Spacer(modifier = Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color.White.copy(alpha = 0.06f))
+                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = otherUserName.firstOrNull()?.uppercase() ?: "?",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = if (state is CallState.Connecting) "Connecting audio…" else "Voice call in progress",
+                            color = Color.White.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilledTonalIconButton(
                         onClick = { callManager.setMicrophoneEnabled(isMuted) },
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
@@ -379,7 +406,7 @@ fun ActiveCallOverlay(
                     }
                     FilledTonalIconButton(
                         onClick = { callManager.setSpeakerEnabled(!isSpeakerEnabled) },
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SpeakerPhone,
@@ -389,7 +416,7 @@ fun ActiveCallOverlay(
                     }
                     FilledTonalIconButton(
                         onClick = { callManager.setCameraEnabled(!isVideoEnabled) },
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = if (isVideoEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
@@ -400,8 +427,8 @@ fun ActiveCallOverlay(
                     IconButton(
                         onClick = onEndCall,
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(32.dp))
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(28.dp))
                             .background(MaterialTheme.colorScheme.error)
                     ) {
                         Icon(

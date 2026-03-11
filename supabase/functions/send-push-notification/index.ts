@@ -21,6 +21,7 @@ interface PushTokenRow {
   user_id: string;
   token: string;
   platform: "android" | "ios";
+  token_type?: "standard" | "voip";
   updated_at: number;
 }
 
@@ -160,32 +161,47 @@ async function sendIosPush(
     throw new Error("Missing APNS_BUNDLE_ID secret");
   }
 
+  const tokenType = pushToken.token_type ?? "standard";
+  const isVoipToken = tokenType === "voip";
+  const isIncomingCall = category === "incoming_call";
+
+  const headers: HeadersInit = {
+    authorization: `bearer ${apnsJwt}`,
+    "apns-topic": isVoipToken ? `${bundleId}.voip` : bundleId,
+    "apns-push-type": isVoipToken && isIncomingCall ? "voip" : "alert",
+    "apns-priority": "10",
+    "content-type": "application/json",
+  };
+
+  const body = isVoipToken && isIncomingCall
+    ? {
+        aps: {
+          "content-available": 1,
+        },
+        ...(requestBody.data ?? {}),
+      }
+    : {
+        aps: {
+          alert: {
+            title: requestBody.title,
+            body: requestBody.body,
+          },
+          sound: "default",
+          ...(isIncomingCall
+            ? {
+                category: "CLICK_INCOMING_CALL",
+                "content-available": 1,
+                "interruption-level": "time-sensitive",
+              }
+            : {}),
+        },
+        ...(requestBody.data ?? {}),
+      };
+
   const response = await fetch(`${APNS_URL}/${pushToken.token}`, {
     method: "POST",
-    headers: {
-      authorization: `bearer ${apnsJwt}`,
-      "apns-topic": bundleId,
-      "apns-push-type": "alert",
-      "apns-priority": category === "incoming_call" ? "10" : "10",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      aps: {
-        alert: {
-          title: requestBody.title,
-          body: requestBody.body,
-        },
-        sound: "default",
-        ...(category === "incoming_call"
-          ? {
-              category: "CLICK_INCOMING_CALL",
-              "content-available": 1,
-              "interruption-level": "time-sensitive",
-            }
-          : {}),
-      },
-      ...(requestBody.data ?? {}),
-    }),
+    headers,
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -299,7 +315,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: tokens, error } = await supabase
       .from("push_tokens")
-      .select("id, user_id, token, platform, updated_at")
+      .select("*")
       .eq("user_id", requestBody.recipient_user_id);
 
     if (error) {
@@ -319,7 +335,11 @@ Deno.serve(async (req: Request) => {
     const errors: PushError[] = [];
     let sent = 0;
 
-    for (const token of tokens as PushTokenRow[]) {
+    const pushTokens = (tokens ?? []) as PushTokenRow[];
+    const hasVoipIosToken = getPushCategory(requestBody) === "incoming_call" &&
+      pushTokens.some((token) => token.platform === "ios" && token.token_type === "voip");
+
+    for (const token of pushTokens) {
       try {
         if (token.platform === "android") {
           if (!fcmAccessToken || !fcmProjectId) {
@@ -334,6 +354,10 @@ Deno.serve(async (req: Request) => {
 
           await sendAndroidPush(token, requestBody, fcmAccessToken, fcmProjectId);
         } else {
+          if (hasVoipIosToken && token.token_type !== "voip" && getPushCategory(requestBody) === "incoming_call") {
+            continue;
+          }
+
           if (!apnsJwt) {
             apnsJwt = await getApnsJwt();
           }

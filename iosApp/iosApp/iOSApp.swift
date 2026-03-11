@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         ClickLiveKitBridge.shared.start()
         ClickCallKitManager.shared.start()
+        ClickVoipPushManager.shared.start()
 
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.delegate = self
@@ -62,7 +63,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        ClickKt.savePushToken(token: token, platform: "ios")
+        ClickKt.savePushToken(token: token, platform: "ios", tokenType: "standard")
     }
 
     func application(
