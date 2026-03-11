@@ -197,6 +197,7 @@ fun NfcScreen(
                                     contextTagObject = contextTag,
                                     heightCategory = barometricSample?.category,
                                     exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                    exactBarometricPressureHpa = barometricSample?.pressureHpa,
                                     noiseLevelCategory = noiseSample?.category,
                                     exactNoiseLevelDb = noiseSample?.decibels
                                 )

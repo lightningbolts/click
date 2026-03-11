@@ -32,16 +32,17 @@ class OpenMeteoWeatherService(
 
         return try {
             val response = client.get(
-                "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true"
+                "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,pressure_msl"
             ).body<OpenMeteoResponse>()
 
-            val current = response.currentWeather ?: return null
+            val current = response.current ?: return null
             WeatherSnapshot(
                 condition = current.weatherCode.toConditionLabel(),
                 temperatureCelsius = current.temperature.toFloat(),
                 iconCode = current.weatherCode.toIconCode(),
-                windSpeedKph = current.windspeed?.toFloat(),
-                windDirectionDegrees = current.winddirection?.toInt()
+                windSpeedKph = current.windSpeed?.toFloat(),
+                windDirectionDegrees = current.windDirection?.toInt(),
+                pressureMslHpa = current.pressureMsl
             )
         } catch (error: Exception) {
             println("OpenMeteoWeatherService: Failed to fetch weather: ${error.message}")
@@ -52,17 +53,21 @@ class OpenMeteoWeatherService(
 
 @Serializable
 private data class OpenMeteoResponse(
-    @SerialName("current_weather")
-    val currentWeather: OpenMeteoCurrentWeather? = null
+    val current: OpenMeteoCurrentWeather? = null
 )
 
 @Serializable
 private data class OpenMeteoCurrentWeather(
+    @SerialName("temperature_2m")
     val temperature: Double,
-    @SerialName("weathercode")
+    @SerialName("weather_code")
     val weatherCode: Int,
-    val windspeed: Double? = null,
-    val winddirection: Double? = null
+    @SerialName("wind_speed_10m")
+    val windSpeed: Double? = null,
+    @SerialName("wind_direction_10m")
+    val windDirection: Double? = null,
+    @SerialName("pressure_msl")
+    val pressureMsl: Double? = null
 )
 
 private fun Int.toConditionLabel(): String = when (this) {

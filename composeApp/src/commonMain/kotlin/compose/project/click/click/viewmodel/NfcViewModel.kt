@@ -140,6 +140,7 @@ class NfcViewModel(
         contextTagObject: ContextTag? = null,
         heightCategory: HeightCategory? = null,
         exactBarometricElevationMeters: Double? = null,
+        exactBarometricPressureHpa: Double? = null,
         noiseLevelCategory: NoiseLevelCategory? = null,
         exactNoiseLevelDb: Double? = null
     ) {
@@ -174,6 +175,7 @@ class NfcViewModel(
                     altitudeMeters = location?.altitudeMeters,
                     heightCategory = heightCategory,
                     exactBarometricElevationMeters = exactBarometricElevationMeters,
+                    exactBarometricPressureHpa = exactBarometricPressureHpa,
                     contextTag = contextTagObject?.label ?: contextTag,
                     contextTagObject = contextTagObject,
                     connectionMethod = "nfc",

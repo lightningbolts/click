@@ -42,7 +42,11 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
                         val sample = altitudeMeters
                             ?.let { elevation ->
                                 deriveHeightCategory(elevation)?.let { category ->
-                                    BarometricHeightSample(category = category, elevationMeters = elevation)
+                                    BarometricHeightSample(
+                                        category = category,
+                                        elevationMeters = elevation,
+                                        pressureHpa = pressureHpa
+                                    )
                                 }
                             }
                         continuation.resume(sample)

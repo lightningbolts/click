@@ -4,6 +4,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.calibrateBarometricElevationMeters
 import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
@@ -176,9 +177,6 @@ class ConnectionRepository(
                 contextTagObject = request.contextTagObject,
                 contextTag = request.contextTag
             )
-            val exactBarometricElevationMeters = request.exactBarometricElevationMeters
-            val heightCategory = request.heightCategory
-                ?: deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
             val contextTagId = resolveContextTagId(normalizedContextTag)
             val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
                 "qr" -> scannedUserId
@@ -233,6 +231,15 @@ class ConnectionRepository(
             } else {
                 null
             }
+
+            val exactBarometricElevationMeters = calibrateBarometricElevationMeters(
+                stationPressureHpa = request.exactBarometricPressureHpa,
+                seaLevelPressureHpa = weatherSnapshot?.pressureMslHpa
+            ) ?: request.altitudeMeters?.takeIf { request.exactBarometricPressureHpa != null }
+                ?: request.exactBarometricElevationMeters
+
+            val heightCategory = request.heightCategory
+                ?: deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
 
             val memoryCapsule = MemoryCapsule(
                 connectionId = result.id,

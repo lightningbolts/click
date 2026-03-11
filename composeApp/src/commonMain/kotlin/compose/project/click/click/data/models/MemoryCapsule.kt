@@ -1,6 +1,7 @@
 package compose.project.click.click.data.models
 
 import kotlinx.serialization.Serializable
+import kotlin.math.pow
 
 @Serializable
 data class MemoryCapsule(
@@ -23,7 +24,8 @@ data class WeatherSnapshot(
     val temperatureCelsius: Float,
     val iconCode: String? = null,
     val windSpeedKph: Float? = null,
-    val windDirectionDegrees: Int? = null
+    val windDirectionDegrees: Int? = null,
+    val pressureMslHpa: Double? = null
 )
 
 @Serializable
@@ -50,6 +52,19 @@ fun deriveHeightCategory(altitudeMeters: Double?): HeightCategory? {
         altitude < 35.0 -> HeightCategory.ELEVATED
         else -> HeightCategory.HIGH_RISE
     }
+}
+
+fun calibrateBarometricElevationMeters(
+    stationPressureHpa: Double?,
+    seaLevelPressureHpa: Double?
+): Double? {
+    val stationPressure = stationPressureHpa?.takeIf { it.isFinite() && it > 0.0 } ?: return null
+    val seaLevelPressure = seaLevelPressureHpa?.takeIf { it.isFinite() && it > 0.0 } ?: return null
+    val pressureRatio = stationPressure / seaLevelPressure
+    if (!pressureRatio.isFinite() || pressureRatio <= 0.0) return null
+
+    val altitude = 44330.0 * (1.0 - pressureRatio.pow(0.1903))
+    return altitude.takeIf { it.isFinite() && it in -500.0..12000.0 }
 }
 
 @Serializable

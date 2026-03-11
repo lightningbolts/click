@@ -164,6 +164,7 @@ fun App() {
         capturedLocation: compose.project.click.click.utils.LocationResult? = null,
         heightCategory: HeightCategory? = null,
         exactBarometricElevationMeters: Double? = null,
+        exactBarometricPressureHpa: Double? = null,
         noiseLevelCategory: NoiseLevelCategory? = null,
         exactNoiseLevelDb: Double? = null
     ) {
@@ -179,6 +180,7 @@ fun App() {
                     altitudeMeters = location?.altitudeMeters,
                     heightCategory = heightCategory,
                     exactBarometricElevationMeters = exactBarometricElevationMeters,
+                    exactBarometricPressureHpa = exactBarometricPressureHpa,
                     contextTagObject = contextTagObject,
                     connectionMethod = "qr",
                     tokenAgeMs = tokenAgeMs,
@@ -921,6 +923,7 @@ fun App() {
                                             capturedLocation = capturedLocation,
                                             heightCategory = barometricSample?.category,
                                             exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                            exactBarometricPressureHpa = barometricSample?.pressureHpa,
                                             noiseLevelCategory = noiseSample?.category,
                                             exactNoiseLevelDb = noiseSample?.decibels
                                         )

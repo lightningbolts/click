@@ -4,7 +4,8 @@ import compose.project.click.click.data.models.HeightCategory
 
 data class BarometricHeightSample(
     val category: HeightCategory,
-    val elevationMeters: Double
+    val elevationMeters: Double,
+    val pressureHpa: Double? = null
 )
 
 interface BarometricHeightMonitor {

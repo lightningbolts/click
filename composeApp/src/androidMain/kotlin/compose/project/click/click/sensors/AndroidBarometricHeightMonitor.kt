@@ -53,7 +53,11 @@ class AndroidBarometricHeightMonitor(
                     val sample = altitudeMeters
                         ?.let { elevation ->
                             deriveHeightCategory(elevation)?.let { category ->
-                                BarometricHeightSample(category = category, elevationMeters = elevation)
+                                BarometricHeightSample(
+                                    category = category,
+                                    elevationMeters = elevation,
+                                    pressureHpa = averagePressure?.toDouble()
+                                )
                             }
                         }
                     continuation.resume(sample)

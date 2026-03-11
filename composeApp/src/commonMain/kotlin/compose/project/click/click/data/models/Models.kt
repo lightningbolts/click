@@ -178,6 +178,7 @@ data class ConnectionRequest(
     val altitudeMeters: Double? = null,
     val heightCategory: HeightCategory? = null,
     val exactBarometricElevationMeters: Double? = null,
+    val exactBarometricPressureHpa: Double? = null,
     val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
     val contextTagObject: ContextTag? = null,
     val connectionMethod: String = "qr", // "qr" or "nfc"
