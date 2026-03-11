@@ -238,8 +238,8 @@ class ConnectionRepository(
             ) ?: request.altitudeMeters?.takeIf { request.exactBarometricPressureHpa != null }
                 ?: request.exactBarometricElevationMeters
 
-            val heightCategory = request.heightCategory
-                ?: deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
+            val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
+                ?: request.heightCategory
 
             val memoryCapsule = MemoryCapsule(
                 connectionId = result.id,
