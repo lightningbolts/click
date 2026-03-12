@@ -6,25 +6,27 @@ import compose.project.click.click.data.models.*
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.notifications.ChatPushNotifier
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.decodeRecord
-import io.github.jan.supabase.realtime.broadcastFlow
-import io.github.jan.supabase.realtime.broadcast
+import io.github.jan.supabase.realtime.RealtimeChannel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import io.github.jan.supabase.realtime.RealtimeChannel
 
 /**
  * Repository for chat operations
@@ -85,6 +87,29 @@ class ChatRepository(
             isRead = isRead
         )
     }
+
+    @Serializable
+    private data class TypingEventIdentityRow(
+        val id: String,
+    )
+
+    @Serializable
+    private data class TypingEventRow(
+        @SerialName("user_id")
+        val userId: String,
+        @SerialName("updated_at")
+        val updatedAt: Long,
+    )
+
+    @Serializable
+    private data class TypingEventInsert(
+        @SerialName("chat_id")
+        val chatId: String,
+        @SerialName("user_id")
+        val userId: String,
+        @SerialName("updated_at")
+        val updatedAt: Long,
+    )
 
     // Fetch all chats for a user with details via API
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
@@ -616,41 +641,69 @@ class ChatRepository(
         return channel to changeFlow
     }
 
-    private val typingChannels = mutableMapOf<String, RealtimeChannel>()
-
     suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean) {
         try {
-            var channel = typingChannels[chatId]
-            if (channel == null) {
-                channel = supabase.channel("typing:$chatId")
-                typingChannels[chatId] = channel
-            }
-            try {
-                channel.subscribe()
-            } catch (_: Exception) {
-            }
-            channel.broadcast(
-                event = "typing",
-                message = buildJsonObject {
-                    put("userId", userId)
-                    put("isTyping", isTyping)
+            val existing = supabase.from("typing_events")
+                .select(columns = Columns.list("id")) {
+                    filter {
+                        eq("chat_id", chatId)
+                        eq("user_id", userId)
+                    }
                 }
-            )
+                .decodeList<TypingEventIdentityRow>()
+
+            if (isTyping) {
+                val updatedAt = Clock.System.now().toEpochMilliseconds()
+                if (existing.isNotEmpty()) {
+                    supabase.from("typing_events")
+                        .update({
+                            set("updated_at", updatedAt)
+                        }) {
+                            filter {
+                                eq("chat_id", chatId)
+                                eq("user_id", userId)
+                            }
+                        }
+                } else {
+                    supabase.from("typing_events")
+                        .insert(
+                            TypingEventInsert(
+                                chatId = chatId,
+                                userId = userId,
+                                updatedAt = updatedAt,
+                            )
+                        )
+                }
+            } else {
+                supabase.from("typing_events")
+                    .delete {
+                        filter {
+                            eq("chat_id", chatId)
+                            eq("user_id", userId)
+                        }
+                    }
+            }
         } catch (e: Exception) {
             println("Error sending typing status: ${e.message}")
         }
     }
 
     fun observeTypingStatus(chatId: String): Flow<TypingStatus> {
-        val channel = typingChannels.getOrPut(chatId) {
-            supabase.channel("typing:$chatId")
-        }
         return flow {
-            try {
-                channel.subscribe()
-            } catch (_: Exception) {
+            var lastTypingUsers = emptySet<String>()
+            while (currentCoroutineContext().isActive) {
+                val currentTypingUsers = getTypingUsers(chatId).toSet()
+
+                (currentTypingUsers - lastTypingUsers).forEach { userId ->
+                    emit(TypingStatus(userId = userId, isTyping = true))
+                }
+                (lastTypingUsers - currentTypingUsers).forEach { userId ->
+                    emit(TypingStatus(userId = userId, isTyping = false))
+                }
+
+                lastTypingUsers = currentTypingUsers
+                delay(1000)
             }
-            emitAll(channel.broadcastFlow<TypingStatus>("typing"))
         }
     }
 
@@ -658,10 +711,18 @@ class ChatRepository(
     data class TypingStatus(val userId: String, val isTyping: Boolean)
 
     suspend fun getTypingUsers(chatId: String): List<String> {
-        // This can be kept as a fallback or removed if using observeTypingStatus exclusively
         return try {
-            val authToken = tokenStorage.getJwt() ?: return emptyList()
-            apiClient.getTypingUsers(chatId, authToken).getOrElse { emptyList() }
+            val cutoff = Clock.System.now().toEpochMilliseconds() - 3000
+            supabase.from("typing_events")
+                .select(columns = Columns.list("user_id", "updated_at")) {
+                    filter {
+                        eq("chat_id", chatId)
+                        gt("updated_at", cutoff)
+                    }
+                }
+                .decodeList<TypingEventRow>()
+                .map { it.userId }
+                .distinct()
         } catch (e: Exception) { println("Error getting typing users: ${e.message}"); emptyList() }
     }
 

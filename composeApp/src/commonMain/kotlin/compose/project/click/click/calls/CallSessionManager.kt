@@ -1,6 +1,7 @@
 package compose.project.click.click.calls
 
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.repository.AuthRepository
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
@@ -65,6 +66,7 @@ sealed class CallOverlayState {
 
 object CallSessionManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val authRepository = AuthRepository()
     private val coordinator = CallCoordinator()
     private val callPushNotifier = CallPushNotifier()
     private val internalCallManager = createCallManager()
@@ -174,7 +176,7 @@ object CallSessionManager {
         otherUserName: String,
         videoEnabled: Boolean,
     ) {
-        val userId = currentUserId ?: return
+        val userId = resolvedCurrentUserId() ?: return
         val callerName = currentUserName ?: "Click User"
 
         if (_overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle) {
@@ -306,7 +308,8 @@ object CallSessionManager {
             return
         }
 
-        if (currentUserId != null && invite.calleeId != currentUserId) {
+        val userId = resolvedCurrentUserId()
+        if (userId != null && invite.calleeId != userId) {
             return
         }
 
@@ -378,7 +381,7 @@ object CallSessionManager {
     }
 
     private fun handleInvite(invite: CallInvite) {
-        val userId = currentUserId ?: return
+        val userId = resolvedCurrentUserId() ?: return
         if (invite.calleeId != userId) return
 
         val isBusy = _overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle
@@ -455,7 +458,7 @@ object CallSessionManager {
     }
 
     private suspend fun joinCall(invite: CallInvite) {
-        val userId = currentUserId ?: return failCall(invite, "You need to be signed in to start a call")
+        val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
         val tokenResult = coordinator.fetchCallToken(
             roomName = invite.roomName,
@@ -479,7 +482,7 @@ object CallSessionManager {
     }
 
     private suspend fun acceptAndJoinIncomingCall(invite: CallInvite) {
-        val userId = currentUserId ?: return failCall(invite, "You need to be signed in to start a call")
+        val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
         val tokenResult = coordinator.fetchCallToken(
             roomName = invite.roomName,
@@ -519,7 +522,7 @@ object CallSessionManager {
     }
 
     private suspend fun sendResponse(invite: CallInvite, accepted: Boolean, busy: Boolean) {
-        val responderId = currentUserId ?: return
+        val responderId = resolvedCurrentUserId() ?: return
         outboundChannel(invite.callerId).broadcast(
             event = "response",
             message = buildJsonObject {
@@ -533,7 +536,7 @@ object CallSessionManager {
     }
 
     private suspend fun sendCancel(invite: CallInvite, targetUserId: String, reason: String) {
-        val senderId = currentUserId ?: return
+        val senderId = resolvedCurrentUserId() ?: return
         outboundChannel(targetUserId).broadcast(
             event = "cancel",
             message = buildJsonObject {
@@ -563,8 +566,12 @@ object CallSessionManager {
         _overlayState.value = CallOverlayState.Ended(invite, reason)
     }
 
+    private fun resolvedCurrentUserId(): String? {
+        return currentUserId ?: authRepository.getCurrentUser()?.id
+    }
+
     private fun processPendingSystemInviteIfPossible() {
-        val userId = currentUserId ?: return
+        val userId = resolvedCurrentUserId() ?: return
         val invite = pendingSystemInvite ?: return
         if (invite.calleeId != userId) return
 
