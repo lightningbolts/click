@@ -25,6 +25,10 @@ actual object PlatformIncomingCallUi {
     }
 
     actual fun dismissIncomingCall(callId: String, reason: String?) {
+        if (reason == null) {
+            return
+        }
+
         NSNotificationCenter.defaultCenter.postNotificationName(
             aName = IOS_NATIVE_END_CALL_NOTIFICATION,
             `object` = null,

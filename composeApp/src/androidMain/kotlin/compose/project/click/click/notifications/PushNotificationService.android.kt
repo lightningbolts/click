@@ -19,6 +19,7 @@ private const val PUSH_NOTIFICATION_PREFS = "push_notification_prefs"
 private const val KEY_PUSH_USER_ID = "push_user_id"
 private const val KEY_PENDING_PUSH_TOKEN = "pending_push_token"
 private const val KEY_PENDING_PUSH_PLATFORM = "pending_push_platform"
+private const val KEY_PENDING_PUSH_TOKEN_TYPE = "pending_push_token_type"
 private const val PUSH_PERMISSION_REQUEST_CODE = 4012
 
 internal object AndroidPushNotificationRuntime {
@@ -57,25 +58,28 @@ internal object AndroidPushNotificationRuntime {
             .getString(KEY_PUSH_USER_ID, null)
     }
 
-    fun savePendingToken(token: String, platform: String) {
+    fun savePendingToken(token: String, platform: String, tokenType: String) {
         val context = applicationContext ?: return
         context.getSharedPreferences(PUSH_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_PENDING_PUSH_TOKEN, token)
             .putString(KEY_PENDING_PUSH_PLATFORM, platform)
+            .putString(KEY_PENDING_PUSH_TOKEN_TYPE, tokenType)
             .apply()
     }
 
-    fun consumePendingToken(): PendingPushToken? {
-        val context = applicationContext ?: return null
+    fun consumePendingTokens(): List<PendingPushToken> {
+        val context = applicationContext ?: return emptyList()
         val prefs = context.getSharedPreferences(PUSH_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
-        val token = prefs.getString(KEY_PENDING_PUSH_TOKEN, null) ?: return null
-        val platform = prefs.getString(KEY_PENDING_PUSH_PLATFORM, null) ?: return null
+        val token = prefs.getString(KEY_PENDING_PUSH_TOKEN, null) ?: return emptyList()
+        val platform = prefs.getString(KEY_PENDING_PUSH_PLATFORM, null) ?: return emptyList()
+        val tokenType = prefs.getString(KEY_PENDING_PUSH_TOKEN_TYPE, null) ?: "standard"
         prefs.edit()
             .remove(KEY_PENDING_PUSH_TOKEN)
             .remove(KEY_PENDING_PUSH_PLATFORM)
+            .remove(KEY_PENDING_PUSH_TOKEN_TYPE)
             .apply()
-        return PendingPushToken(token = token, platform = platform)
+        return listOf(PendingPushToken(token = token, platform = platform, tokenType = tokenType))
     }
 }
 

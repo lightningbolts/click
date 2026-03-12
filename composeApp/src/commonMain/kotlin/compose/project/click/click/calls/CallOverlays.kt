@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -94,24 +97,25 @@ fun CallPreviewOverlay(
         ),
         label = "call_preview_inner",
     )
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 20.dp),
-        contentAlignment = Alignment.TopEnd,
+            .padding(start = 16.dp, end = 16.dp, top = topInset + 10.dp, bottom = 20.dp),
+        contentAlignment = Alignment.TopCenter,
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(max = 340.dp)
-                .fillMaxWidth(0.92f),
+                .widthIn(max = 324.dp)
+                .fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
             color = Color(0xFF08101F).copy(alpha = 0.94f),
             tonalElevation = 12.dp,
             shadowElevation = 20.dp,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -124,50 +128,53 @@ fun CallPreviewOverlay(
                     },
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.72f),
+                    textAlign = TextAlign.Center,
                 )
                 Box(
                     modifier = Modifier
-                        .padding(top = 18.dp)
-                        .size(92.dp)
-                        .clip(RoundedCornerShape(46.dp))
+                        .padding(top = 14.dp)
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(36.dp))
                         .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(46.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(36.dp))
                         .alpha(pulseInner),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
                         modifier = Modifier
-                            .size((118.dp * pulseOuter))
-                            .clip(RoundedCornerShape(59.dp))
+                            .size((92.dp * pulseOuter))
+                            .clip(RoundedCornerShape(46.dp))
                             .background(PrimaryBlue.copy(alpha = 0.08f))
                     )
                     Text(
                         text = otherUserName.firstOrNull()?.uppercase() ?: "?",
                         color = Color.White,
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                 }
                 Text(
                     text = otherUserName,
-                    modifier = Modifier.padding(top = 14.dp),
-                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(top = 12.dp),
+                    style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
                 )
                 Text(
                     text = if (isVideoCall) "Video call" else "Voice call",
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 6.dp),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.68f),
+                    textAlign = TextAlign.Center,
                 )
 
                 if (overlayState is CallOverlayState.Connecting) {
-                    Spacer(modifier = Modifier.height(18.dp))
-                    CircularProgressIndicator(color = LightBlue)
+                    Spacer(modifier = Modifier.height(14.dp))
+                    CircularProgressIndicator(color = LightBlue, strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp))
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 when (overlayState) {
                     is CallOverlayState.Outgoing,
@@ -176,8 +183,8 @@ fun CallPreviewOverlay(
                         IconButton(
                             onClick = onCancel,
                             modifier = Modifier
-                                .size(60.dp)
-                                .clip(RoundedCornerShape(30.dp))
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(26.dp))
                                 .background(MaterialTheme.colorScheme.error)
                         ) {
                             Icon(
@@ -196,8 +203,8 @@ fun CallPreviewOverlay(
                             IconButton(
                                 onClick = onDecline,
                                 modifier = Modifier
-                                    .size(60.dp)
-                                    .clip(RoundedCornerShape(30.dp))
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(26.dp))
                                     .background(MaterialTheme.colorScheme.error)
                             ) {
                                 Icon(
@@ -209,8 +216,8 @@ fun CallPreviewOverlay(
                             IconButton(
                                 onClick = onAccept,
                                 modifier = Modifier
-                                    .size(60.dp)
-                                    .clip(RoundedCornerShape(30.dp))
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(26.dp))
                                     .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
                             ) {
                                 Icon(
@@ -226,8 +233,8 @@ fun CallPreviewOverlay(
                         IconButton(
                             onClick = onDismissEnded,
                             modifier = Modifier
-                                .size(60.dp)
-                                .clip(RoundedCornerShape(30.dp))
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(26.dp))
                                 .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
                         ) {
                             Icon(

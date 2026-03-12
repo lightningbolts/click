@@ -22,7 +22,7 @@ fun savePushToken(token: String, platform: String, tokenType: String) {
     pushTokenScope.launch {
         val currentUserId = AppDataManager.currentUser.value?.id ?: AuthRepository().getCurrentUser()?.id
         if (currentUserId.isNullOrBlank()) {
-            savePendingPushToken(token, platform)
+            savePendingPushToken(token, platform, tokenType)
             println("savePushToken: Cached token because no authenticated user is available yet")
             return@launch
         }

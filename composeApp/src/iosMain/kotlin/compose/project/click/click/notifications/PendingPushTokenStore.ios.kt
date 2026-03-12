@@ -2,20 +2,23 @@ package compose.project.click.click.notifications
 
 import platform.Foundation.NSUserDefaults
 
-private const val PendingPushTokenKey = "pending_push_token"
-private const val PendingPushPlatformKey = "pending_push_platform"
+private fun pendingPushTokenKey(tokenType: String): String = "pending_push_token_$tokenType"
 
-actual fun savePendingPushToken(token: String, platform: String) {
+private fun pendingPushPlatformKey(tokenType: String): String = "pending_push_platform_$tokenType"
+
+actual fun savePendingPushToken(token: String, platform: String, tokenType: String) {
     val defaults = NSUserDefaults.standardUserDefaults
-    defaults.setObject(token, forKey = PendingPushTokenKey)
-    defaults.setObject(platform, forKey = PendingPushPlatformKey)
+    defaults.setObject(token, forKey = pendingPushTokenKey(tokenType))
+    defaults.setObject(platform, forKey = pendingPushPlatformKey(tokenType))
 }
 
-actual fun consumePendingPushToken(): PendingPushToken? {
+actual fun consumePendingPushTokens(): List<PendingPushToken> {
     val defaults = NSUserDefaults.standardUserDefaults
-    val token = defaults.stringForKey(PendingPushTokenKey) ?: return null
-    val platform = defaults.stringForKey(PendingPushPlatformKey) ?: return null
-    defaults.removeObjectForKey(PendingPushTokenKey)
-    defaults.removeObjectForKey(PendingPushPlatformKey)
-    return PendingPushToken(token = token, platform = platform)
+    return listOf("standard", "voip").mapNotNull { tokenType ->
+        val token = defaults.stringForKey(pendingPushTokenKey(tokenType)) ?: return@mapNotNull null
+        val platform = defaults.stringForKey(pendingPushPlatformKey(tokenType)) ?: return@mapNotNull null
+        defaults.removeObjectForKey(pendingPushTokenKey(tokenType))
+        defaults.removeObjectForKey(pendingPushPlatformKey(tokenType))
+        PendingPushToken(token = token, platform = platform, tokenType = tokenType)
+    }
 }

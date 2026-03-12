@@ -226,6 +226,29 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
   return requestBody.data?.type === "incoming_call" ? "incoming_call" : "chat_message";
 }
 
+function shouldSendToToken(
+  requestBody: ResolvedPushRequestBody,
+  pushToken: PushTokenRow,
+  hasVoipIosToken: boolean,
+): boolean {
+  const category = getPushCategory(requestBody);
+
+  if (pushToken.platform !== "ios") {
+    return true;
+  }
+
+  const tokenType = pushToken.token_type ?? "standard";
+  if (category === "chat_message") {
+    return tokenType != "voip";
+  }
+
+  if (hasVoipIosToken) {
+    return tokenType === "voip";
+  }
+
+  return tokenType != "voip";
+}
+
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -517,6 +540,10 @@ Deno.serve(async (req: Request) => {
 
     for (const token of pushTokens) {
       try {
+        if (!shouldSendToToken(resolvedRequestBody, token, hasVoipIosToken)) {
+          continue;
+        }
+
         if (token.platform === "android") {
           if (!fcmAccessToken || !fcmProjectId) {
             const serviceAccountJson = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON");
@@ -530,10 +557,6 @@ Deno.serve(async (req: Request) => {
 
           await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken, fcmProjectId);
         } else {
-          if (hasVoipIosToken && token.token_type !== "voip" && getPushCategory(resolvedRequestBody) === "incoming_call") {
-            continue;
-          }
-
           if (!apnsJwt) {
             apnsJwt = await getApnsJwt();
           }

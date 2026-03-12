@@ -11,13 +11,18 @@ private const val IOS_REQUEST_PUSH_PERMISSION_NOTIFICATION = "ClickRequestNotifi
 
 private class IosPushNotificationService : PushNotificationService {
     override fun registerToken(userId: String) {
-        val pendingToken = consumePendingPushToken() ?: return
+        val pendingTokens = consumePendingPushTokens()
+        if (pendingTokens.isEmpty()) return
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            PushTokenRepository().savePushToken(
-                userId = userId,
-                token = pendingToken.token,
-                platform = pendingToken.platform
-            )
+            val repository = PushTokenRepository()
+            pendingTokens.forEach { pendingToken ->
+                repository.savePushToken(
+                    userId = userId,
+                    token = pendingToken.token,
+                    platform = pendingToken.platform,
+                    tokenType = pendingToken.tokenType,
+                )
+            }
         }
     }
 
