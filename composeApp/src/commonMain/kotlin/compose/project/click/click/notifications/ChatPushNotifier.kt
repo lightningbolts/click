@@ -13,6 +13,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -36,30 +37,40 @@ class ChatPushNotifier(
         val jwt = tokenStorage.getJwt()
             ?: return Result.failure(IllegalStateException("Missing auth token"))
 
-        return try {
-            val response = client.post(SupabaseConfig.functionUrl("send-push-notification")) {
-                contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, "Bearer $jwt")
-                setBody(
-                    PushRequestBody(
-                        data = buildJsonObject {
-                            put("type", "chat_message")
-                            put("chat_id", chatId)
-                            put("message_id", messageId)
-                            put("sender_user_id", senderUserId)
-                        }
+        repeat(3) { attempt ->
+            try {
+                val response = client.post(SupabaseConfig.functionUrl("send-push-notification")) {
+                    contentType(ContentType.Application.Json)
+                    header(HttpHeaders.Authorization, "Bearer $jwt")
+                    setBody(
+                        PushRequestBody(
+                            data = buildJsonObject {
+                                put("type", "chat_message")
+                                put("chat_id", chatId)
+                                put("message_id", messageId)
+                                put("sender_user_id", senderUserId)
+                            }
+                        )
                     )
-                )
+                }
+
+                if (response.status.isSuccess()) {
+                    return Result.success(Unit)
+                }
+
+                if (response.status.value !in 500..599 || attempt == 2) {
+                    return Result.failure(IllegalStateException("Chat message push failed with ${response.status.value}"))
+                }
+            } catch (error: Exception) {
+                if (attempt == 2) {
+                    return Result.failure(error)
+                }
             }
 
-            if (!response.status.isSuccess()) {
-                return Result.failure(IllegalStateException("Chat message push failed with ${response.status.value}"))
-            }
-
-            Result.success(Unit)
-        } catch (error: Exception) {
-            Result.failure(error)
+            delay(300L * (attempt + 1))
         }
+
+        return Result.failure(IllegalStateException("Chat message push failed"))
     }
 
     @Serializable

@@ -13,6 +13,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -35,43 +36,53 @@ class CallPushNotifier(
         val jwt = tokenStorage.getJwt()
             ?: return Result.failure(IllegalStateException("Missing auth token"))
 
-        return try {
-            val response = client.post(SupabaseConfig.functionUrl("send-push-notification")) {
-                contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, "Bearer $jwt")
-                setBody(
-                    PushRequestBody(
-                        recipientUserId = invite.calleeId,
-                        title = if (invite.videoEnabled) {
-                            "Incoming video call from ${invite.callerName}"
-                        } else {
-                            "Incoming call from ${invite.callerName}"
-                        },
-                        body = "Open Click to answer",
-                        data = buildJsonObject {
-                            put("type", "incoming_call")
-                            put("call_id", invite.callId)
-                            put("connection_id", invite.connectionId)
-                            put("room_name", invite.roomName)
-                            put("caller_id", invite.callerId)
-                            put("caller_name", invite.callerName)
-                            put("callee_id", invite.calleeId)
-                            put("callee_name", invite.calleeName)
-                            put("video_enabled", invite.videoEnabled)
-                            put("created_at", invite.createdAt)
-                        }
+        repeat(3) { attempt ->
+            try {
+                val response = client.post(SupabaseConfig.functionUrl("send-push-notification")) {
+                    contentType(ContentType.Application.Json)
+                    header(HttpHeaders.Authorization, "Bearer $jwt")
+                    setBody(
+                        PushRequestBody(
+                            recipientUserId = invite.calleeId,
+                            title = if (invite.videoEnabled) {
+                                "Incoming video call from ${invite.callerName}"
+                            } else {
+                                "Incoming call from ${invite.callerName}"
+                            },
+                            body = "Open Click to answer",
+                            data = buildJsonObject {
+                                put("type", "incoming_call")
+                                put("call_id", invite.callId)
+                                put("connection_id", invite.connectionId)
+                                put("room_name", invite.roomName)
+                                put("caller_id", invite.callerId)
+                                put("caller_name", invite.callerName)
+                                put("callee_id", invite.calleeId)
+                                put("callee_name", invite.calleeName)
+                                put("video_enabled", invite.videoEnabled)
+                                put("created_at", invite.createdAt)
+                            }
+                        )
                     )
-                )
+                }
+
+                if (response.status.isSuccess()) {
+                    return Result.success(Unit)
+                }
+
+                if (response.status.value !in 500..599 || attempt == 2) {
+                    return Result.failure(IllegalStateException("Incoming call push failed with ${response.status.value}"))
+                }
+            } catch (error: Exception) {
+                if (attempt == 2) {
+                    return Result.failure(error)
+                }
             }
 
-            if (!response.status.isSuccess()) {
-                return Result.failure(IllegalStateException("Incoming call push failed with ${response.status.value}"))
-            }
-
-            Result.success(Unit)
-        } catch (error: Exception) {
-            Result.failure(error)
+            delay(300L * (attempt + 1))
         }
+
+        return Result.failure(IllegalStateException("Incoming call push failed"))
     }
 
     @Serializable

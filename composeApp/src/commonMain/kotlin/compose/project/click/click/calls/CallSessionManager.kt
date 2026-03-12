@@ -225,8 +225,7 @@ object CallSessionManager {
         _overlayState.value = CallOverlayState.Connecting(invite)
 
         scope.launch {
-            sendResponse(invite, accepted = true, busy = false)
-            joinCall(invite)
+            acceptAndJoinIncomingCall(invite)
         }
     }
 
@@ -475,6 +474,29 @@ object CallSessionManager {
         }.onFailure {
             val peerId = if (userId == invite.callerId) invite.calleeId else invite.callerId
             sendCancel(invite, peerId, "cancelled")
+            failCall(invite, it.message ?: "Failed to create call token")
+        }
+    }
+
+    private suspend fun acceptAndJoinIncomingCall(invite: CallInvite) {
+        val userId = currentUserId ?: return failCall(invite, "You need to be signed in to start a call")
+        val participantName = currentUserName ?: "Click User"
+        val tokenResult = coordinator.fetchCallToken(
+            roomName = invite.roomName,
+            participantName = participantName,
+            userId = userId,
+        )
+
+        tokenResult.onSuccess { response ->
+            sendResponse(invite, accepted = true, busy = false)
+            internalCallManager.startCall(
+                roomName = invite.roomName,
+                token = response.token,
+                wsUrl = response.wsUrl,
+                videoEnabled = invite.videoEnabled,
+            )
+        }.onFailure {
+            sendCancel(invite, invite.callerId, "cancelled")
             failCall(invite, it.message ?: "Failed to create call token")
         }
     }

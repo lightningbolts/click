@@ -11,6 +11,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -46,26 +47,36 @@ class CallApiClient(
         participantName: String,
         userId: String
     ): Result<LiveKitTokenResponse> {
-        return try {
-            val response = client.post("$baseUrl/api/livekit/token") {
-                contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, "Bearer $authToken")
-                setBody(
-                    LiveKitTokenRequest(
-                        roomName = roomName,
-                        participantName = participantName,
-                        userId = userId
+        repeat(3) { attempt ->
+            try {
+                val response = client.post("$baseUrl/api/livekit/token") {
+                    contentType(ContentType.Application.Json)
+                    header(HttpHeaders.Authorization, "Bearer $authToken")
+                    setBody(
+                        LiveKitTokenRequest(
+                            roomName = roomName,
+                            participantName = participantName,
+                            userId = userId
+                        )
                     )
-                )
+                }
+
+                if (response.status.value in 200..299) {
+                    return Result.success(response.body<LiveKitTokenResponse>())
+                }
+
+                if (response.status.value !in 500..599 || attempt == 2) {
+                    return Result.failure(Exception("Failed to create call token (${response.status.value})"))
+                }
+            } catch (e: Exception) {
+                if (attempt == 2) {
+                    return Result.failure(e)
+                }
             }
 
-            if (response.status.value in 200..299) {
-                Result.success(response.body<LiveKitTokenResponse>())
-            } else {
-                Result.failure(Exception("Failed to create call token"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
+            delay(350L * (attempt + 1))
         }
+
+        return Result.failure(Exception("Failed to create call token"))
     }
 }

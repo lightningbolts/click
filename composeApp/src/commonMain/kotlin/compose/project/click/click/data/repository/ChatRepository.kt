@@ -14,6 +14,8 @@ import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.broadcast
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.async
@@ -621,10 +623,11 @@ class ChatRepository(
             var channel = typingChannels[chatId]
             if (channel == null) {
                 channel = supabase.channel("typing:$chatId")
-                // We don't call subscribe() here if it's causing issues, 
-                // or we ensure it's called correctly.
-                // In many versions of supabase-kt, broadcast() will auto-subscribe if needed.
                 typingChannels[chatId] = channel
+            }
+            try {
+                channel.subscribe()
+            } catch (_: Exception) {
             }
             channel.broadcast(
                 event = "typing",
@@ -642,7 +645,13 @@ class ChatRepository(
         val channel = typingChannels.getOrPut(chatId) {
             supabase.channel("typing:$chatId")
         }
-        return channel.broadcastFlow<TypingStatus>("typing")
+        return flow {
+            try {
+                channel.subscribe()
+            } catch (_: Exception) {
+            }
+            emitAll(channel.broadcastFlow<TypingStatus>("typing"))
+        }
     }
 
     @Serializable

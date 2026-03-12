@@ -823,7 +823,13 @@ class ChatViewModel(
     fun updateMessageInput(text: String) {
         _messageInput.value = text
         ((_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id)
-            ?.let { onUserTyping(it) }
+            ?.let { chatId ->
+                if (text.isBlank()) {
+                    onUserStoppedTyping(chatId)
+                } else {
+                    onUserTyping(chatId)
+                }
+            }
     }
 
     fun leaveChatRoom() {

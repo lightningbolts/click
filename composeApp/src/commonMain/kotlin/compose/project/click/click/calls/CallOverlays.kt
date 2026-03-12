@@ -9,8 +9,10 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
@@ -45,19 +48,25 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
+import kotlin.math.roundToInt
 
 @Composable
 fun CallPreviewOverlay(
@@ -267,20 +276,40 @@ fun ActiveCallOverlay(
         is CallState.Connected -> state.videoRequested
         else -> false
     }
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hasRemoteVideo = (state as? CallState.Connected)?.remoteVideoAvailable == true
     val hasLocalVideo = (state as? CallState.Connected)?.localVideoAvailable == true
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    val density = LocalDensity.current
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        contentAlignment = Alignment.BottomEnd,
+            .padding(start = 16.dp, end = 16.dp, top = topInset + 12.dp, bottom = 16.dp),
+        contentAlignment = Alignment.TopCenter,
     ) {
+        val maxHorizontalOffset = with(density) { ((maxWidth - 220.dp) / 2).toPx().coerceAtLeast(0f) }
+        val maxVerticalOffset = with(density) { (maxHeight / 2).toPx().coerceAtLeast(0f) }
+
         Surface(
             modifier = Modifier
                 .widthIn(max = 380.dp)
-                .fillMaxWidth(0.94f),
+                .fillMaxWidth(0.94f)
+                .offset {
+                    IntOffset(
+                        x = dragOffsetX.roundToInt(),
+                        y = dragOffsetY.roundToInt(),
+                    )
+                }
+                .pointerInput(maxHorizontalOffset, maxVerticalOffset) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        dragOffsetX = (dragOffsetX + dragAmount.x).coerceIn(-maxHorizontalOffset, maxHorizontalOffset)
+                        dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(0f, maxVerticalOffset)
+                    }
+                },
             shape = RoundedCornerShape(28.dp),
             color = Color(0xFF050A16).copy(alpha = 0.94f),
             tonalElevation = 12.dp,
