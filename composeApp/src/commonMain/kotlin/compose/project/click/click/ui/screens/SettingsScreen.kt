@@ -5,9 +5,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -37,6 +40,7 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.repository.NotificationPreferences
+import compose.project.click.click.data.models.LocationPreferences
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -54,6 +58,8 @@ fun SettingsScreen(
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
+    val locationPreferences by AppDataManager.locationPreferences.collectAsState()
+    val ghostModeEnabled by AppDataManager.ghostModeEnabled.collectAsState()
     
     // Full name change dialog state
     var showNameDialog by remember { mutableStateOf(false) }
@@ -113,6 +119,14 @@ fun SettingsScreen(
 
                 item {
                     NotificationSettingsCard(notificationPreferences = notificationPreferences)
+                }
+
+                // Your Data — location privacy (Ghost mode overrides when active)
+                item {
+                    YourDataLocationCard(
+                        locationPreferences = locationPreferences,
+                        ghostModeEnabled = ghostModeEnabled
+                    )
                 }
                 
                 // Appearance Section
@@ -251,6 +265,65 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun YourDataLocationCard(
+    locationPreferences: LocationPreferences,
+    ghostModeEnabled: Boolean
+) {
+    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.PrivacyTip,
+                    contentDescription = null,
+                    tint = PrimaryBlue
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Your Data",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            if (ghostModeEnabled) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "Ghost mode is on — location is not shared until you turn it off.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            SettingsToggleRow(
+                icon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
+                title = "Connection location snap",
+                subtitle = "Records GPS at the moment you tap (not continuous tracking)",
+                checked = locationPreferences.connectionSnapEnabled,
+                onCheckedChange = { AppDataManager.setConnectionSnapEnabled(it) }
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            SettingsToggleRow(
+                icon = { Icon(Icons.Default.Map, contentDescription = null) },
+                title = "Show on my Memory Map",
+                subtitle = "Personal only — never shared with others",
+                checked = locationPreferences.showOnMapEnabled,
+                onCheckedChange = { AppDataManager.setShowOnMapEnabled(it) }
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            SettingsToggleRow(
+                icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
+                title = "Include in business insights",
+                subtitle = "Anonymized — campuses/venues see trends, no personal data",
+                checked = locationPreferences.includeInInsightsEnabled,
+                onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) }
+            )
+        }
+    }
+}
+
+@Composable
 private fun NotificationSettingsCard(notificationPreferences: NotificationPreferences) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -294,6 +367,7 @@ private fun NotificationSettingsCard(notificationPreferences: NotificationPrefer
 private fun SettingsToggleRow(
     icon: @Composable () -> Unit,
     title: String,
+    subtitle: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
@@ -303,7 +377,16 @@ private fun SettingsToggleRow(
     ) {
         icon()
         Spacer(modifier = Modifier.width(8.dp))
-        Text(title, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,

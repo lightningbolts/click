@@ -2,6 +2,7 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.data.models.isResolvedDisplayName
@@ -636,6 +637,50 @@ class SupabaseRepository {
             true
         } catch (e: Exception) {
             println("Error setting tags_initialized: ${e.message}")
+            false
+        }
+    }
+
+    // ==================== Location preferences ====================
+
+    /**
+     * Fetch location privacy preferences for a user.
+     * Returns default (all true) if columns are missing or on error.
+     */
+    suspend fun fetchLocationPreferences(userId: String): LocationPreferences {
+        return try {
+            val result = supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list(
+                    "location_connection_snap_enabled",
+                    "location_show_on_map_enabled",
+                    "location_include_in_insights_enabled"
+                )) {
+                    filter { eq("id", userId) }
+                }
+                .decodeList<LocationPreferences>()
+            result.firstOrNull() ?: LocationPreferences()
+        } catch (e: Exception) {
+            println("Error fetching location preferences: ${e.message}")
+            LocationPreferences()
+        }
+    }
+
+    /**
+     * Update location privacy preferences for a user.
+     */
+    suspend fun updateLocationPreferences(userId: String, prefs: LocationPreferences): Boolean {
+        return try {
+            supabase.from("users")
+                .update({
+                    set("location_connection_snap_enabled", prefs.connectionSnapEnabled)
+                    set("location_show_on_map_enabled", prefs.showOnMapEnabled)
+                    set("location_include_in_insights_enabled", prefs.includeInInsightsEnabled)
+                }) {
+                    filter { eq("id", userId) }
+                }
+            true
+        } catch (e: Exception) {
+            println("Error updating location preferences: ${e.message}")
             false
         }
     }

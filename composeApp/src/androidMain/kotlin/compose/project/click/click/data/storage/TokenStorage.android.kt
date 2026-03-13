@@ -61,6 +61,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
+        private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -148,6 +149,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     override suspend fun getAmbientNoiseOptIn(): Boolean? {
         return if (sharedPreferences.contains(KEY_AMBIENT_NOISE_OPT_IN)) {
             sharedPreferences.getBoolean(KEY_AMBIENT_NOISE_OPT_IN, false)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveLocationExplainerSeen(seen: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_LOCATION_EXPLAINER_SEEN, seen)
+            apply()
+        }
+    }
+
+    override suspend fun getLocationExplainerSeen(): Boolean? {
+        return if (sharedPreferences.contains(KEY_LOCATION_EXPLAINER_SEEN)) {
+            sharedPreferences.getBoolean(KEY_LOCATION_EXPLAINER_SEEN, false)
         } else {
             null
         }

@@ -125,6 +125,7 @@ class MapViewModel : ViewModel() {
                 AppDataManager.connectedUsers,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
+                AppDataManager.locationPreferences,
                 _zoomLevel,
                 _selectedFilter
             ) { values ->
@@ -134,15 +135,17 @@ class MapViewModel : ViewModel() {
                 val connectedUsers = values[1] as Map<String, User>
                 val isDataLoaded = values[2] as Boolean
                 val isLoading = values[3] as Boolean
-                val zoom = values[4] as Double
-                val filter = values[5] as String
-                Sextuple(connections, connectedUsers, isDataLoaded, isLoading, zoom, filter)
-            }.collectLatest { (connections, connectedUsers, isDataLoaded, isLoading, zoom, filter) ->
+                val locationPrefs = values[4] as compose.project.click.click.data.models.LocationPreferences
+                val zoom = values[5] as Double
+                val filter = values[6] as String
+                Septuple(connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter)
+            }.collectLatest { (connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
                 when {
                     isDataLoaded -> {
                         _mapState.value = MapState.Success(connections)
-                        ensureDefaultCameraTarget(connections)
-                        updateRenderData(connections, zoom, filter)
+                        val mapVisibleConnections = if (locationPrefs.showOnMapEnabled) connections else emptyList()
+                        ensureDefaultCameraTarget(mapVisibleConnections)
+                        updateRenderData(mapVisibleConnections, zoom, filter)
                         refreshSelectedConnectionUser(connectedUsers)
                     }
                     isLoading -> {
@@ -577,4 +580,14 @@ private data class Sextuple<A, B, C, D, E, F>(
     val fourth: D,
     val fifth: E,
     val sixth: F
+)
+
+private data class Septuple<A, B, C, D, E, F, G>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+    val sixth: F,
+    val seventh: G
 )

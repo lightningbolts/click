@@ -52,6 +52,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
@@ -82,6 +83,12 @@ fun App() {
         val qrToken: String?
     )
 
+    data class PendingQrLocationConsent(
+        val connection: PendingQrConnection,
+        val contextTag: ContextTag?,
+        val noiseOptIn: Boolean
+    )
+
     // Default to dark until persisted preference is loaded.
     var isDarkMode by remember { mutableStateOf(true) }
 
@@ -104,6 +111,7 @@ fun App() {
 
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }
+    val requestLocationPermissionThen = rememberLocationPermissionRequester()
 
     val currentUser = when (val state = authViewModel.authState) {
         is AuthState.Success -> User(id = state.userId, name = state.name ?: state.email, createdAt = 0L)
@@ -170,8 +178,10 @@ fun App() {
     ) {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
-                // Attempt to capture location for proximity verification + semantic location
-                val location = resolveConnectionLocation(capturedLocation)
+                // Capture location only when user preference allows (ghost mode and connection-snap toggle respected)
+                val location = if (AppDataManager.shouldCaptureLocationAtTap()) {
+                    resolveConnectionLocation(capturedLocation)
+                } else null
                 connectionViewModel.connectWithUser(
                     scannedUserId = userId,
                     currentUserId = currentUser.id,
@@ -192,11 +202,62 @@ fun App() {
         }
     }
 
-    // Navigation state
+    // Navigation / connection flow state
     var showMyQRCode by remember { mutableStateOf(false) }
     var showQRScanner by remember { mutableStateOf(false) }
     var pendingQrConnection by remember { mutableStateOf<PendingQrConnection?>(null) }
+    var pendingQrLocationConsent by remember { mutableStateOf<PendingQrLocationConsent?>(null) }
+    var showQrLocationOnboarding by remember { mutableStateOf(false) }
     var connectionRevealState by remember { mutableStateOf<ConnectionRevealUiState?>(null) }
+
+    fun submitQrConnection(
+        pending: PendingQrConnection,
+        contextTagObject: ContextTag?,
+        noiseOptIn: Boolean,
+        skipLocation: Boolean
+    ) {
+        connectionScope.launch {
+            ambientNoiseOptIn = noiseOptIn
+            tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+
+            val locationDeferred = async {
+                if (skipLocation || !AppDataManager.shouldCaptureLocationAtTap()) {
+                    null
+                } else {
+                    resolveConnectionLocation()
+                }
+            }
+            val noiseSampleDeferred = async {
+                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+            }
+            val barometricSampleDeferred = async {
+                barometricHeightMonitor.sampleHeightReading()
+            }
+
+            val noiseSample = noiseSampleDeferred.await()
+            val barometricSample = barometricSampleDeferred.await()
+            val capturedLocation = locationDeferred.await()
+
+            pendingQrConnection = null
+            pendingQrLocationConsent = null
+            connectionRevealState = ConnectionRevealUiState(
+                methodLabel = "QR",
+                phase = ConnectionRevealPhase.Connecting
+            )
+
+            connectWithUser(
+                userId = pending.userId,
+                qrToken = pending.qrToken,
+                contextTagObject = contextTagObject,
+                capturedLocation = capturedLocation,
+                heightCategory = barometricSample?.category,
+                exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                exactBarometricPressureHpa = barometricSample?.pressureHpa,
+                noiseLevelCategory = noiseSample?.category,
+                exactNoiseLevelDb = noiseSample?.decibels
+            )
+        }
+    }
     val isIOS = remember {
         getPlatform().name.contains("iOS", ignoreCase = true)
     }
@@ -614,6 +675,7 @@ fun App() {
                                                         pendingChatId = null
                                                     }
                                                 },
+                                                onNavigateToLocationSettings = { navigateTo(NavigationItem.Settings.route) },
                                                 viewModel = chatViewModel
                                             )
                                         } else {
@@ -888,7 +950,45 @@ fun App() {
                             renderScreen(animatedScreen)
                         }
 
-                        pendingQrConnection?.let { pending ->
+                        if (showQrLocationOnboarding) {
+                            LocationOnboardingScreen(
+                                mapPreviewContent = { LocationOnboardingMapPreview() },
+                                onBuildMyMap = {
+                                    appScope.launch {
+                                        tokenStorage.saveLocationExplainerSeen(true)
+                                        showQrLocationOnboarding = false
+                                        val pendingConsent = pendingQrLocationConsent
+                                        if (pendingConsent != null) {
+                                            requestLocationPermissionThen {
+                                                submitQrConnection(
+                                                    pending = pendingConsent.connection,
+                                                    contextTagObject = pendingConsent.contextTag,
+                                                    noiseOptIn = pendingConsent.noiseOptIn,
+                                                    skipLocation = false
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                onNotNow = {
+                                    appScope.launch {
+                                        tokenStorage.saveLocationExplainerSeen(true)
+                                        showQrLocationOnboarding = false
+                                        val pendingConsent = pendingQrLocationConsent
+                                        if (pendingConsent != null) {
+                                            submitQrConnection(
+                                                pending = pendingConsent.connection,
+                                                contextTagObject = pendingConsent.contextTag,
+                                                noiseOptIn = pendingConsent.noiseOptIn,
+                                                skipLocation = true
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        pendingQrConnection?.takeIf { !showQrLocationOnboarding }?.let { pending ->
                             ConnectionContextSheet(
                                 otherUserName = null,
                                 locationName = null,
@@ -896,36 +996,33 @@ fun App() {
                                 noisePermissionGranted = ambientNoiseMonitor.hasPermission,
                                 onDismiss = { pendingQrConnection = null },
                                 onConfirm = { contextTag, noiseOptIn ->
-                                    connectionScope.launch {
-                                        ambientNoiseOptIn = noiseOptIn
-                                        tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                        val locationDeferred = async {
-                                            resolveConnectionLocation()
+                                    if (AppDataManager.shouldCaptureLocationAtTap() && !locationService.hasLocationPermission()) {
+                                        appScope.launch {
+                                            val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
+                                            if (!explainerSeen) {
+                                                pendingQrLocationConsent = PendingQrLocationConsent(
+                                                    connection = pending,
+                                                    contextTag = contextTag,
+                                                    noiseOptIn = noiseOptIn
+                                                )
+                                                showQrLocationOnboarding = true
+                                            } else {
+                                                requestLocationPermissionThen {
+                                                    submitQrConnection(
+                                                        pending = pending,
+                                                        contextTagObject = contextTag,
+                                                        noiseOptIn = noiseOptIn,
+                                                        skipLocation = false
+                                                    )
+                                                }
+                                            }
                                         }
-                                        val noiseSampleDeferred = async {
-                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
-                                        }
-                                        val barometricSampleDeferred = async {
-                                            barometricHeightMonitor.sampleHeightReading()
-                                        }
-                                        val noiseSample = noiseSampleDeferred.await()
-                                        val barometricSample = barometricSampleDeferred.await()
-                                        val capturedLocation = locationDeferred.await()
-                                        pendingQrConnection = null
-                                        connectionRevealState = ConnectionRevealUiState(
-                                            methodLabel = "QR",
-                                            phase = ConnectionRevealPhase.Connecting
-                                        )
-                                        connectWithUser(
-                                            userId = pending.userId,
-                                            qrToken = pending.qrToken,
+                                    } else {
+                                        submitQrConnection(
+                                            pending = pending,
                                             contextTagObject = contextTag,
-                                            capturedLocation = capturedLocation,
-                                            heightCategory = barometricSample?.category,
-                                            exactBarometricElevationMeters = barometricSample?.elevationMeters,
-                                            exactBarometricPressureHpa = barometricSample?.pressureHpa,
-                                            noiseLevelCategory = noiseSample?.category,
-                                            exactNoiseLevelDb = noiseSample?.decibels
+                                            noiseOptIn = noiseOptIn,
+                                            skipLocation = false
                                         )
                                     }
                                 }

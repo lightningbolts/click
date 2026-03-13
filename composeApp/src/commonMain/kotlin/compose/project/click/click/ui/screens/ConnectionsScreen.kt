@@ -91,6 +91,7 @@ fun ConnectionsScreen(
     initialChatId: String? = null,
     onChatDismissed: (() -> Unit)? = null,
     onChatOpenStateChanged: (Boolean) -> Unit = {},
+    onNavigateToLocationSettings: (() -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() }
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
@@ -197,7 +198,8 @@ fun ConnectionsScreen(
                 ConnectionsListView(
                     viewModel = viewModel,
                     searchQuery = searchQuery,
-                    onChatSelected = { chatId -> openChat(chatId) }
+                    onChatSelected = { chatId -> openChat(chatId) },
+                    onNavigateToLocationSettings = onNavigateToLocationSettings
                 )
             } else {
                 InteractiveSwipeBackContainer(
@@ -208,7 +210,8 @@ fun ConnectionsScreen(
                         ConnectionsListView(
                             viewModel = viewModel,
                             searchQuery = searchQuery,
-                            onChatSelected = { chatId -> openChat(chatId) }
+                            onChatSelected = { chatId -> openChat(chatId) },
+                            onNavigateToLocationSettings = onNavigateToLocationSettings
                         )
                     },
                     currentContent = {
@@ -243,7 +246,8 @@ fun ConnectionsScreen(
                 ConnectionsListView(
                     viewModel = viewModel,
                     searchQuery = searchQuery,
-                    onChatSelected = { chatId -> openChat(chatId) }
+                    onChatSelected = { chatId -> openChat(chatId) },
+                    onNavigateToLocationSettings = onNavigateToLocationSettings
                 )
             } else {
                 ChatView(
@@ -270,7 +274,8 @@ private val ExpiryWarningColor = Color(0xFFFFA500)
 fun ConnectionsListView(
     viewModel: ChatViewModel,
     searchQuery: String = "",
-    onChatSelected: (String) -> Unit
+    onChatSelected: (String) -> Unit,
+    onNavigateToLocationSettings: (() -> Unit)? = null
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
@@ -476,26 +481,34 @@ fun ConnectionsListView(
                             contentPadding = PaddingValues(bottom = 16.dp)
                         ) {
                             items(filteredChats, key = { it.connection.id }) { chatDetails ->
-                                ConnectionItem(
-                                    chatDetails = chatDetails,
-                                    onClick = {
-                                        if (chatDetails.connection.isExpiredConnection()) {
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar("This connection has expired")
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    ConnectionItem(
+                                        chatDetails = chatDetails,
+                                        onClick = {
+                                            if (chatDetails.connection.isExpiredConnection()) {
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar("This connection has expired")
+                                                }
+                                            } else {
+                                                onChatSelected(chatDetails.connection.id)
                                             }
-                                        } else {
-                                            onChatSelected(chatDetails.connection.id)
-                                        }
-                                    },
-                                    onNudge = {
-                                        val chatId = chatDetails.chat.id
-                                        if (chatId != null) {
-                                            viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
-                                        }
-                                    },
-                                    onOpenMenu = { pendingMenuChat = chatDetails },
-                                    onLongPress = { pendingMenuChat = chatDetails }
-                                )
+                                        },
+                                        onNudge = {
+                                            val chatId = chatDetails.chat.id
+                                            if (chatId != null) {
+                                                viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
+                                            }
+                                        },
+                                        onOpenMenu = { pendingMenuChat = chatDetails },
+                                        onLongPress = { pendingMenuChat = chatDetails }
+                                    )
+                                    if (connectionHasNoGeo(chatDetails.connection) && onNavigateToLocationSettings != null) {
+                                        LocationGapNudge(
+                                            otherName = chatDetails.otherUser.name ?: "them",
+                                            onClick = onNavigateToLocationSettings
+                                        )
+                                    }
+                                }
                                 HorizontalDivider(
                                     modifier = Modifier.padding(start = 68.dp, end = 16.dp),
                                     thickness = 0.5.dp,
@@ -560,6 +573,44 @@ fun ConnectionsListView(
     } // End outer Box
 }
 
+
+private fun connectionHasNoGeo(connection: Connection): Boolean {
+    val g = connection.geo_location
+    return !g.lat.isFinite() || !g.lon.isFinite() || (g.lat == 0.0 && g.lon == 0.0)
+}
+
+@Composable
+private fun LocationGapNudge(
+    otherName: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 68.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.LocationOn,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = PrimaryBlue.copy(alpha = 0.9f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "Enable location to remember where you met $otherName",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
 
 @Composable
 fun ConnectionItem(

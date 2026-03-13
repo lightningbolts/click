@@ -1,6 +1,7 @@
 package compose.project.click.click.data
 
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.models.isResolvedDisplayName
@@ -80,6 +81,10 @@ object AppDataManager {
 
     private val _notificationPreferences = MutableStateFlow(NotificationPreferences())
     val notificationPreferences: StateFlow<NotificationPreferences> = _notificationPreferences.asStateFlow()
+
+    // Location privacy preferences (persisted to Supabase profile)
+    private val _locationPreferences = MutableStateFlow(LocationPreferences())
+    val locationPreferences: StateFlow<LocationPreferences> = _locationPreferences.asStateFlow()
     
     /**
      * Toggle Ghost Mode on/off.
@@ -177,6 +182,11 @@ object AppDataManager {
             _currentUser.value = user
             println("AppDataManager: Current user set to: ${user.name}")
             startPresenceHeartbeat(user.id)
+
+            // Load location preferences from Supabase
+            runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
+                .onSuccess { _locationPreferences.value = it }
+                .onFailure { println("AppDataManager: Failed to load location preferences: ${it.message}") }
 
             val localNotificationPreferences = NotificationPreferences(
                 messagePushEnabled = tokenStorage.getMessageNotificationsEnabled() ?: true,
@@ -300,6 +310,7 @@ object AppDataManager {
         _isLoading.value = false
         _error.value = null
         _notificationPreferences.value = NotificationPreferences()
+        _locationPreferences.value = LocationPreferences()
         NotificationRuntimeState.setNotificationPreferences(messageEnabled = true, callEnabled = true)
     }
 
@@ -466,6 +477,39 @@ object AppDataManager {
         return _connections.value.find { it.id == connectionId }
     }
     
+    /**
+     * Whether we should capture GPS at tap/connection time.
+     * False when Ghost Mode is on or when connection snap preference is off.
+     */
+    fun shouldCaptureLocationAtTap(): Boolean {
+        if (_ghostModeEnabled.value) return false
+        return _locationPreferences.value.connectionSnapEnabled
+    }
+
+    /**
+     * Update location preferences and persist to Supabase.
+     */
+    fun updateLocationPreferences(prefs: LocationPreferences) {
+        val userId = _currentUser.value?.id ?: return
+        _locationPreferences.value = prefs
+        scope.launch {
+            runCatching { supabaseRepository.updateLocationPreferences(userId, prefs) }
+                .onFailure { println("AppDataManager: Failed to save location preferences: ${it.message}") }
+        }
+    }
+
+    fun setConnectionSnapEnabled(enabled: Boolean) {
+        updateLocationPreferences(_locationPreferences.value.copy(connectionSnapEnabled = enabled))
+    }
+
+    fun setShowOnMapEnabled(enabled: Boolean) {
+        updateLocationPreferences(_locationPreferences.value.copy(showOnMapEnabled = enabled))
+    }
+
+    fun setIncludeInInsightsEnabled(enabled: Boolean) {
+        updateLocationPreferences(_locationPreferences.value.copy(includeInInsightsEnabled = enabled))
+    }
+
     /**
      * Get the other user in a connection
      */

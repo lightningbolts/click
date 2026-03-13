@@ -1,5 +1,6 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.WeatherService
@@ -197,6 +198,7 @@ class ConnectionRepository(
                 should_continue = listOf(false, false),
                 has_begun = false,
                 expiry_state = "pending",
+                include_in_business_insights = AppDataManager.locationPreferences.value.includeInInsightsEnabled,
                 context_tag_id = contextTagId,
                 initiator_id = initiatorId,
                 responder_id = responderId

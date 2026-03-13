@@ -31,10 +31,12 @@ import compose.project.click.click.nfc.NfcSupportProfile
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import kotlinx.coroutines.async
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.viewmodel.NfcConnectionState
 import compose.project.click.click.viewmodel.NfcViewModel
 import kotlinx.coroutines.launch
@@ -57,6 +59,9 @@ fun NfcScreen(
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     var pendingUser by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var showLocationOnboarding by remember { mutableStateOf(false) }
+    val locationService = remember { compose.project.click.click.utils.LocationService() }
+    val requestLocationPermissionThen = rememberLocationPermissionRequester()
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
@@ -121,7 +126,22 @@ fun NfcScreen(
                     when (val state = connectionState) {
                         is NfcConnectionState.Idle -> {
                             NfcIdleContent(
-                                onStartScanning = { viewModel.startScanning() },
+                                onStartScanning = {
+                                    if (!locationService.hasLocationPermission()) {
+                                        scope.launch {
+                                            val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
+                                            if (!explainerSeen) {
+                                                showLocationOnboarding = true
+                                            } else {
+                                                requestLocationPermissionThen {
+                                                    viewModel.startScanning(skipLocation = false)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        viewModel.startScanning(skipLocation = false)
+                                    }
+                                },
                                 isNfcAvailable = viewModel.isNfcAvailable(),
                                 isNfcEnabled = viewModel.isNfcEnabled(),
                                 supportProfile = supportProfile,
@@ -164,11 +184,31 @@ fun NfcScreen(
                         is NfcConnectionState.Error -> {
                             NfcErrorContent(
                                 message = state.message,
-                                onRetry = { viewModel.startScanning() },
+                                onRetry = { viewModel.startScanning(skipLocation = false) },
                                 onDismiss = { viewModel.resetState() }
                             )
                         }
                     }
+                }
+
+                if (showLocationOnboarding) {
+                    LocationOnboardingScreen(
+                        mapPreviewContent = { LocationOnboardingMapPreview() },
+                        onBuildMyMap = {
+                            scope.launch {
+                                tokenStorage.saveLocationExplainerSeen(true)
+                                showLocationOnboarding = false
+                                requestLocationPermissionThen { viewModel.startScanning(skipLocation = false) }
+                            }
+                        },
+                        onNotNow = {
+                            scope.launch {
+                                tokenStorage.saveLocationExplainerSeen(true)
+                                showLocationOnboarding = false
+                                viewModel.startScanning(skipLocation = true)
+                            }
+                        }
+                    )
                 }
 
                 pendingUser?.let { (detectedUserId, detectedUserName) ->

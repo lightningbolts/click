@@ -29,6 +29,10 @@ interface TokenStorage {
     // One-time opt-in for ambient noise enrichment at connection time
     suspend fun saveAmbientNoiseOptIn(enabled: Boolean)
     suspend fun getAmbientNoiseOptIn(): Boolean?
+
+    // Location onboarding: has the user seen the pre-permission explainer (Build my map / Not now)
+    suspend fun saveLocationExplainerSeen(seen: Boolean)
+    suspend fun getLocationExplainerSeen(): Boolean?
 }
 
 expect fun createTokenStorage(): TokenStorage

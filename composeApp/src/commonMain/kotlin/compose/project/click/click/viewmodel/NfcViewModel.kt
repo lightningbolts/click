@@ -70,10 +70,11 @@ class NfcViewModel(
     }
 
     /**
-     * Fetch the device's real GPS coordinates, then start NFC scanning.
-     * Shows a "Fetching Location..." state while resolving GPS.
+     * Fetch the device's real GPS coordinates (if allowed by preferences and not ghost mode), then start NFC scanning.
+     * When [skipLocation] is true, or when [AppDataManager.shouldCaptureLocationAtTap] is false, skips location and goes straight to scanning.
+     * Shows a "Fetching Location..." state only when we actually request location.
      */
-    fun startScanning() {
+    fun startScanning(skipLocation: Boolean = false) {
         val userId = currentUserId
         if (userId == null) {
             _connectionState.value = NfcConnectionState.Error("User not logged in")
@@ -90,6 +91,16 @@ class NfcViewModel(
             return
         }
 
+        val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
+
+        if (!shouldFetchLocation) {
+            _currentLocation.value = null
+            _connectionState.value = NfcConnectionState.Scanning
+            currentRole = NfcInteractionRole.READER
+            nfcManager.startNfcReader(userId)
+            return
+        }
+
         // First, fetch the real location
         _connectionState.value = NfcConnectionState.FetchingLocation
         currentRole = NfcInteractionRole.READER
@@ -98,7 +109,6 @@ class NfcViewModel(
             try {
                 if (!locationService.hasLocationPermission()) {
                     locationService.requestLocationPermission()
-                    // Give a moment for permission dialog, then try fetching
                     kotlinx.coroutines.delay(1000)
                 }
 
@@ -109,12 +119,10 @@ class NfcViewModel(
                     println("NfcViewModel: Could not get GPS, proceeding with null location")
                 }
 
-                // Now start the NFC scan regardless of location result
                 _connectionState.value = NfcConnectionState.Scanning
                 nfcManager.startNfcReader(userId)
             } catch (e: Exception) {
                 println("NfcViewModel: Location error: ${e.message}")
-                // Don't block on location failure — proceed without location
                 _connectionState.value = NfcConnectionState.Scanning
                 nfcManager.startNfcReader(userId)
             }

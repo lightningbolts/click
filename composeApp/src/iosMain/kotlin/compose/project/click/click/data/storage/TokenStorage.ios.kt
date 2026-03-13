@@ -44,6 +44,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
+        private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -224,6 +225,19 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getAmbientNoiseOptIn(): Boolean? {
         return if (userDefaults.objectForKey(KEY_AMBIENT_NOISE_OPT_IN) != null) {
             userDefaults.boolForKey(KEY_AMBIENT_NOISE_OPT_IN)
+        } else {
+            null
+        }
+    }
+
+    override suspend fun saveLocationExplainerSeen(seen: Boolean) {
+        userDefaults.setBool(seen, KEY_LOCATION_EXPLAINER_SEEN)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getLocationExplainerSeen(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_LOCATION_EXPLAINER_SEEN) != null) {
+            userDefaults.boolForKey(KEY_LOCATION_EXPLAINER_SEEN)
         } else {
             null
         }
