@@ -128,7 +128,7 @@ fun NfcScreen(
                             NfcIdleContent(
                                 onStartScanning = {
                                     if (!AppDataManager.shouldCaptureLocationAtTap()) {
-                                        showLocationOnboarding = true
+                                        viewModel.startScanning(skipLocation = true)
                                     } else if (!locationService.hasLocationPermission()) {
                                         scope.launch {
                                             val explainerSeen = tokenStorage.getLocationExplainerSeen() == true

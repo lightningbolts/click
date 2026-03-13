@@ -132,7 +132,7 @@ fun LocationOnboardingScreen(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    "Business insights stay off by default. If you turn them on later, campuses and venues only see anonymized trends.",
+                    "Anonymous venue and campus trends are included by default, and you can opt out anytime in Your Data.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.8f)
                 )

@@ -289,7 +289,7 @@ private fun YourDataLocationCard(
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                "Location stays off by default. Turn on only what you want to use.",
+                "Location is enabled by default so your map and anonymous trends work right away. Turn off anything you do not want.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -320,10 +320,10 @@ private fun YourDataLocationCard(
             Spacer(modifier = Modifier.height(10.dp))
             SettingsToggleRow(
                 icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
-                title = "Include in business insights",
-                subtitle = "Anonymized — campuses/venues see trends, no personal data",
-                checked = locationPreferences.includeInInsightsEnabled,
-                onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) }
+                title = "Opt out of business insights",
+                subtitle = "Anonymous venue/campus trends are included by default. Turn this on if you do not want to be included.",
+                checked = !locationPreferences.includeInInsightsEnabled,
+                onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(!it) }
             )
         }
     }

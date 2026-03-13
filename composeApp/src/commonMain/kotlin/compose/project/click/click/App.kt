@@ -1012,12 +1012,12 @@ fun App() {
                                 onDismiss = { pendingQrConnection = null },
                                 onConfirm = { contextTag, noiseOptIn ->
                                     if (!AppDataManager.shouldCaptureLocationAtTap()) {
-                                        pendingQrLocationConsent = PendingQrLocationConsent(
-                                            connection = pending,
-                                            contextTag = contextTag,
-                                            noiseOptIn = noiseOptIn
+                                        submitQrConnection(
+                                            pending = pending,
+                                            contextTagObject = contextTag,
+                                            noiseOptIn = noiseOptIn,
+                                            skipLocation = true
                                         )
-                                        showQrLocationOnboarding = true
                                     } else if (!locationService.hasLocationPermission()) {
                                         appScope.launch {
                                             val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
