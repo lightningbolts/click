@@ -33,7 +33,7 @@ data class ConnectionInsert(
     val should_continue: List<Boolean>,
     val has_begun: Boolean,
     val expiry_state: String,
-    val include_in_business_insights: Boolean = true,
+    val include_in_business_insights: Boolean = false,
     @SerialName("context_tag_id")
     val context_tag_id: String? = null,
     val initiator_id: String? = null,
@@ -151,11 +151,11 @@ fun isResolvedDisplayName(value: String?): Boolean {
 @Serializable
 data class LocationPreferences(
     @SerialName("location_connection_snap_enabled")
-    val connectionSnapEnabled: Boolean = true,
+    val connectionSnapEnabled: Boolean = false,
     @SerialName("location_show_on_map_enabled")
-    val showOnMapEnabled: Boolean = true,
+    val showOnMapEnabled: Boolean = false,
     @SerialName("location_include_in_insights_enabled")
-    val includeInInsightsEnabled: Boolean = true
+    val includeInInsightsEnabled: Boolean = false
 )
 
 @Serializable
@@ -263,7 +263,7 @@ data class Connection(
     val proximity_signals: Map<String, kotlinx.serialization.json.JsonElement>? = null,
     val connection_method: String = "qr",
     val flagged: Boolean = false,
-    val include_in_business_insights: Boolean = true
+    val include_in_business_insights: Boolean = false
 ) {
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer

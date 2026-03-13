@@ -287,6 +287,12 @@ private fun YourDataLocationCard(
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Location stays off by default. Turn on only what you want to use.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (ghostModeEnabled) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(

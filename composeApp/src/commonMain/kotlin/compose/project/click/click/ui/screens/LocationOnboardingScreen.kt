@@ -132,7 +132,7 @@ fun LocationOnboardingScreen(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    "Anonymized data helps campuses and venues see where connections happen—no personal data is ever shared.",
+                    "Business insights stay off by default. If you turn them on later, campuses and venues only see anonymized trends.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.8f)
                 )

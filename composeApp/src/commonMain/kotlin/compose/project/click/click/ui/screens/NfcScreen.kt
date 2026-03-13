@@ -127,7 +127,9 @@ fun NfcScreen(
                         is NfcConnectionState.Idle -> {
                             NfcIdleContent(
                                 onStartScanning = {
-                                    if (!locationService.hasLocationPermission()) {
+                                    if (!AppDataManager.shouldCaptureLocationAtTap()) {
+                                        showLocationOnboarding = true
+                                    } else if (!locationService.hasLocationPermission()) {
                                         scope.launch {
                                             val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
                                             if (!explainerSeen) {
@@ -196,9 +198,19 @@ fun NfcScreen(
                         mapPreviewContent = { LocationOnboardingMapPreview() },
                         onBuildMyMap = {
                             scope.launch {
+                                AppDataManager.updateLocationPreferences(
+                                    AppDataManager.locationPreferences.value.copy(
+                                        connectionSnapEnabled = true,
+                                        showOnMapEnabled = true
+                                    )
+                                )
                                 tokenStorage.saveLocationExplainerSeen(true)
                                 showLocationOnboarding = false
-                                requestLocationPermissionThen { viewModel.startScanning(skipLocation = false) }
+                                if (!locationService.hasLocationPermission()) {
+                                    requestLocationPermissionThen { viewModel.startScanning(skipLocation = false) }
+                                } else {
+                                    viewModel.startScanning(skipLocation = false)
+                                }
                             }
                         },
                         onNotNow = {

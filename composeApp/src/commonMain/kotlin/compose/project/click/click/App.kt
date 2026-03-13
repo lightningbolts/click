@@ -955,11 +955,26 @@ fun App() {
                                 mapPreviewContent = { LocationOnboardingMapPreview() },
                                 onBuildMyMap = {
                                     appScope.launch {
+                                        AppDataManager.updateLocationPreferences(
+                                            AppDataManager.locationPreferences.value.copy(
+                                                connectionSnapEnabled = true,
+                                                showOnMapEnabled = true
+                                            )
+                                        )
                                         tokenStorage.saveLocationExplainerSeen(true)
                                         showQrLocationOnboarding = false
                                         val pendingConsent = pendingQrLocationConsent
                                         if (pendingConsent != null) {
-                                            requestLocationPermissionThen {
+                                            if (!locationService.hasLocationPermission()) {
+                                                requestLocationPermissionThen {
+                                                    submitQrConnection(
+                                                        pending = pendingConsent.connection,
+                                                        contextTagObject = pendingConsent.contextTag,
+                                                        noiseOptIn = pendingConsent.noiseOptIn,
+                                                        skipLocation = false
+                                                    )
+                                                }
+                                            } else {
                                                 submitQrConnection(
                                                     pending = pendingConsent.connection,
                                                     contextTagObject = pendingConsent.contextTag,
@@ -996,7 +1011,14 @@ fun App() {
                                 noisePermissionGranted = ambientNoiseMonitor.hasPermission,
                                 onDismiss = { pendingQrConnection = null },
                                 onConfirm = { contextTag, noiseOptIn ->
-                                    if (AppDataManager.shouldCaptureLocationAtTap() && !locationService.hasLocationPermission()) {
+                                    if (!AppDataManager.shouldCaptureLocationAtTap()) {
+                                        pendingQrLocationConsent = PendingQrLocationConsent(
+                                            connection = pending,
+                                            contextTag = contextTag,
+                                            noiseOptIn = noiseOptIn
+                                        )
+                                        showQrLocationOnboarding = true
+                                    } else if (!locationService.hasLocationPermission()) {
                                         appScope.launch {
                                             val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
                                             if (!explainerSeen) {
