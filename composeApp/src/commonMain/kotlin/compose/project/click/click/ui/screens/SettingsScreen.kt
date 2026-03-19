@@ -320,10 +320,10 @@ private fun YourDataLocationCard(
             Spacer(modifier = Modifier.height(10.dp))
             SettingsToggleRow(
                 icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
-                title = "Opt out of business insights",
-                subtitle = "Anonymous venue/campus trends are included by default. Turn this on if you do not want to be included.",
-                checked = !locationPreferences.includeInInsightsEnabled,
-                onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(!it) }
+                title = "Include in business insights",
+                subtitle = "Anonymized venue/campus trends are on by default. Turn this off if you do not want to be included.",
+                checked = locationPreferences.includeInInsightsEnabled,
+                onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) }
             )
         }
     }
