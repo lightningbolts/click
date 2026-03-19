@@ -6,10 +6,13 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsights
+import compose.project.click.click.data.models.IcebreakerRepository
+import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ReconnectReminder
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -37,7 +40,8 @@ sealed class HomeState {
 }
 
 class HomeViewModel(
-    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = createTokenStorage())
+    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = createTokenStorage()),
+    private val connectionRepository: ConnectionRepository = ConnectionRepository()
 ) : ViewModel() {
 
     private val _homeState = MutableStateFlow<HomeState>(HomeState.Loading)
@@ -70,6 +74,10 @@ class HomeViewModel(
     // Nudge feedback toast
     private val _nudgeResult = MutableStateFlow<String?>(null)
     val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
+
+    /** Single highlighted “Poll-Pair” reconnect suggestion (oldest stale chat). */
+    private val _pollPairSuggestion = MutableStateFlow<PollPairSuggestion?>(null)
+    val pollPairSuggestion: StateFlow<PollPairSuggestion?> = _pollPairSuggestion.asStateFlow()
     
     // Track if data has been loaded already
     private var dataLoaded = false
@@ -124,6 +132,12 @@ class HomeViewModel(
 
                         // Expose connected users for name lookups
                         _connectedUsers.value = connectedUsers
+
+                        _pollPairSuggestion.value = connectionRepository.getPollPairSuggestion(
+                            userId = user.id,
+                            connections = connections,
+                            connectedUsers = connectedUsers
+                        )
                         
                         _homeState.value = HomeState.Success(user, stats)
                         
@@ -139,6 +153,7 @@ class HomeViewModel(
                         _homeState.value = HomeState.Loading
                     }
                     else -> {
+                        _pollPairSuggestion.value = null
                         _homeState.value = HomeState.Error("Session expired. Please log in again.")
                     }
                 }
@@ -270,6 +285,32 @@ class HomeViewModel(
 
     fun clearNudgeResult() {
         _nudgeResult.value = null
+    }
+
+    /**
+     * Send one contextual icebreaker as a chat message (same catalog as in-chat icebreakers).
+     */
+    fun sendPollPairIcebreaker(suggestion: PollPairSuggestion) {
+        val currentUser = AppDataManager.currentUser.value ?: return
+        val name = suggestion.otherUserName ?: "them"
+        viewModelScope.launch {
+            try {
+                val details = chatRepository.fetchChatWithDetails(suggestion.connectionId, currentUser.id)
+                val chatId = details?.chat?.id ?: chatRepository.ensureChatForConnection(suggestion.connectionId)?.id
+                if (chatId == null) {
+                    _nudgeResult.value = "Couldn't open chat"
+                    return@launch
+                }
+                val contextTag = details?.connection?.context_tag ?: suggestion.contextTag
+                val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
+                    ?: IcebreakerRepository.getRandomPrompt()
+                val msg = chatRepository.sendMessage(chatId, currentUser.id, prompt.text)
+                _nudgeResult.value =
+                    if (msg != null) "Icebreaker sent to $name!" else "Failed to send icebreaker"
+            } catch (_: Exception) {
+                _nudgeResult.value = "Failed to send icebreaker"
+            }
+        }
     }
 
     /**

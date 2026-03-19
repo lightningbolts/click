@@ -13,6 +13,9 @@ import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.MemoryCapsule
+import compose.project.click.click.data.models.PollPairSuggestion
+import compose.project.click.click.data.models.ReconnectHelper
+import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.User
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
@@ -425,6 +428,53 @@ class ConnectionRepository(
             println("Error checking connection: ${e.message}")
             null
         }
+    }
+
+    /**
+     * Pick one connection the user has not interacted with recently: sorts by
+     * last interaction time ascending (oldest first) among connections whose
+     * activity is cooling, dormant, or inactive (7+ days since last message
+     * or connection creation when never messaged). Uses the in-memory
+     * [connections] list (e.g. from [AppDataManager]) to avoid an extra round-trip.
+     */
+    fun getPollPairSuggestion(
+        userId: String,
+        connections: List<Connection>,
+        connectedUsers: Map<String, User>
+    ): PollPairSuggestion? {
+        val now = Clock.System.now().toEpochMilliseconds()
+        return connections
+            .asSequence()
+            .filter { !(it.expiry_state == "expired" && it.expiry < now) }
+            .mapNotNull { connection ->
+                val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+                val lastInteraction = connection.last_message_at ?: connection.created
+                val status = ReconnectHelper.getActivityStatus(lastInteraction)
+                if (status == ConnectionActivityStatus.ACTIVE) return@mapNotNull null
+                Triple(connection, otherUserId, lastInteraction)
+            }
+            .sortedBy { it.third }
+            .firstOrNull()
+            ?.let { (connection, otherUserId, lastInteraction) ->
+                val otherName = connectedUsers[otherUserId]?.name
+                PollPairSuggestion(
+                    connectionId = connection.id,
+                    otherUserId = otherUserId,
+                    otherUserName = otherName,
+                    lastInteractionAt = lastInteraction,
+                    daysSinceContact = ReconnectHelper.getDaysSinceContact(lastInteraction),
+                    contextTag = connection.context_tag
+                )
+            }
+    }
+
+    /**
+     * Load connections from Supabase and return a poll-pair suggestion, or null.
+     */
+    suspend fun getPollPairSuggestion(userId: String): PollPairSuggestion? {
+        val connections = getUserConnections(userId).getOrNull() ?: return null
+        val usersMap = AppDataManager.connectedUsers.value
+        return getPollPairSuggestion(userId, connections, usersMap)
     }
 
     /**

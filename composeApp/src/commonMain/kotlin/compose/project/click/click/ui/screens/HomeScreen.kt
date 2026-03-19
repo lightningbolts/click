@@ -36,6 +36,7 @@ import compose.project.click.click.ui.components.GlassCard
 import compose.project.click.click.ui.components.GlassCardCompact
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.OnlineFriendItem
+import compose.project.click.click.ui.components.PollPairCard
 import compose.project.click.click.ui.components.RecentClickCard
 import compose.project.click.click.ui.components.StatCard
 import androidx.compose.foundation.layout.WindowInsets
@@ -83,6 +84,7 @@ fun HomeScreen(
     val expandedLocations by viewModel.expandedLocations.collectAsState()
     val connectedUsers by viewModel.connectedUsers.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
+    val pollPairSuggestion by viewModel.pollPairSuggestion.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -174,6 +176,16 @@ fun HomeScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(CardSpacing)
                     ) {
+                        pollPairSuggestion?.let { suggestion ->
+                            item(key = "poll_pair_card") {
+                                PollPairCard(
+                                    suggestion = suggestion,
+                                    onOpenChat = { onNavigateToChat(suggestion.connectionId) },
+                                    onSendIcebreaker = { viewModel.sendPollPairIcebreaker(suggestion) }
+                                )
+                            }
+                        }
+
                         // Recent Connections Section — grouped by location
                         if (locationGroupedConnections.isNotEmpty()) {
                             item {
@@ -669,75 +681,101 @@ fun ReconnectReminderCard(
     onReconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val actionShape = RoundedCornerShape(14.dp)
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         usePrimaryBorder = true,
-        contentPadding = 12.dp
+        contentPadding = 14.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // User avatar placeholder
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = PrimaryBlue.copy(alpha = 0.3f)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    color = PrimaryBlue.copy(alpha = 0.3f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            reminder.userName?.firstOrNull()?.uppercase() ?: "?",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = LightBlue
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        reminder.userName?.firstOrNull()?.uppercase() ?: "?",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = LightBlue
+                        reminder.userName ?: "Someone",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "${reminder.daysSinceContact} days since last chat",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            // Content
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    reminder.userName ?: "Someone",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "${reminder.daysSinceContact} days since last chat",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-            
-            // Action buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = actionShape,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                 ) {
                     Icon(
                         Icons.Filled.Close,
-                        contentDescription = "Dismiss",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Dismiss",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
                 Button(
                     onClick = onReconnect,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = actionShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryBlue
+                        containerColor = PrimaryBlue,
+                        contentColor = Color.White
                     ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                 ) {
                     Icon(
                         Icons.Filled.Chat,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Say Hi", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Say hi",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }

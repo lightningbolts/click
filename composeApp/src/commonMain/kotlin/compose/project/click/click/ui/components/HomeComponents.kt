@@ -1,21 +1,34 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.ui.theme.*
+
+/** Web `globals.css` accent blue — pairs with violet for gradient borders */
+private val WebAccentBlue = Color(0xFF3A86FF)
 
 @Composable
 fun OnlineFriendItem(name: String, status: String) {
@@ -124,6 +137,145 @@ fun RecentClickCard(name: String, time: String, location: String) {
                         "$location • $time",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Hero “Poll-Pair” card: matches dashboard glass + gradient-border language from the web app.
+ */
+@Composable
+fun PollPairCard(
+    suggestion: PollPairSuggestion,
+    onOpenChat: () -> Unit,
+    onSendIcebreaker: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val outerShape = RoundedCornerShape(24.dp)
+    val innerShape = RoundedCornerShape(23.dp)
+    val borderGradient = Brush.linearGradient(
+        colors = listOf(
+            PrimaryBlue.copy(alpha = 0.65f),
+            WebAccentBlue.copy(alpha = 0.65f)
+        )
+    )
+    val displayName = suggestion.otherUserName ?: "your click"
+    val subtitle = when {
+        suggestion.daysSinceContact <= 0 -> "No recent messages — say hi?"
+        suggestion.daysSinceContact == 1 -> "1 day since you last chatted"
+        else -> "${suggestion.daysSinceContact} days since you last chatted"
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(20.dp, outerShape, spotColor = PrimaryBlue.copy(alpha = 0.35f))
+            .clip(outerShape)
+            .background(borderGradient)
+            .padding(1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(innerShape)
+                .background(GlassWhite)
+                .border(1.dp, GlassBorder, innerShape)
+                .padding(18.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(PrimaryBlue.copy(alpha = 0.35f), WebAccentBlue.copy(alpha = 0.2f))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.Icon(
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Poll-Pair",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = NeonPurple
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "It's been a while! Say hi to $displayName",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onOpenChat,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    androidx.compose.material3.Icon(
+                        Icons.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open chat", fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = onSendIcebreaker,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, GlassBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    androidx.compose.material3.Icon(
+                        Icons.Filled.Lightbulb,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = WebAccentBlue
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Icebreaker",
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
             }

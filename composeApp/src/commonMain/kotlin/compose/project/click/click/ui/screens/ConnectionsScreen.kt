@@ -13,6 +13,10 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -27,8 +31,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -63,6 +67,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.AdaptiveSurface
+import compose.project.click.click.ui.components.GlassCard
 import compose.project.click.click.ui.components.PageHeader
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -811,7 +816,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
     val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
 
-    val listState = rememberLazyListState()
+    // Fresh scroll state per chat so opening a thread doesn't keep the previous scroll offset
+    val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -844,13 +850,17 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         }
     }
 
-    // Scroll to bottom when new messages arrive
-    LaunchedEffect(chatMessagesState) {
-        if (chatMessagesState is ChatMessagesState.Success) {
-            val messages = (chatMessagesState as ChatMessagesState.Success).messages
-            if (messages.isNotEmpty()) {
-                coroutineScope.launch { listState.animateScrollToItem(messages.size - 1) }
+    // Newest-first + reverseLayout pins latest messages next to the composer; snap to index 0 after layout
+    val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
+    val scrollAnchor = successMessages.lastOrNull()?.message?.id to successMessages.size
+    LaunchedEffect(chatId, scrollAnchor) {
+        if (successMessages.isEmpty()) return@LaunchedEffect
+        repeat(50) {
+            if (listState.layoutInfo.totalItemsCount > 0) {
+                listState.scrollToItem(0)
+                return@LaunchedEffect
             }
+            delay(16L)
         }
     }
 
@@ -1071,56 +1081,103 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     // Messages
                     if (messages.isEmpty()) {
                         Box(
-                            modifier = messageContentModifier,
+                            modifier = messageContentModifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Filled.ChatBubbleOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    "No messages yet",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    "Say hi to ${chatDetails.otherUser.name}!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            GlassCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                usePrimaryBorder = true,
+                                contentPadding = 28.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Filled.ChatBubbleOutline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = PrimaryBlue.copy(alpha = 0.85f)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        "No messages yet",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "Say hi to ${chatDetails.otherUser.name}!",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     } else {
-                        val timelineEntries = remember(messages) { buildChatTimelineEntries(messages) }
-                        LazyColumn(
-                            state = listState,
-                            modifier = messageContentModifier,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            items(timelineEntries, key = { it.key }) { entry ->
-                                when (entry) {
-                                    is ChatTimelineEntry.DaySeparator -> ConversationDaySeparator(entry.label)
-                                    is ChatTimelineEntry.MessageEntry -> {
-                                        val messageWithUser = entry.messageWithUser
-                                        val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
-                                        ChatMessageBubble(
-                                            messageWithUser = messageWithUser,
-                                            currentUserId = viewModel.currentUserId.collectAsState().value,
-                                            reactions = msgReactions,
-                                            onToggleReaction = { reaction ->
-                                                viewModel.toggleReaction(messageWithUser.message.id, reaction)
-                                            },
-                                            onForward = { msgId ->
-                                                forwardMessageId = msgId
-                                            },
-                                            onLongPress = { contextMenuMessage = messageWithUser }
+                        val timelineEntries = remember(messages) {
+                            buildChatTimelineEntriesNewestFirst(messages)
+                        }
+                        Box(
+                            modifier = messageContentModifier
+                                .padding(horizontal = 4.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    // Stronger tint toward the composer (visual bottom)
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            PrimaryBlue.copy(alpha = 0.05f),
+                                            Color.Transparent,
+                                            Color(0xFF3A86FF).copy(alpha = 0.05f)
                                         )
+                                    )
+                                )
+                        ) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                reverseLayout = true,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(timelineEntries, key = { it.key }) { entry ->
+                                    when (entry) {
+                                        is ChatTimelineEntry.DaySeparator -> {
+                                            Column {
+                                                ConversationDaySeparator(entry.label)
+                                            }
+                                        }
+                                        is ChatTimelineEntry.MessageEntry -> {
+                                            val messageWithUser = entry.messageWithUser
+                                            val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
+                                            Column {
+                                                AnimatedVisibilityChatBubble(
+                                                    messageId = messageWithUser.message.id,
+                                                    isSent = messageWithUser.isSent,
+                                                    content = {
+                                                        ChatMessageBubble(
+                                                            messageWithUser = messageWithUser,
+                                                            currentUserId = viewModel.currentUserId.collectAsState().value,
+                                                            reactions = msgReactions,
+                                                            onToggleReaction = { reaction ->
+                                                                viewModel.toggleReaction(messageWithUser.message.id, reaction)
+                                                            },
+                                                            onForward = { msgId ->
+                                                                forwardMessageId = msgId
+                                                            },
+                                                            onLongPress = { contextMenuMessage = messageWithUser }
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1230,7 +1287,11 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = effectiveImePadding)
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(GlassWhite)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(22.dp))
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
@@ -1419,6 +1480,33 @@ private fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<Chat
     return timeline
 }
 
+/**
+ * Timeline for [reverseLayout] chat: newest message is **first** in the list (index 0) so it sits
+ * next to the composer. Day separators are inserted when the day changes while walking
+ * newest → oldest.
+ */
+private fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>): List<ChatTimelineEntry> {
+    if (messages.isEmpty()) return emptyList()
+    val newestFirst = messages.asReversed()
+    val out = mutableListOf<ChatTimelineEntry>()
+    var prevDayKey: String? = null
+    newestFirst.forEach { messageWithUser ->
+        val dayKey = messageDayKey(messageWithUser.message.timeCreated)
+        if (prevDayKey != null && dayKey != prevDayKey) {
+            out += ChatTimelineEntry.DaySeparator(
+                key = "separator-nf-$dayKey-before-${messageWithUser.message.id}",
+                label = formatConversationDayLabel(messageWithUser.message.timeCreated)
+            )
+        }
+        out += ChatTimelineEntry.MessageEntry(
+            key = messageWithUser.message.id,
+            messageWithUser = messageWithUser
+        )
+        prevDayKey = dayKey
+    }
+    return out
+}
+
 @Composable
 private fun ConversationDaySeparator(label: String) {
     Row(
@@ -1595,6 +1683,35 @@ private fun ForwardDialog(
             TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
+}
+
+@Composable
+private fun AnimatedVisibilityChatBubble(
+    messageId: String,
+    isSent: Boolean,
+    content: @Composable () -> Unit
+) {
+    var visible by remember(messageId) { mutableStateOf(false) }
+    LaunchedEffect(messageId) {
+        visible = true
+    }
+    val bounce = spring<Float>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(bounce) +
+            slideInHorizontally { full -> if (isSent) full / 3 else -full / 3 } +
+            scaleIn(bounce, initialScale = 0.9f),
+        exit = fadeOut(animationSpec = tween(140)) +
+            slideOutHorizontally(animationSpec = tween(200)) { full ->
+                if (isSent) full / 4 else -full / 4
+            } +
+            scaleOut(animationSpec = tween(200), targetScale = 0.92f)
+    ) {
+        content()
+    }
 }
 
 @Composable

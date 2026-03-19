@@ -31,6 +31,19 @@ data class ReconnectReminder(
  * Connection Insights Model - Stats about a user's connections
  */
 @Serializable
+/**
+ * Featured home-screen suggestion: one connection you have not chatted with recently
+ * (oldest last-interaction among non-active / "cooling or colder" ties).
+ */
+data class PollPairSuggestion(
+    val connectionId: String,
+    val otherUserId: String,
+    val otherUserName: String?,
+    val lastInteractionAt: Long,
+    val daysSinceContact: Int,
+    val contextTag: String?
+)
+
 data class ConnectionInsights(
     val totalConnections: Int = 0,
     val keptConnections: Int = 0,          // Connections that passed Vibe Check
