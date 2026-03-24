@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
+import compose.project.click.click.ui.components.PlatformBottomBar
 import compose.project.click.click.calls.ActiveCallOverlay
 import compose.project.click.click.calls.CallOverlayState
 import compose.project.click.click.calls.CallPreviewOverlay
@@ -130,6 +132,7 @@ fun App() {
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val pendingConnectionsCount by AppDataManager.pendingConnectionsCount.collectAsState()
     val usingCachedData by AppDataManager.usingCachedData.collectAsState()
+    val isInitialLoading by AppDataManager.isLoading.collectAsState()
     val appError by AppDataManager.error.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -398,7 +401,7 @@ fun App() {
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = PrimaryBlue)
+                AdaptiveCircularProgressIndicator(color = PrimaryBlue)
             }
         } else if (!authViewModel.isAuthenticated) {
             if (showSignUp) {
@@ -465,7 +468,7 @@ fun App() {
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = PrimaryBlue)
+                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
                 }
             } else if (onboardingStep != "complete") {
                 AnimatedContent(
@@ -695,64 +698,17 @@ fun App() {
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
-                    val navShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-                    NavigationBar(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(navShape),
-                        containerColor = if (isDarkMode) {
-                            GlassDark
-                        } else {
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                        },
-                        tonalElevation = 0.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                                bottomNavItems.forEach { item ->
-                                NavigationBarItem(
-                                    icon = { Icon(item.icon, contentDescription = item.title) },
-                                    selected = currentRoute == item.route,
-                                    onClick = {
-                                        navigateTo(item.route)
-                                        // Reset overlay screens so we can navigate away
-                                        showMyQRCode = false
-                                        showQRScanner = false
-                                        showNfcScreen = false
-                                        focusManager.clearFocus()
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    ),
-                                    alwaysShowLabel = false
-                                )
-                            }
-
-                            // Search button at the end
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
-                                selected = false,
-                                onClick = { navigateTo("search") },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                alwaysShowLabel = false
-                            )
+                    PlatformBottomBar(
+                        items = bottomNavItems + NavigationItem.Search,
+                        currentRoute = currentRoute,
+                        onItemSelected = { item ->
+                            navigateTo(item.route)
+                            showMyQRCode = false
+                            showQRScanner = false
+                            showNfcScreen = false
+                            focusManager.clearFocus()
                         }
-                    }
+                    )
                 }
             ) { paddingValues ->
                 Box(modifier = Modifier
@@ -1085,7 +1041,7 @@ fun App() {
                             renderScreen(animatedScreen)
                         }
 
-                        if (usingCachedData || pendingConnectionsCount > 0 || appError != null) {
+                        if (!isInitialLoading && (usingCachedData || pendingConnectionsCount > 0 || appError != null)) {
                             Card(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)

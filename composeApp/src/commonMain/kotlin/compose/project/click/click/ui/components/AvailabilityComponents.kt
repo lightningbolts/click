@@ -25,6 +25,7 @@ import compose.project.click.click.data.models.DayOfWeek
 import compose.project.click.click.data.models.MutualAvailability
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.ui.theme.PrimaryBlue
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 /**
  * Quick toggle for "I'm free this week" status
@@ -98,7 +99,7 @@ fun AvailabilityToggle(
             
             // Toggle or loading
             if (isLoading) {
-                CircularProgressIndicator(
+                AdaptiveCircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
                     strokeWidth = 2.dp
                 )

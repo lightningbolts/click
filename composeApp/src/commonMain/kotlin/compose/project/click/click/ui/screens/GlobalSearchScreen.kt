@@ -35,6 +35,7 @@ import compose.project.click.click.viewmodel.MessageSearchResult
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 /**
  * Full-screen global search — unified results for People, Messages, and Locations.
@@ -136,7 +137,7 @@ fun GlobalSearchScreen(
             when {
                 // Loading indicator
                 isSearching -> {
-                    CircularProgressIndicator(
+                    AdaptiveCircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
                         color = PrimaryBlue
                     )

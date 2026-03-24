@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.SpeakerPhone
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,6 +66,7 @@ import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlin.math.roundToInt
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 @Composable
 fun CallPreviewOverlay(
@@ -180,7 +180,7 @@ fun CallPreviewOverlay(
 
                 if (overlayState is CallOverlayState.Connecting) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    CircularProgressIndicator(color = LightBlue, strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp))
+                    AdaptiveCircularProgressIndicator(color = LightBlue, strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp))
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

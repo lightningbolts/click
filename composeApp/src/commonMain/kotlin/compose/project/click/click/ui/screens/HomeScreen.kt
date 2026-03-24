@@ -54,6 +54,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 // Spacing constants matching app's consistent 20.dp horizontal padding
 private val ScreenPaddingHorizontal = 20.dp
@@ -112,7 +113,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = PrimaryBlue)
+                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
                 }
             }
             is HomeState.Error -> {

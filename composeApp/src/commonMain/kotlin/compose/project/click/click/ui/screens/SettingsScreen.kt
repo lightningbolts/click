@@ -17,7 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -104,7 +104,7 @@ fun SettingsScreen(
                                     "Free currently",
                                     modifier = Modifier.weight(1f)
                                 )
-                                Switch(
+                                AdaptiveSwitch(
                                     checked = currentAvailability?.isFreeThisWeek ?: false,
                                     onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() },
                                     colors = SwitchDefaults.colors(
@@ -146,7 +146,7 @@ fun SettingsScreen(
                                 Icon(Icons.Default.DarkMode, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Dark Mode", modifier = Modifier.weight(1f))
-                                Switch(
+                                AdaptiveSwitch(
                                     checked = isDarkMode,
                                     onCheckedChange = { onToggleDarkMode() },
                                     colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
@@ -393,7 +393,7 @@ private fun SettingsToggleRow(
                 )
             }
         }
-        Switch(
+        AdaptiveSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(

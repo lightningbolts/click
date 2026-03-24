@@ -15,11 +15,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.material3.Text
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -185,7 +185,7 @@ fun PermissionsOnboardingScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(
+                    AdaptiveCircularProgressIndicator(
                         modifier = Modifier.size(22.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp
@@ -243,7 +243,7 @@ private fun PermissionPreferenceCard(
                     lineHeight = 20.sp
                 )
             }
-            Switch(
+            AdaptiveSwitch(
                 checked = checked,
                 enabled = enabled,
                 onCheckedChange = onCheckedChange

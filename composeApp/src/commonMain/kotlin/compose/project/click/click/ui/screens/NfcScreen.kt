@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -429,7 +430,7 @@ private fun NfcFetchingLocationContent() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        CircularProgressIndicator(
+        AdaptiveCircularProgressIndicator(
             modifier = Modifier.size(32.dp),
             color = PrimaryBlue,
             strokeWidth = 3.dp
@@ -537,7 +538,7 @@ private fun NfcSendingContent() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        CircularProgressIndicator(
+        AdaptiveCircularProgressIndicator(
             modifier = Modifier.size(80.dp),
             color = PrimaryBlue,
             strokeWidth = 6.dp
@@ -644,7 +645,7 @@ private fun NfcCreatingConnectionContent() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        CircularProgressIndicator(
+        AdaptiveCircularProgressIndicator(
             modifier = Modifier.size(80.dp),
             color = PrimaryBlue,
             strokeWidth = 6.dp

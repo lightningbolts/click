@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import qrcode.QRCode
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 private val httpClient = HttpClient {
     install(ContentNegotiation) { json() }
@@ -165,7 +166,7 @@ fun UserQrCode(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                CircularProgressIndicator(
+                AdaptiveCircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
                     color = Color(0xFF8338EC),
                     strokeWidth = 2.dp

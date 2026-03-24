@@ -88,6 +88,10 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.absoluteValue
+import com.mohamedrejeb.calf.ui.dialog.AdaptiveAlertDialog
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
+import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 
 @Composable
 fun ConnectionsScreen(
@@ -410,7 +414,7 @@ fun ConnectionsListView(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        AdaptiveCircularProgressIndicator()
                     }
                 }
                 is ChatListState.Error -> {
@@ -1545,8 +1549,8 @@ private fun formatConversationDayLabel(timestamp: Long, nowMs: Long = Clock.Syst
 
     val dayDifference = (now.date.toEpochDays() - dateTime.date.toEpochDays())
     return when (dayDifference) {
-        0 -> "Today"
-        1 -> "Yesterday"
+        0L -> "Today"
+        1L -> "Yesterday"
         else -> {
             val weekday = dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
             val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }
@@ -1633,7 +1637,7 @@ private fun ChatChannelLoadingView(
                 .padding(top = topInset + 56.dp),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
+            AdaptiveCircularProgressIndicator(
                 modifier = Modifier.size((34f * spinnerScale).dp),
                 strokeWidth = 3.dp,
                 color = spinnerColor
@@ -1675,7 +1679,7 @@ private fun ForwardDialog(
                         }
                     }
                 }
-                is ChatListState.Loading -> { CircularProgressIndicator() }
+                is ChatListState.Loading -> { AdaptiveCircularProgressIndicator() }
                 is ChatListState.Error -> { Text("Failed to load chats") }
             }
         },
@@ -1882,7 +1886,7 @@ private fun MessageActionSheet(
     val isSent = messageWithUser.isSent
     val message = messageWithUser.message
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
@@ -1892,11 +1896,9 @@ private fun MessageActionSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
-    ModalBottomSheet(
+    AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        adaptiveSheetState = sheetState,
     ) {
         Column(
             modifier = Modifier
@@ -1989,58 +1991,32 @@ private fun MessageActionSheet(
 
     // ── Delete message confirmation dialog ──────────────────────────────────
     if (showDeleteMessageConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteMessageConfirm = false },
-            title = { Text("Delete Message?", color = Color.White) },
-            text = {
-                Text(
-                    "This message will be permanently deleted. This cannot be undone.",
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+        AdaptiveAlertDialog(
+            onConfirm = {
+                showDeleteMessageConfirm = false
+                showDeleteMessageFinalConfirm = true
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteMessageConfirm = false
-                    showDeleteMessageFinalConfirm = true
-                }) {
-                    Text("Delete", color = Color(0xFFFF4444))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMessageConfirm = false }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            onDismiss = { showDeleteMessageConfirm = false },
+            confirmText = "Delete",
+            dismissText = "Cancel",
+            title = "Delete Message?",
+            text = "This message will be permanently deleted. This cannot be undone."
         )
     }
 
     // ── Final delete confirmation dialog ───────────────────────────────────
     if (showDeleteMessageFinalConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteMessageFinalConfirm = false },
-            title = { Text("Delete Message Permanently?", color = Color.White) },
-            text = {
-                Text(
-                    "This action is permanent and cannot be undone.",
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+        AdaptiveAlertDialog(
+            onConfirm = {
+                viewModel.deleteMessage(message.id)
+                showDeleteMessageFinalConfirm = false
+                dismiss()
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteMessage(message.id)
-                    showDeleteMessageFinalConfirm = false
-                    dismiss()
-                }) {
-                    Text("Yes, Delete", color = Color(0xFFFF4444))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMessageFinalConfirm = false }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            onDismiss = { showDeleteMessageFinalConfirm = false },
+            confirmText = "Yes, Delete",
+            dismissText = "Cancel",
+            title = "Delete Message Permanently?",
+            text = "This action is permanent and cannot be undone."
         )
     }
 }
@@ -2064,7 +2040,7 @@ private fun ConnectionActionSheet(
     onReport: (String) -> Unit = {},
     onBlock: () -> Unit = {}
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
@@ -2098,11 +2074,9 @@ private fun ConnectionActionSheet(
         showFinalConfirm = true
     }
 
-    ModalBottomSheet(
+    AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        adaptiveSheetState = sheetState,
     ) {
         Column(
             modifier = Modifier
@@ -2226,141 +2200,89 @@ private fun ConnectionActionSheet(
     }
 
     if (showUnarchiveConfirm) {
-        AlertDialog(
-            onDismissRequest = { showUnarchiveConfirm = false },
-            title = { Text("Unarchive Connection?", color = Color.White) },
-            text = {
-                Text(
-                    "This connection will return to your Active list.",
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showUnarchiveConfirm = false
-                    openFinalConfirm(
-                        title = "Confirm Unarchive",
-                        body = "Move this connection back to Active now?",
-                        buttonLabel = "Yes, Unarchive",
-                        buttonColor = PrimaryBlue
-                    ) {
-                        onUnarchive()
-                    }
-                }) {
-                    Text("Unarchive", color = PrimaryBlue)
+        AdaptiveAlertDialog(
+            onConfirm = {
+                showUnarchiveConfirm = false
+                openFinalConfirm(
+                    title = "Confirm Unarchive",
+                    body = "Move this connection back to Active now?",
+                    buttonLabel = "Yes, Unarchive",
+                    buttonColor = PrimaryBlue
+                ) {
+                    onUnarchive()
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showUnarchiveConfirm = false }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            onDismiss = { showUnarchiveConfirm = false },
+            confirmText = "Unarchive",
+            dismissText = "Cancel",
+            title = "Unarchive Connection?",
+            text = "This connection will return to your Active list."
         )
     }
 
     // ── Archive confirmation dialog ────────────────────────────────────────────
     if (showArchiveConfirm) {
-        AlertDialog(
-            onDismissRequest = { showArchiveConfirm = false },
-            title = { Text("Archive Connection?", color = Color.White) },
-            text = {
-                Text(
-                    "This connection will be hidden from your list. You can recover it later.",
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showArchiveConfirm = false
-                    openFinalConfirm(
-                        title = "Confirm Archive",
-                        body = "Archive this connection now? You can unarchive it later.",
-                        buttonLabel = "Yes, Archive",
-                        buttonColor = PrimaryBlue
-                    ) {
-                        onArchive()
-                    }
-                }) {
-                    Text("Archive", color = PrimaryBlue)
+        AdaptiveAlertDialog(
+            onConfirm = {
+                showArchiveConfirm = false
+                openFinalConfirm(
+                    title = "Confirm Archive",
+                    body = "Archive this connection now? You can unarchive it later.",
+                    buttonLabel = "Yes, Archive",
+                    buttonColor = PrimaryBlue
+                ) {
+                    onArchive()
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showArchiveConfirm = false }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            onDismiss = { showArchiveConfirm = false },
+            confirmText = "Archive",
+            dismissText = "Cancel",
+            title = "Archive Connection?",
+            text = "This connection will be hidden from your list. You can recover it later."
         )
     }
 
     // ── Block confirmation dialog ──────────────────────────────────────────────
     if (showBlockConfirm) {
-        AlertDialog(
-            onDismissRequest = { showBlockConfirm = false },
-            title = { Text("Block User?", color = Color.White) },
-            text = {
-                Text(
-                    "They won't be able to contact you and this connection will be removed. This cannot be undone.",
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBlockConfirm = false
-                    openFinalConfirm(
-                        title = "Confirm Block",
-                        body = "Block this user and remove this connection? This cannot be undone.",
-                        buttonLabel = "Yes, Block",
-                        buttonColor = Color(0xFFFF4444)
-                    ) {
-                        onBlock()
-                    }
-                }) {
-                    Text("Block", color = Color(0xFFFF4444))
+        AdaptiveAlertDialog(
+            onConfirm = {
+                showBlockConfirm = false
+                openFinalConfirm(
+                    title = "Confirm Block",
+                    body = "Block this user and remove this connection? This cannot be undone.",
+                    buttonLabel = "Yes, Block",
+                    buttonColor = Color(0xFFFF4444)
+                ) {
+                    onBlock()
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showBlockConfirm = false }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            onDismiss = { showBlockConfirm = false },
+            confirmText = "Block",
+            dismissText = "Cancel",
+            title = "Block User?",
+            text = "They won't be able to contact you and this connection will be removed. This cannot be undone."
         )
     }
 
     // ── Delete confirmation dialog ─────────────────────────────────────────────
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Remove Connection?", color = Color.White) },
-            text = {
-                Text(
-                    "This will permanently remove this connection and all messages. This cannot be undone.",
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    openFinalConfirm(
-                        title = "Confirm Remove",
-                        body = "Permanently remove this connection and all messages? This cannot be undone.",
-                        buttonLabel = "Yes, Remove",
-                        buttonColor = Color(0xFFFF4444)
-                    ) {
-                        onDelete()
-                    }
-                }) {
-                    Text("Remove", color = Color(0xFFFF4444))
+        AdaptiveAlertDialog(
+            onConfirm = {
+                showDeleteConfirm = false
+                openFinalConfirm(
+                    title = "Confirm Remove",
+                    body = "Permanently remove this connection and all messages? This cannot be undone.",
+                    buttonLabel = "Yes, Remove",
+                    buttonColor = Color(0xFFFF4444)
+                ) {
+                    onDelete()
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            onDismiss = { showDeleteConfirm = false },
+            confirmText = "Remove",
+            dismissText = "Cancel",
+            title = "Remove Connection?",
+            text = "This will permanently remove this connection and all messages. This cannot be undone."
         )
     }
 
@@ -2419,37 +2341,21 @@ private fun ConnectionActionSheet(
 
     // ── Final destructive-action confirmation dialog ────────────────────────
     if (showFinalConfirm) {
-        AlertDialog(
-            onDismissRequest = {
+        AdaptiveAlertDialog(
+            onConfirm = {
+                finalConfirmAction?.invoke()
+                showFinalConfirm = false
+                finalConfirmAction = null
+                dismiss()
+            },
+            onDismiss = {
                 showFinalConfirm = false
                 finalConfirmAction = null
             },
-            title = { Text(finalConfirmTitle, color = Color.White) },
-            text = {
-                Text(
-                    finalConfirmBody,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    finalConfirmAction?.invoke()
-                    showFinalConfirm = false
-                    finalConfirmAction = null
-                    dismiss()
-                }) {
-                    Text(finalConfirmButtonLabel, color = finalConfirmButtonColor)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showFinalConfirm = false
-                    finalConfirmAction = null
-                }) {
-                    Text("Cancel", color = LightBlue)
-                }
-            },
-            containerColor = SurfaceDark
+            confirmText = finalConfirmButtonLabel,
+            dismissText = "Cancel",
+            title = finalConfirmTitle,
+            text = finalConfirmBody
         )
     }
 }

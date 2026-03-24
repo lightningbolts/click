@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
+import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
+import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,7 @@ import compose.project.click.click.data.models.User
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,7 +105,7 @@ fun MapScreen(
     }
 
     // Bottom sheet state
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
     
     // Update sheet visibility based on selection
@@ -265,14 +268,12 @@ fun MapScreen(
     // Connection Bottom Sheet
     if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
         val connectionSelection = selection as MapSelection.ConnectionSelected
-        ModalBottomSheet(
+        AdaptiveBottomSheet(
             onDismissRequest = {
                 showBottomSheet = false
                 viewModel.clearSelection()
             },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp
+            adaptiveSheetState = sheetState,
         ) {
             ConnectionMarkerSheet(
                 point = connectionSelection.point,
@@ -542,7 +543,7 @@ private fun LoadingState() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator()
+        AdaptiveCircularProgressIndicator()
     }
 }
 
@@ -653,7 +654,7 @@ private fun ConnectionsList(
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                AdaptiveCircularProgressIndicator()
             }
         }
         is MapState.Error -> {

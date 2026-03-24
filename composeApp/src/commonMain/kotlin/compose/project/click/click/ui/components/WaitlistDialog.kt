@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.WaitlistApiClient
 import kotlinx.coroutines.launch
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 @Composable
 fun WaitlistDialog(
@@ -112,7 +112,7 @@ fun WaitlistDialog(
                     modifier = androidx.compose.ui.Modifier.height(40.dp)
                 ) {
                     if (isSubmitting) {
-                        CircularProgressIndicator(
+                        AdaptiveCircularProgressIndicator(
                             modifier = androidx.compose.ui.Modifier.height(18.dp),
                             strokeWidth = 2.dp
                         )

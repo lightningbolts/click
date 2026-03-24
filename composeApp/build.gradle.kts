@@ -38,6 +38,7 @@ kotlin {
             baseName = "ComposeApp"
             isStatic = true
             freeCompilerArgs += listOf("-Xbinary=bundleId=compose.project.click.click")
+            export("com.mohamedrejeb.calf:calf-ui:0.9.0")
         }
     }
 
@@ -78,6 +79,8 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
+            api("com.mohamedrejeb.calf:calf-ui:0.9.0")
+
             // Supabase dependencies
             implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:3.0.2"))
             implementation("io.github.jan-tennert.supabase:postgrest-kt")
@@ -89,8 +92,9 @@ kotlin {
             implementation("io.ktor:ktor-client-content-negotiation:3.0.1")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
 
-            // DateTime library
-            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+            // DateTime library – use the 0.6.x-compat artifact so Calf's transitive
+            // kotlinx-datetime 0.7.1 upgrade doesn't remove Clock.System / Instant
+            implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1-0.6.x-compat")
 
             // Kotlinx Serialization
             implementation(libs.kotlinx.serialization.json)
