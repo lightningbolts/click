@@ -27,12 +27,17 @@ data class QrPayload(
 data class TokenQrPayload(
     val token: String,
     val userId: String,
-    val exp: Long
+    val exp: Long,
+    val name: String? = null,
+    val issuedAt: Long? = null
 )
 
 private val json = Json { ignoreUnknownKeys = true }
 
 fun QrPayload.toJson(): String = json.encodeToString(QrPayload.serializer(), this)
+
+fun buildOfflineQrPayload(userId: String, name: String?): String =
+    QrPayload(userId = userId, name = name).toJson()
 
 fun String.toQrPayloadOrNull(): QrPayload? =
     try {

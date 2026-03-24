@@ -1,6 +1,7 @@
 package compose.project.click.click.data
 
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.CachedAppSnapshot
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
@@ -12,6 +13,7 @@ import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import kotlinx.coroutines.async
@@ -26,6 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * Singleton app state manager that loads data once at app startup.
@@ -34,13 +39,16 @@ import kotlinx.coroutines.delay
 object AppDataManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var presenceHeartbeatJob: Job? = null
+    private var pendingSyncJob: Job? = null
     
     private val authRepository = AuthRepository()
     private val supabaseRepository = SupabaseRepository()
     private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
     private val notificationPreferencesRepository = NotificationPreferencesRepository()
+    private val connectionRepository = ConnectionRepository()
     private val tokenStorage = createTokenStorage() // For local preferences storage
     private val pushNotificationService = createPushNotificationService()
+    private val json = Json { ignoreUnknownKeys = true }
     
     // Current user state
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -70,10 +78,18 @@ object AppDataManager {
     private var lastRefreshTime: Long = 0
     private const val REFRESH_COOLDOWN_MS = 30_000 // 30 seconds minimum between refreshes
     private const val PRESENCE_HEARTBEAT_MS = 30_000L
+    private const val PENDING_SYNC_RETRY_MS = 15_000L
+    private const val STARTUP_TIMEOUT_MS = 15_000L
     
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _pendingConnectionsCount = MutableStateFlow(0)
+    val pendingConnectionsCount: StateFlow<Int> = _pendingConnectionsCount.asStateFlow()
+
+    private val _usingCachedData = MutableStateFlow(false)
+    val usingCachedData: StateFlow<Boolean> = _usingCachedData.asStateFlow()
     
     // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
     private val _ghostModeEnabled = MutableStateFlow(false)
@@ -106,6 +122,10 @@ object AppDataManager {
      */
     fun initializeData() {
         if (_isDataLoaded.value || _isLoading.value) return // Already loaded or loading
+        scope.launch {
+            refreshPendingConnectionCount()
+        }
+        startPendingConnectionSync()
         
         scope.launch {
             loadAllData()
@@ -118,158 +138,170 @@ object AppDataManager {
     private suspend fun loadAllData() {
         _isLoading.value = true
         _error.value = null
+        val restoredFromCache = restoreCachedSnapshot()
         
         try {
             // Get current user from auth
             val authUser = authRepository.getCurrentUser()
             if (authUser == null) {
                 println("AppDataManager: No auth user found")
+                if (!restoredFromCache) {
+                    _isDataLoaded.value = false
+                }
                 _isLoading.value = false
                 return
             }
             
             println("AppDataManager: Loading data for user ${authUser.id}")
-            
-            // Extract name from auth metadata (prefer full_name over name, set during signup/update)
-            val fullName = authUser.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
-            val legacyName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
-            val authName = fullName ?: legacyName
-            println("AppDataManager: Auth metadata - full_name: $fullName, name: $legacyName, using: $authName")
-            
-            // Fetch user data from database
-            var user = supabaseRepository.fetchUserById(authUser.id)
-            println("AppDataManager: Fetched user from DB: ${user?.name}")
-            
-            if (user == null) {
-                // Create user in database if not exists
-                val newUser = User(
-                    id = authUser.id,
-                    name = resolveDisplayName(
+
+            withTimeout(STARTUP_TIMEOUT_MS) {
+                // Extract name from auth metadata (prefer full_name over name, set during signup/update)
+                val fullName = authUser.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
+                val legacyName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
+                val authName = fullName ?: legacyName
+                println("AppDataManager: Auth metadata - full_name: $fullName, name: $legacyName, using: $authName")
+
+                // Fetch user data from database
+                var user = supabaseRepository.fetchUserById(authUser.id)
+                println("AppDataManager: Fetched user from DB: ${user?.name}")
+
+                if (user == null) {
+                    // Create user in database if not exists
+                    val newUser = User(
+                        id = authUser.id,
+                        name = resolveDisplayName(
+                            fullName = authName,
+                            name = null,
+                            email = authUser.email
+                        ),
+                        email = authUser.email,
+                        image = null,
+                        createdAt = Clock.System.now().toEpochMilliseconds(),
+                        lastPolled = null,
+                        connections = emptyList(),
+                        paired_with = emptyList(),
+                        connection_today = 0,
+                        last_paired = null
+                    )
+                    println("AppDataManager: Creating new user in DB: ${newUser.name}")
+                    supabaseRepository.upsertUser(newUser)
+                    user = newUser
+                } else {
+                    val desiredName = resolveDisplayName(
                         fullName = authName,
-                        name = null,
-                        email = authUser.email
-                    ),
-                    email = authUser.email,
-                    image = null,
-                    createdAt = Clock.System.now().toEpochMilliseconds(),
-                    lastPolled = null,
-                    connections = emptyList(),
-                    paired_with = emptyList(),
-                    connection_today = 0,
-                    last_paired = null
-                )
-                println("AppDataManager: Creating new user in DB: ${newUser.name}")
-                supabaseRepository.upsertUser(newUser)
-                user = newUser
-            } else {
-                val desiredName = resolveDisplayName(
-                    fullName = authName,
-                    name = user.name,
-                    email = authUser.email ?: user.email
-                )
-                val desiredEmail = authUser.email ?: user.email
-                val syncedUser = user.copy(
-                    name = desiredName,
-                    email = desiredEmail
-                )
-                if (syncedUser != user) {
-                    println("AppDataManager: Syncing current user profile to users table: ${syncedUser.name}")
-                    supabaseRepository.upsertUser(syncedUser)
-                    user = syncedUser
+                        name = user.name,
+                        email = authUser.email ?: user.email
+                    )
+                    val desiredEmail = authUser.email ?: user.email
+                    val syncedUser = user.copy(
+                        name = desiredName,
+                        email = desiredEmail
+                    )
+                    if (syncedUser != user) {
+                        println("AppDataManager: Syncing current user profile to users table: ${syncedUser.name}")
+                        supabaseRepository.upsertUser(syncedUser)
+                        user = syncedUser
+                    }
                 }
-            }
-            
-            _currentUser.value = user
-            println("AppDataManager: Current user set to: ${user.name}")
-            startPresenceHeartbeat(user.id)
 
-            // Load location preferences from Supabase
-            runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
-                .onSuccess { _locationPreferences.value = it }
-                .onFailure { println("AppDataManager: Failed to load location preferences: ${it.message}") }
+                _currentUser.value = user
+                println("AppDataManager: Current user set to: ${user.name}")
+                startPresenceHeartbeat(user.id)
 
-            val localNotificationPreferences = NotificationPreferences(
-                messagePushEnabled = tokenStorage.getMessageNotificationsEnabled() ?: true,
-                callPushEnabled = tokenStorage.getCallNotificationsEnabled() ?: true,
-            )
-            _notificationPreferences.value = localNotificationPreferences
-            NotificationRuntimeState.setNotificationPreferences(
-                messageEnabled = localNotificationPreferences.messagePushEnabled,
-                callEnabled = localNotificationPreferences.callPushEnabled,
-            )
+                // Load location preferences from Supabase
+                runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
+                    .onSuccess { _locationPreferences.value = it }
+                    .onFailure { println("AppDataManager: Failed to load location preferences: ${it.message}") }
 
-            // Push registration is non-critical for first paint. Keep it off the main
-            // startup path so chats/connections do not wait on permission or token work.
-            if (localNotificationPreferences.messagePushEnabled || localNotificationPreferences.callPushEnabled) {
-                scope.launch {
-                    runCatching { pushNotificationService.requestPermission() }
-                        .onFailure { println("AppDataManager: Push permission request failed: ${it.message}") }
-                    runCatching { pushNotificationService.registerToken(user.id) }
-                        .onFailure { println("AppDataManager: Push token registration failed: ${it.message}") }
-                }
-            }
-
-            scope.launch {
-                val remotePreferences = notificationPreferencesRepository.fetchPreferences(user.id)
-                _notificationPreferences.value = remotePreferences
+                val localNotificationPreferences = NotificationPreferences(
+                    messagePushEnabled = tokenStorage.getMessageNotificationsEnabled() ?: true,
+                    callPushEnabled = tokenStorage.getCallNotificationsEnabled() ?: true,
+                )
+                _notificationPreferences.value = localNotificationPreferences
                 NotificationRuntimeState.setNotificationPreferences(
-                    messageEnabled = remotePreferences.messagePushEnabled,
-                    callEnabled = remotePreferences.callPushEnabled,
+                    messageEnabled = localNotificationPreferences.messagePushEnabled,
+                    callEnabled = localNotificationPreferences.callPushEnabled,
                 )
-                tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
-                tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)
 
-                if (remotePreferences.messagePushEnabled || remotePreferences.callPushEnabled) {
-                    runCatching { pushNotificationService.requestPermission() }
-                        .onFailure { println("AppDataManager: Push permission request failed after sync: ${it.message}") }
-                    runCatching { pushNotificationService.registerToken(user.id) }
-                        .onFailure { println("AppDataManager: Push token registration failed after sync: ${it.message}") }
-                }
-            }
-            
-            // Load availability from local storage first for immediate display
-            val localFreeThisWeek = tokenStorage.getFreeThisWeek()
-            if (localFreeThisWeek != null) {
-                // Use local value immediately
-                _userAvailability.value = UserAvailability(
-                    userId = user.id,
-                    isFreeThisWeek = localFreeThisWeek,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                )
-                println("AppDataManager: Loaded local availability: isFreeThisWeek=$localFreeThisWeek")
-            }
-
-            coroutineScope {
-                val availabilityDeferred = async {
-                    runCatching { supabaseRepository.fetchUserAvailability(user.id) }
-                        .onFailure { println("AppDataManager: Availability fetch failed: ${it.message}") }
-                        .getOrNull()
+                // Push registration is non-critical for first paint. Keep it off the main
+                // startup path so chats/connections do not wait on permission or token work.
+                if (localNotificationPreferences.messagePushEnabled || localNotificationPreferences.callPushEnabled) {
+                    scope.launch {
+                        runCatching { pushNotificationService.requestPermission() }
+                            .onFailure { println("AppDataManager: Push permission request failed: ${it.message}") }
+                        runCatching { pushNotificationService.registerToken(user.id) }
+                            .onFailure { println("AppDataManager: Push token registration failed: ${it.message}") }
+                    }
                 }
 
-                // Prioritize connections and connected-user hydration so the Home/Map/Chats
-                // screens are ready before slower auxiliary startup work completes.
-                val userConnections = supabaseRepository.fetchUserConnections(user.id)
-                _connections.value = userConnections
-                refreshConnectedUsers(userConnections, user.id)
+                scope.launch {
+                    val remotePreferences = notificationPreferencesRepository.fetchPreferences(user.id)
+                    _notificationPreferences.value = remotePreferences
+                    NotificationRuntimeState.setNotificationPreferences(
+                        messageEnabled = remotePreferences.messagePushEnabled,
+                        callEnabled = remotePreferences.callPushEnabled,
+                    )
+                    tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
+                    tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)
 
-                _isDataLoaded.value = true
-                lastRefreshTime = Clock.System.now().toEpochMilliseconds()
+                    if (remotePreferences.messagePushEnabled || remotePreferences.callPushEnabled) {
+                        runCatching { pushNotificationService.requestPermission() }
+                            .onFailure { println("AppDataManager: Push permission request failed after sync: ${it.message}") }
+                        runCatching { pushNotificationService.registerToken(user.id) }
+                            .onFailure { println("AppDataManager: Push token registration failed after sync: ${it.message}") }
+                    }
+                }
 
-                // Apply availability after the primary connection data is visible.
-                val availability = availabilityDeferred.await()
-                if (availability != null) {
-                    _userAvailability.value = availability
-                    tokenStorage.saveFreeThisWeek(availability.isFreeThisWeek)
-                    println("AppDataManager: Synced availability from Supabase: isFreeThisWeek=${availability.isFreeThisWeek}")
-                } else if (localFreeThisWeek == null) {
-                    println("AppDataManager: No availability found locally or on server")
+                // Load availability from local storage first for immediate display
+                val localFreeThisWeek = tokenStorage.getFreeThisWeek()
+                if (localFreeThisWeek != null) {
+                    // Use local value immediately
+                    _userAvailability.value = UserAvailability(
+                        userId = user.id,
+                        isFreeThisWeek = localFreeThisWeek,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds()
+                    )
+                    println("AppDataManager: Loaded local availability: isFreeThisWeek=$localFreeThisWeek")
+                }
+
+                coroutineScope {
+                    val availabilityDeferred = async {
+                        runCatching { supabaseRepository.fetchUserAvailability(user.id) }
+                            .onFailure { println("AppDataManager: Availability fetch failed: ${it.message}") }
+                            .getOrNull()
+                    }
+
+                    // Prioritize connections and connected-user hydration so the Home/Map/Chats
+                    // screens are ready before slower auxiliary startup work completes.
+                    val userConnections = supabaseRepository.fetchUserConnections(user.id)
+                    _connections.value = userConnections
+                    refreshConnectedUsers(userConnections, user.id)
+
+                    _isDataLoaded.value = true
+                    _usingCachedData.value = false
+                    lastRefreshTime = Clock.System.now().toEpochMilliseconds()
+                    persistSnapshot()
+
+                    // Apply availability after the primary connection data is visible.
+                    val availability = availabilityDeferred.await()
+                    if (availability != null) {
+                        _userAvailability.value = availability
+                        tokenStorage.saveFreeThisWeek(availability.isFreeThisWeek)
+                        println("AppDataManager: Synced availability from Supabase: isFreeThisWeek=${availability.isFreeThisWeek}")
+                    } else if (localFreeThisWeek == null) {
+                        println("AppDataManager: No availability found locally or on server")
+                    }
                 }
             }
             
         } catch (e: Exception) {
             println("Error loading app data: ${e.message}")
             e.printStackTrace()
-            _error.value = e.message
+            _error.value = e.message ?: "Offline mode is active."
+            if (restoredFromCache) {
+                _isDataLoaded.value = true
+                _usingCachedData.value = true
+            }
         } finally {
             _isLoading.value = false
         }
@@ -311,6 +343,8 @@ object AppDataManager {
         _error.value = null
         _notificationPreferences.value = NotificationPreferences()
         _locationPreferences.value = LocationPreferences()
+        _pendingConnectionsCount.value = 0
+        _usingCachedData.value = false
         NotificationRuntimeState.setNotificationPreferences(messageEnabled = true, callEnabled = true)
     }
 
@@ -358,6 +392,10 @@ object AppDataManager {
                 refreshConnectedUsers(_connections.value, currentUserId)
             }
         }
+
+        scope.launch {
+            persistSnapshot()
+        }
     }
     
     /**
@@ -365,6 +403,37 @@ object AppDataManager {
      */
     fun removeConnection(connectionId: String) {
         _connections.value = _connections.value.filter { it.id != connectionId }
+        scope.launch {
+            persistSnapshot()
+        }
+    }
+
+    fun replaceLocalConnection(localId: String, syncedConnection: Connection, otherUser: User? = null) {
+        _connections.value = _connections.value
+            .filterNot { it.id == localId }
+            .plus(syncedConnection)
+            .distinctBy { it.id }
+        if (otherUser != null) {
+            _connectedUsers.value = _connectedUsers.value + (otherUser.id to otherUser)
+        }
+        scope.launch {
+            persistSnapshot()
+        }
+    }
+
+    fun setPendingConnectionsCount(count: Int) {
+        _pendingConnectionsCount.value = count
+    }
+
+    suspend fun refreshPendingConnectionCount() {
+        val queueJson = tokenStorage.getPendingConnectionQueue()
+        _pendingConnectionsCount.value = runCatching {
+            if (queueJson.isNullOrBlank()) {
+                0
+            } else {
+                json.decodeFromString<List<compose.project.click.click.data.models.PendingConnectionDraft>>(queueJson).size
+            }
+        }.getOrElse { 0 }
     }
 
     fun setMessageNotificationsEnabled(enabled: Boolean) {
@@ -495,6 +564,7 @@ object AppDataManager {
         scope.launch {
             runCatching { supabaseRepository.updateLocationPreferences(userId, prefs) }
                 .onFailure { println("AppDataManager: Failed to save location preferences: ${it.message}") }
+            persistSnapshot()
         }
     }
 
@@ -645,12 +715,61 @@ object AppDataManager {
                 } else {
                     println("updateUsername: Successfully updated full name to: $newName")
                 }
+                persistSnapshot()
             } catch (e: Exception) {
                 println("updateUsername: Error updating name: ${e.message}")
                 e.printStackTrace()
                 // Only revert if we couldn't update auth metadata either
                 _currentUser.value = user.copy(name = previousName)
             }
+        }
+    }
+
+    private fun startPendingConnectionSync() {
+        if (pendingSyncJob?.isActive == true) return
+
+        pendingSyncJob = scope.launch {
+            while (true) {
+                delay(PENDING_SYNC_RETRY_MS)
+                val currentUserId = _currentUser.value?.id
+                if (currentUserId.isNullOrBlank()) continue
+
+                runCatching { connectionRepository.syncPendingConnections() }
+                    .onFailure { println("AppDataManager: Pending sync attempt failed: ${it.message}") }
+                refreshPendingConnectionCount()
+            }
+        }
+    }
+
+    private suspend fun restoreCachedSnapshot(): Boolean {
+        val snapshotJson = tokenStorage.getCachedAppSnapshot()
+        if (snapshotJson.isNullOrBlank()) return false
+
+        return runCatching {
+            val snapshot = json.decodeFromString<CachedAppSnapshot>(snapshotJson)
+            _currentUser.value = snapshot.currentUser
+            _connections.value = snapshot.connections
+            _connectedUsers.value = snapshot.connectedUsers.associateBy { it.id }
+            _locationPreferences.value = snapshot.locationPreferences
+            _isDataLoaded.value = snapshot.currentUser != null || snapshot.connections.isNotEmpty()
+            _usingCachedData.value = _isDataLoaded.value
+            snapshot
+        }.onFailure {
+            println("AppDataManager: Failed to restore cached snapshot: ${it.message}")
+        }.isSuccess
+    }
+
+    private suspend fun persistSnapshot() {
+        val snapshot = CachedAppSnapshot(
+            currentUser = _currentUser.value,
+            connections = _connections.value,
+            connectedUsers = _connectedUsers.value.values.toList(),
+            locationPreferences = _locationPreferences.value
+        )
+        runCatching {
+            tokenStorage.saveCachedAppSnapshot(json.encodeToString(snapshot))
+        }.onFailure {
+            println("AppDataManager: Failed to persist cached snapshot: ${it.message}")
         }
     }
 }

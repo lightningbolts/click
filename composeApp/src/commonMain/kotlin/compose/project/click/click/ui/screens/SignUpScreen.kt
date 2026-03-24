@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.theme.*
@@ -62,6 +64,9 @@ fun SignUpScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            }
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
@@ -93,6 +98,8 @@ fun SignUpScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
+                .navigationBarsPadding()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp)
                 .padding(top = topInset + 60.dp, bottom = 24.dp),
@@ -271,6 +278,7 @@ fun SignUpScreen(
             // Sign Up Button
             Button(
                 onClick = {
+                    focusManager.clearFocus()
                     if (canSignUp) {
                         onEmailSignUp(name, email, password)
                     }

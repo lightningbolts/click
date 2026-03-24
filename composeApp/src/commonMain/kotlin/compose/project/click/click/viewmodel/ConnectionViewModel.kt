@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.isPendingSync
 import compose.project.click.click.data.repository.ConnectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -107,7 +108,9 @@ class ConnectionViewModel : ViewModel() {
 
                     // Force a full refresh so connections screen picks up the new connection
                     // This also updates the connected users map
-                    AppDataManager.refresh(force = true)
+                    if (!connection.isPendingSync()) {
+                        AppDataManager.refresh(force = true)
+                    }
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Failed to create connection"
                     _connectionState.value = ConnectionState.Error(error)

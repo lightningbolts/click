@@ -62,6 +62,9 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
+        private const val KEY_ONBOARDING_STATE = "onboarding_state"
+        private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
+        private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -167,6 +170,39 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         } else {
             null
         }
+    }
+
+    override suspend fun saveOnboardingState(state: String?) {
+        sharedPreferences.edit().apply {
+            if (state == null) remove(KEY_ONBOARDING_STATE) else putString(KEY_ONBOARDING_STATE, state)
+            apply()
+        }
+    }
+
+    override suspend fun getOnboardingState(): String? {
+        return sharedPreferences.getString(KEY_ONBOARDING_STATE, null)
+    }
+
+    override suspend fun saveCachedAppSnapshot(snapshot: String?) {
+        sharedPreferences.edit().apply {
+            if (snapshot == null) remove(KEY_CACHED_APP_SNAPSHOT) else putString(KEY_CACHED_APP_SNAPSHOT, snapshot)
+            apply()
+        }
+    }
+
+    override suspend fun getCachedAppSnapshot(): String? {
+        return sharedPreferences.getString(KEY_CACHED_APP_SNAPSHOT, null)
+    }
+
+    override suspend fun savePendingConnectionQueue(queue: String?) {
+        sharedPreferences.edit().apply {
+            if (queue == null) remove(KEY_PENDING_CONNECTION_QUEUE) else putString(KEY_PENDING_CONNECTION_QUEUE, queue)
+            apply()
+        }
+    }
+
+    override suspend fun getPendingConnectionQueue(): String? {
+        return sharedPreferences.getString(KEY_PENDING_CONNECTION_QUEUE, null)
     }
 }
 

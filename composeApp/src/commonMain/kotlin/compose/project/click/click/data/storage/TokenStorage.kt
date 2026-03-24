@@ -33,6 +33,14 @@ interface TokenStorage {
     // Location onboarding: has the user seen the pre-permission explainer (Build my map / Not now)
     suspend fun saveLocationExplainerSeen(seen: Boolean)
     suspend fun getLocationExplainerSeen(): Boolean?
+
+    // Serialized local state for onboarding, offline cache, and deferred sync
+    suspend fun saveOnboardingState(state: String?)
+    suspend fun getOnboardingState(): String?
+    suspend fun saveCachedAppSnapshot(snapshot: String?)
+    suspend fun getCachedAppSnapshot(): String?
+    suspend fun savePendingConnectionQueue(queue: String?)
+    suspend fun getPendingConnectionQueue(): String?
 }
 
 expect fun createTokenStorage(): TokenStorage

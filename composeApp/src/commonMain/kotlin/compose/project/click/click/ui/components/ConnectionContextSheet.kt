@@ -18,7 +18,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -209,28 +208,17 @@ fun ConnectionContextSheet(
             )
 
             Text(
-                text = if (noisePermissionGranted) {
-                    "Store only a 2-second noise category for this encounter. No raw audio is saved."
-                } else {
-                    "Opt in to store only a 2-second noise category. If microphone permission is unavailable, Click will skip this enrichment."
+                text = when {
+                    ambientNoiseOptIn && noisePermissionGranted ->
+                        "Ambient sound enrichment is enabled from onboarding. Click stores only a 2-second noise category for this encounter."
+                    ambientNoiseOptIn ->
+                        "Ambient sound enrichment is enabled, but microphone permission is unavailable right now so Click will skip it for this encounter."
+                    else ->
+                        "Ambient sound enrichment is currently off. You can change it later in Settings."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Enable ambient noise enrichment",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Switch(
-                    checked = ambientNoiseOptIn,
-                    onCheckedChange = { ambientNoiseOptIn = it }
-                )
-            }
 
             Spacer(modifier = Modifier.height(4.dp))
 

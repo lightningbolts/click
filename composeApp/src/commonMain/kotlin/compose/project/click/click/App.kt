@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
@@ -44,7 +45,9 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
+import compose.project.click.click.data.models.OnboardingState
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.isPendingSync
 import compose.project.click.click.ui.components.ConnectionRevealOverlay
 import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
@@ -53,6 +56,7 @@ import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
+import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
@@ -70,6 +74,10 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlin.coroutines.resume
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.viewmodel.ConnectionState
@@ -81,12 +89,6 @@ fun App() {
     data class PendingQrConnection(
         val userId: String,
         val qrToken: String?
-    )
-
-    data class PendingQrLocationConsent(
-        val connection: PendingQrConnection,
-        val contextTag: ContextTag?,
-        val noiseOptIn: Boolean
     )
 
     // Default to dark until persisted preference is loaded.
@@ -112,6 +114,8 @@ fun App() {
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
+    val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
+    val onboardingJson = remember { Json { ignoreUnknownKeys = true } }
 
     val currentUser = when (val state = authViewModel.authState) {
         is AuthState.Success -> User(id = state.userId, name = state.name ?: state.email, createdAt = 0L)
@@ -119,6 +123,14 @@ fun App() {
     }
 
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var onboardingState by remember { mutableStateOf<OnboardingState?>(null) }
+    var isCompletingPermissions by remember { mutableStateOf(false) }
+
+    val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
+    val locationPreferences by AppDataManager.locationPreferences.collectAsState()
+    val pendingConnectionsCount by AppDataManager.pendingConnectionsCount.collectAsState()
+    val usingCachedData by AppDataManager.usingCachedData.collectAsState()
+    val appError by AppDataManager.error.collectAsState()
 
     LaunchedEffect(Unit) {
         val persisted = tokenStorage.getDarkModeEnabled()
@@ -126,6 +138,78 @@ fun App() {
             isDarkMode = persisted
         }
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+    }
+
+    suspend fun persistOnboardingState(state: OnboardingState) {
+        onboardingState = state
+        tokenStorage.saveOnboardingState(onboardingJson.encodeToString(state))
+    }
+
+    suspend fun requestLocationPermissionIfNeeded(shouldRequest: Boolean) {
+        if (!shouldRequest) return
+        suspendCancellableCoroutine<Unit> { continuation ->
+            requestLocationPermissionThen {
+                if (continuation.isActive) {
+                    continuation.resume(Unit)
+                }
+            }
+        }
+    }
+
+    suspend fun requestMicrophonePermissionIfNeeded(shouldRequest: Boolean) {
+        if (!shouldRequest) return
+        suspendCancellableCoroutine<Unit> { continuation ->
+            requestMicrophonePermissionThen {
+                if (continuation.isActive) {
+                    continuation.resume(Unit)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(authViewModel.isAuthenticated, currentUser.id) {
+        if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
+            onboardingState = null
+            return@LaunchedEffect
+        }
+
+        val savedState = tokenStorage.getOnboardingState()
+            ?.let { serialized ->
+                runCatching { onboardingJson.decodeFromString<OnboardingState>(serialized) }.getOrNull()
+            }
+
+        if (savedState != null) {
+            onboardingState = savedState
+            return@LaunchedEffect
+        }
+
+        val dbTagsInitialized = runCatching {
+            compose.project.click.click.data.repository.SupabaseRepository()
+                .fetchTagsInitialized(currentUser.id)
+        }.getOrNull()
+
+        val localTagsInit = tokenStorage.getTagsInitialized() == true
+        val tagsReady = dbTagsInitialized == true || localTagsInit
+
+        val localPermissionsReady = tokenStorage.getLocationExplainerSeen() == true &&
+            tokenStorage.getAmbientNoiseOptIn() != null
+
+        val migratedState = OnboardingState(
+            permissionsCompleted = if (tagsReady) true else localPermissionsReady,
+            interestsCompleted = tagsReady,
+            locationPermissionRequested = tokenStorage.getLocationExplainerSeen() == true,
+            notificationPermissionRequested = tokenStorage.getMessageNotificationsEnabled() != null ||
+                tokenStorage.getCallNotificationsEnabled() != null,
+            microphonePermissionRequested = tokenStorage.getAmbientNoiseOptIn() != null,
+            completedAt = if (tagsReady) kotlinx.datetime.Clock.System.now().toEpochMilliseconds() else null
+        )
+
+        if (tagsReady) {
+            tokenStorage.saveTagsInitialized(true)
+        }
+
+        onboardingState = migratedState
+        tokenStorage.saveOnboardingState(onboardingJson.encodeToString(migratedState))
     }
 
     // Coroutine scope for location-aware connection
@@ -206,8 +290,6 @@ fun App() {
     var showMyQRCode by remember { mutableStateOf(false) }
     var showQRScanner by remember { mutableStateOf(false) }
     var pendingQrConnection by remember { mutableStateOf<PendingQrConnection?>(null) }
-    var pendingQrLocationConsent by remember { mutableStateOf<PendingQrLocationConsent?>(null) }
-    var showQrLocationOnboarding by remember { mutableStateOf(false) }
     var connectionRevealState by remember { mutableStateOf<ConnectionRevealUiState?>(null) }
 
     fun submitQrConnection(
@@ -239,7 +321,6 @@ fun App() {
             val capturedLocation = locationDeferred.await()
 
             pendingQrConnection = null
-            pendingQrLocationConsent = null
             connectionRevealState = ConnectionRevealUiState(
                 methodLabel = "QR",
                 phase = ConnectionRevealPhase.Connecting
@@ -370,69 +451,119 @@ fun App() {
                 CallSessionManager.bindUser(appDataUser?.id, appDataUser?.name)
             }
 
-            // --- Interest tagging onboarding gate ---
-            // Uses local cache (TokenStorage) + DB column for persistent state.
-            // Local cache prevents re-showing the tagging screen on app resume / process recreation.
             val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
-            var needsTagging by remember { mutableStateOf<Boolean?>(null) }
-            // Hoist scope outside the conditional so it's always called at the same composable depth
             val onboardingScope = rememberCoroutineScope()
-
-            LaunchedEffect(currentUser.id) {
-                if (currentUser.id.isNotEmpty()) {
-                    // 1. Check local cache first — avoids network call on app resume
-                    val localCached = tokenStorage.getTagsInitialized()
-                    if (localCached == true) {
-                        needsTagging = false
-                        return@LaunchedEffect
-                    }
-
-                    // 2. Fall back to network check
-                    val initialized = supabaseRepo.fetchTagsInitialized(currentUser.id)
-                    if (initialized != null) {
-                        // Got a definitive answer from the server
-                        if (initialized) tokenStorage.saveTagsInitialized(true)
-                        needsTagging = !initialized
-                    } else {
-                        // Network error — keep null (show spinner), don't show tags screen
-                        // The user can retry by reopening the app
-                        needsTagging = null
-                    }
-                }
+            val onboardingStep = when {
+                onboardingState == null || appDataUser == null -> "loading"
+                onboardingState?.permissionsCompleted != true -> "permissions"
+                onboardingState?.interestsCompleted != true -> "interests"
+                else -> "complete"
             }
 
-            // Show tagging screen if the user hasn't completed or skipped onboarding
-            if (needsTagging == true) {
-                InterestTaggingScreen(
-                    onTagsSelected = { tags ->
-                        onboardingScope.launch {
-                            supabaseRepo.updateUserTags(currentUser.id, tags)
-                            supabaseRepo.setTagsInitialized(currentUser.id)
-                            tokenStorage.saveTagsInitialized(true)
-                            needsTagging = false
-                        }
-                    },
-                    onSkip = {
-                        // Immediately hide the screen; persist the skip in the background
-                        needsTagging = false
-                        onboardingScope.launch {
-                            supabaseRepo.setTagsInitialized(currentUser.id)
-                            tokenStorage.saveTagsInitialized(true)
-                        }
-                    },
-                    canSkip = true
-                )
-            } else if (needsTagging == null) {
-                // Still loading tag check
+            if (onboardingStep == "loading") {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(color = PrimaryBlue)
                 }
+            } else if (onboardingStep != "complete") {
+                AnimatedContent(
+                    targetState = onboardingStep,
+                    transitionSpec = {
+                        val slideSpec = tween<IntOffset>(280, easing = FastOutSlowInEasing)
+                        val fadeSpec = tween<Float>(180, easing = LinearOutSlowInEasing)
+                        (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                            fadeIn(animationSpec = fadeSpec))
+                            .togetherWith(
+                                slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) +
+                                    fadeOut(animationSpec = fadeSpec)
+                            )
+                            .using(SizeTransform(clip = true))
+                    },
+                    label = "onboarding_transition"
+                ) { step ->
+                    when (step) {
+                        "permissions" -> {
+                            PermissionsOnboardingScreen(
+                                initialConnectionSnapEnabled = locationPreferences.connectionSnapEnabled,
+                                initialShowOnMapEnabled = locationPreferences.showOnMapEnabled,
+                                initialIncludeInInsightsEnabled = locationPreferences.includeInInsightsEnabled,
+                                initialNotificationsEnabled = notificationPreferences.messagePushEnabled || notificationPreferences.callPushEnabled,
+                                initialAmbientNoiseEnabled = ambientNoiseOptIn,
+                                isLoading = isCompletingPermissions,
+                                onContinue = { selection ->
+                                    onboardingScope.launch {
+                                        isCompletingPermissions = true
+                                        try {
+                                            ambientNoiseOptIn = selection.ambientNoiseEnabled
+                                            tokenStorage.saveAmbientNoiseOptIn(selection.ambientNoiseEnabled)
+                                            tokenStorage.saveLocationExplainerSeen(true)
+
+                                            AppDataManager.updateLocationPreferences(
+                                                locationPreferences.copy(
+                                                    connectionSnapEnabled = selection.connectionSnapEnabled,
+                                                    showOnMapEnabled = selection.showOnMapEnabled,
+                                                    includeInInsightsEnabled = selection.includeInInsightsEnabled
+                                                )
+                                            )
+                                            AppDataManager.setMessageNotificationsEnabled(selection.notificationsEnabled)
+                                            AppDataManager.setCallNotificationsEnabled(selection.notificationsEnabled)
+
+                                            requestLocationPermissionIfNeeded(
+                                                shouldRequest = selection.connectionSnapEnabled && !locationService.hasLocationPermission()
+                                            )
+                                            requestMicrophonePermissionIfNeeded(
+                                                shouldRequest = selection.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission
+                                            )
+
+                                            val updatedState = (onboardingState ?: OnboardingState()).copy(
+                                                permissionsCompleted = true,
+                                                locationPermissionRequested = selection.connectionSnapEnabled,
+                                                notificationPermissionRequested = selection.notificationsEnabled,
+                                                microphonePermissionRequested = selection.ambientNoiseEnabled,
+                                                completedAt = if (onboardingState?.interestsCompleted == true) {
+                                                    kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                                                } else {
+                                                    null
+                                                }
+                                            )
+                                            persistOnboardingState(updatedState)
+                                        } finally {
+                                            isCompletingPermissions = false
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        else -> {
+                            InterestTaggingScreen(
+                                onTagsSelected = { tags ->
+                                    onboardingScope.launch {
+                                        val tagsUpdated = runCatching { supabaseRepo.updateUserTags(currentUser.id, tags) }
+                                            .getOrDefault(false)
+                                        val flagSet = runCatching { supabaseRepo.setTagsInitialized(currentUser.id) }
+                                            .getOrDefault(false)
+
+                                        if (tagsUpdated && flagSet) {
+                                            tokenStorage.saveTagsInitialized(true)
+                                            persistOnboardingState(
+                                                (onboardingState ?: OnboardingState()).copy(
+                                                    interestsCompleted = true,
+                                                    completedAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                                                )
+                                            )
+                                            AppDataManager.refresh(force = true)
+                                        }
+                                    }
+                                },
+                                canSkip = false
+                            )
+                        }
+                    }
+                }
             } else {
-            // --- End onboarding gate ---
-            
             var currentRoute by remember { mutableStateOf("home") }
             var previousRoute by remember { mutableStateOf("home") }
             var transitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
@@ -518,7 +649,11 @@ fun App() {
             LaunchedEffect(connectionState) {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
-                        if (connectionRevealState != null) {
+                        if (state.connection.isPendingSync()) {
+                            connectionRevealState = null
+                            snackbarHostState.showSnackbar("Connection saved offline. It will sync automatically when you're back online.")
+                            navigateTo(NavigationItem.Connections.route)
+                        } else if (connectionRevealState != null) {
                             connectionRevealState = connectionRevealState?.copy(
                                 phase = ConnectionRevealPhase.Success,
                                 connectedName = state.connectedUser.name
@@ -950,60 +1085,46 @@ fun App() {
                             renderScreen(animatedScreen)
                         }
 
-                        if (showQrLocationOnboarding) {
-                            LocationOnboardingScreen(
-                                mapPreviewContent = { LocationOnboardingMapPreview() },
-                                onBuildMyMap = {
-                                    appScope.launch {
-                                        AppDataManager.updateLocationPreferences(
-                                            AppDataManager.locationPreferences.value.copy(
-                                                connectionSnapEnabled = true,
-                                                showOnMapEnabled = true
-                                            )
+                        if (usingCachedData || pendingConnectionsCount > 0 || appError != null) {
+                            Card(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = 16.dp, start = 16.dp, end = 16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+                                ),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (usingCachedData) {
+                                        Text(
+                                            text = "Offline mode: showing saved data until sync succeeds.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
                                         )
-                                        tokenStorage.saveLocationExplainerSeen(true)
-                                        showQrLocationOnboarding = false
-                                        val pendingConsent = pendingQrLocationConsent
-                                        if (pendingConsent != null) {
-                                            if (!locationService.hasLocationPermission()) {
-                                                requestLocationPermissionThen {
-                                                    submitQrConnection(
-                                                        pending = pendingConsent.connection,
-                                                        contextTagObject = pendingConsent.contextTag,
-                                                        noiseOptIn = pendingConsent.noiseOptIn,
-                                                        skipLocation = false
-                                                    )
-                                                }
-                                            } else {
-                                                submitQrConnection(
-                                                    pending = pendingConsent.connection,
-                                                    contextTagObject = pendingConsent.contextTag,
-                                                    noiseOptIn = pendingConsent.noiseOptIn,
-                                                    skipLocation = false
-                                                )
-                                            }
-                                        }
                                     }
-                                },
-                                onNotNow = {
-                                    appScope.launch {
-                                        tokenStorage.saveLocationExplainerSeen(true)
-                                        showQrLocationOnboarding = false
-                                        val pendingConsent = pendingQrLocationConsent
-                                        if (pendingConsent != null) {
-                                            submitQrConnection(
-                                                pending = pendingConsent.connection,
-                                                contextTagObject = pendingConsent.contextTag,
-                                                noiseOptIn = pendingConsent.noiseOptIn,
-                                                skipLocation = true
-                                            )
-                                        }
+                                    if (pendingConnectionsCount > 0) {
+                                        Text(
+                                            text = "$pendingConnectionsCount connection${if (pendingConnectionsCount == 1) "" else "s"} queued for sync.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (!appError.isNullOrBlank()) {
+                                        Text(
+                                            text = appError ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
-                            )
+                            }
                         }
 
-                        pendingQrConnection?.takeIf { !showQrLocationOnboarding }?.let { pending ->
+                        pendingQrConnection?.let { pending ->
                             ConnectionContextSheet(
                                 otherUserName = null,
                                 locationName = null,
@@ -1019,25 +1140,13 @@ fun App() {
                                             skipLocation = true
                                         )
                                     } else if (!locationService.hasLocationPermission()) {
-                                        appScope.launch {
-                                            val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
-                                            if (!explainerSeen) {
-                                                pendingQrLocationConsent = PendingQrLocationConsent(
-                                                    connection = pending,
-                                                    contextTag = contextTag,
-                                                    noiseOptIn = noiseOptIn
-                                                )
-                                                showQrLocationOnboarding = true
-                                            } else {
-                                                requestLocationPermissionThen {
-                                                    submitQrConnection(
-                                                        pending = pending,
-                                                        contextTagObject = contextTag,
-                                                        noiseOptIn = noiseOptIn,
-                                                        skipLocation = false
-                                                    )
-                                                }
-                                            }
+                                        requestLocationPermissionThen {
+                                            submitQrConnection(
+                                                pending = pending,
+                                                contextTagObject = contextTag,
+                                                noiseOptIn = noiseOptIn,
+                                                skipLocation = !locationService.hasLocationPermission()
+                                            )
                                         }
                                     } else {
                                         submitQrConnection(

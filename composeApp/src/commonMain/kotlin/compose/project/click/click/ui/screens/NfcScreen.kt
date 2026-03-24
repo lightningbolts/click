@@ -59,7 +59,6 @@ fun NfcScreen(
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     var pendingUser by remember { mutableStateOf<Pair<String, String?>?>(null) }
-    var showLocationOnboarding by remember { mutableStateOf(false) }
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
 
@@ -130,15 +129,8 @@ fun NfcScreen(
                                     if (!AppDataManager.shouldCaptureLocationAtTap()) {
                                         viewModel.startScanning(skipLocation = true)
                                     } else if (!locationService.hasLocationPermission()) {
-                                        scope.launch {
-                                            val explainerSeen = tokenStorage.getLocationExplainerSeen() == true
-                                            if (!explainerSeen) {
-                                                showLocationOnboarding = true
-                                            } else {
-                                                requestLocationPermissionThen {
-                                                    viewModel.startScanning(skipLocation = false)
-                                                }
-                                            }
+                                        requestLocationPermissionThen {
+                                            viewModel.startScanning(skipLocation = !locationService.hasLocationPermission())
                                         }
                                     } else {
                                         viewModel.startScanning(skipLocation = false)
@@ -191,36 +183,6 @@ fun NfcScreen(
                             )
                         }
                     }
-                }
-
-                if (showLocationOnboarding) {
-                    LocationOnboardingScreen(
-                        mapPreviewContent = { LocationOnboardingMapPreview() },
-                        onBuildMyMap = {
-                            scope.launch {
-                                AppDataManager.updateLocationPreferences(
-                                    AppDataManager.locationPreferences.value.copy(
-                                        connectionSnapEnabled = true,
-                                        showOnMapEnabled = true
-                                    )
-                                )
-                                tokenStorage.saveLocationExplainerSeen(true)
-                                showLocationOnboarding = false
-                                if (!locationService.hasLocationPermission()) {
-                                    requestLocationPermissionThen { viewModel.startScanning(skipLocation = false) }
-                                } else {
-                                    viewModel.startScanning(skipLocation = false)
-                                }
-                            }
-                        },
-                        onNotNow = {
-                            scope.launch {
-                                tokenStorage.saveLocationExplainerSeen(true)
-                                showLocationOnboarding = false
-                                viewModel.startScanning(skipLocation = true)
-                            }
-                        }
-                    )
                 }
 
                 pendingUser?.let { (detectedUserId, detectedUserName) ->

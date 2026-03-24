@@ -9,23 +9,29 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import kotlinx.coroutines.withTimeout
 
 class AuthRepository(
     private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
     private val supabase = SupabaseConfig.client
+    private companion object {
+        const val AUTH_TIMEOUT_MS = 12_000L
+    }
 
     suspend fun signInWithEmail(email: String, password: String): Result<UserInfo> {
         return try {
-            supabase.auth.signInWith(Email) {
-                this.email = email
-                this.password = password
+            withTimeout(AUTH_TIMEOUT_MS) {
+                supabase.auth.signInWith(Email) {
+                    this.email = email
+                    this.password = password
+                }
             }
 
             val session = supabase.auth.currentSessionOrNull()
-            val user = session?.user
 
-            if (user != null && session != null) {
+            if (session != null) {
+                val user = session.user ?: return Result.failure(Exception("Failed to get user info after sign in"))
                 tokenStorage.saveTokens(
                     jwt = session.accessToken,
                     refreshToken = session.refreshToken,
@@ -37,27 +43,31 @@ class AuthRepository(
                 Result.failure(Exception("Failed to get user info after sign in"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(mapAuthErrorMessage(e, defaultMessage = "Couldn't sign in. Check your credentials and try again.")))
         }
     }
 
     suspend fun signUpWithEmail(email: String, password: String, name: String): Result<UserInfo> {
         return try {
             // Sign up with Supabase
-            supabase.auth.signUpWith(Email) {
-                this.email = email
-                this.password = password
-                data = buildJsonObject {
-                    put("full_name", name)
-                    put("name", name)
+            withTimeout(AUTH_TIMEOUT_MS) {
+                supabase.auth.signUpWith(Email) {
+                    this.email = email
+                    this.password = password
+                    data = buildJsonObject {
+                        put("full_name", name)
+                        put("name", name)
+                    }
                 }
             }
 
             // Get the current session
             val session = supabase.auth.currentSessionOrNull()
-            val user = session?.user
 
-            if (user != null && session != null) {
+            if (session != null) {
+                val user = session.user ?: return Result.failure(
+                    Exception("Sign up succeeded, but your session could not be restored. Please sign in.")
+                )
                 tokenStorage.saveTokens(
                     jwt = session.accessToken,
                     refreshToken = session.refreshToken,
@@ -65,14 +75,11 @@ class AuthRepository(
                     tokenType = session.tokenType
                 )
                 Result.success(user)
-            } else if (user != null) {
-                // User created but no session (e.g. confirm email), strictly shouldn't happen with implicit login unless configured otherwise
-                Result.success(user)
             } else {
                 Result.failure(Exception("Sign up successful! Please check your email to confirm your account, then sign in."))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Sign up failed: ${e.message}"))
+            Result.failure(Exception(mapAuthErrorMessage(e, defaultMessage = "Couldn't create your account right now. Please try again.")))
         }
     }
 
@@ -189,7 +196,9 @@ class AuthRepository(
 
     suspend fun refreshSession(): Result<Unit> {
         return try {
-            supabase.auth.refreshCurrentSession()
+            withTimeout(AUTH_TIMEOUT_MS) {
+                supabase.auth.refreshCurrentSession()
+            }
             val session = supabase.auth.currentSessionOrNull()
             if (session != null) {
                 tokenStorage.saveTokens(
@@ -222,6 +231,36 @@ class AuthRepository(
             println("AuthRepository: Error updating user metadata: ${e.message}")
             e.printStackTrace()
             Result.failure(e)
+        }
+    }
+
+    private fun mapAuthErrorMessage(error: Throwable, defaultMessage: String): String {
+        val rawMessage = error.message?.trim().orEmpty()
+        val normalized = rawMessage.lowercase()
+
+        return when {
+            normalized.contains("already registered") ||
+                normalized.contains("user already registered") ||
+                normalized.contains("email already") ||
+                normalized.contains("duplicate key") ||
+                normalized.contains("already exists") ->
+                "That email is already in use. Try signing in instead."
+
+            normalized.contains("invalid login credentials") ||
+                normalized.contains("invalid credentials") ->
+                "That email or password is incorrect."
+
+            normalized.contains("network") ||
+                normalized.contains("timeout") ||
+                normalized.contains("timed out") ||
+                normalized.contains("unable to resolve host") ||
+                normalized.contains("offline") ||
+                normalized.contains("socket") ||
+                normalized.contains("connection") ->
+                "You're offline or the network is unstable. Please try again when you're connected."
+
+            rawMessage.isNotBlank() -> rawMessage
+            else -> defaultMessage
         }
     }
 }

@@ -29,7 +29,7 @@ import androidx.compose.foundation.layout.FlowRow
 
 /**
  * Interest tagging onboarding screen.
- * Shows a grid of interest chips; user selects 3-7 to populate users.tags[].
+ * Shows a grid of interest chips; user selects at least 5 to populate users.tags[].
  * This data powers the B2B "Tribe Analysis" analytics layer.
  */
 
@@ -66,13 +66,13 @@ private val INTEREST_CATEGORIES = listOf(
     InterestCategory("🧩", "Puzzles & Strategy", listOf("Chess", "Sudoku", "Escape Rooms", "Crosswords", "Go"))
 )
 
-private const val MIN_TAGS = 3
+private const val MIN_TAGS = 5
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InterestTaggingScreen(
     onTagsSelected: (List<String>) -> Unit,
-    onSkip: () -> Unit,
+    onSkip: () -> Unit = {},
     canSkip: Boolean = true
 ) {
     val selectedTags = remember { mutableStateListOf<String>() }
@@ -114,13 +114,12 @@ fun InterestTaggingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = topInset)
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Header
             Text(
                 text = "What are you into?",
                 style = MaterialTheme.typography.headlineLarge,
@@ -134,24 +133,24 @@ fun InterestTaggingScreen(
                 text = "Pick at least $MIN_TAGS interests to help find common ground with your connections",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Selection count indicator
             Text(
                 text = "${selectedTags.size} selected" +
-                    if (selectedTags.size < MIN_TAGS) " (min $MIN_TAGS)" else "",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (selectedTags.size >= MIN_TAGS) PrimaryBlue 
+                    if (selectedTags.size < MIN_TAGS) " \u00b7 need ${MIN_TAGS - selectedTags.size} more" else " \u2713",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (selectedTags.size >= MIN_TAGS) PrimaryBlue
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            INTEREST_CATEGORIES.forEach { category ->
+            INTEREST_CATEGORIES.forEachIndexed { index, category ->
                 val isCategorySelected = category.label in selectedTags
                 val hasSelectedSubs = category.subcategories.any { it in selectedTags }
                 val isExpanded = expandedCategory == category.label
@@ -159,7 +158,7 @@ fun InterestTaggingScreen(
                     targetValue = when {
                         isCategorySelected -> PrimaryBlue
                         hasSelectedSubs -> PrimaryBlue.copy(alpha = 0.5f)
-                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
                     }
                 )
 
@@ -167,32 +166,36 @@ fun InterestTaggingScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { toggleTag(category.label) },
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (isCategorySelected) PrimaryBlue.copy(alpha = 0.14f) else Color.Transparent,
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isCategorySelected) PrimaryBlue.copy(alpha = 0.10f)
+                            else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
                     border = BorderStroke(1.dp, borderColor)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = category.emoji)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = category.emoji, fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = category.label,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = if (isCategorySelected) PrimaryBlue else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
                             fontWeight = if (isCategorySelected) FontWeight.SemiBold else FontWeight.Normal
                         )
-                        IconButton(onClick = {
-                            expandedCategory = if (isExpanded) null else category.label
-                        }) {
+                        IconButton(
+                            onClick = { expandedCategory = if (isExpanded) null else category.label },
+                            modifier = Modifier.size(32.dp)
+                        ) {
                             Icon(
                                 imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
                         }
                         if (isCategorySelected) {
+                            Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 Icons.Default.Check,
                                 contentDescription = null,
@@ -207,7 +210,7 @@ fun InterestTaggingScreen(
                     FlowRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
+                            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -216,38 +219,49 @@ fun InterestTaggingScreen(
                             FilterChip(
                                 selected = isSubSelected,
                                 onClick = { toggleTag(sub) },
-                                label = { Text(sub, fontSize = 12.sp) },
-                                shape = RoundedCornerShape(14.dp),
+                                label = {
+                                    Text(
+                                        sub,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
+                                    )
+                                },
+                                shape = RoundedCornerShape(20.dp),
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isSubSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f)
+                                    if (isSubSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
                                 ),
                                 colors = FilterChipDefaults.filterChipColors(
                                     containerColor = Color.Transparent,
-                                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.18f),
+                                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.14f),
                                     selectedLabelColor = PrimaryBlue,
-                                    labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                    labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                 )
                             )
                         }
                     }
                 }
+
+                if (index < INTEREST_CATEGORIES.lastIndex) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "Custom interests",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.align(Alignment.Start)
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
@@ -256,21 +270,22 @@ fun InterestTaggingScreen(
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Add your own interest") },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 )
                 FilledTonalButton(
                     onClick = { addCustomInterest() },
                     enabled = customInterestInput.trim().isNotEmpty(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.height(52.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Add")
                 }
             }
 
             if (customSelectedTags.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -279,7 +294,7 @@ fun InterestTaggingScreen(
                     customSelectedTags.forEach { custom ->
                         AssistChip(
                             onClick = { selectedTags.remove(custom) },
-                            label = { Text(custom) },
+                            label = { Text(custom, fontSize = 13.sp) },
                             trailingIcon = {
                                 Icon(
                                     Icons.Default.Close,
@@ -287,19 +302,16 @@ fun InterestTaggingScreen(
                                     modifier = Modifier.size(14.dp)
                                 )
                             },
-                            shape = RoundedCornerShape(14.dp)
+                            shape = RoundedCornerShape(20.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Continue button
             Button(
-                onClick = {
-                    onTagsSelected(selectedTags.toList())
-                },
+                onClick = { onTagsSelected(selectedTags.toList()) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -310,9 +322,8 @@ fun InterestTaggingScreen(
                 Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
 
-            // Skip button
             if (canSkip) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 TextButton(
                     onClick = onSkip,
                     modifier = Modifier.fillMaxWidth()

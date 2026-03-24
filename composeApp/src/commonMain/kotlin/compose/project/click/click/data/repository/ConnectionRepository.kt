@@ -9,14 +9,18 @@ import compose.project.click.click.data.models.calibrateBarometricElevationMeter
 import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
+import compose.project.click.click.data.models.PendingConnectionDraft
 import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.MemoryCapsule
+import compose.project.click.click.data.models.newPendingConnectionId
 import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -29,6 +33,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -38,6 +43,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.withTimeout
 import kotlin.math.*
 
 private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
@@ -61,11 +67,15 @@ sealed class ProximityResult {
 }
 
 class ConnectionRepository(
-    private val weatherService: WeatherService = OpenMeteoWeatherService()
+    private val weatherService: WeatherService = OpenMeteoWeatherService(),
+    private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
     private val supabase = SupabaseConfig.client
     private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
+    private companion object {
+        const val CONNECTION_TIMEOUT_MS = 15_000L
+    }
 
     private fun normalizeContextTag(
         contextTagObject: ContextTag?,
@@ -101,6 +111,30 @@ class ConnectionRepository(
      * The Supabase anomaly detection trigger runs on INSERT.
      */
     suspend fun createConnection(request: ConnectionRequest): Result<Connection> {
+        return try {
+            val onlineResult = withTimeout(CONNECTION_TIMEOUT_MS) {
+                createConnectionOnline(request)
+            }
+            if (onlineResult.isSuccess) {
+                onlineResult
+            } else {
+                val error = onlineResult.exceptionOrNull()
+                if (shouldQueueOffline(request, error)) {
+                    Result.success(queuePendingConnection(request))
+                } else {
+                    onlineResult
+                }
+            }
+        } catch (e: Exception) {
+            if (shouldQueueOffline(request, e)) {
+                Result.success(queuePendingConnection(request))
+            } else {
+                Result.failure(e)
+            }
+        }
+    }
+
+    private suspend fun createConnectionOnline(request: ConnectionRequest): Result<Connection> {
         return try {
             val redeemedToken = if (!request.qrToken.isNullOrBlank()) {
                 redeemQrToken(request.qrToken)
@@ -315,6 +349,51 @@ class ConnectionRepository(
         }
     }
 
+    suspend fun syncPendingConnections(): Int {
+        val queue = loadPendingConnectionQueue()
+        if (queue.isEmpty()) {
+            AppDataManager.setPendingConnectionsCount(0)
+            return 0
+        }
+
+        val remaining = mutableListOf<PendingConnectionDraft>()
+        var syncedCount = 0
+        var needsRefresh = false
+
+        queue.forEach { draft ->
+            val result = runCatching {
+                withTimeout(CONNECTION_TIMEOUT_MS) {
+                    createConnectionOnline(draft.request)
+                }
+            }.getOrElse { Result.failure(it) }
+
+            if (result.isSuccess) {
+                val connection = result.getOrNull() ?: return@forEach
+                val otherUser = getUserById(draft.request.userId2).getOrNull()
+                AppDataManager.replaceLocalConnection(draft.localId, connection, otherUser)
+                syncedCount++
+                needsRefresh = true
+            } else {
+                val error = result.exceptionOrNull()
+                if (shouldDropQueuedDraft(error)) {
+                    AppDataManager.removeConnection(draft.localId)
+                    needsRefresh = true
+                } else {
+                    remaining += draft
+                }
+            }
+        }
+
+        savePendingConnectionQueue(remaining)
+        AppDataManager.setPendingConnectionsCount(remaining.size)
+
+        if (needsRefresh) {
+            AppDataManager.refresh(force = true)
+        }
+
+        return syncedCount
+    }
+
     /**
      * Compute a local proximity confidence score based on available signals.
      *
@@ -507,6 +586,77 @@ class ConnectionRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun queuePendingConnection(request: ConnectionRequest): Connection {
+        val queue = loadPendingConnectionQueue().toMutableList()
+        val existing = queue.firstOrNull {
+            it.request.userId1 == request.userId1 &&
+                it.request.userId2 == request.userId2 &&
+                it.request.connectionMethod == request.connectionMethod
+        }
+        if (existing != null) {
+            AppDataManager.setPendingConnectionsCount(queue.size)
+            return existing.toPlaceholderConnection(AppDataManager.locationPreferences.value.includeInInsightsEnabled)
+        }
+
+        val normalizedRequest = request.copy(
+            qrToken = null,
+            tokenAgeMs = null
+        )
+        val draft = PendingConnectionDraft(
+            localId = newPendingConnectionId(),
+            request = normalizedRequest,
+            queuedAt = Clock.System.now().toEpochMilliseconds()
+        )
+        queue += draft
+        savePendingConnectionQueue(queue)
+        AppDataManager.setPendingConnectionsCount(queue.size)
+        return draft.toPlaceholderConnection(AppDataManager.locationPreferences.value.includeInInsightsEnabled)
+    }
+
+    private suspend fun loadPendingConnectionQueue(): List<PendingConnectionDraft> {
+        val queueJson = tokenStorage.getPendingConnectionQueue()
+        if (queueJson.isNullOrBlank()) return emptyList()
+
+        return runCatching {
+            json.decodeFromString<List<PendingConnectionDraft>>(queueJson)
+        }.getOrElse {
+            println("ConnectionRepository: Failed to decode pending queue: ${it.message}")
+            emptyList()
+        }
+    }
+
+    private suspend fun savePendingConnectionQueue(queue: List<PendingConnectionDraft>) {
+        val serialized = if (queue.isEmpty()) null else json.encodeToString(queue)
+        tokenStorage.savePendingConnectionQueue(serialized)
+    }
+
+    private fun shouldQueueOffline(request: ConnectionRequest, error: Throwable?): Boolean {
+        if (error == null) return false
+
+        val message = error.message?.lowercase().orEmpty()
+        val isRetryableNetworkFailure = message.contains("timeout") ||
+            message.contains("timed out") ||
+            message.contains("network") ||
+            message.contains("socket") ||
+            message.contains("unable to resolve host") ||
+            message.contains("failed to connect") ||
+            message.contains("offline") ||
+            message.contains("unreachable")
+
+        if (!isRetryableNetworkFailure) return false
+
+        return request.connectionMethod == "nfc" || request.connectionMethod == "qr"
+    }
+
+    private fun shouldDropQueuedDraft(error: Throwable?): Boolean {
+        val message = error?.message?.lowercase().orEmpty()
+        return message.contains("already exists") ||
+            message.contains("cannot connect with yourself") ||
+            message.contains("invalid qr code") ||
+            message.contains("already used") ||
+            message.contains("expired")
     }
 
     private suspend fun redeemQrToken(token: String): Result<RedeemQrTokenResponse> {

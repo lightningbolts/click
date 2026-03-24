@@ -45,6 +45,9 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
+        private const val KEY_ONBOARDING_STATE = "onboarding_state"
+        private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
+        private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -141,6 +144,9 @@ class IosTokenStorage : TokenStorage {
         userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
         userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
         userDefaults.removeObjectForKey(KEY_TAGS_INITIALIZED)
+        userDefaults.removeObjectForKey(KEY_ONBOARDING_STATE)
+        userDefaults.removeObjectForKey(KEY_CACHED_APP_SNAPSHOT)
+        userDefaults.removeObjectForKey(KEY_PENDING_CONNECTION_QUEUE)
         userDefaults.synchronize()
         
         // Clear Keychain
@@ -241,6 +247,45 @@ class IosTokenStorage : TokenStorage {
         } else {
             null
         }
+    }
+
+    override suspend fun saveOnboardingState(state: String?) {
+        if (state == null) {
+            userDefaults.removeObjectForKey(KEY_ONBOARDING_STATE)
+        } else {
+            userDefaults.setObject(state, KEY_ONBOARDING_STATE)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getOnboardingState(): String? {
+        return userDefaults.stringForKey(KEY_ONBOARDING_STATE)
+    }
+
+    override suspend fun saveCachedAppSnapshot(snapshot: String?) {
+        if (snapshot == null) {
+            userDefaults.removeObjectForKey(KEY_CACHED_APP_SNAPSHOT)
+        } else {
+            userDefaults.setObject(snapshot, KEY_CACHED_APP_SNAPSHOT)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getCachedAppSnapshot(): String? {
+        return userDefaults.stringForKey(KEY_CACHED_APP_SNAPSHOT)
+    }
+
+    override suspend fun savePendingConnectionQueue(queue: String?) {
+        if (queue == null) {
+            userDefaults.removeObjectForKey(KEY_PENDING_CONNECTION_QUEUE)
+        } else {
+            userDefaults.setObject(queue, KEY_PENDING_CONNECTION_QUEUE)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getPendingConnectionQueue(): String? {
+        return userDefaults.stringForKey(KEY_PENDING_CONNECTION_QUEUE)
     }
 
     // ============ Keychain Helpers ============

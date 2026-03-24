@@ -20,12 +20,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.User
+import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.utils.toImageBitmap
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -36,6 +38,11 @@ import qrcode.QRCode
 
 private val httpClient = HttpClient {
     install(ContentNegotiation) { json() }
+    install(HttpTimeout) {
+        requestTimeoutMillis = 10_000
+        connectTimeoutMillis = 10_000
+        socketTimeoutMillis = 10_000
+    }
 }
 
 private const val QR_API_URL = "$CLICK_WEB_BASE_URL/api/qr"
@@ -57,7 +64,7 @@ fun UserQrCode(
     val coroutineScope = rememberCoroutineScope()
 
     // Static fallback URL — renders instantly so user never sees a blank
-    val fallbackUrl = "$CLICK_WEB_BASE_URL/connect/${user.id}"
+    val fallbackUrl = buildOfflineQrPayload(user.id, user.name)
 
     var qrPayload by remember { mutableStateOf(fallbackUrl) }
     var isLoading by remember { mutableStateOf(false) }
