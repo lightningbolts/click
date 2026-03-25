@@ -1499,21 +1499,34 @@ private fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>)
     if (messages.isEmpty()) return emptyList()
     val newestFirst = messages.asReversed()
     val out = mutableListOf<ChatTimelineEntry>()
-    var prevDayKey: String? = null
+    var currentDayKey: String? = null
+    var currentDayTimestamp = 0L
+
     newestFirst.forEach { messageWithUser ->
         val dayKey = messageDayKey(messageWithUser.message.timeCreated)
-        if (prevDayKey != null && dayKey != prevDayKey) {
+        if (currentDayKey != null && dayKey != currentDayKey) {
             out += ChatTimelineEntry.DaySeparator(
-                key = "separator-nf-$dayKey-before-${messageWithUser.message.id}",
-                label = formatConversationDayLabel(messageWithUser.message.timeCreated)
+                key = "separator-nf-$currentDayKey",
+                label = formatConversationDayLabel(currentDayTimestamp)
             )
+        }
+        if (dayKey != currentDayKey) {
+            currentDayTimestamp = messageWithUser.message.timeCreated
         }
         out += ChatTimelineEntry.MessageEntry(
             key = messageWithUser.message.id,
             messageWithUser = messageWithUser
         )
-        prevDayKey = dayKey
+        currentDayKey = dayKey
     }
+
+    if (currentDayKey != null) {
+        out += ChatTimelineEntry.DaySeparator(
+            key = "separator-nf-tail-$currentDayKey",
+            label = formatConversationDayLabel(currentDayTimestamp)
+        )
+    }
+
     return out
 }
 
@@ -1554,19 +1567,19 @@ private fun formatConversationDayLabel(timestamp: Long, nowMs: Long = Clock.Syst
     val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone)
 
     val dayDifference = (now.date.toEpochDays() - dateTime.date.toEpochDays())
-    return when (dayDifference) {
-        0L -> "Today"
-        1L -> "Yesterday"
+    return when {
+        dayDifference == 0L -> "Today"
+        dayDifference == 1L -> "Yesterday"
+        dayDifference < 7L -> {
+            dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+        }
         else -> {
-            val weekday = dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
-            val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }
-            val hour = when (val value = dateTime.hour % 12) {
-                0 -> 12
-                else -> value
+            val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+            if (dateTime.year == now.year) {
+                "$month ${dateTime.dayOfMonth}"
+            } else {
+                "$month ${dateTime.dayOfMonth}, ${dateTime.year}"
             }
-            val minute = dateTime.minute.toString().padStart(2, '0')
-            val period = if (dateTime.hour >= 12) "PM" else "AM"
-            "$weekday, $month ${dateTime.dayOfMonth} at $hour:$minute $period"
         }
     }
 }
@@ -1902,9 +1915,12 @@ private fun MessageActionSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
+    val sheetStyle = LocalPlatformStyle.current
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
+        containerColor = if (sheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
+        dragHandle = if (sheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
     ) {
         Column(
             modifier = Modifier
@@ -2080,9 +2096,12 @@ private fun ConnectionActionSheet(
         showFinalConfirm = true
     }
 
+    val actionSheetStyle = LocalPlatformStyle.current
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
+        containerColor = if (actionSheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
+        dragHandle = if (actionSheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
     ) {
         Column(
             modifier = Modifier

@@ -268,12 +268,15 @@ fun MapScreen(
     // Connection Bottom Sheet
     if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
         val connectionSelection = selection as MapSelection.ConnectionSelected
+        val mapSheetStyle = LocalPlatformStyle.current
         AdaptiveBottomSheet(
             onDismissRequest = {
                 showBottomSheet = false
                 viewModel.clearSelection()
             },
             adaptiveSheetState = sheetState,
+            containerColor = if (mapSheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
+            dragHandle = if (mapSheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
         ) {
             ConnectionMarkerSheet(
                 point = connectionSelection.point,

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,13 +62,12 @@ fun SettingsScreen(
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val ghostModeEnabled by AppDataManager.ghostModeEnabled.collectAsState()
-    
-    // Full name change dialog state
+
     var showNameDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
-    
+
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // Use full status bar inset to prevent overlap with phone hardware
+
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
@@ -78,113 +78,81 @@ fun SettingsScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Availability Section
+                item {
+                    SettingsSectionHeader("Availability")
+                }
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                "Availability",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.EventAvailable,
-                                    contentDescription = null,
-                                    tint = if (currentAvailability?.isFreeThisWeek == true) 
-                                        PrimaryBlue else MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Free currently",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                AdaptiveSwitch(
-                                    checked = currentAvailability?.isFreeThisWeek ?: false,
-                                    onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = PrimaryBlue,
-                                        checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f)
-                                    )
-                                )
-                            }
-                        }
+                        SettingsToggleRow(
+                            icon = Icons.Default.EventAvailable,
+                            iconTint = if (currentAvailability?.isFreeThisWeek == true)
+                                PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                            title = "Free currently",
+                            checked = currentAvailability?.isFreeThisWeek ?: false,
+                            onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() }
+                        )
                     }
                 }
 
                 item {
+                    SettingsSectionHeader("Notifications")
+                }
+                item {
                     NotificationSettingsCard(notificationPreferences = notificationPreferences)
                 }
 
-                // Your Data — location privacy (Ghost mode overrides when active)
+                item {
+                    SettingsSectionHeader("Your Data")
+                }
                 item {
                     YourDataLocationCard(
                         locationPreferences = locationPreferences,
                         ghostModeEnabled = ghostModeEnabled
                     )
                 }
-                
-                // Appearance Section
+
+                item {
+                    SettingsSectionHeader("Appearance")
+                }
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                "Appearance",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.DarkMode, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Dark Mode", modifier = Modifier.weight(1f))
-                                AdaptiveSwitch(
-                                    checked = isDarkMode,
-                                    onCheckedChange = { onToggleDarkMode() },
-                                    colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
-                                )
-                            }
-                        }
+                        SettingsToggleRow(
+                            icon = Icons.Default.DarkMode,
+                            title = "Dark mode",
+                            checked = isDarkMode,
+                            onCheckedChange = { onToggleDarkMode() }
+                        )
                     }
                 }
 
-                // Account Section
+                item {
+                    SettingsSectionHeader("Account")
+                }
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                "Account",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            // Username row
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     Icons.Default.Person,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    modifier = Modifier.size(22.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        "Full Name",
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        "Full name",
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         currentUser?.name ?: "Not set",
                                         style = MaterialTheme.typography.bodyLarge,
@@ -200,19 +168,20 @@ fun SettingsScreen(
                                     Icon(
                                         Icons.Default.Edit,
                                         contentDescription = "Edit full name",
+                                        modifier = Modifier.size(20.dp),
                                         tint = PrimaryBlue
                                     )
                                 }
                             }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-                            
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
                             val sStyle = LocalPlatformStyle.current
                             Button(
                                 onClick = onSignOut,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                    containerColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
                                         else MaterialTheme.colorScheme.error,
                                     contentColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onError
@@ -222,19 +191,18 @@ fun SettingsScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Logout,
-                                    contentDescription = "Sign Out",
-                                    modifier = Modifier.size(20.dp)
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Sign Out")
+                                Text("Sign out")
                             }
                         }
                     }
                 }
             }
         }
-        
-        // Full name change dialog
+
         if (showNameDialog) {
             AlertDialog(
                 onDismissRequest = { showNameDialog = false },
@@ -271,63 +239,56 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+@Composable
 private fun YourDataLocationCard(
     locationPreferences: LocationPreferences,
     ghostModeEnabled: Boolean
 ) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.PrivacyTip,
-                    contentDescription = null,
-                    tint = PrimaryBlue
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Your Data",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                "Location is enabled by default so your map and anonymous trends work right away. Turn off anything you do not want.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             if (ghostModeEnabled) {
-                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "Ghost mode is on — location is not shared until you turn it off.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "Ghost mode is on — location not shared.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+
             SettingsToggleRow(
-                icon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
-                title = "Connection location snap",
-                subtitle = "Records GPS at the moment you tap (not continuous tracking)",
+                icon = Icons.Default.LocationOn,
+                title = "Location snap",
+                subtitle = "GPS recorded at moment of tap",
                 checked = locationPreferences.connectionSnapEnabled,
                 onCheckedChange = { AppDataManager.setConnectionSnapEnabled(it) }
             )
-            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsDivider()
+
             SettingsToggleRow(
-                icon = { Icon(Icons.Default.Map, contentDescription = null) },
-                title = "Show on my Memory Map",
-                subtitle = "Personal only — never shared with others",
+                icon = Icons.Default.Map,
+                title = "Memory Map",
+                subtitle = "Personal only, never shared",
                 checked = locationPreferences.showOnMapEnabled,
                 onCheckedChange = { AppDataManager.setShowOnMapEnabled(it) }
             )
-            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsDivider()
+
             SettingsToggleRow(
-                icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
-                title = "Include in business insights",
-                subtitle = "Anonymized venue/campus trends are on by default. Turn this off if you do not want to be included.",
+                icon = Icons.Default.PrivacyTip,
+                title = "Business insights",
+                subtitle = "Anonymized venue trends",
                 checked = locationPreferences.includeInInsightsEnabled,
                 onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) }
             )
@@ -339,35 +300,18 @@ private fun YourDataLocationCard(
 private fun NotificationSettingsCard(notificationPreferences: NotificationPreferences) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                "Notifications",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Control whether Click can alert you about new messages and incoming calls.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
             SettingsToggleRow(
-                icon = {
-                    Icon(Icons.Default.Notifications, contentDescription = null)
-                },
-                title = "Chat push notifications",
+                icon = Icons.Default.Notifications,
+                title = "Message notifications",
                 checked = notificationPreferences.messagePushEnabled,
                 onCheckedChange = { AppDataManager.setMessageNotificationsEnabled(it) }
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            SettingsDivider()
 
             SettingsToggleRow(
-                icon = {
-                    Icon(Icons.Default.PhoneInTalk, contentDescription = null)
-                },
-                title = "Incoming call alerts",
+                icon = Icons.Default.PhoneInTalk,
+                title = "Call alerts",
                 checked = notificationPreferences.callPushEnabled,
                 onCheckedChange = { AppDataManager.setCallNotificationsEnabled(it) }
             )
@@ -376,29 +320,50 @@ private fun NotificationSettingsCard(notificationPreferences: NotificationPrefer
 }
 
 @Composable
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    )
+}
+
+@Composable
 private fun SettingsToggleRow(
-    icon: @Composable () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String? = null,
+    iconTint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        icon()
-        Spacer(modifier = Modifier.width(8.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = iconTint
+        )
+        Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title)
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight
                 )
             }
         }
+        Spacer(modifier = Modifier.width(12.dp))
         AdaptiveSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
