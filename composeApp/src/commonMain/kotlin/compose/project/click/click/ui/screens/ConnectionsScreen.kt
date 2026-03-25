@@ -818,6 +818,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val chatListState by viewModel.chatListState.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
+    val messageSendError by viewModel.messageSendError.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
 
@@ -844,6 +845,14 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
         if (r != null) {
             coroutineScope.launch { snackbarHostState.showSnackbar(r) }
             viewModel.clearNudgeResult()
+        }
+    }
+
+    LaunchedEffect(messageSendError) {
+        val err = messageSendError
+        if (err != null) {
+            coroutineScope.launch { snackbarHostState.showSnackbar(err) }
+            viewModel.clearMessageSendError()
         }
     }
 

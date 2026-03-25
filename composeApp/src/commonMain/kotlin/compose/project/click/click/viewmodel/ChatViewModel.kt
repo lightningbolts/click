@@ -103,6 +103,10 @@ class ChatViewModel(
     private val _nudgeResult = MutableStateFlow<String?>(null)
     val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
 
+    // ── Message send error feedback ────────────────────────────────────────────
+    private val _messageSendError = MutableStateFlow<String?>(null)
+    val messageSendError: StateFlow<String?> = _messageSendError.asStateFlow()
+
     // ── Message editing state ─────────────────────────────────────────────────
     // Non-null when the user is editing an existing message
     private val _editingMessageId = MutableStateFlow<String?>(null)
@@ -792,9 +796,13 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         val content = _messageInput.value.trim()
         if (content.isEmpty()) return
+        _messageSendError.value = null
         viewModelScope.launch {
             try {
-                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: return@launch
+                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                    _messageSendError.value = "Failed to send — unable to start chat"
+                    return@launch
+                }
                 onUserStoppedTyping(apiChatId)
                 val message = chatRepository.sendMessage(apiChatId, userId, content)
                 if (message != null) {
@@ -802,15 +810,20 @@ class ChatViewModel(
                     resolveMessageUser(userId, apiChatId)?.let { currentUser ->
                         applyInsertedMessage(message, currentUser, userId)
                     }
-                    // Activate connection on first message (pending → active)
                     activateConnectionIfPending(connectionId)
                 } else {
+                    _messageSendError.value = "Failed to send message"
                     println("Failed to send message")
                 }
             } catch (e: Exception) {
+                _messageSendError.value = "Failed to send — ${e.message ?: "encryption or network error"}"
                 println("Error sending message: ${e.message}")
             }
         }
+    }
+
+    fun clearMessageSendError() {
+        _messageSendError.value = null
     }
 
     /**

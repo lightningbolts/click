@@ -40,12 +40,19 @@ object MessageCrypto {
 
     @OptIn(ExperimentalEncodingApi::class)
     fun encryptContent(plaintext: String, keys: DerivedKeys): String {
-        val iv = PlatformCrypto.secureRandomBytes(IV_LENGTH)
-        val ciphertext = PlatformCrypto.aesCbcEncrypt(keys.encKey, iv, plaintext.encodeToByteArray())
-        val hmac = PlatformCrypto.hmacSha256(keys.macKey, iv + ciphertext)
-        val payload = iv + hmac + ciphertext
-        return E2EE_PREFIX + Base64.encode(payload)
+        return try {
+            val iv = PlatformCrypto.secureRandomBytes(IV_LENGTH)
+            val ciphertext = PlatformCrypto.aesCbcEncrypt(keys.encKey, iv, plaintext.encodeToByteArray())
+            val hmac = PlatformCrypto.hmacSha256(keys.macKey, iv + ciphertext)
+            val payload = iv + hmac + ciphertext
+            E2EE_PREFIX + Base64.encode(payload)
+        } catch (e: Exception) {
+            println("MessageCrypto: Encryption failed: ${e.message}")
+            throw MessageEncryptionException("Failed to encrypt message", e)
+        }
     }
+
+    class MessageEncryptionException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
     @OptIn(ExperimentalEncodingApi::class)
     fun decryptContent(content: String, keys: DerivedKeys): String {

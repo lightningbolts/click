@@ -1,8 +1,10 @@
 package compose.project.click.click
 
+import android.os.Build
 import android.os.Bundle
 import android.content.Context
 import android.content.Intent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +22,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        configureScreenWakeForCalls(intent)
 
         // Initialize token storage with application context
         initTokenStorage(applicationContext)
@@ -52,6 +56,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        configureScreenWakeForCalls(intent)
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
     }
@@ -60,6 +65,23 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != ACTION_VIEW_CHAT) return
         val connectionId = intent.getStringExtra(EXTRA_CHAT_CONNECTION_ID) ?: return
         ChatDeepLinkManager.setPendingChat(connectionId)
+    }
+
+    private fun configureScreenWakeForCalls(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action != ACTION_ACCEPT_CALL && action != ACTION_DECLINE_CALL && action != ACTION_VIEW_CALL) return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     private fun handleIncomingCallIntent(intent: Intent?) {
