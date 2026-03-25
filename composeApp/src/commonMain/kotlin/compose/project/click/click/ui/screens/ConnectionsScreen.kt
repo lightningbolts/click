@@ -344,29 +344,31 @@ fun ConnectionsListView(
                 val activeCount = successState.chats.count { it.connection.id !in archivedConnectionIds }
                 val archivedCount = successState.chats.count { it.connection.id in archivedConnectionIds }
 
-                // Segmented control — matches the web pill-toggle design
+                val segStyle = LocalPlatformStyle.current
+                val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
+                val segCorner = if (segStyle.isIOS) 10.dp else 12.dp
+                val segInnerCorner = if (segStyle.isIOS) 7.dp else 8.dp
                 Row(
                     modifier = Modifier
                         .padding(horizontal = 20.dp)
                         .border(
-                            width = 1.dp,
+                            width = segBorderWidth,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(segCorner)
                         )
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .clip(RoundedCornerShape(segCorner))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f))
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Active tab
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(segInnerCorner))
                             .then(
                                 if (selectedTabIndex == 0) Modifier
-                                    .background(PrimaryBlue.copy(alpha = 0.18f))
-                                    .border(1.dp, PrimaryBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                    .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
+                                    .border(segBorderWidth, PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f), RoundedCornerShape(segInnerCorner))
                                 else Modifier
                             )
                             .clickable { selectedTabIndex = 0 }
@@ -381,15 +383,14 @@ fun ConnectionsListView(
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    // Archived tab
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(segInnerCorner))
                             .then(
                                 if (selectedTabIndex == 1) Modifier
-                                    .background(PrimaryBlue.copy(alpha = 0.18f))
-                                    .border(1.dp, PrimaryBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                    .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
+                                    .border(segBorderWidth, PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f), RoundedCornerShape(segInnerCorner))
                                 else Modifier
                             )
                             .clickable { selectedTabIndex = 1 }
@@ -1014,12 +1015,13 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                             tint = PrimaryBlue.copy(alpha = 0.85f)
                                         )
                                     }
+                                    val menuStyle = LocalPlatformStyle.current
                                     DropdownMenu(
                                         expanded = showCallMenu,
                                         onDismissRequest = { showCallMenu = false },
-                                        shape = RoundedCornerShape(22.dp),
-                                        tonalElevation = 8.dp,
-                                        shadowElevation = 16.dp
+                                        shape = RoundedCornerShape(if (menuStyle.isIOS) 14.dp else 22.dp),
+                                        tonalElevation = if (menuStyle.isIOS) 0.dp else 8.dp,
+                                        shadowElevation = if (menuStyle.isIOS) 0.dp else 16.dp
                                     ) {
                                         DropdownMenuItem(
                                             text = { Text("Voice call") },
@@ -1287,17 +1289,21 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
                     }
 
+                    val composerStyle = LocalPlatformStyle.current
+                    val composerCorner = if (composerStyle.isIOS) 20.dp else 22.dp
+                    val composerBorderW = if (composerStyle.isIOS) 0.5.dp else 1.dp
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = effectiveImePadding)
                             .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(GlassWhite)
-                            .border(1.dp, GlassBorder, RoundedCornerShape(22.dp))
+                            .clip(RoundedCornerShape(composerCorner))
+                            .background(Color.White.copy(alpha = composerStyle.glassBackgroundAlpha))
+                            .border(composerBorderW, Color.White.copy(alpha = composerStyle.glassBorderAlpha), RoundedCornerShape(composerCorner))
                             .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val fieldCorner = if (composerStyle.isIOS) 10.dp else 12.dp
                         OutlinedTextField(
                             value = messageInput,
                             onValueChange = {
@@ -1314,12 +1320,12 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(fieldCorner),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = PrimaryBlue.copy(alpha = 0.65f),
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                                focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f)
                             ),
                             textStyle = MaterialTheme.typography.bodyMedium,
                             singleLine = true,
@@ -1339,7 +1345,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         Box(
                             modifier = Modifier
                                 .size(52.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(fieldCorner))
                                 .background(sendGradient)
                                 .then(
                                     if (canSend) Modifier.clickable { viewModel.sendMessage() }

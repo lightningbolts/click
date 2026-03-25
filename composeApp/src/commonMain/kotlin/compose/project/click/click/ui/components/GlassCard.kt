@@ -17,32 +17,29 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
 
-/**
- * Glass Card shape matching web's rounded-3xl (24px)
- */
-val GlassCardShape = RoundedCornerShape(24.dp)
+@Composable
+private fun platformGlassShape(): RoundedCornerShape {
+    val style = LocalPlatformStyle.current
+    return RoundedCornerShape(style.cardCornerRadius)
+}
 
-/**
- * Default corner radius for glass cards
- */
+@Composable
+private fun platformGlassBackground(): Color =
+    Color.White.copy(alpha = LocalPlatformStyle.current.glassBackgroundAlpha)
+
+@Composable
+private fun platformGlassBorder(usePrimary: Boolean): Color {
+    val style = LocalPlatformStyle.current
+    return if (usePrimary) PrimaryBlue.copy(alpha = style.glassBorderPrimaryAlpha)
+    else Color.White.copy(alpha = style.glassBorderAlpha)
+}
+
+@Composable
+private fun platformBorderWidth(): Dp = LocalPlatformStyle.current.cardBorderWidth
+
+val GlassCardShape = RoundedCornerShape(24.dp)
 val GlassCornerRadius: Dp = 24.dp
 
-/**
- * GlassCard - Replicates the web's .glass CSS effect:
- * - bg-white/5 (translucent white background)
- * - border-white/10 (subtle white border)
- * - backdrop-blur (simulated via opacity layers)
- * - rounded-3xl (24dp corner radius)
- *
- * Note: Real backdrop-blur is expensive in KMP, so we simulate
- * the effect using the specific translucent colors from the web.
- *
- * @param modifier Modifier to apply to the card
- * @param onClick Optional click handler; makes the card clickable
- * @param usePrimaryBorder If true, uses a subtle violet-tinted border
- * @param contentPadding Padding inside the card (default 16.dp)
- * @param content The composable content to display inside the card
- */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -51,21 +48,20 @@ fun GlassCard(
     contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val borderColor = if (usePrimaryBorder) GlassBorderPrimary else GlassBorder
-    
+    val shape = platformGlassShape()
+    val bg = platformGlassBackground()
+    val borderColor = platformGlassBorder(usePrimaryBorder)
+    val borderWidth = platformBorderWidth()
+
     val cardModifier = modifier
-        .clip(GlassCardShape)
-        .background(GlassWhite)
-        .border(
-            width = 1.dp,
-            color = borderColor,
-            shape = GlassCardShape
-        )
+        .clip(shape)
+        .background(bg)
+        .border(width = borderWidth, color = borderColor, shape = shape)
         .then(
             if (onClick != null) {
                 Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = null, // Minimal ripple for glass aesthetic
+                    indication = null,
                     onClick = onClick
                 )
             } else {
@@ -81,10 +77,6 @@ fun GlassCard(
     }
 }
 
-/**
- * GlassCard variant using Surface for Material3 integration
- * Provides elevation and ripple effects while maintaining glass aesthetic
- */
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,
@@ -93,13 +85,16 @@ fun GlassSurface(
     contentPadding: Dp = 16.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val borderColor = if (usePrimaryBorder) GlassBorderPrimary else GlassBorder
-    
+    val shape = platformGlassShape()
+    val bg = platformGlassBackground()
+    val borderColor = platformGlassBorder(usePrimaryBorder)
+    val borderWidth = platformBorderWidth()
+
     Surface(
         modifier = modifier,
-        shape = GlassCardShape,
-        color = GlassWhite,
-        border = BorderStroke(1.dp, borderColor),
+        shape = shape,
+        color = bg,
+        border = BorderStroke(borderWidth, borderColor),
         shadowElevation = 0.dp,
         onClick = onClick ?: {}
     ) {
@@ -110,10 +105,6 @@ fun GlassSurface(
     }
 }
 
-/**
- * Utility modifier to apply glass effect to any composable
- * Useful for custom components that need the glass aesthetic
- */
 fun Modifier.glassEffect(usePrimaryBorder: Boolean = false): Modifier {
     val borderColor = if (usePrimaryBorder) GlassBorderPrimary else GlassBorder
     return this
@@ -122,10 +113,6 @@ fun Modifier.glassEffect(usePrimaryBorder: Boolean = false): Modifier {
         .border(1.dp, borderColor, GlassCardShape)
 }
 
-/**
- * Smaller glass card with reduced corner radius (16dp)
- * For compact UI elements like chips, tags, small buttons
- */
 @Composable
 fun GlassCardCompact(
     modifier: Modifier = Modifier,
@@ -133,12 +120,16 @@ fun GlassCardCompact(
     contentPadding: Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val compactShape = RoundedCornerShape(16.dp)
-    
+    val style = LocalPlatformStyle.current
+    val compactShape = RoundedCornerShape(style.compactCardCornerRadius)
+    val bg = platformGlassBackground()
+    val borderColor = platformGlassBorder(false)
+    val borderWidth = platformBorderWidth()
+
     val cardModifier = modifier
         .clip(compactShape)
-        .background(GlassWhite)
-        .border(1.dp, GlassBorder, compactShape)
+        .background(bg)
+        .border(borderWidth, borderColor, compactShape)
         .then(
             if (onClick != null) {
                 Modifier.clickable(

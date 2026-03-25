@@ -39,6 +39,7 @@ import compose.project.click.click.ui.components.OnlineFriendItem
 import compose.project.click.click.ui.components.PollPairCard
 import compose.project.click.click.ui.components.RecentClickCard
 import compose.project.click.click.ui.components.StatCard
+import compose.project.click.click.ui.components.getAdaptiveCornerRadius
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
@@ -519,12 +520,13 @@ private fun ConnectionRowItem(
     }
     val displayName = otherUser?.name ?: "Connection"
 
+    val rowStyle = LocalPlatformStyle.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(if (rowStyle.isIOS) 14.dp else 12.dp))
             .clickable { onNavigate() }
-            .background(GlassWhite)
+            .background(Color.White.copy(alpha = rowStyle.glassBackgroundAlpha))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -682,7 +684,8 @@ fun ReconnectReminderCard(
     onReconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val actionShape = RoundedCornerShape(14.dp)
+    val style = LocalPlatformStyle.current
+    val actionShape = RoundedCornerShape(if (style.isIOS) 12.dp else 14.dp)
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         usePrimaryBorder = true,

@@ -41,6 +41,12 @@ interface TokenStorage {
     suspend fun getCachedAppSnapshot(): String?
     suspend fun savePendingConnectionQueue(queue: String?)
     suspend fun getPendingConnectionQueue(): String?
+
+    /**
+     * Clear all user-specific session data on sign-out.
+     * Preserves only device-level preferences (e.g. dark mode).
+     */
+    suspend fun clearSessionData()
 }
 
 expect fun createTokenStorage(): TokenStorage

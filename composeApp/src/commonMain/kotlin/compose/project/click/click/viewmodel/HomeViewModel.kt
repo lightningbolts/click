@@ -95,7 +95,8 @@ class HomeViewModel(
      */
     private fun observeAppData() {
         viewModelScope.launch {
-            // Combine user and connections data from AppDataManager
+            var lastUserId: String? = null
+
             combine(
                 AppDataManager.currentUser,
                 AppDataManager.connections,
@@ -105,7 +106,17 @@ class HomeViewModel(
             ) { user, connections, connectedUsers, isLoading, isDataLoaded ->
                 HomeSnapshot(user, connections, connectedUsers, isLoading, isDataLoaded)
             }.collectLatest { (user, connections, connectedUsers, isLoading, isDataLoaded) ->
-                
+
+                if (user?.id != lastUserId) {
+                    lastUserId = user?.id
+                    dataLoaded = false
+                    _reconnectReminders.value = emptyList()
+                    _connectionInsights.value = null
+                    _pollPairSuggestion.value = null
+                    _locationGroupedConnections.value = emptyMap()
+                    _connectedUsers.value = emptyMap()
+                }
+
                 when {
                     user != null && isDataLoaded -> {
                         // Calculate stats

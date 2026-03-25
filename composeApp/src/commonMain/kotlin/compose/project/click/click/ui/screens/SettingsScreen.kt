@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
@@ -206,13 +207,18 @@ fun SettingsScreen(
                             
                             Spacer(modifier = Modifier.height(16.dp))
                             
+                            val sStyle = LocalPlatformStyle.current
                             Button(
                                 onClick = onSignOut,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
+                                    containerColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.error,
+                                    contentColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onError
                                 ),
-                                shape = RoundedCornerShape(12.dp)
+                                elevation = if (sStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
+                                shape = RoundedCornerShape(if (sStyle.isIOS) 10.dp else 12.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Logout,

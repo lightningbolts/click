@@ -32,6 +32,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 import androidx.compose.ui.zIndex
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -276,7 +277,7 @@ fun SignUpScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Sign Up Button
+            val signupStyle = LocalPlatformStyle.current
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -287,10 +288,11 @@ fun SignUpScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(if (signupStyle.isIOS) 14.dp else 12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
                 ),
+                elevation = if (signupStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
                 enabled = !isLoading && canSignUp
             ) {
                 if (isLoading) {

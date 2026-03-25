@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -141,13 +142,15 @@ fun LocationOnboardingScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             // CTAs
+            val locStyle = LocalPlatformStyle.current
             Button(
                 onClick = onBuildMyMap,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                shape = RoundedCornerShape(if (locStyle.isIOS) 14.dp else 28.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                elevation = if (locStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation()
             ) {
                 Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))

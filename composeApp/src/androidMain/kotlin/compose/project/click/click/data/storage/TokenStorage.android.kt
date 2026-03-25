@@ -204,6 +204,20 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     override suspend fun getPendingConnectionQueue(): String? {
         return sharedPreferences.getString(KEY_PENDING_CONNECTION_QUEUE, null)
     }
+
+    override suspend fun clearSessionData() {
+        sharedPreferences.edit().apply {
+            val sessionKeys = listOf(
+                KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
+                KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
+                KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
+                KEY_AMBIENT_NOISE_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
+                KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+            )
+            sessionKeys.forEach { remove(it) }
+            apply()
+        }
+    }
 }
 
 // We need to pass context from the composable level

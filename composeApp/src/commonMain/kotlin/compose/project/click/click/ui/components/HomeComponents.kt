@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.ui.theme.*
 
-/** Web `globals.css` accent blue — pairs with violet for gradient borders */
 private val WebAccentBlue = Color(0xFF3A86FF)
 
 @Composable
@@ -169,13 +168,17 @@ fun PollPairCard(
         else -> "${suggestion.daysSinceContact} days since you last chatted"
     }
 
+    val pStyle = LocalPlatformStyle.current
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(20.dp, outerShape, spotColor = PrimaryBlue.copy(alpha = 0.35f))
+            .then(
+                if (pStyle.useShadowElevation) Modifier.shadow(20.dp, outerShape, spotColor = PrimaryBlue.copy(alpha = 0.35f))
+                else Modifier
+            )
             .clip(outerShape)
             .background(borderGradient)
-            .padding(1.dp)
+            .padding(if (pStyle.isIOS) 0.5.dp else 1.dp)
     ) {
         Column(
             modifier = Modifier

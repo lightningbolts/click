@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 
@@ -214,6 +215,7 @@ fun InterestTaggingScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val chipStyle = LocalPlatformStyle.current
                         category.subcategories.forEach { sub ->
                             val isSubSelected = sub in selectedTags
                             FilterChip(
@@ -228,12 +230,14 @@ fun InterestTaggingScreen(
                                 },
                                 shape = RoundedCornerShape(20.dp),
                                 border = BorderStroke(
-                                    1.dp,
-                                    if (isSubSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
+                                    if (chipStyle.isIOS) 0.5.dp else 1.dp,
+                                    if (isSubSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurface.copy(
+                                        alpha = if (chipStyle.isIOS) 0.12f else 0.15f
+                                    )
                                 ),
                                 colors = FilterChipDefaults.filterChipColors(
                                     containerColor = Color.Transparent,
-                                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.14f),
+                                    selectedContainerColor = PrimaryBlue.copy(alpha = if (chipStyle.isIOS) 0.12f else 0.14f),
                                     selectedLabelColor = PrimaryBlue,
                                     labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                 )
@@ -291,6 +295,7 @@ fun InterestTaggingScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val assistStyle = LocalPlatformStyle.current
                     customSelectedTags.forEach { custom ->
                         AssistChip(
                             onClick = { selectedTags.remove(custom) },
@@ -302,6 +307,7 @@ fun InterestTaggingScreen(
                                     modifier = Modifier.size(14.dp)
                                 )
                             },
+                            border = if (assistStyle.isIOS) BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)) else null,
                             shape = RoundedCornerShape(20.dp)
                         )
                     }
@@ -310,13 +316,15 @@ fun InterestTaggingScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
+            val tagStyle = LocalPlatformStyle.current
             Button(
                 onClick = { onTagsSelected(selectedTags.toList()) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(if (tagStyle.isIOS) 14.dp else 28.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                elevation = if (tagStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
                 enabled = selectedTags.size >= MIN_TAGS
             ) {
                 Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)

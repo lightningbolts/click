@@ -31,6 +31,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -193,7 +194,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Sign In Button
+            val loginStyle = LocalPlatformStyle.current
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -204,10 +205,11 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(if (loginStyle.isIOS) 14.dp else 12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
                 ),
+                elevation = if (loginStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
                 enabled = !isLoading && email.isNotBlank() && password.isNotBlank()
             ) {
                 if (isLoading) {

@@ -177,14 +177,14 @@ class AuthViewModel(
     fun signOut() {
         viewModelScope.launch {
             try {
-                // Clear AppDataManager FIRST so all screens go to loading/empty
                 AppDataManager.clearData()
+                tokenStorage.clearSessionData()
                 authRepository.signOut()
                 isAuthenticated = false
                 authState = AuthState.Idle
             } catch (e: Exception) {
-                // If repo logout fails, we still want to clear UI state
                 AppDataManager.clearData()
+                runCatching { tokenStorage.clearSessionData() }
                 isAuthenticated = false
                 authState = AuthState.Idle
             }

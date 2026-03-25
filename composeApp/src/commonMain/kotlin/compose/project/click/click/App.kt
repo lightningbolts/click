@@ -375,7 +375,7 @@ fun App() {
     }
 
     MaterialTheme(colorScheme = scheme) {
-        // Global background with subtle purple gradient (only in dark mode)
+        compose.project.click.click.ui.theme.PlatformThemeProvider {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1158,6 +1158,7 @@ fun App() {
             } // End of onboarding gate
         }
         } // End of Global Background Box
+        } // End of PlatformThemeProvider
     }
 }
 

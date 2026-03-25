@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 data class PermissionsOnboardingSelection(
@@ -165,6 +166,7 @@ fun PermissionsOnboardingScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            val btnStyle = LocalPlatformStyle.current
             Button(
                 onClick = {
                     onContinue(
@@ -181,7 +183,8 @@ fun PermissionsOnboardingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
+                elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
             ) {
                 if (isLoading) {
@@ -207,11 +210,20 @@ private fun PermissionPreferenceCard(
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val style = LocalPlatformStyle.current
+    val cornerRadius = if (style.isIOS) 16.dp else 20.dp
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(cornerRadius),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (enabled) 0.96f else 0.72f)
+            containerColor = MaterialTheme.colorScheme.surface.copy(
+                alpha = if (enabled) {
+                    if (style.isIOS) 0.92f else 0.96f
+                } else {
+                    if (style.isIOS) 0.65f else 0.72f
+                }
+            )
         )
     ) {
         Row(

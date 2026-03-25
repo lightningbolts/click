@@ -288,6 +288,23 @@ class IosTokenStorage : TokenStorage {
         return userDefaults.stringForKey(KEY_PENDING_CONNECTION_QUEUE)
     }
 
+    override suspend fun clearSessionData() {
+        val sessionKeys = listOf(
+            KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
+            KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
+            KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
+            KEY_AMBIENT_NOISE_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
+            KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+        )
+        sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
+        userDefaults.synchronize()
+
+        deleteKeychainItem(KEY_JWT)
+        deleteKeychainItem(KEY_REFRESH_TOKEN)
+        deleteKeychainItem(KEY_EXPIRES_AT)
+        deleteKeychainItem(KEY_TOKEN_TYPE)
+    }
+
     // ============ Keychain Helpers ============
 
     private fun setKeychainItem(key: String, value: String): Boolean {
