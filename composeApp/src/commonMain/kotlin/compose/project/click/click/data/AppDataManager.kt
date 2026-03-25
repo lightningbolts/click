@@ -145,9 +145,7 @@ object AppDataManager {
             val authUser = authRepository.getCurrentUser()
             if (authUser == null) {
                 println("AppDataManager: No auth user found")
-                if (!restoredFromCache) {
-                    _isDataLoaded.value = false
-                }
+                _isDataLoaded.value = true
                 _isLoading.value = false
                 return
             }
@@ -297,9 +295,9 @@ object AppDataManager {
         } catch (e: Exception) {
             println("Error loading app data: ${e.message}")
             e.printStackTrace()
-            _error.value = e.message ?: "Offline mode is active."
+            _error.value = e.message ?: "No internet connection"
+            _isDataLoaded.value = true
             if (restoredFromCache) {
-                _isDataLoaded.value = true
                 _usingCachedData.value = true
             }
         } finally {

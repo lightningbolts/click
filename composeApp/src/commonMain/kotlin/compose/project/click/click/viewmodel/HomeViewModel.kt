@@ -119,7 +119,6 @@ class HomeViewModel(
 
                 when {
                     user != null && isDataLoaded -> {
-                        // Calculate stats
                         val recentConnections = connections
                             .sortedByDescending { it.created }
                             .take(3)
@@ -135,24 +134,26 @@ class HomeViewModel(
                             uniqueLocations = uniqueLocations
                         )
 
-                        // Build location-grouped map (all connections, not just top 3)
                         val grouped = connections
                             .sortedByDescending { it.created }
                             .groupBy { it.semantic_location ?: "Somewhere New" }
                         _locationGroupedConnections.value = grouped
 
-                        // Expose connected users for name lookups
                         _connectedUsers.value = connectedUsers
 
-                        _pollPairSuggestion.value = connectionRepository.getPollPairSuggestion(
-                            userId = user.id,
-                            connections = connections,
-                            connectedUsers = connectedUsers
-                        )
+                        _pollPairSuggestion.value = try {
+                            connectionRepository.getPollPairSuggestion(
+                                userId = user.id,
+                                connections = connections,
+                                connectedUsers = connectedUsers
+                            )
+                        } catch (e: Exception) {
+                            println("HomeViewModel: Error computing poll pair suggestion: ${e.message}")
+                            null
+                        }
                         
                         _homeState.value = HomeState.Success(user, stats)
                         
-                        // Load additional data only once
                         if (!dataLoaded) {
                             dataLoaded = true
                             viewModelScope.launch {
@@ -165,7 +166,12 @@ class HomeViewModel(
                     }
                     else -> {
                         _pollPairSuggestion.value = null
-                        _homeState.value = HomeState.Error("Session expired. Please log in again.")
+                        val errorMsg = AppDataManager.error.value
+                        _homeState.value = if (errorMsg != null) {
+                            HomeState.Error("No internet connection. Your data will appear when you're back online.")
+                        } else {
+                            HomeState.Error("Session expired. Please log in again.")
+                        }
                     }
                 }
             }
