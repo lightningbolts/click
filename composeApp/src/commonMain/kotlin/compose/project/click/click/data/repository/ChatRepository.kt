@@ -426,14 +426,22 @@ class ChatRepository(
      * Returns a [Pair] of the [RealtimeChannel] (for cleanup) and a [Flow] of change events.
      * The caller MUST call `channel.subscribe()` after collecting the flow, or use the
      * convenience wrapper that does it automatically.
+     *
+     * Keys are eagerly resolved on the caller's coroutine context and captured in the
+     * flow closure so that realtime callbacks (which may execute on background I/O
+     * threads) never read the shared [encryptionKeyCache] directly — avoiding
+     * thread-visibility issues in Kotlin/Native release builds.
      */
-    fun subscribeToMessages(chatId: String): Pair<RealtimeChannel, Flow<MessageChangeEvent>> {
+    suspend fun subscribeToMessages(chatId: String): Pair<RealtimeChannel, Flow<MessageChangeEvent>> {
+        val preloadedKeys = getEncryptionKeysForChat(chatId)
+
         val channel = supabase.channel("messages:$chatId")
+        var resolvedKeys = preloadedKeys
 
         val changeFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
         }.mapNotNull { action ->
-            val keys = encryptionKeyCache[chatId]
+            val keys = resolvedKeys ?: getEncryptionKeysForChat(chatId).also { resolvedKeys = it }
             when (action) {
                 is PostgresAction.Insert -> {
                     val row = action.decodeRecord<MessageRow>()

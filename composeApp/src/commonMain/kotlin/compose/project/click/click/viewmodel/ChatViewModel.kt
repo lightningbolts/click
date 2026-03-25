@@ -459,6 +459,12 @@ class ChatViewModel(
                     )
                 }
 
+                chatRepository.cacheEncryptionKeys(
+                    apiChatId,
+                    hydratedChatDetails.connection.id,
+                    hydratedChatDetails.connection.user_ids
+                )
+
                 val payload = buildChatPayload(hydratedChatDetails, apiChatId, userId)
                 prefetchedChatPayloads[resolvedConnectionId] = payload
 
@@ -521,6 +527,9 @@ class ChatViewModel(
                     val connectionId = chatDetails.connection.id
                     if (prefetchedChatPayloads.containsKey(connectionId)) return@forEach
                     val apiChatId = chatDetails.chat.id ?: return@forEach
+                    chatRepository.cacheEncryptionKeys(
+                        apiChatId, connectionId, chatDetails.connection.user_ids
+                    )
                     runCatching {
                         buildChatPayload(chatDetails, apiChatId, userId)
                     }.onSuccess { payload ->
