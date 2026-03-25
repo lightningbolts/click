@@ -45,10 +45,9 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             message.toIncomingCallInvite()?.let { invite ->
+                PlatformIncomingCallUi.showIncomingCall(invite)
                 if (AndroidPushNotificationRuntime.isAppInForeground()) {
                     compose.project.click.click.calls.CallSessionManager.receiveIncomingPush(invite)
-                } else {
-                    PlatformIncomingCallUi.showIncomingCall(invite)
                 }
             }
             return

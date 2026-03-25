@@ -4,7 +4,6 @@ import Foundation
 import PushKit
 import ComposeApp
 
-@MainActor
 final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     static let shared = ClickVoipPushManager()
 
@@ -28,18 +27,22 @@ final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
-        handleIncomingPush(payload.dictionaryPayload, type: type)
+        reportCallFromPush(payload.dictionaryPayload, type: type)
         completion()
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
-        handleIncomingPush(payload.dictionaryPayload, type: type)
+        reportCallFromPush(payload.dictionaryPayload, type: type)
     }
 
-    private func handleIncomingPush(_ userInfo: [AnyHashable: Any], type: PKPushType) {
+    private func reportCallFromPush(_ userInfo: [AnyHashable: Any], type: PKPushType) {
         guard type == .voIP else { return }
-        guard let payload = ClickIncomingCallPayload(userInfo) else { return }
-        ClickCallKitManager.shared.reportIncomingCall(payload)
+
+        if let payload = ClickIncomingCallPayload(userInfo) {
+            ClickCallKitManager.shared.reportIncomingCall(payload)
+        } else {
+            ClickCallKitManager.shared.reportUnparseableIncomingCall()
+        }
     }
 }
 #else

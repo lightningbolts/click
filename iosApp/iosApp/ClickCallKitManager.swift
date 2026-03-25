@@ -48,7 +48,6 @@ struct ClickIncomingCallPayload {
     }
 }
 
-@MainActor
 final class ClickCallKitManager: NSObject, CXProviderDelegate {
     static let shared = ClickCallKitManager()
 
@@ -113,6 +112,18 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
                 print("CallKit report incoming call failed: \(error.localizedDescription)")
                 self.clear(callId: payload.callId)
             }
+        }
+    }
+
+    func reportUnparseableIncomingCall() {
+        let uuid = UUID()
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .generic, value: "Unknown")
+        update.localizedCallerName = "Unknown"
+        update.hasVideo = false
+
+        provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] _ in
+            self?.provider.reportCall(with: uuid, endedAt: Date(), reason: .failed)
         }
     }
 

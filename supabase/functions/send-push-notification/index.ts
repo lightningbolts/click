@@ -177,13 +177,16 @@ async function sendIosPush(
   const isVoipToken = tokenType === "voip";
   const isIncomingCall = category === "incoming_call";
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     authorization: `bearer ${apnsJwt}`,
     "apns-topic": isVoipToken ? `${bundleId}.voip` : bundleId,
     "apns-push-type": isVoipToken && isIncomingCall ? "voip" : "alert",
     "apns-priority": "10",
     "content-type": "application/json",
   };
+  if (isVoipToken && isIncomingCall) {
+    headers["apns-expiration"] = "0";
+  }
 
   const body = isVoipToken && isIncomingCall
     ? {
