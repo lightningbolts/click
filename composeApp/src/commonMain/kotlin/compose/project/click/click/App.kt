@@ -812,6 +812,7 @@ fun App() {
                                         MyQRCodeScreen(
                                             userId = currentUser.id,
                                             username = currentUser.name,
+                                            locationService = locationService,
                                             onNavigateBack = {
                                                 transitionMode = NavigationTransitionMode.Tap
                                                 showMyQRCode = false

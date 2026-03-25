@@ -3,6 +3,7 @@ import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY =
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
   Deno.env.get("SUPABASE_SERVICE_KEY") ??
   Deno.env.get("SUPABASE_KEY")!;
 const FCM_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -39,7 +40,6 @@ interface NotificationPreferenceRow {
 
 interface UserProfileRow {
   name?: string | null;
-  full_name?: string | null;
   email?: string | null;
 }
 
@@ -103,7 +103,21 @@ async function getApnsJwt(): Promise<string> {
     throw new Error("Missing APNS_KEY, APNS_KEY_ID, or APNS_TEAM_ID secret");
   }
 
-  const privateKey = await importPKCS8(normalizePrivateKey(apnsKey), "ES256");
+  const base64Key = apnsKey
+    .replace(/-----BEGIN[^-]*-----/gi, "")
+    .replace(/-----END[^-]*-----/gi, "")
+    .replace(/\\n/g, "")
+    .replace(/[^A-Za-z0-9+/=]/g, "");
+
+  if (base64Key.length < 100) {
+    throw new Error(
+      `APNS_KEY appears truncated (${base64Key.length} base64 chars, expected ~200). ` +
+      "Ensure the key is on a single line in .env and re-set the Supabase secret.",
+    );
+  }
+
+  const formattedKey = `-----BEGIN PRIVATE KEY-----\n${base64Key}\n-----END PRIVATE KEY-----`;
+  const privateKey = await importPKCS8(formattedKey, "ES256");
   return new SignJWT({})
     .setProtectedHeader({ alg: "ES256", kid: apnsKeyId })
     .setIssuer(apnsTeamId)
@@ -254,7 +268,7 @@ function asNonEmptyString(value: unknown): string | null {
 }
 
 function resolveUserDisplayName(profile: UserProfileRow | null | undefined): string {
-  const candidates = [profile?.full_name, profile?.name, profile?.email?.split("@")[0]];
+  const candidates = [profile?.name, profile?.email?.split("@")[0]];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim().length > 0) {
       return candidate.trim();
@@ -427,7 +441,7 @@ async function resolveChatMessageRequest(
   if (!resolvedTitle) {
     const { data: senderProfile, error: senderProfileError } = await supabase
       .from("users")
-      .select("name, full_name, email")
+      .select("name, email")
       .eq("id", senderUserId)
       .maybeSingle<UserProfileRow>();
 

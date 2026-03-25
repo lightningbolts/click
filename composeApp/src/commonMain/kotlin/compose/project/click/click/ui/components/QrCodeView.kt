@@ -22,6 +22,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import compose.project.click.click.utils.LocationService
 import compose.project.click.click.utils.toImageBitmap
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.*
@@ -59,6 +60,7 @@ private const val TOKEN_TTL_SECONDS = 90
 @Composable
 fun UserQrCode(
     user: User,
+    locationService: LocationService? = null,
     size: Dp = 200.dp,
     onShare: () -> Unit = {}
 ) {
@@ -81,7 +83,16 @@ fun UserQrCode(
             val session = SupabaseConfig.client.auth.currentSessionOrNull()
             val token = session?.accessToken
 
-            val response = httpClient.get(QR_API_URL) {
+            // Capture initiator's GPS to store alongside the token for proximity verification
+            val location = try { locationService?.getCurrentLocation() } catch (_: Exception) { null }
+
+            var url = QR_API_URL
+            if (location != null && location.latitude.isFinite() && location.longitude.isFinite()
+                && !(location.latitude == 0.0 && location.longitude == 0.0)) {
+                url += "?lat=${location.latitude}&lon=${location.longitude}"
+            }
+
+            val response = httpClient.get(url) {
                 if (token != null) {
                     header(HttpHeaders.Authorization, "Bearer $token")
                 }

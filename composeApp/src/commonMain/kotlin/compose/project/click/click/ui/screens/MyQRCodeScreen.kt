@@ -13,12 +13,14 @@ import androidx.compose.ui.text.style.TextAlign
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.UserQrCode
+import compose.project.click.click.utils.LocationService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyQRCodeScreen(
     userId: String,
     username: String?,
+    locationService: LocationService? = null,
     onNavigateBack: () -> Unit
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -55,7 +57,7 @@ fun MyQRCodeScreen(
                     createdAt = 0L // Dummy
                 )
                 
-                UserQrCode(user = user, size = 300.dp)
+                UserQrCode(user = user, locationService = locationService, size = 300.dp)
                 
                 Spacer(modifier = Modifier.height(32.dp))
                 

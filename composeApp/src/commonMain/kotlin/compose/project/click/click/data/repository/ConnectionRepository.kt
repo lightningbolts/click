@@ -101,6 +101,7 @@ class ConnectionRepository(
         val error: String? = null,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("token_age_ms") val tokenAgeMs: Long? = null,
+        @SerialName("distance_meters") val distanceMeters: Int? = null,
     )
 
     /**
@@ -137,8 +138,11 @@ class ConnectionRepository(
     private suspend fun createConnectionOnline(request: ConnectionRequest): Result<Connection> {
         return try {
             val redeemedToken = if (!request.qrToken.isNullOrBlank()) {
-                redeemQrToken(request.qrToken)
-                    .getOrElse { return Result.failure(it) }
+                redeemQrToken(
+                    token = request.qrToken,
+                    scannerLat = request.locationLat,
+                    scannerLon = request.locationLng
+                ).getOrElse { return Result.failure(it) }
             } else {
                 null
             }
@@ -656,20 +660,32 @@ class ConnectionRepository(
             message.contains("cannot connect with yourself") ||
             message.contains("invalid qr code") ||
             message.contains("already used") ||
-            message.contains("expired")
+            message.contains("expired") ||
+            message.contains("same physical location")
     }
 
-    private suspend fun redeemQrToken(token: String): Result<RedeemQrTokenResponse> {
+    private suspend fun redeemQrToken(
+        token: String,
+        scannerLat: Double? = null,
+        scannerLon: Double? = null
+    ): Result<RedeemQrTokenResponse> {
         return try {
             val response = supabase.postgrest.rpc(
                 "redeem_qr_token",
                 buildJsonObject {
                     put("p_token", token)
+                    if (scannerLat != null && scannerLon != null
+                        && scannerLat.isFinite() && scannerLon.isFinite()
+                        && !(scannerLat == 0.0 && scannerLon == 0.0)) {
+                        put("p_scanner_lat", scannerLat)
+                        put("p_scanner_lon", scannerLon)
+                    }
                 }
             ).decodeSingle<RedeemQrTokenResponse>()
 
             if (!response.success) {
                 val message = when (response.error) {
+                    "proximity_failed" -> "Connection failed: Users must be in the same physical location."
                     "expired" -> "This QR code has expired. Ask them to generate a new one."
                     "already_used" -> "This QR code was already used. Ask them to generate a new one."
                     "not_found" -> "This QR code is no longer valid. Ask them to generate a new one."
