@@ -64,7 +64,7 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
         configuration.supportedHandleTypes = [.generic]
         configuration.maximumCallsPerCallGroup = 1
         configuration.maximumCallGroups = 1
-        configuration.includesCallsInRecents = false
+        configuration.includesCallsInRecents = true
         provider = CXProvider(configuration: configuration)
         super.init()
         provider.setDelegate(self, queue: nil)
