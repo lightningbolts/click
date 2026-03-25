@@ -13,8 +13,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import compose.project.click.click.MainActivity
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.PlatformIncomingCallUi
+import compose.project.click.click.crypto.MessageCrypto
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
 private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
@@ -61,22 +63,34 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        val title = message.notification?.title ?: message.data["title"] ?: "New message"
-        val body = message.notification?.body ?: message.data["body"] ?: "Open Click to view it"
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        } ?: return
+        val senderName = message.data["sender_name"] ?: "Someone"
+        val connectionId = message.data["connection_id"] ?: ""
+        val body = decryptMessagePreview(
+            encryptedContent = message.data["encrypted_content"] ?: "",
+            connectionId = connectionId,
+            senderUserId = message.data["sender_user_id"] ?: "",
+            recipientUserId = message.data["recipient_user_id"] ?: "",
+            fallback = message.data["body"] ?: "Open Click to view it"
+        )
+
+        val launchIntent = if (connectionId.isNotBlank()) {
+            MainActivity.createChatDeepLinkIntent(this, connectionId)
+        } else {
+            packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            } ?: return
+        }
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            connectionId.hashCode(),
             launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(this, CLICK_MESSAGES_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
+            .setContentTitle(senderName)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -92,6 +106,32 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         NotificationManagerCompat.from(this).notify(message.messageId?.hashCode() ?: body.hashCode(), notification)
+    }
+
+    private fun decryptMessagePreview(
+        encryptedContent: String,
+        connectionId: String,
+        senderUserId: String,
+        recipientUserId: String,
+        fallback: String,
+    ): String {
+        if (encryptedContent.isBlank()) return fallback
+
+        if (!MessageCrypto.isEncrypted(encryptedContent)) {
+            return encryptedContent.take(120)
+        }
+
+        if (connectionId.isBlank() || senderUserId.isBlank() || recipientUserId.isBlank()) {
+            return fallback
+        }
+
+        return try {
+            val keys = MessageCrypto.deriveKeysForConnection(connectionId, listOf(senderUserId, recipientUserId))
+            val decrypted = MessageCrypto.decryptContent(encryptedContent, keys)
+            if (MessageCrypto.isEncrypted(decrypted)) fallback else decrypted.take(120)
+        } catch (_: Exception) {
+            fallback
+        }
     }
 }
 

@@ -131,10 +131,11 @@ async function sendAndroidPush(
   accessToken: string,
   projectId: string,
 ): Promise<void> {
-  const category = getPushCategory(requestBody);
-  const data = Object.fromEntries(
+  const data: Record<string, string> = Object.fromEntries(
     Object.entries(requestBody.data ?? {}).map(([key, value]) => [key, String(value)])
   );
+  if (requestBody.title && !data.title) data.title = requestBody.title;
+  if (requestBody.body && !data.body) data.body = requestBody.body;
 
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -147,25 +148,9 @@ async function sendAndroidPush(
       body: JSON.stringify({
         message: {
           token: pushToken.token,
-          ...(category === "incoming_call"
-            ? {}
-            : {
-                notification: {
-                  title: requestBody.title,
-                  body: requestBody.body,
-                },
-              }),
           data,
           android: {
             priority: "high",
-            ...(category === "incoming_call"
-              ? {}
-              : {
-                  notification: {
-                    channel_id: "click_messages",
-                    sound: "default",
-                  },
-                }),
           },
         },
       }),
@@ -220,7 +205,7 @@ async function sendIosPush(
                 "content-available": 1,
                 "interruption-level": "time-sensitive",
               }
-            : {}),
+            : { "mutable-content": 1 }),
         },
         ...(requestBody.data ?? {}),
       };
@@ -353,11 +338,40 @@ async function resolveChatMessageRequest(
   const providedBody = asNonEmptyString(requestBody.body);
 
   if (providedRecipientUserId && providedTitle && providedBody) {
+    const data = requestBody.data ?? {};
+    const senderUserId = asNonEmptyString(data.sender_user_id);
+    const messageId = asNonEmptyString(data.message_id);
+
+    let senderName = "Someone";
+    if (senderUserId) {
+      const { data: senderProfile } = await supabase
+        .from("users")
+        .select("name, email")
+        .eq("id", senderUserId)
+        .maybeSingle<UserProfileRow>();
+      senderName = resolveUserDisplayName(senderProfile);
+    }
+
+    let encryptedContent = "";
+    if (messageId) {
+      const { data: msg } = await supabase
+        .from("messages")
+        .select("content")
+        .eq("id", messageId)
+        .maybeSingle();
+      encryptedContent = msg?.content ?? "";
+    }
+
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
       body: providedBody,
-      data: requestBody.data,
+      data: {
+        ...data,
+        sender_name: senderName,
+        encrypted_content: encryptedContent,
+        recipient_user_id: providedRecipientUserId,
+      },
     };
   }
 
@@ -437,26 +451,34 @@ async function resolveChatMessageRequest(
     throw new Error("recipient_user_id does not belong to the chat connection");
   }
 
+  const { data: senderProfile, error: senderProfileError } = await supabase
+    .from("users")
+    .select("name, email")
+    .eq("id", senderUserId)
+    .maybeSingle<UserProfileRow>();
+
+  if (senderProfileError) {
+    throw new Error(`Unable to resolve sender display name: ${senderProfileError.message}`);
+  }
+
+  const senderDisplayName = resolveUserDisplayName(senderProfile);
+
   let resolvedTitle = providedTitle;
   if (!resolvedTitle) {
-    const { data: senderProfile, error: senderProfileError } = await supabase
-      .from("users")
-      .select("name, email")
-      .eq("id", senderUserId)
-      .maybeSingle<UserProfileRow>();
-
-    if (senderProfileError) {
-      throw new Error(`Unable to resolve sender display name: ${senderProfileError.message}`);
-    }
-
-    resolvedTitle = `New message from ${resolveUserDisplayName(senderProfile)}`;
+    resolvedTitle = `New message from ${senderDisplayName}`;
   }
 
   return {
     recipient_user_id: recipientUserId,
     title: resolvedTitle,
     body: buildMessagePreview(messageContent),
-    data: requestBody.data,
+    data: {
+      ...(requestBody.data ?? {}),
+      connection_id: chat.connection_id,
+      sender_name: senderDisplayName,
+      encrypted_content: messageContent ?? "",
+      recipient_user_id: recipientUserId,
+    },
   };
 }
 

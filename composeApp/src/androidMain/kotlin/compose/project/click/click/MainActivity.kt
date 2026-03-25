@@ -12,6 +12,7 @@ import compose.project.click.click.data.storage.initTokenStorage
 import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
+import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
 
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
         initPushNotificationService(applicationContext, this)
 
         handleIncomingCallIntent(intent)
+        handleChatDeepLinkIntent(intent)
 
         setContent {
             App()
@@ -51,6 +53,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingCallIntent(intent)
+        handleChatDeepLinkIntent(intent)
+    }
+
+    private fun handleChatDeepLinkIntent(intent: Intent?) {
+        if (intent?.action != ACTION_VIEW_CHAT) return
+        val connectionId = intent.getStringExtra(EXTRA_CHAT_CONNECTION_ID) ?: return
+        ChatDeepLinkManager.setPendingChat(connectionId)
     }
 
     private fun handleIncomingCallIntent(intent: Intent?) {
@@ -69,7 +78,9 @@ class MainActivity : ComponentActivity() {
         const val ACTION_VIEW_CALL = "compose.project.click.click.action.VIEW_CALL"
         const val ACTION_ACCEPT_CALL = "compose.project.click.click.action.ACCEPT_CALL"
         const val ACTION_DECLINE_CALL = "compose.project.click.click.action.DECLINE_CALL"
+        const val ACTION_VIEW_CHAT = "compose.project.click.click.action.VIEW_CHAT"
 
+        private const val EXTRA_CHAT_CONNECTION_ID = "extra_chat_connection_id"
         private const val EXTRA_CALL_ID = "extra_call_id"
         private const val EXTRA_CONNECTION_ID = "extra_connection_id"
         private const val EXTRA_ROOM_NAME = "extra_room_name"
@@ -93,6 +104,14 @@ class MainActivity : ComponentActivity() {
                 putExtra(EXTRA_CALLEE_NAME, invite.calleeName)
                 putExtra(EXTRA_VIDEO_ENABLED, invite.videoEnabled)
                 putExtra(EXTRA_CREATED_AT, invite.createdAt)
+            }
+        }
+
+        fun createChatDeepLinkIntent(context: Context, connectionId: String): Intent {
+            return Intent(context, MainActivity::class.java).apply {
+                action = ACTION_VIEW_CHAT
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_CHAT_CONNECTION_ID, connectionId)
             }
         }
 

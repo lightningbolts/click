@@ -65,6 +65,7 @@ import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.nfc.rememberNfcManager
+import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import kotlinx.coroutines.async
@@ -643,6 +644,16 @@ fun App() {
             LaunchedEffect(currentUser.id) {
                 if (currentUser.id.isNotEmpty()) {
                     chatViewModel.setCurrentUser(currentUser.id)
+                }
+            }
+
+            val deepLinkConnectionId by ChatDeepLinkManager.pendingConnectionId.collectAsState()
+            LaunchedEffect(deepLinkConnectionId) {
+                val connId = deepLinkConnectionId
+                if (!connId.isNullOrBlank()) {
+                    ChatDeepLinkManager.consume()
+                    pendingChatId = connId
+                    navigateTo(NavigationItem.Connections.route)
                 }
             }
 
