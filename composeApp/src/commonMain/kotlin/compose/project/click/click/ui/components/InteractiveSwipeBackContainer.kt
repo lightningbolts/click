@@ -99,6 +99,10 @@ fun InteractiveSwipeBackContainer(
 
                 if (shouldComplete) {
                     onBack()
+                    // Keep the previous layer rendered for two extra frames so the
+                    // parent composable has time to recompose and draw the
+                    // destination surface before this overlay is torn down.
+                    kotlinx.coroutines.delay(34)
                 } else {
                     dragOffset.floatValue = 0f
                 }
@@ -117,6 +121,7 @@ fun InteractiveSwipeBackContainer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 previousContent()
             }

@@ -230,8 +230,9 @@ class ChatViewModel(
 
     // Set the current user
     fun setCurrentUser(userId: String) {
-        if (_currentUserId.value == userId && _chatListState.value is ChatListState.Success) return
-        if (_currentUserId.value != userId) {
+        val userUnchanged = _currentUserId.value == userId
+        if (userUnchanged && _chatListState.value is ChatListState.Success) return
+        if (!userUnchanged) {
             prefetchedChatPayloads.clear()
         }
         _currentUserId.value = userId
@@ -262,20 +263,28 @@ class ChatViewModel(
                 }
             }
             
-            // Show cached data immediately if available, BUT only if we don't
-            // already have real data from the API (avoids the flash to "Start a
-            // conversation" when returning from a chat).
+            // CRITICAL: Never revert a Success state to Loading. When navigating
+            // back to the connections list the previously loaded data must remain
+            // visible while the background refresh runs. Only show Loading (or
+            // cached placeholders) when no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
             
-            if (cachedConnections.isNotEmpty() && canRenderCachedChats && !alreadyHasRealData) {
+            if (!alreadyHasRealData && cachedConnections.isNotEmpty() && canRenderCachedChats) {
                 val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                // Filter out any entries whose user name is still a placeholder — the API
-                // result will fill them in correctly a moment later.
                 val readyChats = cachedChats.filter { isResolvedDisplayName(it.otherUser.name) }
                 if (readyChats.isNotEmpty()) {
                     _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(readyChats))
                 }
-            } else if (!alreadyHasRealData && (isForced || _chatListState.value !is ChatListState.Success)) {
+            } else if (!alreadyHasRealData && cachedConnections.isNotEmpty()) {
+                // Even with unresolved names, prefer showing cached rows over a
+                // blank loading spinner – the API response will patch names shortly.
+                val fallbackChats = buildCachedChats(cachedConnections, cachedUsers, userId)
+                if (fallbackChats.isNotEmpty()) {
+                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(fallbackChats))
+                } else {
+                    _chatListState.value = ChatListState.Loading
+                }
+            } else if (!alreadyHasRealData) {
                 _chatListState.value = ChatListState.Loading
             }
             

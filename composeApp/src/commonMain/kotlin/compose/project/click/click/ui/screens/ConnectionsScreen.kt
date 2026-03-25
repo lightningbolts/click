@@ -77,6 +77,7 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.IcebreakerPrompt
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.User
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.ChatListState
 import compose.project.click.click.viewmodel.ChatMessagesState
@@ -174,63 +175,57 @@ fun ConnectionsScreen(
     }
 
     if (isIOS) {
-        AnimatedContent(
-            targetState = selectedChatId,
-            transitionSpec = {
-                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-                val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-                when {
-                    initialState == null && targetState != null -> {
-                        (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) + fadeIn(animationSpec = fadeSpec))
-                            .togetherWith(
-                                slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) +
-                                    fadeOut(animationSpec = fadeSpec)
+        // Persistent base layer + chat overlay architecture.
+        // ConnectionsListView is always composed and never torn down, so the
+        // swipe-back gesture reveals it instantly without a recomposition gap.
+        Box(modifier = Modifier.fillMaxSize()) {
+            ConnectionsListView(
+                viewModel = viewModel,
+                searchQuery = searchQuery,
+                onChatSelected = { chatId -> openChat(chatId) },
+                onNavigateToLocationSettings = onNavigateToLocationSettings
+            )
+
+            AnimatedContent(
+                targetState = selectedChatId,
+                transitionSpec = {
+                    val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                    val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                    when {
+                        initialState == null && targetState != null -> {
+                            (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                                fadeIn(animationSpec = fadeSpec))
+                                .togetherWith(ExitTransition.None)
+                        }
+                        initialState != null && targetState == null && chatTransitionMode == ChatTransitionMode.Tap -> {
+                            EnterTransition.None
+                                .togetherWith(
+                                    slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                                        fadeOut(animationSpec = fadeSpec)
+                                )
+                        }
+                        else -> {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        }
+                    }
+                },
+                label = "ios_chat_open_transition"
+            ) { activeChatId ->
+                if (activeChatId != null) {
+                    InteractiveSwipeBackContainer(
+                        enabled = true,
+                        edgeSwipeWidth = 44.dp,
+                        onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
+                        previousContent = { },
+                        currentContent = {
+                            ChatView(
+                                viewModel = viewModel,
+                                chatId = activeChatId,
+                                onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) }
                             )
-                            .using(SizeTransform(clip = true))
-                    }
-                    initialState != null && targetState == null && chatTransitionMode == ChatTransitionMode.Tap -> {
-                        (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) + fadeIn(animationSpec = fadeSpec))
-                            .togetherWith(
-                                slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
-                                    fadeOut(animationSpec = fadeSpec)
-                            )
-                            .using(SizeTransform(clip = true))
-                    }
-                    else -> {
-                    EnterTransition.None togetherWith ExitTransition.None
-                    }
+                        }
+                    )
                 }
-            },
-            label = "ios_chat_open_transition"
-        ) { activeChatId ->
-            if (activeChatId == null) {
-                ConnectionsListView(
-                    viewModel = viewModel,
-                    searchQuery = searchQuery,
-                    onChatSelected = { chatId -> openChat(chatId) },
-                    onNavigateToLocationSettings = onNavigateToLocationSettings
-                )
-            } else {
-                InteractiveSwipeBackContainer(
-                    enabled = true,
-                    edgeSwipeWidth = 44.dp,
-                    onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
-                    previousContent = {
-                        ConnectionsListView(
-                            viewModel = viewModel,
-                            searchQuery = searchQuery,
-                            onChatSelected = { chatId -> openChat(chatId) },
-                            onNavigateToLocationSettings = onNavigateToLocationSettings
-                        )
-                    },
-                    currentContent = {
-                        ChatView(
-                            viewModel = viewModel,
-                            chatId = activeChatId,
-                            onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) }
-                        )
-                    }
-                )
             }
         }
     } else {
@@ -289,6 +284,8 @@ fun ConnectionsListView(
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val cachedConnections by AppDataManager.connections.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val currentUserId by viewModel.currentUserId.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -297,6 +294,30 @@ fun ConnectionsListView(
 
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
+
+    // Build effective chat list: prefer ViewModel Success data, fall back to
+    // cached connections during Loading/Error to prevent blank-screen flashes.
+    val effectiveChats: List<ChatWithDetails> = when (val state = chatListState) {
+        is ChatListState.Success -> state.chats
+        else -> {
+            val uid = currentUserId
+            if (cachedConnections.isNotEmpty() && uid != null) {
+                cachedConnections.mapNotNull { connection ->
+                    val otherUserId = connection.user_ids.firstOrNull { it != uid }
+                        ?: return@mapNotNull null
+                    val otherUser = connectedUsers[otherUserId]
+                        ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
+                    ChatWithDetails(
+                        chat = connection.chat,
+                        connection = connection,
+                        otherUser = otherUser,
+                        lastMessage = connection.chat.messages.lastOrNull(),
+                        unreadCount = 0
+                    )
+                }
+            } else emptyList()
+        }
+    }
 
     // Show nudge feedback
     LaunchedEffect(nudgeResult) {
@@ -311,40 +332,36 @@ fun ConnectionsListView(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                when (val state = chatListState) {
-                    is ChatListState.Success -> {
-                        val activeChats = state.chats.filter { it.connection.id !in archivedConnectionIds }
-                        val archivedChats = state.chats.filter { it.connection.id in archivedConnectionIds }
-                        val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
-                        val filteredCount = if (searchQuery.isBlank()) {
-                            tabChats.size
-                        } else {
-                            tabChats.count { chat ->
-                                chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
-                            }
+                if (effectiveChats.isNotEmpty()) {
+                    val activeChats = effectiveChats.filter { it.connection.id !in archivedConnectionIds }
+                    val archivedChats = effectiveChats.filter { it.connection.id in archivedConnectionIds }
+                    val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
+                    val filteredCount = if (searchQuery.isBlank()) {
+                        tabChats.size
+                    } else {
+                        tabChats.count { chat ->
+                            chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
                         }
-                        val tabLabel = if (selectedTabIndex == 0) "active" else "archived"
-                        PageHeader(
-                            title = "Clicks",
-                            subtitle = if (searchQuery.isNotBlank()) {
-                                "$filteredCount result${if (filteredCount == 1) "" else "s"} for \"$searchQuery\""
-                            } else {
-                                "$filteredCount $tabLabel ${if (filteredCount == 1) "connection" else "connections"}"
-                            }
-                        )
                     }
-                    else -> {
-                        val subtitle = if (cachedConnections.isEmpty()) "Loading…" else ""
-                        PageHeader(title = "Clicks", subtitle = subtitle)
-                    }
+                    val tabLabel = if (selectedTabIndex == 0) "active" else "archived"
+                    PageHeader(
+                        title = "Clicks",
+                        subtitle = if (searchQuery.isNotBlank()) {
+                            "$filteredCount result${if (filteredCount == 1) "" else "s"} for \"$searchQuery\""
+                        } else {
+                            "$filteredCount $tabLabel ${if (filteredCount == 1) "connection" else "connections"}"
+                        }
+                    )
+                } else {
+                    val subtitle = if (chatListState is ChatListState.Loading) "Loading…" else ""
+                    PageHeader(title = "Clicks", subtitle = subtitle)
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
 
-            if (chatListState is ChatListState.Success) {
-                val successState = chatListState as ChatListState.Success
-                val activeCount = successState.chats.count { it.connection.id !in archivedConnectionIds }
-                val archivedCount = successState.chats.count { it.connection.id in archivedConnectionIds }
+            if (effectiveChats.isNotEmpty()) {
+                val activeCount = effectiveChats.count { it.connection.id !in archivedConnectionIds }
+                val archivedCount = effectiveChats.count { it.connection.id in archivedConnectionIds }
 
                 val segStyle = LocalPlatformStyle.current
                 val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
@@ -411,124 +428,119 @@ fun ConnectionsListView(
                 Spacer(modifier = Modifier.height(6.dp))
             }
 
-            when (val state = chatListState) {
-                is ChatListState.Loading -> {
-                    if (cachedConnections.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AdaptiveCircularProgressIndicator()
+            if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AdaptiveCircularProgressIndicator()
+                }
+            } else if (effectiveChats.isEmpty() && chatListState is ChatListState.Error) {
+                val errorMsg = (chatListState as ChatListState.Error).message
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Error loading chats",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            errorMsg,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.loadChats() }) {
+                            Text("Retry")
                         }
                     }
                 }
-                is ChatListState.Error -> {
+            } else {
+                val activeChats = effectiveChats.filter { it.connection.id !in archivedConnectionIds }
+                val archivedChats = effectiveChats.filter { it.connection.id in archivedConnectionIds }
+                val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
+
+                val filteredChats = if (searchQuery.isBlank()) {
+                    tabChats
+                } else {
+                    tabChats.filter { chat ->
+                        chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
+                    }
+                }
+
+                if (filteredChats.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Error loading chats",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.error
+                                if (searchQuery.isNotBlank()) "No matches found"
+                                else if (selectedTabIndex == 1) "No archived connections"
+                                else "No connections yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                state.message,
+                                if (searchQuery.isNotBlank()) "Try a different search term"
+                                else if (selectedTabIndex == 1) "Archived chats will appear here"
+                                else "Start clicking with people nearby!",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.loadChats() }) {
-                                Text("Retry")
-                            }
                         }
                     }
-                }
-                is ChatListState.Success -> {
-                    val activeChats = state.chats.filter { it.connection.id !in archivedConnectionIds }
-                    val archivedChats = state.chats.filter { it.connection.id in archivedConnectionIds }
-                    val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
-
-                    val filteredChats = if (searchQuery.isBlank()) {
-                        tabChats
-                    } else {
-                        tabChats.filter { chat ->
-                            chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
-                        }
-                    }
-                    
-                    if (filteredChats.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    if (searchQuery.isNotBlank()) "No matches found"
-                                    else if (selectedTabIndex == 1) "No archived connections"
-                                    else "No connections yet",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    if (searchQuery.isNotBlank()) "Try a different search term"
-                                    else if (selectedTabIndex == 1) "Archived chats will appear here"
-                                    else "Start clicking with people nearby!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 16.dp)
-                        ) {
-                            items(filteredChats, key = { it.connection.id }) { chatDetails ->
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    ConnectionItem(
-                                        chatDetails = chatDetails,
-                                        onClick = {
-                                            if (chatDetails.connection.isExpiredConnection()) {
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar("This connection has expired")
-                                                }
-                                            } else {
-                                                onChatSelected(chatDetails.connection.id)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        items(filteredChats, key = { it.connection.id }) { chatDetails ->
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                ConnectionItem(
+                                    chatDetails = chatDetails,
+                                    onClick = {
+                                        if (chatDetails.connection.isExpiredConnection()) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("This connection has expired")
                                             }
-                                        },
-                                        onNudge = {
-                                            val chatId = chatDetails.chat.id
-                                            if (chatId != null) {
-                                                viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
-                                            }
-                                        },
-                                        onOpenMenu = { pendingMenuChat = chatDetails },
-                                        onLongPress = { pendingMenuChat = chatDetails }
+                                        } else {
+                                            onChatSelected(chatDetails.connection.id)
+                                        }
+                                    },
+                                    onNudge = {
+                                        val chatId = chatDetails.chat.id
+                                        if (chatId != null) {
+                                            viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
+                                        }
+                                    },
+                                    onOpenMenu = { pendingMenuChat = chatDetails },
+                                    onLongPress = { pendingMenuChat = chatDetails }
+                                )
+                                if (connectionHasNoGeo(chatDetails.connection) && onNavigateToLocationSettings != null) {
+                                    LocationGapNudge(
+                                        otherName = chatDetails.otherUser.name ?: "them",
+                                        onClick = onNavigateToLocationSettings
                                     )
-                                    if (connectionHasNoGeo(chatDetails.connection) && onNavigateToLocationSettings != null) {
-                                        LocationGapNudge(
-                                            otherName = chatDetails.otherUser.name ?: "them",
-                                            onClick = onNavigateToLocationSettings
-                                        )
-                                    }
                                 }
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 68.dp, end = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                )
                             }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                            )
                         }
                     }
                 }
