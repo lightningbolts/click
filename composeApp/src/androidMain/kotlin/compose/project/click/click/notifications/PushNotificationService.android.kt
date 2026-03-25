@@ -90,6 +90,22 @@ private class AndroidPushNotificationService : PushNotificationService {
     override fun registerToken(userId: String) {
         AndroidPushNotificationRuntime.storeUserId(userId)
         requestPermission()
+
+        // Upload any tokens that arrived before login
+        val pending = consumePendingPushTokens()
+        if (pending.isNotEmpty()) {
+            scope.launch {
+                pending.forEach { pendingToken ->
+                    pushTokenRepository.savePushToken(
+                        userId = userId,
+                        token = pendingToken.token,
+                        platform = pendingToken.platform,
+                        tokenType = pendingToken.tokenType,
+                    )
+                }
+            }
+        }
+
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
                 println("PushNotificationService.android: Failed to fetch FCM token: ${task.exception?.message}")
@@ -130,7 +146,8 @@ private class AndroidPushNotificationService : PushNotificationService {
 internal fun uploadAndroidPushToken(token: String) {
     val userId = AndroidPushNotificationRuntime.storedUserId()
     if (userId.isNullOrBlank()) {
-        println("PushNotificationService.android: Skipping token upload because no user id is cached")
+        println("PushNotificationService.android: No user id yet — saving token as pending for later upload")
+        savePendingPushToken(token, "android", "standard")
         return
     }
 

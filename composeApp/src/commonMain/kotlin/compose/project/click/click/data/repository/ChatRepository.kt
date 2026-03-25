@@ -1,5 +1,6 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.*
@@ -39,6 +40,58 @@ class ChatRepository(
     private val supabase = SupabaseConfig.client
     private val supabaseRepository = SupabaseRepository()
     private val chatPushNotifier = ChatPushNotifier(tokenStorage)
+
+    private val encryptionKeyCache = mutableMapOf<String, MessageCrypto.DerivedKeys>()
+
+    @Serializable
+    private data class ConnectionUserIdsRow(
+        val id: String,
+        val user_ids: List<String>
+    )
+
+    private suspend fun getEncryptionKeysForChat(chatId: String): MessageCrypto.DerivedKeys? {
+        encryptionKeyCache[chatId]?.let { return it }
+        return try {
+            val chat = supabase.from("chats")
+                .select(columns = Columns.list("connection_id")) {
+                    filter { eq("id", chatId) }
+                    limit(1)
+                }
+                .decodeList<ChatConnectionIdOnly>()
+                .firstOrNull() ?: return null
+
+            val connection = supabase.from("connections")
+                .select(columns = Columns.list("id", "user_ids")) {
+                    filter { eq("id", chat.connectionId) }
+                    limit(1)
+                }
+                .decodeList<ConnectionUserIdsRow>()
+                .firstOrNull() ?: return null
+
+            val keys = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
+            encryptionKeyCache[chatId] = keys
+            keys
+        } catch (e: Exception) {
+            println("ChatRepository: Failed to derive encryption keys: ${e.message}")
+            null
+        }
+    }
+
+    fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {
+        val keys = MessageCrypto.deriveKeysForConnection(connectionId, userIds)
+        encryptionKeyCache[chatId] = keys
+    }
+
+    private fun decryptMessage(message: Message, keys: MessageCrypto.DerivedKeys?): Message {
+        if (keys == null || !MessageCrypto.isEncrypted(message.content)) return message
+        return message.copy(content = MessageCrypto.decryptContent(message.content, keys))
+    }
+
+    @Serializable
+    private data class ChatConnectionIdOnly(
+        @SerialName("connection_id")
+        val connectionId: String
+    )
 
     private suspend fun fetchUsersByIdsSafe(userIds: List<String>): List<User> {
         if (userIds.isEmpty()) return emptyList()
@@ -187,7 +240,13 @@ class ChatRepository(
                     createdAt = 0L
                 )
 
-                val lastMessage = chatRow?.let { firstByChatId[it.id]?.toMessage() }
+                val rawLastMessage = chatRow?.let { firstByChatId[it.id]?.toMessage() }
+                val keys = if (chatRow != null) {
+                    val k = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
+                    encryptionKeyCache[chatRow.id] = k
+                    k
+                } else null
+                val lastMessage = rawLastMessage?.let { decryptMessage(it, keys) }
                 val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
 
                 ChatWithDetails(
@@ -212,9 +271,9 @@ class ChatRepository(
         }
     }
 
-    // Fetch messages for a specific chat via API
     suspend fun fetchMessagesForChat(chatId: String): List<Message> {
         return try {
+            val keys = getEncryptionKeysForChat(chatId)
             supabase.from("messages")
                 .select {
                     filter {
@@ -223,20 +282,23 @@ class ChatRepository(
                     order("time_created", Order.ASCENDING)
                 }
                 .decodeList<Message>()
+                .map { decryptMessage(it, keys) }
         } catch (e: Exception) {
             println("Error fetching messages: ${e.message}")
             emptyList()
         }
     }
 
-    // Send a new message via API
     suspend fun sendMessage(chatId: String, userId: String, content: String): Message? {
         return try {
+            val keys = getEncryptionKeysForChat(chatId)
+            val wireContent = if (keys != null) MessageCrypto.encryptContent(content, keys) else content
+
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             val payload = buildJsonObject {
                 put("chat_id", chatId)
                 put("user_id", userId)
-                put("content", content)
+                put("content", wireContent)
                 put("time_created", now)
             }
 
@@ -247,13 +309,12 @@ class ChatRepository(
                     }
                     .decodeSingle<Message>()
             }.getOrElse {
-                // Some deployments can fail on the immediate returning payload even when the row exists.
                 supabase.from("messages")
                     .select {
                         filter {
                             eq("chat_id", chatId)
                             eq("user_id", userId)
-                            eq("content", content)
+                            eq("content", wireContent)
                             eq("time_created", now)
                         }
                         order("time_created", Order.DESCENDING)
@@ -263,6 +324,8 @@ class ChatRepository(
                     .firstOrNull()
                     ?: throw it
             }
+
+            val decrypted = if (keys != null) decryptMessage(inserted, keys) else inserted
 
             try {
                 supabase.from("chats")
@@ -281,14 +344,14 @@ class ChatRepository(
             runCatching {
                 chatPushNotifier.notifyNewMessage(
                     chatId = chatId,
-                    messageId = inserted.id,
+                    messageId = decrypted.id,
                     senderUserId = userId,
                 ).getOrThrow()
             }.onFailure {
                 println("ChatRepository: Failed to dispatch chat push: ${it.message}")
             }
 
-            inserted
+            decrypted
         } catch (e: Exception) {
             println("Error sending message: ${e.message}")
             null
@@ -370,18 +433,18 @@ class ChatRepository(
         val changeFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
         }.mapNotNull { action ->
+            val keys = encryptionKeyCache[chatId]
             when (action) {
                 is PostgresAction.Insert -> {
                     val row = action.decodeRecord<MessageRow>()
-                    if (row.chatId == chatId) MessageChangeEvent.Insert(row.toMessage()) else null
+                    if (row.chatId == chatId) MessageChangeEvent.Insert(decryptMessage(row.toMessage(), keys)) else null
                 }
                 is PostgresAction.Update -> {
                     val row = action.decodeRecord<MessageRow>()
-                    if (row.chatId == chatId) MessageChangeEvent.Update(row.toMessage()) else null
+                    if (row.chatId == chatId) MessageChangeEvent.Update(decryptMessage(row.toMessage(), keys)) else null
                 }
                 is PostgresAction.Delete -> {
                     try {
-                        // In supabase-kt v3, old record is accessed via the raw oldRecord JSON
                         val id = action.oldRecord["id"]?.toString()?.trim('"')
                         if (id != null) MessageChangeEvent.Delete(id) else null
                     } catch (_: Exception) {
@@ -741,18 +804,9 @@ class ChatRepository(
     }
 
     suspend fun searchMessages(chatId: String, query: String): List<Message> {
-        // Use direct Supabase query with ilike for reliable search (bypasses Python API)
         return try {
-            supabase.from("messages")
-                .select {
-                    filter {
-                        eq("chat_id", chatId)
-                        ilike("content", "%$query%")
-                    }
-                    order("time_created", Order.DESCENDING)
-                    limit(50)
-                }
-                .decodeList<Message>()
+            val allMessages = fetchMessagesForChat(chatId)
+            allMessages.filter { it.content.contains(query, ignoreCase = true) }
         } catch (e: Exception) {
             println("Error searching messages: ${e.message}")
             emptyList()

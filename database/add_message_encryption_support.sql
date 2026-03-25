@@ -1,4 +1,24 @@
--- Make message push delivery best-effort so a broken push setup never blocks chat sends.
+-- E2EE Message Encryption Support
+--
+-- No schema changes are required for E2EE support.
+--
+-- Encrypted messages are stored in the existing `content` TEXT column
+-- using the wire format:   e2e:<base64(iv || hmac || ciphertext)>
+--
+-- The "e2e:" prefix allows backward compatibility: unencrypted (legacy)
+-- messages are returned as-is, while encrypted messages are decrypted
+-- client-side before display.
+--
+-- Key derivation (identical on KMP and Web):
+--   master  = SHA-256( SALT || sorted_user_id_1 || sorted_user_id_2 || connection_id )
+--   enc_key = SHA-256( master || 0x01 )
+--   mac_key = SHA-256( master || 0x02 )
+--
+-- The push notification trigger (notify_new_message_push) has been updated
+-- to emit a generic "Tap to view message" body when the content starts
+-- with "e2e:", preventing ciphertext leakage into push payloads.
+--
+-- Re-apply the updated trigger:
 
 CREATE OR REPLACE FUNCTION notify_new_message_push()
 RETURNS TRIGGER AS $$
@@ -46,8 +66,7 @@ BEGIN
      WHERE id = NEW.user_id
      LIMIT 1;
 
-    -- E2EE guardrail: encrypted messages start with 'e2e:' and must not leak
-    -- ciphertext into the push notification body.
+    -- E2EE guardrail: never leak ciphertext into push notifications
     IF LEFT(COALESCE(NEW.content, ''), 4) = 'e2e:' THEN
         preview_body := 'Tap to view message';
     ELSE
@@ -84,3 +103,10 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Ensure trigger is attached
+DROP TRIGGER IF EXISTS trigger_new_message_push ON messages;
+CREATE TRIGGER trigger_new_message_push
+    AFTER INSERT ON messages
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_new_message_push();

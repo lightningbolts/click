@@ -268,6 +268,9 @@ function buildMessagePreview(content: string | null): string {
   if (!normalized) {
     return "Open Click to view the latest message";
   }
+  if (normalized.startsWith("e2e:")) {
+    return "Tap to view message";
+  }
   return normalized.slice(0, 120);
 }
 

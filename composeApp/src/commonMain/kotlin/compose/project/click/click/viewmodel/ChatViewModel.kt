@@ -1251,8 +1251,8 @@ class ChatViewModel(
         val newContent = _messageInput.value.trim()
         if (newContent.isEmpty()) return
         val now = Clock.System.now().toEpochMilliseconds()
+        val apiChatId = currentApiChatId
 
-        // Optimistic local update
         val previousState = _chatMessagesState.value
         if (previousState is ChatMessagesState.Success) {
             _chatMessagesState.value = previousState.copy(
@@ -1273,7 +1273,7 @@ class ChatViewModel(
 
         viewModelScope.launch {
             try {
-                val success = supabaseRepository.editMessage(messageId, newContent)
+                val success = supabaseRepository.editMessage(messageId, newContent, chatId = apiChatId)
                 if (success) {
                     _editingMessageId.value = null
                     _messageInput.value = ""
