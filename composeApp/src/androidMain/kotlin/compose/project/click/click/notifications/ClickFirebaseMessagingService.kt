@@ -62,6 +62,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        val chatId = message.data["chat_id"] ?: ""
         val senderName = message.data["sender_name"] ?: "Someone"
         val connectionId = message.data["connection_id"] ?: ""
         val body = decryptMessagePreview(
@@ -69,11 +70,16 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             connectionId = connectionId,
             senderUserId = message.data["sender_user_id"] ?: "",
             recipientUserId = message.data["recipient_user_id"] ?: "",
-            fallback = message.data["body"] ?: "Open Click to view it"
+            fallback = "Open Click to view it"
         )
 
-        val launchIntent = if (connectionId.isNotBlank()) {
-            MainActivity.createChatDeepLinkIntent(this, connectionId)
+        val deepLinkId = chatId.ifBlank { connectionId }
+        val launchIntent = if (deepLinkId.isNotBlank()) {
+            MainActivity.createChatDeepLinkIntent(
+                context = this,
+                chatId = chatId,
+                connectionId = connectionId
+            )
         } else {
             packageManager.getLaunchIntentForPackage(packageName)?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -82,7 +88,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            connectionId.hashCode(),
+            deepLinkId.hashCode(),
             launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

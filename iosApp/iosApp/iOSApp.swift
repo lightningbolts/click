@@ -121,6 +121,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound, .badge])
     }
 
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let chatId = userInfo["chat_id"] as? String, !chatId.isEmpty {
+            ClickKt.setChatDeepLink(chatId: chatId)
+        } else if let connectionId = userInfo["connection_id"] as? String, !connectionId.isEmpty {
+            ClickKt.setChatDeepLink(chatId: connectionId)
+        }
+        completionHandler()
+    }
+
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable : Any],

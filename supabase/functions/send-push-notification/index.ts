@@ -131,11 +131,19 @@ async function sendAndroidPush(
   accessToken: string,
   projectId: string,
 ): Promise<void> {
+  const category = getPushCategory(requestBody);
   const data: Record<string, string> = Object.fromEntries(
     Object.entries(requestBody.data ?? {}).map(([key, value]) => [key, String(value)])
   );
-  if (requestBody.title && !data.title) data.title = requestBody.title;
-  if (requestBody.body && !data.body) data.body = requestBody.body;
+
+  if (category === "chat_message") {
+    // Data-only: Android service decrypts locally and builds its own notification
+    delete data.title;
+    delete data.body;
+  } else {
+    if (requestBody.title && !data.title) data.title = requestBody.title;
+    if (requestBody.body && !data.body) data.body = requestBody.body;
+  }
 
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -344,6 +352,7 @@ async function resolveChatMessageRequest(
     const data = requestBody.data ?? {};
     const senderUserId = asNonEmptyString(data.sender_user_id);
     const messageId = asNonEmptyString(data.message_id);
+    const chatId = asNonEmptyString(data.chat_id);
 
     let senderName = "Someone";
     if (senderUserId) {
@@ -365,6 +374,16 @@ async function resolveChatMessageRequest(
       encryptedContent = msg?.content ?? "";
     }
 
+    let connectionId = asNonEmptyString(data.connection_id);
+    if (!connectionId && chatId) {
+      const { data: chat } = await supabase
+        .from("chats")
+        .select("connection_id")
+        .eq("id", chatId)
+        .maybeSingle();
+      connectionId = chat?.connection_id ?? null;
+    }
+
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
@@ -374,6 +393,7 @@ async function resolveChatMessageRequest(
         sender_name: senderName,
         encrypted_content: encryptedContent,
         recipient_user_id: providedRecipientUserId,
+        ...(connectionId ? { connection_id: connectionId } : {}),
       },
     };
   }
@@ -471,12 +491,13 @@ async function resolveChatMessageRequest(
     resolvedTitle = `New message from ${senderDisplayName}`;
   }
 
-  return {
+    return {
     recipient_user_id: recipientUserId,
     title: resolvedTitle,
     body: buildMessagePreview(messageContent),
     data: {
       ...(requestBody.data ?? {}),
+      chat_id: chatId,
       connection_id: chat.connection_id,
       sender_name: senderDisplayName,
       encrypted_content: messageContent ?? "",

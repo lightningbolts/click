@@ -63,8 +63,10 @@ class MainActivity : ComponentActivity() {
 
     private fun handleChatDeepLinkIntent(intent: Intent?) {
         if (intent?.action != ACTION_VIEW_CHAT) return
-        val connectionId = intent.getStringExtra(EXTRA_CHAT_CONNECTION_ID) ?: return
-        ChatDeepLinkManager.setPendingChat(connectionId)
+        val chatId = intent.getStringExtra(EXTRA_CHAT_ID)
+        val connectionId = intent.getStringExtra(EXTRA_CHAT_CONNECTION_ID)
+        val deepLinkId = chatId?.takeIf { it.isNotBlank() } ?: connectionId ?: return
+        ChatDeepLinkManager.setPendingChat(deepLinkId)
     }
 
     private fun configureScreenWakeForCalls(intent: Intent?) {
@@ -102,6 +104,7 @@ class MainActivity : ComponentActivity() {
         const val ACTION_DECLINE_CALL = "compose.project.click.click.action.DECLINE_CALL"
         const val ACTION_VIEW_CHAT = "compose.project.click.click.action.VIEW_CHAT"
 
+        private const val EXTRA_CHAT_ID = "extra_chat_id"
         private const val EXTRA_CHAT_CONNECTION_ID = "extra_chat_connection_id"
         private const val EXTRA_CALL_ID = "extra_call_id"
         private const val EXTRA_CONNECTION_ID = "extra_connection_id"
@@ -129,10 +132,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        fun createChatDeepLinkIntent(context: Context, connectionId: String): Intent {
+        fun createChatDeepLinkIntent(
+            context: Context,
+            chatId: String = "",
+            connectionId: String = "",
+        ): Intent {
             return Intent(context, MainActivity::class.java).apply {
                 action = ACTION_VIEW_CHAT
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_CHAT_ID, chatId)
                 putExtra(EXTRA_CHAT_CONNECTION_ID, connectionId)
             }
         }
