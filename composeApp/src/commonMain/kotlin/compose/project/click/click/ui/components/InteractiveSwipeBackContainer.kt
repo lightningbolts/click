@@ -99,6 +99,7 @@ fun InteractiveSwipeBackContainer(
 
                 if (shouldComplete) {
                     onBack()
+                } else {
                     dragOffset.floatValue = 0f
                 }
                 isGestureActive = false

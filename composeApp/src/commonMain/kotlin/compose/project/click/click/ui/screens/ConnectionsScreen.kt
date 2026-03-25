@@ -288,6 +288,7 @@ fun ConnectionsListView(
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
+    val cachedConnections by AppDataManager.connections.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -333,7 +334,8 @@ fun ConnectionsListView(
                         )
                     }
                     else -> {
-                        PageHeader(title = "Clicks", subtitle = "Loading…")
+                        val subtitle = if (cachedConnections.isEmpty()) "Loading…" else ""
+                        PageHeader(title = "Clicks", subtitle = subtitle)
                     }
                 }
             }
@@ -411,11 +413,13 @@ fun ConnectionsListView(
 
             when (val state = chatListState) {
                 is ChatListState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AdaptiveCircularProgressIndicator()
+                    if (cachedConnections.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AdaptiveCircularProgressIndicator()
+                        }
                     }
                 }
                 is ChatListState.Error -> {
