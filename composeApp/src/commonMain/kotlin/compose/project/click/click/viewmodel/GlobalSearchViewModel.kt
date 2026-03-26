@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import kotlinx.coroutines.Job
@@ -46,7 +47,7 @@ data class GlobalSearchResults(
 
 class GlobalSearchViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
-    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = tokenStorage)
+    private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage)
 ) : ViewModel() {
 
     private val appDataManager = AppDataManager

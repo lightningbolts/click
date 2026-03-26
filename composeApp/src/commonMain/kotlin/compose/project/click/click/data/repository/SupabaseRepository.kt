@@ -22,7 +22,8 @@ import kotlinx.serialization.json.put
  * Handles direct database queries for users and connections
  */
 class SupabaseRepository {
-    private val supabase = SupabaseConfig.client
+    /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
+    private val supabase by lazy { SupabaseConfig.client }
     private val userColumnSets = listOf(
         listOf("id", "name", "full_name", "email", "image", "last_polled"),
         listOf("id", "name", "email", "image", "last_polled"),
@@ -795,7 +796,7 @@ class SupabaseRepository {
 
             var wireContent = newContent
             if (chatId != null) {
-                val chatRepo = ChatRepository(tokenStorage = compose.project.click.click.data.storage.createTokenStorage())
+                val chatRepo = SupabaseChatRepository(tokenStorage = compose.project.click.click.data.storage.createTokenStorage())
                 // Attempt encryption if we can resolve keys
                 try {
                     val chat = supabase.from("chats")

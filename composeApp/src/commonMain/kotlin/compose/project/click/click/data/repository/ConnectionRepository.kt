@@ -70,7 +70,7 @@ class ConnectionRepository(
     private val weatherService: WeatherService = OpenMeteoWeatherService(),
     private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
-    private val supabase = SupabaseConfig.client
+    private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
     private companion object {

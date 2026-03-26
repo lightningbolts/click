@@ -14,7 +14,8 @@ import kotlinx.coroutines.withTimeout
 class AuthRepository(
     private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
-    private val supabase = SupabaseConfig.client
+    /** Lazy so [AppDataManager] and JVM tests can load without touching Supabase / Android crypto. */
+    private val supabase by lazy { SupabaseConfig.client }
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
     }

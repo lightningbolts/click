@@ -13,6 +13,7 @@ import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
@@ -25,10 +26,11 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
-import io.github.jan.supabase.realtime.RealtimeChannel
 import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.repository.ChatRepository.MessageChangeEvent
-import compose.project.click.click.data.repository.ChatRepository.ReactionChangeEvent
+import compose.project.click.click.data.repository.ChatMessageSubscription
+import compose.project.click.click.data.repository.ChatReactionSubscription
+import compose.project.click.click.data.repository.MessageChangeEvent
+import compose.project.click.click.data.repository.ReactionChangeEvent
 
 sealed class ChatListState {
     data object Loading : ChatListState()
@@ -48,7 +50,7 @@ sealed class ChatMessagesState {
 
 class ChatViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
-    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = tokenStorage),
+    private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository()
 ) : ViewModel() {
 
@@ -124,8 +126,8 @@ class ChatViewModel(
 
     private var currentConnectionId: String? = null
     private var currentApiChatId: String? = null
-    private var activeChannel: RealtimeChannel? = null
-    private var reactionsChannel: RealtimeChannel? = null
+    private var activeMessageSubscription: ChatMessageSubscription? = null
+    private var activeReactionSubscription: ChatReactionSubscription? = null
     private var reactionsJob: Job? = null
     private var realtimeJob: Job? = null
     private var activeChatSyncJob: Job? = null
@@ -220,9 +222,12 @@ class ChatViewModel(
         }
 
         viewModelScope.launch {
-            SupabaseConfig.client.auth.sessionStatus.collect { status ->
-                if (status is SessionStatus.Authenticated) {
-                    restoreActiveChatSubscriptionsIfNeeded()
+            // Session restore after auth; wrapped so JVM unit tests without Android Settings can construct the VM.
+            runCatching {
+                SupabaseConfig.client.auth.sessionStatus.collect { status ->
+                    if (status is SessionStatus.Authenticated) {
+                        restoreActiveChatSubscriptionsIfNeeded()
+                    }
                 }
             }
         }
@@ -414,9 +419,9 @@ class ChatViewModel(
                 )
         val hasLiveSubscriptions =
             currentApiChatId == activeApiChatId &&
-                activeChannel != null &&
+                activeMessageSubscription != null &&
                 realtimeJob?.isActive == true &&
-                reactionsChannel != null &&
+                activeReactionSubscription != null &&
                 reactionsJob?.isActive == true &&
                 typingPollingJob?.isActive == true
 
@@ -592,17 +597,17 @@ class ChatViewModel(
         currentApiChatId = chatId
         viewModelScope.launch {
             // Clean up previous channel
-            activeChannel?.let {
-                try { it.unsubscribe() } catch (_: Exception) {}
+            activeMessageSubscription?.let {
+                try { it.detach() } catch (_: Exception) {}
             }
-            activeChannel = null
+            activeMessageSubscription = null
         }
         realtimeJob = viewModelScope.launch {
             var attempt = 0
             while (attempt < MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS && currentApiChatId == chatId) {
                 try {
-                    val (channel, changeFlow) = chatRepository.subscribeToMessages(chatId)
-                    activeChannel = channel
+                    val (subscription, changeFlow) = chatRepository.subscribeToMessages(chatId)
+                    activeMessageSubscription = subscription
 
                     changeFlow
                         .onEach { event ->
@@ -638,14 +643,14 @@ class ChatViewModel(
                         }
                         .launchIn(this)
 
-                    channel.subscribe()
+                    subscription.attach()
                     return@launch
                 } catch (e: Exception) {
                     attempt += 1
-                    activeChannel?.let { channel ->
-                        try { channel.unsubscribe() } catch (_: Exception) {}
+                    activeMessageSubscription?.let { sub ->
+                        try { sub.detach() } catch (_: Exception) {}
                     }
-                    activeChannel = null
+                    activeMessageSubscription = null
                     println("Error subscribing to messages (attempt $attempt): ${e.message}")
                     if (attempt < MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS && currentApiChatId == chatId) {
                         delay(MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS * attempt)
@@ -659,8 +664,8 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         val apiChatId = currentState.chatDetails.chat.id ?: return
-        val needsMessageSubscription = currentApiChatId != apiChatId || activeChannel == null || realtimeJob?.isActive != true
-        val needsReactionSubscription = reactionsChannel == null || reactionsJob?.isActive != true
+        val needsMessageSubscription = currentApiChatId != apiChatId || activeMessageSubscription == null || realtimeJob?.isActive != true
+        val needsReactionSubscription = activeReactionSubscription == null || reactionsJob?.isActive != true
         val needsTypingSubscription = typingPollingJob?.isActive != true
 
         currentApiChatId = apiChatId
@@ -872,22 +877,22 @@ class ChatViewModel(
         realtimeJob?.cancel()
         realtimeJob = null
         // Remove the realtime channels from Supabase
-        activeChannel?.let { channel ->
+        activeMessageSubscription?.let { sub ->
             viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
+                try { sub.detach() } catch (_: Exception) {}
             }
         }
-        activeChannel = null
+        activeMessageSubscription = null
         reactionsJob?.cancel()
         reactionsJob = null
         activeChatSyncJob?.cancel()
         activeChatSyncJob = null
-        reactionsChannel?.let { channel ->
+        activeReactionSubscription?.let { sub ->
             viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
+                try { sub.detach() } catch (_: Exception) {}
             }
         }
-        reactionsChannel = null
+        activeReactionSubscription = null
         _messageReactions.value = emptyMap()
         _typingUsers.value = emptyList()
         typingPollingJob?.cancel()
@@ -947,10 +952,10 @@ class ChatViewModel(
         initialReactionsByMessageId: Map<String, List<MessageReaction>> = emptyMap()
     ) {
         reactionsJob?.cancel()
-        reactionsChannel?.let { ch ->
-            viewModelScope.launch { try { ch.unsubscribe() } catch (_: Exception) {} }
+        activeReactionSubscription?.let { sub ->
+            viewModelScope.launch { try { sub.detach() } catch (_: Exception) {} }
         }
-        reactionsChannel = null
+        activeReactionSubscription = null
 
         reactionsJob = viewModelScope.launch {
             // 1. Fetch existing reactions
@@ -963,8 +968,8 @@ class ChatViewModel(
 
             // 2. Subscribe to Realtime inserts/deletes
             try {
-                val (channel, changeFlow) = chatRepository.subscribeToReactions(chatId)
-                reactionsChannel = channel
+                val (reactionSub, changeFlow) = chatRepository.subscribeToReactions(chatId)
+                activeReactionSubscription = reactionSub
 
                 changeFlow
                     .onEach { event ->
@@ -992,7 +997,7 @@ class ChatViewModel(
                     }
                     .launchIn(this)
 
-                channel.subscribe()
+                reactionSub.attach()
             } catch (e: Exception) {
                 println("Error subscribing to reactions: ${e.message}")
             }
@@ -1525,18 +1530,18 @@ class ChatViewModel(
         reactionsJob?.cancel()
         typingPollingJob?.cancel()
         vibeCheckTimerJob?.cancel()
-        activeChannel?.let { channel ->
+        activeMessageSubscription?.let { sub ->
             viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
+                try { sub.detach() } catch (_: Exception) {}
             }
         }
-        activeChannel = null
-        reactionsChannel?.let { channel ->
+        activeMessageSubscription = null
+        activeReactionSubscription?.let { sub ->
             viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
+                try { sub.detach() } catch (_: Exception) {}
             }
         }
-        reactionsChannel = null
+        activeReactionSubscription = null
     }
 }
 

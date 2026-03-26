@@ -12,6 +12,7 @@ import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ReconnectReminder
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.realtime.PostgresAction
@@ -40,7 +41,7 @@ sealed class HomeState {
 }
 
 class HomeViewModel(
-    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = createTokenStorage()),
+    private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
     private val connectionRepository: ConnectionRepository = ConnectionRepository()
 ) : ViewModel() {
 

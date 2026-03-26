@@ -8,7 +8,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 class PushTokenRepository {
-    private val supabase = SupabaseConfig.client
+    private val supabase by lazy { SupabaseConfig.client }
 
     suspend fun savePushToken(
         userId: String,

@@ -13,6 +13,7 @@ import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
@@ -41,13 +42,14 @@ object AppDataManager {
     private var presenceHeartbeatJob: Job? = null
     private var pendingSyncJob: Job? = null
     
-    private val authRepository = AuthRepository()
-    private val supabaseRepository = SupabaseRepository()
-    private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
-    private val notificationPreferencesRepository = NotificationPreferencesRepository()
-    private val connectionRepository = ConnectionRepository()
-    private val tokenStorage = createTokenStorage() // For local preferences storage
-    private val pushNotificationService = createPushNotificationService()
+    /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
+    private val tokenStorage by lazy { createTokenStorage() }
+    private val authRepository by lazy { AuthRepository(tokenStorage = tokenStorage) }
+    private val supabaseRepository by lazy { SupabaseRepository() }
+    private val chatRepository by lazy { SupabaseChatRepository(tokenStorage = tokenStorage) }
+    private val notificationPreferencesRepository by lazy { NotificationPreferencesRepository() }
+    private val connectionRepository by lazy { ConnectionRepository() }
+    private val pushNotificationService by lazy { createPushNotificationService() }
     private val json = Json { ignoreUnknownKeys = true }
     
     // Current user state

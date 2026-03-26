@@ -7,6 +7,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.ui.utils.*
@@ -103,7 +104,7 @@ class MapViewModel : ViewModel() {
     private var connectionsChannel: RealtimeChannel? = null
 
     // Chat repository for nudge messages
-    private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
+    private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage())
 
     // Nudge result for snackbar feedback
     private val _nudgeResult = MutableStateFlow<String?>(null)

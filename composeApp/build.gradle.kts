@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -110,6 +112,18 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        iosSimulatorArm64Test.dependencies {
+            implementation(compose.uiTest)
+        }
+        androidUnitTest.dependencies {
+            implementation(libs.junit)
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.robolectric)
+            implementation(libs.androidx.arch.core.testing)
+            implementation(libs.androidx.test.core)
         }
     }
 }
@@ -139,6 +153,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 }
 

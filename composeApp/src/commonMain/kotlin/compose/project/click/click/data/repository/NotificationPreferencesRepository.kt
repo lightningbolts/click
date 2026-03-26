@@ -13,7 +13,7 @@ data class NotificationPreferences(
 )
 
 class NotificationPreferencesRepository {
-    private val supabase = SupabaseConfig.client
+    private val supabase by lazy { SupabaseConfig.client }
 
     suspend fun fetchPreferences(userId: String): NotificationPreferences {
         return try {
