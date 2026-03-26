@@ -42,6 +42,7 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -79,8 +80,13 @@ class SupabaseChatRepository(
     )
 
     private fun userIdFromPresence(p: Presence): String? {
-        val el = p.state["userId"] ?: p.state["user_id"] ?: return null
-        return (el as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        fun fromObject(obj: JsonObject): String? {
+            val el = obj["userId"] ?: obj["user_id"] ?: return null
+            return (el as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        }
+        fromObject(p.state)?.let { return it }
+        val nested = p.state["state"]?.let { it as? JsonObject } ?: return null
+        return fromObject(nested)
     }
 
     private suspend fun disposeEphemeralSession(session: ChatEphemeralSession) {
@@ -378,6 +384,7 @@ class SupabaseChatRepository(
                     chatId = chatId,
                     messageId = decrypted.id,
                     senderUserId = userId,
+                    messagePreviewPlaintext = content,
                 ).getOrThrow()
             }.onFailure {
                 println("ChatRepository: Failed to dispatch chat push: ${it.message}")
@@ -775,7 +782,8 @@ class SupabaseChatRepository(
                 onBufferOverflow = BufferOverflow.DROP_OLDEST
             )
             val peerOnline = MutableStateFlow(false)
-            val trackedPresence = mutableSetOf<String>()
+            /** Presence keys are configured as each client's user id; diff joins/leaves are authoritative. */
+            val presenceKeysOnline = mutableSetOf<String>()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val broadcastFlow = channel.broadcastFlow<TypingBroadcastPayload>(event = "typing")
             val presenceFlow = channel.presenceChangeFlow()
@@ -802,13 +810,15 @@ class SupabaseChatRepository(
             val presenceJob = scope.launch {
                 try {
                     presenceFlow.collect { action ->
+                        action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
+                        action.joins.keys.forEach { key -> presenceKeysOnline.add(key) }
                         action.joins.values.forEach { p ->
-                            userIdFromPresence(p)?.let { trackedPresence.add(it) }
+                            userIdFromPresence(p)?.let { presenceKeysOnline.add(it) }
                         }
                         action.leaves.values.forEach { p ->
-                            userIdFromPresence(p)?.let { trackedPresence.remove(it) }
+                            userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
                         }
-                        peerOnline.value = peerUserId in trackedPresence
+                        peerOnline.value = peerUserId in presenceKeysOnline
                     }
                 } catch (_: Exception) {
                 }

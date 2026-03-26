@@ -239,7 +239,6 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
 function shouldSendToToken(
   requestBody: ResolvedPushRequestBody,
   pushToken: PushTokenRow,
-  hasVoipIosToken: boolean,
 ): boolean {
   const category = getPushCategory(requestBody);
 
@@ -252,8 +251,9 @@ function shouldSendToToken(
     return tokenType != "voip";
   }
 
-  if (hasVoipIosToken) {
-    return tokenType === "voip";
+  // incoming_call: send to every iOS token. VoIP wakes CallKit; standard APNs adds banner + sound if VoIP fails or is delayed.
+  if (category === "incoming_call") {
+    return true;
   }
 
   return tokenType != "voip";
@@ -394,13 +394,14 @@ async function resolveChatMessageRequest(
       connectionId = chat?.connection_id ?? null;
     }
 
-    const previewText = buildMessagePreview(encryptedContent);
+    const clientPreview = asNonEmptyString(data.message_preview);
+    const previewText = clientPreview ?? buildMessagePreview(encryptedContent);
     const encryptedForFcm = encryptedContentForFcmPayload(encryptedContent);
 
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
-      body: providedBody,
+      body: clientPreview ?? providedBody,
       data: {
         ...data,
         sender_name: senderName,
@@ -426,6 +427,7 @@ async function resolveChatMessageRequest(
   const chatId = asNonEmptyString(data.chat_id);
   const senderUserId = asNonEmptyString(data.sender_user_id);
   const messageId = asNonEmptyString(data.message_id);
+  const clientMessagePreview = asNonEmptyString(data.message_preview);
 
   if (!chatId || !senderUserId) {
     throw new Error("chat_message pushes require chat_id and sender_user_id");
@@ -506,7 +508,7 @@ async function resolveChatMessageRequest(
   }
 
   const rawContent = messageContent ?? "";
-  const previewText = buildMessagePreview(rawContent);
+  const previewText = clientMessagePreview ?? buildMessagePreview(rawContent);
   const encryptedForFcm = encryptedContentForFcmPayload(rawContent);
 
   return {
@@ -617,12 +619,10 @@ Deno.serve(async (req: Request) => {
     let sent = 0;
 
     const pushTokens = (tokens ?? []) as PushTokenRow[];
-    const hasVoipIosToken = getPushCategory(resolvedRequestBody) === "incoming_call" &&
-      pushTokens.some((token) => token.platform === "ios" && token.token_type === "voip");
 
     for (const token of pushTokens) {
       try {
-        if (!shouldSendToToken(resolvedRequestBody, token, hasVoipIosToken)) {
+        if (!shouldSendToToken(resolvedRequestBody, token)) {
           continue;
         }
 

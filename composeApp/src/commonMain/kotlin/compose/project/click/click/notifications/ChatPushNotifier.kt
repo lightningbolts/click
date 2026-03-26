@@ -33,7 +33,12 @@ class ChatPushNotifier(
         }
     }
 
-    suspend fun notifyNewMessage(chatId: String, messageId: String, senderUserId: String): Result<Unit> {
+    suspend fun notifyNewMessage(
+        chatId: String,
+        messageId: String,
+        senderUserId: String,
+        messagePreviewPlaintext: String? = null,
+    ): Result<Unit> {
         val jwt = tokenStorage.getJwt()
             ?: return Result.failure(IllegalStateException("Missing auth token"))
 
@@ -49,6 +54,13 @@ class ChatPushNotifier(
                                 put("chat_id", chatId)
                                 put("message_id", messageId)
                                 put("sender_user_id", senderUserId)
+                                val preview = messagePreviewPlaintext?.trim().orEmpty()
+                                if (preview.isNotEmpty()) {
+                                    put(
+                                        "message_preview",
+                                        preview.replace(Regex("\\s+"), " ").take(160),
+                                    )
+                                }
                             }
                         )
                     )

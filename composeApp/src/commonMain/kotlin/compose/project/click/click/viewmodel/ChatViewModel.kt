@@ -448,6 +448,14 @@ class ChatViewModel(
         // Instantly show the chat header from cached list data (no loading spinner)
         val prefetchedPayload = prefetchedChatPayloads[connectionId]
 
+        if (cachedChat != null && prefetchedPayload == null) {
+            _icebreakerPrompts.value =
+                IcebreakerRepository.getPromptsForContext(cachedChat.connection.context_tag, count = 3)
+            if (cachedChat.lastMessage == null) {
+                _showIcebreakerPanel.value = true
+            }
+        }
+
         if (cachedChat != null && prefetchedPayload != null) {
             _messageReactions.value = prefetchedPayload.reactionsByMessageId
             _icebreakerPrompts.value = prefetchedPayload.icebreakerPrompts

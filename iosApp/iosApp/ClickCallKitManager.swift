@@ -9,6 +9,7 @@ import ComposeApp
 private enum ClickNativeCallNotifications {
     static let incoming = Notification.Name("ClickNativeIncomingCall")
     static let end = Notification.Name("ClickNativeEndCall")
+    static let answer = Notification.Name("ClickNativeAnswerCall")
 }
 
 struct ClickIncomingCallPayload {
@@ -83,6 +84,7 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
     static let shared = ClickCallKitManager()
 
     private let provider: CXProvider
+    private let callController = CXCallController()
     private var observers: [NSObjectProtocol] = []
     private var payloadsByCallId: [String: ClickIncomingCallPayload] = [:]
     private var uuidsByCallId: [String: UUID] = [:]
@@ -121,6 +123,24 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
             }
             self?.endCall(callId: callId)
         })
+        observers.append(center.addObserver(forName: ClickNativeCallNotifications.answer, object: nil, queue: .main) { [weak self] notification in
+            guard let callId = notification.userInfo?["callId"] as? String ?? notification.userInfo?["call_id"] as? String else {
+                return
+            }
+            self?.requestAnswerForCall(callId: callId)
+        })
+    }
+
+    /// In-app Accept must drive CallKit answer; otherwise the native incoming UI stays active and can send End → decline.
+    func requestAnswerForCall(callId: String) {
+        guard let uuid = uuidsByCallId[callId] else { return }
+        let action = CXAnswerCallAction(call: uuid)
+        let transaction = CXTransaction(action: action)
+        callController.request(transaction) { error in
+            if let error {
+                print("CallKit request answer failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// - Parameter voipPushCompletion: When non-nil (PushKit path), **must** be invoked after `reportNewIncomingCall` finishes so iOS can wake the app reliably.

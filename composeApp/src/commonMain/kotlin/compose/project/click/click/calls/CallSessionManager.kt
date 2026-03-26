@@ -219,6 +219,8 @@ object CallSessionManager {
     }
 
     fun acceptIncomingCall() {
+        if (_overlayState.value is CallOverlayState.Connecting) return
+
         val invite = (_overlayState.value as? CallOverlayState.Incoming)?.invite ?: return
 
         timeoutJob?.cancel()
