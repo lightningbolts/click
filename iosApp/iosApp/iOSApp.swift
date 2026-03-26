@@ -31,10 +31,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         ClickCallKitManager.shared.start()
         ClickVoipPushManager.shared.start()
 
+        // Incoming call from notification tap / cold start: report CallKit immediately (no async deferral).
         if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
-            DispatchQueue.main.async {
-                _ = self.handleIncomingCallNotification(remote)
-            }
+            _ = handleIncomingCallNotification(remote)
         }
 
         let notificationCenter = UNUserNotificationCenter.current()

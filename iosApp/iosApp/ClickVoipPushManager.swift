@@ -7,7 +7,8 @@ import ComposeApp
 final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     static let shared = ClickVoipPushManager()
 
-    private let registry = PKPushRegistry(queue: DispatchQueue.main)
+    /// Main queue: PushKit requires `CXProvider.reportNewIncomingCall` to be invoked immediately from this callback (no network/async before reporting).
+    private let registry = PKPushRegistry(queue: .main)
     private var started = false
 
     func start() {
@@ -27,24 +28,42 @@ final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
-        reportCallFromPush(payload.dictionaryPayload, type: type, voipPushCompletion: completion)
-    }
-
-    func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
-        reportCallFromPush(payload.dictionaryPayload, type: type, voipPushCompletion: nil)
-    }
-
-    private func reportCallFromPush(_ userInfo: [AnyHashable: Any], type: PKPushType, voipPushCompletion: (() -> Void)?) {
         guard type == .voIP else {
-            voipPushCompletion?()
+            completion()
             return
         }
 
-        if let payload = ClickIncomingCallPayload(userInfo) {
-            ClickCallKitManager.shared.reportIncomingCall(payload, voipPushCompletion: voipPushCompletion)
-        } else {
-            ClickCallKitManager.shared.reportUnparseableIncomingCall(voipPushCompletion: voipPushCompletion)
+        let dictionaryPayload = payload.dictionaryPayload
+        // Caller UUID + name: top-level keys only, before CallKit (no async / network).
+        let callerUUID = dictionaryPayload["caller_id"] as? String ?? dictionaryPayload["callerId"] as? String
+        let callerName = dictionaryPayload["caller_name"] as? String ?? dictionaryPayload["callerName"] as? String
+
+        guard let parsed = ClickIncomingCallPayload(dictionaryPayload) else {
+            ClickCallKitManager.shared.reportUnparseableIncomingCall(voipPushCompletion: completion)
+            return
         }
+
+        let resolvedCallerId: String = {
+            if let u = callerUUID, !u.isEmpty { return u }
+            return parsed.callerId
+        }()
+        let resolvedCallerName: String = {
+            if let n = callerName, !n.isEmpty { return n }
+            return parsed.callerName
+        }()
+
+        let incoming = ClickIncomingCallPayload(
+            callId: parsed.callId,
+            connectionId: parsed.connectionId,
+            roomName: parsed.roomName,
+            callerId: resolvedCallerId,
+            callerName: resolvedCallerName,
+            calleeId: parsed.calleeId,
+            calleeName: parsed.calleeName,
+            videoEnabled: parsed.videoEnabled,
+            createdAt: parsed.createdAt
+        )
+        ClickCallKitManager.shared.reportIncomingCall(incoming, voipPushCompletion: completion)
     }
 }
 #else

@@ -184,19 +184,25 @@ async function sendIosPush(
   const tokenType = pushToken.token_type ?? "standard";
   const isVoipToken = tokenType === "voip";
   const isIncomingCall = category === "incoming_call";
+  // Apple VoIP pushes require push-type voip, topic <bundleId>.voip, and apns-expiration 0 (no delay).
+  const isVoipIncomingCall = isVoipToken && isIncomingCall;
 
   const headers: Record<string, string> = {
     authorization: `bearer ${apnsJwt}`,
-    "apns-topic": isVoipToken ? `${bundleId}.voip` : bundleId,
-    "apns-push-type": isVoipToken && isIncomingCall ? "voip" : "alert",
-    "apns-priority": "10",
     "content-type": "application/json",
+    "apns-priority": "10",
   };
-  if (isVoipToken && isIncomingCall) {
+
+  if (isVoipIncomingCall) {
+    headers["apns-topic"] = `${bundleId}.voip`;
+    headers["apns-push-type"] = "voip";
     headers["apns-expiration"] = "0";
+  } else {
+    headers["apns-topic"] = bundleId;
+    headers["apns-push-type"] = "alert";
   }
 
-  const body = isVoipToken && isIncomingCall
+  const body = isVoipIncomingCall
     ? {
         aps: {
           "content-available": 1,

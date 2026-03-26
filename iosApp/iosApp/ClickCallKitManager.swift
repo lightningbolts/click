@@ -120,6 +120,29 @@ struct ClickIncomingCallPayload {
         }
         self.createdAt = Self.int64(info, "createdAt", "created_at")
     }
+
+    /// VoIP / PushKit: rebuild after reading top-level `caller_id` / `caller_name` from `dictionaryPayload`.
+    init(
+        callId: String,
+        connectionId: String,
+        roomName: String,
+        callerId: String,
+        callerName: String,
+        calleeId: String,
+        calleeName: String,
+        videoEnabled: Bool,
+        createdAt: Int64
+    ) {
+        self.callId = callId
+        self.connectionId = connectionId
+        self.roomName = roomName
+        self.callerId = callerId
+        self.callerName = callerName
+        self.calleeId = calleeId
+        self.calleeName = calleeName
+        self.videoEnabled = videoEnabled
+        self.createdAt = createdAt
+    }
 }
 
 private extension String {
@@ -192,6 +215,7 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
     }
 
     /// - Parameter voipPushCompletion: When non-nil (PushKit path), **must** be invoked after `reportNewIncomingCall` finishes so iOS can wake the app reliably.
+    /// PushKit: call synchronously from `PKPushRegistryDelegate` — do not dispatch async or await network before this method.
     func reportIncomingCall(_ payload: ClickIncomingCallPayload, voipPushCompletion: (() -> Void)?) {
         if uuidsByCallId[payload.callId] != nil {
             payloadsByCallId[payload.callId] = payload
@@ -213,6 +237,7 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
         update.supportsUngrouping = false
         update.supportsDTMF = false
 
+        // Invoked synchronously from the caller; completion runs when CallKit finishes registration.
         provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] error in
             if let error {
                 print("CallKit report incoming call failed: \(error.localizedDescription)")
