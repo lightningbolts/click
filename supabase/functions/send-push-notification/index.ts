@@ -210,6 +210,8 @@ async function sendIosPush(
             body: requestBody.body,
           },
           sound: "default",
+          // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
+          ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
           ...(isIncomingCall
             ? {
                 category: "CLICK_INCOMING_CALL",
