@@ -126,7 +126,7 @@ fun App() {
         else -> User(id = "", name = "", createdAt = 0L)
     }
 
-    var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var ambientNoiseOptIn by remember { mutableStateOf(true) }
     var barometricContextOptIn by remember { mutableStateOf(true) }
     var onboardingState by remember { mutableStateOf<OnboardingState?>(null) }
     var isCompletingPermissions by remember { mutableStateOf(false) }
@@ -143,7 +143,7 @@ fun App() {
         if (persisted != null) {
             isDarkMode = persisted
         }
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
         barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true
     }
 

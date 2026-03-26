@@ -81,7 +81,7 @@ fun SettingsScreen(
     val microphoneGranted = remember(micPermissionBump) { ambientNoiseMonitor.hasPermission }
 
     LaunchedEffect(Unit) {
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
     }
 
     var showNameDialog by remember { mutableStateOf(false) }

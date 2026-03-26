@@ -64,7 +64,7 @@ fun NfcScreen(
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
 
     LaunchedEffect(Unit) {
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
     }
 
     LaunchedEffect(userId) {
