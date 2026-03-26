@@ -1078,6 +1078,15 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                         expanded = showCallMenu,
                                         onDismissRequest = { showCallMenu = false },
                                         shape = RoundedCornerShape(if (menuStyle.isIOS) 14.dp else 22.dp),
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = if (menuStyle.isIOS) {
+                                            BorderStroke(
+                                                0.5.dp,
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                            )
+                                        } else {
+                                            null
+                                        },
                                         tonalElevation = if (menuStyle.isIOS) 0.dp else 8.dp,
                                         shadowElevation = if (menuStyle.isIOS) 0.dp else 16.dp
                                     ) {
