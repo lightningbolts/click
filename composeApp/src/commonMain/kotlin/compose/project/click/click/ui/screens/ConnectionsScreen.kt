@@ -216,7 +216,16 @@ fun ConnectionsScreen(
                         enabled = true,
                         edgeSwipeWidth = 44.dp,
                         onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
-                        previousContent = { },
+                        previousContent = {
+                            // Must mirror the persistent list layer so the edge swipe reveals
+                            // the connections UI instead of an empty (black) placeholder.
+                            ConnectionsListView(
+                                viewModel = viewModel,
+                                searchQuery = searchQuery,
+                                onChatSelected = { chatId -> openChat(chatId) },
+                                onNavigateToLocationSettings = onNavigateToLocationSettings
+                            )
+                        },
                         currentContent = {
                             ChatView(
                                 viewModel = viewModel,

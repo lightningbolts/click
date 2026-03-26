@@ -65,6 +65,17 @@ interface ChatRepository {
 
     suspend fun getTypingUsers(chatId: String): List<String>
 
+    /**
+     * Joins the Realtime channel `chat:{chatId}` for Broadcast (typing) and Presence (peer online).
+     * Idempotent for the same [chatId]; replaces any prior ephemeral session for another chat.
+     */
+    suspend fun joinChatEphemeralChannel(chatId: String, currentUserId: String, peerUserId: String)
+
+    suspend fun leaveChatEphemeralChannel(chatId: String)
+
+    /** Emits whether [peerUserId] is currently present on the chat channel (active in this chat). */
+    fun observePeerOnline(chatId: String, peerUserId: String): Flow<Boolean>
+
     suspend fun updateMessageStatus(messageId: String, status: String): Boolean
 
     suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message?

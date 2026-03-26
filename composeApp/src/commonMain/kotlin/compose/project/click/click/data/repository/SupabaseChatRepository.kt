@@ -10,23 +10,44 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.Presence
+import io.github.jan.supabase.realtime.broadcast
+import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.decodeRecord
+import io.github.jan.supabase.realtime.presenceChangeFlow
+import io.github.jan.supabase.realtime.track
+import io.github.jan.supabase.realtime.untrack
 import io.github.jan.supabase.realtime.RealtimeChannel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
@@ -43,6 +64,39 @@ class SupabaseChatRepository(
     private val chatPushNotifier = ChatPushNotifier(tokenStorage)
 
     private val encryptionKeyCache = mutableMapOf<String, MessageCrypto.DerivedKeys>()
+
+    private val ephemeralMutex = Mutex()
+    private val ephemeralSessions = mutableMapOf<String, ChatEphemeralSession>()
+
+    @Serializable
+    private data class TypingBroadcastPayload(val userId: String)
+
+    private data class ChatEphemeralSession(
+        val channel: RealtimeChannel,
+        val peerUserId: String,
+        val typingFlow: MutableSharedFlow<TypingStatus>,
+        val peerOnline: MutableStateFlow<Boolean>,
+        val scope: CoroutineScope,
+        val jobs: List<Job>,
+    )
+
+    private fun userIdFromPresence(p: Presence): String? =
+        p.state["userId"]?.jsonPrimitive?.contentOrNull
+
+    private suspend fun disposeEphemeralSession(session: ChatEphemeralSession) {
+        session.jobs.forEach { it.cancel() }
+        session.scope.cancel()
+        runCatching { session.channel.untrack() }
+        runCatching { session.channel.unsubscribe() }
+    }
+
+    private suspend fun awaitEphemeralSession(chatId: String): ChatEphemeralSession? {
+        repeat(EPHEMERAL_SESSION_WAIT_STEPS) {
+            ephemeralMutex.withLock { ephemeralSessions[chatId] }?.let { return it }
+            delay(EPHEMERAL_SESSION_POLL_MS)
+        }
+        return null
+    }
 
     @Serializable
     private data class ConnectionUserIdsRow(
@@ -141,29 +195,6 @@ class SupabaseChatRepository(
             isRead = isRead
         )
     }
-
-    @Serializable
-    private data class TypingEventIdentityRow(
-        val id: String,
-    )
-
-    @Serializable
-    private data class TypingEventRow(
-        @SerialName("user_id")
-        val userId: String,
-        @SerialName("updated_at")
-        val updatedAt: Long,
-    )
-
-    @Serializable
-    private data class TypingEventInsert(
-        @SerialName("chat_id")
-        val chatId: String,
-        @SerialName("user_id")
-        val userId: String,
-        @SerialName("updated_at")
-        val updatedAt: Long,
-    )
 
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
@@ -700,85 +731,108 @@ class SupabaseChatRepository(
     }
 
     override suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean) {
+        if (!isTyping) return
+        val session = ephemeralMutex.withLock { ephemeralSessions[chatId] } ?: return
         try {
-            val existing = supabase.from("typing_events")
-                .select(columns = Columns.list("id")) {
-                    filter {
-                        eq("chat_id", chatId)
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeList<TypingEventIdentityRow>()
-
-            if (isTyping) {
-                val updatedAt = Clock.System.now().toEpochMilliseconds()
-                if (existing.isNotEmpty()) {
-                    supabase.from("typing_events")
-                        .update({
-                            set("updated_at", updatedAt)
-                        }) {
-                            filter {
-                                eq("chat_id", chatId)
-                                eq("user_id", userId)
-                            }
-                        }
-                } else {
-                    supabase.from("typing_events")
-                        .insert(
-                            TypingEventInsert(
-                                chatId = chatId,
-                                userId = userId,
-                                updatedAt = updatedAt,
-                            )
-                        )
-                }
-            } else {
-                supabase.from("typing_events")
-                    .delete {
-                        filter {
-                            eq("chat_id", chatId)
-                            eq("user_id", userId)
-                        }
-                    }
-            }
+            session.channel.broadcast("typing", TypingBroadcastPayload(userId))
         } catch (e: Exception) {
-            println("Error sending typing status: ${e.message}")
+            println("ChatRepository: typing broadcast failed: ${e.message}")
         }
     }
 
-    override fun observeTypingStatus(chatId: String): Flow<TypingStatus> {
-        return flow {
-            var lastTypingUsers = emptySet<String>()
-            while (currentCoroutineContext().isActive) {
-                val currentTypingUsers = getTypingUsers(chatId).toSet()
+    override fun observeTypingStatus(chatId: String): Flow<TypingStatus> = flow {
+        val session = awaitEphemeralSession(chatId) ?: run {
+            awaitCancellation()
+            return@flow
+        }
+        emitAll(session.typingFlow)
+    }
 
-                (currentTypingUsers - lastTypingUsers).forEach { userId ->
-                    emit(TypingStatus(userId = userId, isTyping = true))
-                }
-                (lastTypingUsers - currentTypingUsers).forEach { userId ->
-                    emit(TypingStatus(userId = userId, isTyping = false))
-                }
+    override suspend fun getTypingUsers(chatId: String): List<String> = emptyList()
 
-                lastTypingUsers = currentTypingUsers
-                delay(1000)
+    override suspend fun joinChatEphemeralChannel(chatId: String, currentUserId: String, peerUserId: String) {
+        ephemeralMutex.withLock {
+            ephemeralSessions[chatId]?.let { existing ->
+                if (existing.peerUserId == peerUserId) return
+                disposeEphemeralSession(existing)
+                ephemeralSessions.remove(chatId)
             }
+
+            val channel = supabase.channel("chat:$chatId") {
+                broadcast {
+                    receiveOwnBroadcasts = false
+                }
+            }
+
+            val typingFlow = MutableSharedFlow<TypingStatus>(
+                extraBufferCapacity = 32,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST
+            )
+            val peerOnline = MutableStateFlow(false)
+            val trackedPresence = mutableSetOf<String>()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val broadcastFlow = channel.broadcastFlow<TypingBroadcastPayload>(event = "typing")
+            val presenceFlow = channel.presenceChangeFlow()
+
+            try {
+                channel.subscribe(blockUntilSubscribed = true)
+                channel.track(buildJsonObject { put("userId", currentUserId) })
+            } catch (e: Exception) {
+                println("ChatRepository: join chat ephemeral failed: ${e.message}")
+                scope.cancel()
+                return
+            }
+
+            val broadcastJob = scope.launch {
+                try {
+                    broadcastFlow.collect { payload ->
+                        if (payload.userId != currentUserId) {
+                            typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            val presenceJob = scope.launch {
+                try {
+                    presenceFlow.collect { action ->
+                        action.joins.values.forEach { p ->
+                            userIdFromPresence(p)?.let { trackedPresence.add(it) }
+                        }
+                        action.leaves.values.forEach { p ->
+                            userIdFromPresence(p)?.let { trackedPresence.remove(it) }
+                        }
+                        peerOnline.value = peerUserId in trackedPresence
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
+            ephemeralSessions[chatId] = ChatEphemeralSession(
+                channel = channel,
+                peerUserId = peerUserId,
+                typingFlow = typingFlow,
+                peerOnline = peerOnline,
+                scope = scope,
+                jobs = listOf(broadcastJob, presenceJob),
+            )
         }
     }
 
-    override suspend fun getTypingUsers(chatId: String): List<String> {
-        return try {
-            val cutoff = Clock.System.now().toEpochMilliseconds() - 3000
-            supabase.from("typing_events")
-                .select(columns = Columns.list("user_id", "updated_at")) {
-                    filter {
-                        eq("chat_id", chatId)
-                        gt("updated_at", cutoff)
-                    }
-                }
-                .decodeList<TypingEventRow>()
-                .map { it.userId }
-                .distinct()
-        } catch (e: Exception) { println("Error getting typing users: ${e.message}"); emptyList() }
+    override suspend fun leaveChatEphemeralChannel(chatId: String) {
+        ephemeralMutex.withLock {
+            val session = ephemeralSessions.remove(chatId) ?: return
+            disposeEphemeralSession(session)
+        }
+    }
+
+    override fun observePeerOnline(chatId: String, peerUserId: String): Flow<Boolean> = flow {
+        val session = awaitEphemeralSession(chatId)
+        if (session == null || session.peerUserId != peerUserId) {
+            emit(false)
+            return@flow
+        }
+        emitAll(session.peerOnline)
     }
 
     override suspend fun updateMessageStatus(messageId: String, status: String): Boolean {
@@ -841,3 +895,6 @@ private class SupabaseReactionSubscription(private val channel: RealtimeChannel)
     override suspend fun attach() = channel.subscribe()
     override suspend fun detach() = channel.unsubscribe()
 }
+
+private const val EPHEMERAL_SESSION_POLL_MS = 50L
+private const val EPHEMERAL_SESSION_WAIT_STEPS = 100
