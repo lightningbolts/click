@@ -7,17 +7,26 @@ import kotlinx.serialization.Serializable
 
 const val PENDING_SYNC_CONNECTION_PREFIX = "pending-sync:"
 
+/** Bump when onboarding steps or gating rules change so clients re-run the full flow once. */
+const val ONBOARDING_FLOW_VERSION_COMPLETE = 2
+
 @Serializable
 data class OnboardingState(
+    /**
+     * Set to [ONBOARDING_FLOW_VERSION_COMPLETE] only after interests + permissions onboarding finishes.
+     * Older stored states default to 0 and are treated as needing the current flow.
+     */
+    val flowVersion: Int = 0,
     val permissionsCompleted: Boolean = false,
     val interestsCompleted: Boolean = false,
     val locationPermissionRequested: Boolean = false,
     val notificationPermissionRequested: Boolean = false,
     val microphonePermissionRequested: Boolean = false,
+    val barometricContextPermissionReviewed: Boolean = false,
     val completedAt: Long? = null,
 ) {
     val isComplete: Boolean
-        get() = permissionsCompleted && interestsCompleted
+        get() = flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE && permissionsCompleted && interestsCompleted
 }
 
 @Serializable

@@ -22,6 +22,8 @@ class FakeTokenStorage : TokenStorage {
     override suspend fun getCallNotificationsEnabled(): Boolean? = null
     override suspend fun saveAmbientNoiseOptIn(enabled: Boolean) {}
     override suspend fun getAmbientNoiseOptIn(): Boolean? = null
+    override suspend fun saveBarometricContextOptIn(enabled: Boolean) {}
+    override suspend fun getBarometricContextOptIn(): Boolean? = null
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {}
     override suspend fun getLocationExplainerSeen(): Boolean? = null
     override suspend fun saveOnboardingState(state: String?) {}

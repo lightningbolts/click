@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         guard let type = userInfo["type"] as? String, type == "incoming_call" else { return false }
             guard let payload = ClickIncomingCallPayload(userInfo) else { return false }
 
-        ClickCallKitManager.shared.reportIncomingCall(payload)
+        ClickCallKitManager.shared.reportIncomingCall(payload, voipPushCompletion: nil)
         return true
     }
 }

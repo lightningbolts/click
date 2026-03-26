@@ -44,6 +44,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
+        private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
@@ -236,6 +237,19 @@ class IosTokenStorage : TokenStorage {
         }
     }
 
+    override suspend fun saveBarometricContextOptIn(enabled: Boolean) {
+        userDefaults.setBool(enabled, KEY_BAROMETRIC_CONTEXT_OPT_IN)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getBarometricContextOptIn(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN) != null) {
+            userDefaults.boolForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN)
+        } else {
+            null
+        }
+    }
+
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         userDefaults.setBool(seen, KEY_LOCATION_EXPLAINER_SEEN)
         userDefaults.synchronize()
@@ -293,7 +307,7 @@ class IosTokenStorage : TokenStorage {
             KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
             KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
             KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
-            KEY_AMBIENT_NOISE_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
+            KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
             KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
         )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }

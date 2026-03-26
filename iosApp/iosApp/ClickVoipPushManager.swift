@@ -27,21 +27,23 @@ final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
-        reportCallFromPush(payload.dictionaryPayload, type: type)
-        completion()
+        reportCallFromPush(payload.dictionaryPayload, type: type, voipPushCompletion: completion)
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
-        reportCallFromPush(payload.dictionaryPayload, type: type)
+        reportCallFromPush(payload.dictionaryPayload, type: type, voipPushCompletion: nil)
     }
 
-    private func reportCallFromPush(_ userInfo: [AnyHashable: Any], type: PKPushType) {
-        guard type == .voIP else { return }
+    private func reportCallFromPush(_ userInfo: [AnyHashable: Any], type: PKPushType, voipPushCompletion: (() -> Void)?) {
+        guard type == .voIP else {
+            voipPushCompletion?()
+            return
+        }
 
         if let payload = ClickIncomingCallPayload(userInfo) {
-            ClickCallKitManager.shared.reportIncomingCall(payload)
+            ClickCallKitManager.shared.reportIncomingCall(payload, voipPushCompletion: voipPushCompletion)
         } else {
-            ClickCallKitManager.shared.reportUnparseableIncomingCall()
+            ClickCallKitManager.shared.reportUnparseableIncomingCall(voipPushCompletion: voipPushCompletion)
         }
     }
 }

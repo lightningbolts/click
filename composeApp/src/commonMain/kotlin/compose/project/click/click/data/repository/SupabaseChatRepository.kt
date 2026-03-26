@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -41,6 +42,7 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -76,8 +78,10 @@ class SupabaseChatRepository(
         val jobs: List<Job>,
     )
 
-    private fun userIdFromPresence(p: Presence): String? =
-        p.state["userId"]?.jsonPrimitive?.contentOrNull
+    private fun userIdFromPresence(p: Presence): String? {
+        val el = p.state["userId"] ?: p.state["user_id"] ?: return null
+        return (el as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+    }
 
     private suspend fun disposeEphemeralSession(session: ChatEphemeralSession) {
         session.jobs.forEach { it.cancel() }
@@ -730,7 +734,10 @@ class SupabaseChatRepository(
         if (!isTyping) return
         val session = ephemeralMutex.withLock { ephemeralSessions[chatId] } ?: return
         try {
-            session.channel.broadcast("typing", TypingBroadcastPayload(userId))
+            session.channel.broadcast(
+                event = "typing",
+                message = buildJsonObject { put("userId", userId) },
+            )
         } catch (e: Exception) {
             println("ChatRepository: typing broadcast failed: ${e.message}")
         }
@@ -757,6 +764,9 @@ class SupabaseChatRepository(
             val channel = supabase.channel("chat:$chatId") {
                 broadcast {
                     receiveOwnBroadcasts = false
+                }
+                presence {
+                    key = currentUserId
                 }
             }
 
@@ -804,13 +814,22 @@ class SupabaseChatRepository(
                 }
             }
 
+            val presenceRefreshJob = scope.launch {
+                while (isActive) {
+                    delay(PRESENCE_TRACK_REFRESH_MS)
+                    runCatching {
+                        channel.track(buildJsonObject { put("userId", currentUserId) })
+                    }
+                }
+            }
+
             ephemeralSessions[chatId] = ChatEphemeralSession(
                 channel = channel,
                 peerUserId = peerUserId,
                 typingFlow = typingFlow,
                 peerOnline = peerOnline,
                 scope = scope,
-                jobs = listOf(broadcastJob, presenceJob),
+                jobs = listOf(broadcastJob, presenceJob, presenceRefreshJob),
             )
         }
     }
@@ -894,3 +913,4 @@ private class SupabaseReactionSubscription(private val channel: RealtimeChannel)
 
 private const val EPHEMERAL_SESSION_POLL_MS = 50L
 private const val EPHEMERAL_SESSION_WAIT_STEPS = 100
+private const val PRESENCE_TRACK_REFRESH_MS = 25_000L

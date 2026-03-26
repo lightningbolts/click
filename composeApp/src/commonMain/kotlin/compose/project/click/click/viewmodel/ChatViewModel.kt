@@ -439,6 +439,10 @@ class ChatViewModel(
 
         if (currentConnectionId == connectionId && currentState != null && hasLiveSubscriptions) return
 
+        val switchingConnection = currentConnectionId != null && currentConnectionId != connectionId
+        if (switchingConnection) {
+            currentApiChatId = null
+        }
         currentConnectionId = connectionId
 
         // Instantly show the chat header from cached list data (no loading spinner)
@@ -892,23 +896,25 @@ class ChatViewModel(
 
     fun updateMessageInput(text: String) {
         _messageInput.value = text
-        ((_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id)
-            ?.let { chatId ->
-                if (text.isBlank()) {
-                    localTypingIdleJob?.cancel()
-                    localTypingIdleJob = null
-                    _isLocalTypingActive.value = false
-                    onUserStoppedTyping(chatId)
-                } else {
-                    _isLocalTypingActive.value = true
-                    localTypingIdleJob?.cancel()
-                    localTypingIdleJob = viewModelScope.launch {
-                        delay(3000)
-                        _isLocalTypingActive.value = false
-                    }
-                    onUserTyping(chatId)
-                }
+        val success = _chatMessagesState.value as? ChatMessagesState.Success ?: return
+        if (success.chatDetails.connection.id != currentConnectionId) return
+        val apiChatId = success.chatDetails.chat.id?.takeIf { it.isNotBlank() }
+            ?: currentApiChatId?.takeIf { it.isNotBlank() }
+            ?: return
+        if (text.isBlank()) {
+            localTypingIdleJob?.cancel()
+            localTypingIdleJob = null
+            _isLocalTypingActive.value = false
+            onUserStoppedTyping(apiChatId)
+        } else {
+            _isLocalTypingActive.value = true
+            localTypingIdleJob?.cancel()
+            localTypingIdleJob = viewModelScope.launch {
+                delay(3000)
+                _isLocalTypingActive.value = false
             }
+            onUserTyping(apiChatId)
+        }
     }
 
     fun leaveChatRoom() {

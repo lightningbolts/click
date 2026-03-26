@@ -15,6 +15,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import compose.project.click.click.MainActivity
 import compose.project.click.click.calls.CallInvite
+import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.PlatformIncomingCallUi
 import compose.project.click.click.crypto.MessageCrypto
 
@@ -24,6 +25,8 @@ private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
 class ClickFirebaseMessagingService : FirebaseMessagingService() {
     override fun onCreate() {
         super.onCreate()
+        // Incoming call notifications can arrive before MainActivity runs (cold start / killed process).
+        initCallManager(applicationContext)
         initPushNotificationService(applicationContext)
         ensureNotificationChannel(applicationContext)
     }
@@ -65,13 +68,16 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val chatId = message.data["chat_id"] ?: ""
         val senderName = message.data["sender_name"] ?: "Someone"
         val connectionId = message.data["connection_id"] ?: ""
-        val body = decryptMessagePreview(
+        val previewFromServer = message.data["preview_text"]?.trim()?.takeIf { it.isNotEmpty() }
+        val decrypted = decryptMessagePreview(
             encryptedContent = message.data["encrypted_content"] ?: "",
             connectionId = connectionId,
             senderUserId = message.data["sender_user_id"] ?: "",
             recipientUserId = message.data["recipient_user_id"] ?: "",
             fallback = "Open Click to view it"
         )
+        val fallbackPreview = "Open Click to view it"
+        val body = if (decrypted != fallbackPreview) decrypted else previewFromServer ?: decrypted
 
         val deepLinkId = chatId.ifBlank { connectionId }
         val launchIntent = if (deepLinkId.isNotBlank()) {

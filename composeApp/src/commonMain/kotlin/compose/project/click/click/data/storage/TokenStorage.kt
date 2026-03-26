@@ -30,6 +30,10 @@ interface TokenStorage {
     suspend fun saveAmbientNoiseOptIn(enabled: Boolean)
     suspend fun getAmbientNoiseOptIn(): Boolean?
 
+    // Barometric / elevation context at connection time (height category only; no continuous health tracking)
+    suspend fun saveBarometricContextOptIn(enabled: Boolean)
+    suspend fun getBarometricContextOptIn(): Boolean?
+
     // Location onboarding: has the user seen the pre-permission explainer (Build my map / Not now)
     suspend fun saveLocationExplainerSeen(seen: Boolean)
     suspend fun getLocationExplainerSeen(): Boolean?

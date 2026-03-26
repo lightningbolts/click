@@ -137,7 +137,7 @@ async function sendAndroidPush(
   );
 
   if (category === "chat_message") {
-    // Data-only: Android service decrypts locally and builds its own notification
+    // Data-only: Android client decrypts when possible; preview_text is always safe to show if decrypt fails.
     delete data.title;
     delete data.body;
   } else {
@@ -284,6 +284,16 @@ function buildMessagePreview(content: string | null): string {
   return normalized.slice(0, 120);
 }
 
+/** FCM data payload limits — oversized ciphertext breaks client-side decrypt; omit and rely on preview_text. */
+const MAX_ENCRYPTED_CONTENT_FCM_CHARS = 3500;
+
+function encryptedContentForFcmPayload(raw: string): string {
+  if (!raw || raw.length <= MAX_ENCRYPTED_CONTENT_FCM_CHARS) {
+    return raw;
+  }
+  return "";
+}
+
 function getBearerToken(req: Request): string | null {
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
   return authHeader?.replace(/^Bearer\s+/i, "") ?? null;
@@ -384,6 +394,9 @@ async function resolveChatMessageRequest(
       connectionId = chat?.connection_id ?? null;
     }
 
+    const previewText = buildMessagePreview(encryptedContent);
+    const encryptedForFcm = encryptedContentForFcmPayload(encryptedContent);
+
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
@@ -391,7 +404,8 @@ async function resolveChatMessageRequest(
       data: {
         ...data,
         sender_name: senderName,
-        encrypted_content: encryptedContent,
+        encrypted_content: encryptedForFcm,
+        preview_text: previewText,
         recipient_user_id: providedRecipientUserId,
         ...(connectionId ? { connection_id: connectionId } : {}),
       },
@@ -491,16 +505,21 @@ async function resolveChatMessageRequest(
     resolvedTitle = `New message from ${senderDisplayName}`;
   }
 
-    return {
+  const rawContent = messageContent ?? "";
+  const previewText = buildMessagePreview(rawContent);
+  const encryptedForFcm = encryptedContentForFcmPayload(rawContent);
+
+  return {
     recipient_user_id: recipientUserId,
     title: resolvedTitle,
-    body: buildMessagePreview(messageContent),
+    body: previewText,
     data: {
       ...(requestBody.data ?? {}),
       chat_id: chatId,
       connection_id: chat.connection_id,
       sender_name: senderDisplayName,
-      encrypted_content: messageContent ?? "",
+      encrypted_content: encryptedForFcm,
+      preview_text: previewText,
       recipient_user_id: recipientUserId,
     },
   };

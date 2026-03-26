@@ -47,6 +47,7 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
+import compose.project.click.click.data.models.ONBOARDING_FLOW_VERSION_COMPLETE
 import compose.project.click.click.data.models.OnboardingState
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isPendingSync
@@ -126,6 +127,7 @@ fun App() {
     }
 
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var barometricContextOptIn by remember { mutableStateOf(true) }
     var onboardingState by remember { mutableStateOf<OnboardingState?>(null) }
     var isCompletingPermissions by remember { mutableStateOf(false) }
 
@@ -142,6 +144,7 @@ fun App() {
             isDarkMode = persisted
         }
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true
     }
 
     suspend fun persistOnboardingState(state: OnboardingState) {
@@ -182,38 +185,19 @@ fun App() {
                 runCatching { onboardingJson.decodeFromString<OnboardingState>(serialized) }.getOrNull()
             }
 
-        if (savedState != null) {
-            onboardingState = savedState
-            return@LaunchedEffect
+        when {
+            savedState != null && savedState.isComplete -> {
+                onboardingState = savedState
+            }
+            savedState != null -> {
+                onboardingState = savedState
+            }
+            else -> {
+                val shell = OnboardingState(flowVersion = 0)
+                onboardingState = shell
+                tokenStorage.saveOnboardingState(onboardingJson.encodeToString(shell))
+            }
         }
-
-        val dbTagsInitialized = runCatching {
-            compose.project.click.click.data.repository.SupabaseRepository()
-                .fetchTagsInitialized(currentUser.id)
-        }.getOrNull()
-
-        val localTagsInit = tokenStorage.getTagsInitialized() == true
-        val tagsReady = dbTagsInitialized == true || localTagsInit
-
-        val localPermissionsReady = tokenStorage.getLocationExplainerSeen() == true &&
-            tokenStorage.getAmbientNoiseOptIn() != null
-
-        val migratedState = OnboardingState(
-            permissionsCompleted = if (tagsReady) true else localPermissionsReady,
-            interestsCompleted = tagsReady,
-            locationPermissionRequested = tokenStorage.getLocationExplainerSeen() == true,
-            notificationPermissionRequested = tokenStorage.getMessageNotificationsEnabled() != null ||
-                tokenStorage.getCallNotificationsEnabled() != null,
-            microphonePermissionRequested = tokenStorage.getAmbientNoiseOptIn() != null,
-            completedAt = if (tagsReady) kotlinx.datetime.Clock.System.now().toEpochMilliseconds() else null
-        )
-
-        if (tagsReady) {
-            tokenStorage.saveTagsInitialized(true)
-        }
-
-        onboardingState = migratedState
-        tokenStorage.saveOnboardingState(onboardingJson.encodeToString(migratedState))
     }
 
     // Coroutine scope for location-aware connection
@@ -317,7 +301,7 @@ fun App() {
                 if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
             }
             val barometricSampleDeferred = async {
-                barometricHeightMonitor.sampleHeightReading()
+                if (barometricContextOptIn) barometricHeightMonitor.sampleHeightReading() else null
             }
 
             val noiseSample = noiseSampleDeferred.await()
@@ -495,13 +479,16 @@ fun App() {
                                 initialIncludeInInsightsEnabled = locationPreferences.includeInInsightsEnabled,
                                 initialNotificationsEnabled = notificationPreferences.messagePushEnabled || notificationPreferences.callPushEnabled,
                                 initialAmbientNoiseEnabled = ambientNoiseOptIn,
+                                initialBarometricContextEnabled = barometricContextOptIn,
                                 isLoading = isCompletingPermissions,
                                 onContinue = { selection ->
                                     onboardingScope.launch {
                                         isCompletingPermissions = true
                                         try {
                                             ambientNoiseOptIn = selection.ambientNoiseEnabled
+                                            barometricContextOptIn = selection.barometricContextEnabled
                                             tokenStorage.saveAmbientNoiseOptIn(selection.ambientNoiseEnabled)
+                                            tokenStorage.saveBarometricContextOptIn(selection.barometricContextEnabled)
                                             tokenStorage.saveLocationExplainerSeen(true)
 
                                             AppDataManager.updateLocationPreferences(
@@ -526,6 +513,7 @@ fun App() {
                                                 locationPermissionRequested = selection.connectionSnapEnabled,
                                                 notificationPermissionRequested = selection.notificationsEnabled,
                                                 microphonePermissionRequested = selection.ambientNoiseEnabled,
+                                                barometricContextPermissionReviewed = selection.barometricContextEnabled,
                                                 completedAt = if (onboardingState?.interestsCompleted == true) {
                                                     kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                                                 } else {
@@ -555,6 +543,7 @@ fun App() {
                                             persistOnboardingState(
                                                 (onboardingState ?: OnboardingState()).copy(
                                                     interestsCompleted = true,
+                                                    flowVersion = ONBOARDING_FLOW_VERSION_COMPLETE,
                                                     completedAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                                                 )
                                             )

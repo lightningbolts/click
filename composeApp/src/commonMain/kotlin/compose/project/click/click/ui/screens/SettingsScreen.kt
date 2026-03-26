@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Person
@@ -25,10 +26,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +45,10 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
+import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
+import kotlinx.coroutines.launch
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.models.LocationPreferences
 import androidx.compose.foundation.lazy.LazyColumn
@@ -62,6 +70,19 @@ fun SettingsScreen(
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val ghostModeEnabled by AppDataManager.ghostModeEnabled.collectAsState()
+
+    val tokenStorage = remember { createTokenStorage() }
+    val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
+    val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
+    val settingsScope = rememberCoroutineScope()
+
+    var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var micPermissionBump by remember { mutableIntStateOf(0) }
+    val microphoneGranted = remember(micPermissionBump) { ambientNoiseMonitor.hasPermission }
+
+    LaunchedEffect(Unit) {
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+    }
 
     var showNameDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
@@ -101,6 +122,39 @@ fun SettingsScreen(
                 }
                 item {
                     NotificationSettingsCard(notificationPreferences = notificationPreferences)
+                }
+
+                item {
+                    SettingsSectionHeader("Sound & microphone")
+                }
+                item {
+                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SettingsToggleRow(
+                                icon = Icons.Default.Mic,
+                                title = "Ambient sound enrichment",
+                                subtitle = "Short mic sample at connect time for a noise category only. No recordings stored.",
+                                checked = ambientNoiseOptIn,
+                                onCheckedChange = { enabled ->
+                                    settingsScope.launch {
+                                        ambientNoiseOptIn = enabled
+                                        tokenStorage.saveAmbientNoiseOptIn(enabled)
+                                        if (enabled && !ambientNoiseMonitor.hasPermission) {
+                                            requestMicrophonePermissionThen { micPermissionBump++ }
+                                        }
+                                    }
+                                }
+                            )
+                            if (ambientNoiseOptIn && !microphoneGranted) {
+                                Text(
+                                    text = "Microphone access is off — enable it in system settings to use ambient enrichment.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 item {

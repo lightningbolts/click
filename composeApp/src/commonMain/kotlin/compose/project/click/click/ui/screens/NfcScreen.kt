@@ -197,11 +197,12 @@ fun NfcScreen(
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                                 val noiseSampleDeferred = async {
                                     if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
                                 }
                                 val barometricSampleDeferred = async {
-                                    barometricHeightMonitor.sampleHeightReading()
+                                    if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
                                 }
                                 val noiseSample = noiseSampleDeferred.await()
                                 val barometricSample = barometricSampleDeferred.await()

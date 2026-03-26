@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,6 +42,7 @@ data class PermissionsOnboardingSelection(
     val includeInInsightsEnabled: Boolean,
     val notificationsEnabled: Boolean,
     val ambientNoiseEnabled: Boolean,
+    val barometricContextEnabled: Boolean,
 )
 
 @Composable
@@ -50,6 +52,7 @@ fun PermissionsOnboardingScreen(
     initialIncludeInInsightsEnabled: Boolean,
     initialNotificationsEnabled: Boolean,
     initialAmbientNoiseEnabled: Boolean,
+    initialBarometricContextEnabled: Boolean,
     isLoading: Boolean = false,
     onContinue: (PermissionsOnboardingSelection) -> Unit,
 ) {
@@ -58,6 +61,7 @@ fun PermissionsOnboardingScreen(
     var includeInInsightsEnabled by remember { mutableStateOf(initialIncludeInInsightsEnabled) }
     var notificationsEnabled by remember { mutableStateOf(initialNotificationsEnabled) }
     var ambientNoiseEnabled by remember { mutableStateOf(initialAmbientNoiseEnabled) }
+    var barometricContextEnabled by remember { mutableStateOf(initialBarometricContextEnabled) }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Box(
@@ -126,6 +130,28 @@ fun PermissionsOnboardingScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             PermissionPreferenceCard(
+                icon = Icons.Default.Terrain,
+                title = "Movement & elevation context",
+                description = "During a connection, optionally read barometric pressure once to infer a coarse height band. No continuous fitness or health tracking.",
+                checked = barometricContextEnabled,
+                enabled = connectionSnapEnabled,
+                onCheckedChange = { barometricContextEnabled = it }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            PermissionPreferenceCard(
+                icon = Icons.Default.Mic,
+                title = "Enable ambient sound enrichment",
+                description = "Store only a 2-second sound category for each encounter. No raw audio is saved.",
+                checked = ambientNoiseEnabled,
+                enabled = connectionSnapEnabled,
+                onCheckedChange = { ambientNoiseEnabled = it }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            PermissionPreferenceCard(
                 icon = Icons.Default.PrivacyTip,
                 title = "Include in business insights",
                 description = "Share only anonymized venue and campus trends. Never your identity or raw path.",
@@ -142,16 +168,6 @@ fun PermissionsOnboardingScreen(
                 description = "Get notified when connections message or call you.",
                 checked = notificationsEnabled,
                 onCheckedChange = { notificationsEnabled = it }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            PermissionPreferenceCard(
-                icon = Icons.Default.Mic,
-                title = "Enable ambient sound enrichment",
-                description = "Store only a 2-second sound category for each encounter. No raw audio is saved.",
-                checked = ambientNoiseEnabled,
-                onCheckedChange = { ambientNoiseEnabled = it }
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -176,6 +192,7 @@ fun PermissionsOnboardingScreen(
                             includeInInsightsEnabled = includeInInsightsEnabled,
                             notificationsEnabled = notificationsEnabled,
                             ambientNoiseEnabled = ambientNoiseEnabled,
+                            barometricContextEnabled = barometricContextEnabled,
                         )
                     )
                 },
