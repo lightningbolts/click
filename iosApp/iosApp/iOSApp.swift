@@ -31,6 +31,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         ClickCallKitManager.shared.start()
         ClickVoipPushManager.shared.start()
 
+        if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            DispatchQueue.main.async {
+                _ = self.handleIncomingCallNotification(remote)
+            }
+        }
+
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.delegate = self
         requestPermissionObserver = NotificationCenter.default.addObserver(

@@ -213,10 +213,9 @@ async function sendIosPush(
           ...(isIncomingCall
             ? {
                 category: "CLICK_INCOMING_CALL",
-                "content-available": 1,
                 "interruption-level": "time-sensitive",
               }
-            : { "mutable-content": 1 }),
+            : {}),
         },
         ...(requestBody.data ?? {}),
       };

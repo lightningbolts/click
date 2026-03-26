@@ -450,10 +450,13 @@ class ChatViewModel(
 
         if (cachedChat != null && prefetchedPayload == null) {
             _icebreakerPrompts.value =
-                IcebreakerRepository.getPromptsForContext(cachedChat.connection.context_tag, count = 3)
-            if (cachedChat.lastMessage == null) {
-                _showIcebreakerPanel.value = true
-            }
+                IcebreakerRepository.getPromptsForContext(
+                    cachedChat.connection.context_tag,
+                    count = 3,
+                    stableSelectionKey = cachedChat.connection.id,
+                )
+            // Provisional: payload refines after messages load (hide if thread has 5+ messages).
+            _showIcebreakerPanel.value = true
         }
 
         if (cachedChat != null && prefetchedPayload != null) {
@@ -468,6 +471,13 @@ class ChatViewModel(
         } else if (hasRenderableStateForTarget && currentState != null) {
             // Keep current content visible while refreshing in background.
             _chatMessagesState.value = currentState.copy(isLoadingMessages = true)
+        } else if (cachedChat != null) {
+            // Show header, composer, and conversation starters immediately instead of a blank loading screen.
+            _chatMessagesState.value = ChatMessagesState.Success(
+                messages = emptyList(),
+                chatDetails = cachedChat,
+                isLoadingMessages = true
+            )
         } else {
             _chatMessagesState.value = ChatMessagesState.Loading
         }
@@ -512,12 +522,33 @@ class ChatViewModel(
                     hydratedChatDetails.connection.user_ids
                 )
 
+                if (_chatMessagesState.value is ChatMessagesState.Loading) {
+                    _icebreakerPrompts.value =
+                        IcebreakerRepository.getPromptsForContext(
+                            hydratedChatDetails.connection.context_tag,
+                            count = 3,
+                            stableSelectionKey = hydratedChatDetails.connection.id,
+                        )
+                    _showIcebreakerPanel.value = true
+                    _chatMessagesState.value = ChatMessagesState.Success(
+                        messages = emptyList(),
+                        chatDetails = hydratedChatDetails,
+                        isLoadingMessages = true,
+                    )
+                }
+
                 val payload = buildChatPayload(hydratedChatDetails, apiChatId, userId)
                 prefetchedChatPayloads[resolvedConnectionId] = payload
 
                 _messageReactions.value = payload.reactionsByMessageId
-                _icebreakerPrompts.value = payload.icebreakerPrompts
                 _showIcebreakerPanel.value = payload.showIcebreakerPanel
+                if (payload.showIcebreakerPanel) {
+                    if (_icebreakerPrompts.value != payload.icebreakerPrompts) {
+                        _icebreakerPrompts.value = payload.icebreakerPrompts
+                    }
+                } else {
+                    _icebreakerPrompts.value = emptyList()
+                }
                 _chatMessagesState.value = ChatMessagesState.Success(
                     messages = payload.messages,
                     chatDetails = hydratedChatDetails,
@@ -614,7 +645,11 @@ class ChatViewModel(
         val reactionsByMessageId = reactionsDeferred.await().groupBy { it.messageId }
         val shouldShowIcebreaker = messagesWithUsers.size < 5
         val prompts = if (shouldShowIcebreaker) {
-            IcebreakerRepository.getPromptsForContext(chatDetails.connection.context_tag, count = 3)
+            IcebreakerRepository.getPromptsForContext(
+                chatDetails.connection.context_tag,
+                count = 3,
+                stableSelectionKey = chatDetails.connection.id,
+            )
         } else {
             emptyList()
         }

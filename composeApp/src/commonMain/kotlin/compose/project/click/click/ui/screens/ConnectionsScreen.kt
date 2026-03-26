@@ -1152,7 +1152,28 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     }
 
                     // Messages
-                    if (messages.isEmpty()) {
+                    if (state.isLoadingMessages && messages.isEmpty() && chatDetails.lastMessage != null) {
+                        Box(
+                            modifier = messageContentModifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(36.dp),
+                                    color = PrimaryBlue,
+                                    strokeWidth = 3.dp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "Loading messages…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else if (messages.isEmpty()) {
                         Box(
                             modifier = messageContentModifier
                                 .fillMaxWidth()

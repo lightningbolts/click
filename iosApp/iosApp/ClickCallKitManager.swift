@@ -4,7 +4,31 @@ import Foundation
 import UIKit
 import CallKit
 import AVFAudio
+import UserNotifications
 import ComposeApp
+
+/// Lock-screen / banner fallback when CallKit cannot be shown (malformed VoIP payload, CallKit errors).
+enum ClickIncomingCallFallbackNotifier {
+    static func present(callerName: String, videoEnabled: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = videoEnabled ? "Incoming video call" : "Incoming call"
+        content.body = callerName.isEmpty ? "Open Click to answer" : "From \(callerName)"
+        content.sound = .default
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+        let request = UNNotificationRequest(
+            identifier: "click.incoming-call.fallback.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    static func presentGenericIncomingCall() {
+        present(callerName: "", videoEnabled: false)
+    }
+}
 
 private enum ClickNativeCallNotifications {
     static let incoming = Notification.Name("ClickNativeIncomingCall")
@@ -23,9 +47,28 @@ struct ClickIncomingCallPayload {
     let videoEnabled: Bool
     let createdAt: Int64
 
+    /// Coerces APNs / PushKit values (String, NSString, NSNumber) so payloads are not dropped on type mismatch.
     private static func string(_ userInfo: [AnyHashable: Any], _ camel: String, _ snake: String) -> String? {
-        (userInfo[camel] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            ?? (userInfo[snake] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        func coerce(_ raw: Any?) -> String? {
+            guard let raw else { return nil }
+            if let s = raw as? String {
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.nilIfEmpty
+            }
+            if let s = raw as? NSString {
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (t as String).nilIfEmpty
+            }
+            if let n = raw as? NSNumber {
+                return n.stringValue.nilIfEmpty
+            }
+            return nil
+        }
+        return coerce(userInfo[camel]) ?? coerce(userInfo[snake])
+    }
+
+    private static func displayName(_ userInfo: [AnyHashable: Any], _ camel: String, _ snake: String) -> String {
+        string(userInfo, camel, snake) ?? "Someone"
     }
 
     private static func int64(_ userInfo: [AnyHashable: Any], _ camel: String, _ snake: String) -> Int64 {
@@ -55,9 +98,7 @@ struct ClickIncomingCallPayload {
             let connectionId = Self.string(info, "connectionId", "connection_id"),
             let roomName = Self.string(info, "roomName", "room_name"),
             let callerId = Self.string(info, "callerId", "caller_id"),
-            let callerName = Self.string(info, "callerName", "caller_name"),
-            let calleeId = Self.string(info, "calleeId", "callee_id"),
-            let calleeName = Self.string(info, "calleeName", "callee_name")
+            let calleeId = Self.string(info, "calleeId", "callee_id")
         else {
             return nil
         }
@@ -66,10 +107,17 @@ struct ClickIncomingCallPayload {
         self.connectionId = connectionId
         self.roomName = roomName
         self.callerId = callerId
-        self.callerName = callerName
+        self.callerName = Self.displayName(info, "callerName", "caller_name")
         self.calleeId = calleeId
-        self.calleeName = calleeName
-        self.videoEnabled = (info["videoEnabled"] as? Bool) ?? (info["video_enabled"] as? Bool) ?? false
+        self.calleeName = Self.displayName(info, "calleeName", "callee_name")
+        let vidRaw = info["videoEnabled"] ?? info["video_enabled"]
+        if let b = vidRaw as? Bool {
+            self.videoEnabled = b
+        } else if let n = vidRaw as? NSNumber {
+            self.videoEnabled = n.boolValue
+        } else {
+            self.videoEnabled = false
+        }
         self.createdAt = Self.int64(info, "createdAt", "created_at")
     }
 }
@@ -169,22 +217,15 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
             if let error {
                 print("CallKit report incoming call failed: \(error.localizedDescription)")
                 self?.clear(callId: payload.callId)
+                ClickIncomingCallFallbackNotifier.present(callerName: payload.callerName, videoEnabled: payload.videoEnabled)
             }
             voipPushCompletion?()
         }
     }
 
     func reportUnparseableIncomingCall(voipPushCompletion: (() -> Void)?) {
-        let uuid = UUID()
-        let update = CXCallUpdate()
-        update.remoteHandle = CXHandle(type: .generic, value: "Unknown")
-        update.localizedCallerName = "Unknown"
-        update.hasVideo = false
-
-        provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] _ in
-            self?.provider.reportCall(with: uuid, endedAt: Date(), reason: .failed)
-            voipPushCompletion?()
-        }
+        ClickIncomingCallFallbackNotifier.presentGenericIncomingCall()
+        voipPushCompletion?()
     }
 
     func endCall(callId: String) {
