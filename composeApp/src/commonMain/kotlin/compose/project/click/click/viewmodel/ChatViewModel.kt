@@ -17,12 +17,14 @@ import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -75,8 +77,14 @@ class ChatViewModel(
     private val _messageInput = MutableStateFlow("")
     val messageInput: StateFlow<String> = _messageInput.asStateFlow()
 
-    private val _typingUsers = MutableStateFlow<List<String>>(emptyList())
-    val typingUsers: StateFlow<List<String>> = _typingUsers.asStateFlow()
+    private val _isPeerTyping = MutableStateFlow(false)
+    val isPeerTyping: StateFlow<Boolean> = _isPeerTyping.asStateFlow()
+
+    private val _isPeerOnline = MutableStateFlow(false)
+    val isPeerOnline: StateFlow<Boolean> = _isPeerOnline.asStateFlow()
+
+    private val _isLocalTypingActive = MutableStateFlow(false)
+    val isLocalTypingActive: StateFlow<Boolean> = _isLocalTypingActive.asStateFlow()
     
     // Vibe Check Timer State
     private val _vibeCheckRemainingMs = MutableStateFlow<Long>(0L)
@@ -132,6 +140,9 @@ class ChatViewModel(
     private var realtimeJob: Job? = null
     private var activeChatSyncJob: Job? = null
     private var typingPollingJob: Job? = null
+    private var peerTypingTimeoutJob: Job? = null
+    private var peerOnlineJob: Job? = null
+    private var localTypingIdleJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var lastTypingSent: Long = 0L
     private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
@@ -423,7 +434,8 @@ class ChatViewModel(
                 realtimeJob?.isActive == true &&
                 activeReactionSubscription != null &&
                 reactionsJob?.isActive == true &&
-                typingPollingJob?.isActive == true
+                typingPollingJob?.isActive == true &&
+                peerOnlineJob?.isActive == true
 
         if (currentConnectionId == connectionId && currentState != null && hasLiveSubscriptions) return
 
@@ -450,6 +462,7 @@ class ChatViewModel(
 
         viewModelScope.launch {
             try {
+                val previousApiChatId = currentApiChatId
                 // Resolve chat details (use cached if available)
                 val chatDetails = cachedChat ?: chatRepository.fetchChatWithDetails(chatId, userId)
                 if (chatDetails == null) {
@@ -465,6 +478,10 @@ class ChatViewModel(
                     return@launch
                 }
                 currentApiChatId = apiChatId
+
+                if (previousApiChatId != null && previousApiChatId != apiChatId) {
+                    chatRepository.leaveChatEphemeralChannel(previousApiChatId)
+                }
 
                 val hydratedChatDetails = if (chatDetails.chat.id == apiChatId) {
                     chatDetails
@@ -498,14 +515,21 @@ class ChatViewModel(
                 // Mark messages as read
                 chatRepository.markMessagesAsRead(apiChatId, userId)
 
+                chatRepository.joinChatEphemeralChannel(
+                    apiChatId,
+                    userId,
+                    hydratedChatDetails.otherUser.id
+                )
+
                 // Subscribe to new messages
                 subscribeToNewMessages(apiChatId, userId)
 
                 // Load initial reactions & subscribe to changes via Realtime
                 loadAndSubscribeReactions(apiChatId, payload.reactionsByMessageId)
                 
-                // Monitor typing status
+                // Monitor typing status (Realtime Broadcast) and peer presence
                 startTypingMonitoring(apiChatId)
+                startPeerOnlineMonitoring(apiChatId, hydratedChatDetails.otherUser.id)
                 startActiveChatSync(apiChatId, userId)
                 
                 // Vibe Check is disabled
@@ -664,22 +688,32 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         val apiChatId = currentState.chatDetails.chat.id ?: return
+        val peerUserId = currentState.chatDetails.otherUser.id
         val needsMessageSubscription = currentApiChatId != apiChatId || activeMessageSubscription == null || realtimeJob?.isActive != true
         val needsReactionSubscription = activeReactionSubscription == null || reactionsJob?.isActive != true
         val needsTypingSubscription = typingPollingJob?.isActive != true
+        val needsPeerPresence = peerOnlineJob?.isActive != true
 
         currentApiChatId = apiChatId
 
-        if (needsMessageSubscription) {
-            subscribeToNewMessages(apiChatId, userId)
+        viewModelScope.launch {
+            if (needsPeerPresence || needsTypingSubscription) {
+                chatRepository.joinChatEphemeralChannel(apiChatId, userId, peerUserId)
+            }
+            if (needsMessageSubscription) {
+                subscribeToNewMessages(apiChatId, userId)
+            }
+            if (needsReactionSubscription) {
+                loadAndSubscribeReactions(apiChatId, _messageReactions.value)
+            }
+            if (needsTypingSubscription) {
+                startTypingMonitoring(apiChatId)
+            }
+            if (needsPeerPresence) {
+                startPeerOnlineMonitoring(apiChatId, peerUserId)
+            }
+            startActiveChatSync(apiChatId, userId)
         }
-        if (needsReactionSubscription) {
-            loadAndSubscribeReactions(apiChatId, _messageReactions.value)
-        }
-        if (needsTypingSubscription) {
-            startTypingMonitoring(apiChatId)
-        }
-        startActiveChatSync(apiChatId, userId)
     }
 
     private fun startActiveChatSync(chatId: String, userId: String) {
@@ -861,8 +895,17 @@ class ChatViewModel(
         ((_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id)
             ?.let { chatId ->
                 if (text.isBlank()) {
+                    localTypingIdleJob?.cancel()
+                    localTypingIdleJob = null
+                    _isLocalTypingActive.value = false
                     onUserStoppedTyping(chatId)
                 } else {
+                    _isLocalTypingActive.value = true
+                    localTypingIdleJob?.cancel()
+                    localTypingIdleJob = viewModelScope.launch {
+                        delay(3000)
+                        _isLocalTypingActive.value = false
+                    }
                     onUserTyping(chatId)
                 }
             }
@@ -894,11 +937,22 @@ class ChatViewModel(
         }
         activeReactionSubscription = null
         _messageReactions.value = emptyMap()
-        _typingUsers.value = emptyList()
         typingPollingJob?.cancel()
         typingPollingJob = null
+        peerTypingTimeoutJob?.cancel()
+        peerTypingTimeoutJob = null
+        peerOnlineJob?.cancel()
+        peerOnlineJob = null
+        localTypingIdleJob?.cancel()
+        localTypingIdleJob = null
+        currentApiChatId?.let { id ->
+            viewModelScope.launch { chatRepository.leaveChatEphemeralChannel(id) }
+        }
         currentConnectionId = null
         currentApiChatId = null
+        _isPeerTyping.value = false
+        _isPeerOnline.value = false
+        _isLocalTypingActive.value = false
         _chatMessagesState.value = ChatMessagesState.Loading
         resetVibeCheckState()
         resetIcebreakerState()
@@ -906,19 +960,27 @@ class ChatViewModel(
 
     fun startTypingMonitoring(chatId: String) {
         typingPollingJob?.cancel()
+        peerTypingTimeoutJob?.cancel()
         typingPollingJob = viewModelScope.launch {
             chatRepository.observeTypingStatus(chatId).collect { status ->
                 val currentUser = _currentUserId.value
-                if (status.userId != currentUser) {
-                    val currentTyping = _typingUsers.value.toMutableList()
-                    if (status.isTyping) {
-                        if (status.userId !in currentTyping) {
-                            _typingUsers.value = currentTyping + status.userId
-                        }
-                    } else {
-                        _typingUsers.value = currentTyping - status.userId
+                if (status.userId != currentUser && status.isTyping) {
+                    _isPeerTyping.value = true
+                    peerTypingTimeoutJob?.cancel()
+                    peerTypingTimeoutJob = launch {
+                        delay(3000)
+                        _isPeerTyping.value = false
                     }
                 }
+            }
+        }
+    }
+
+    private fun startPeerOnlineMonitoring(apiChatId: String, peerUserId: String) {
+        peerOnlineJob?.cancel()
+        peerOnlineJob = viewModelScope.launch {
+            chatRepository.observePeerOnline(apiChatId, peerUserId).collect { online ->
+                _isPeerOnline.value = online
             }
         }
     }
@@ -928,20 +990,14 @@ class ChatViewModel(
         val now = Clock.System.now().toEpochMilliseconds()
         if (now - lastTypingSent > 2000L) {
             lastTypingSent = now
-            viewModelScope.launch { 
-                chatRepository.sendTypingStatus(chatId, userId, true) 
-                delay(3000)
-                if (Clock.System.now().toEpochMilliseconds() - lastTypingSent >= 3000L) {
-                    onUserStoppedTyping(chatId)
-                }
+            viewModelScope.launch {
+                chatRepository.sendTypingStatus(chatId, userId, true)
             }
         }
     }
-    
+
     fun onUserStoppedTyping(chatId: String) {
-        val userId = _currentUserId.value ?: return
-        lastTypingSent = 0L 
-        viewModelScope.launch { chatRepository.sendTypingStatus(chatId, userId, false) }
+        lastTypingSent = 0L
     }
 
     // ── Reactions ──────────────────────────────────────────────────────────────
@@ -1529,7 +1585,16 @@ class ChatViewModel(
         realtimeJob?.cancel()
         reactionsJob?.cancel()
         typingPollingJob?.cancel()
+        peerTypingTimeoutJob?.cancel()
+        peerOnlineJob?.cancel()
+        localTypingIdleJob?.cancel()
         vibeCheckTimerJob?.cancel()
+        val apiIdToLeave = currentApiChatId
+        if (apiIdToLeave != null) {
+            runBlocking(Dispatchers.Default) {
+                chatRepository.leaveChatEphemeralChannel(apiIdToLeave)
+            }
+        }
         activeMessageSubscription?.let { sub ->
             viewModelScope.launch {
                 try { sub.detach() } catch (_: Exception) {}

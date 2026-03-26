@@ -15,6 +15,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 
 private object NoopMessageSubscription : ChatMessageSubscription {
     override suspend fun attach() {}
@@ -44,6 +45,7 @@ class FakeChatRepository(
     var onObserveTypingStatus: (String) -> Flow<TypingStatus> = {
         flow { awaitCancellation() }
     },
+    var onObservePeerOnline: (String, String) -> Flow<Boolean> = { _, _ -> flowOf(false) },
     var onSendMessage: suspend (String, String, String) -> Message? = { _, _, _ -> null },
     var onEnsureChatForConnection: suspend (String) -> Chat? = { null },
     var onGetUserById: suspend (String) -> User? = { null },
@@ -104,6 +106,13 @@ class FakeChatRepository(
     override fun observeTypingStatus(chatId: String): Flow<TypingStatus> = onObserveTypingStatus(chatId)
 
     override suspend fun getTypingUsers(chatId: String): List<String> = emptyList()
+
+    override suspend fun joinChatEphemeralChannel(chatId: String, currentUserId: String, peerUserId: String) {}
+
+    override suspend fun leaveChatEphemeralChannel(chatId: String) {}
+
+    override fun observePeerOnline(chatId: String, peerUserId: String): Flow<Boolean> =
+        onObservePeerOnline(chatId, peerUserId)
 
     override suspend fun updateMessageStatus(messageId: String, status: String): Boolean = false
 

@@ -25,6 +25,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -33,6 +35,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -835,7 +838,8 @@ private fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
 fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val messageInput by viewModel.messageInput.collectAsState()
-    val typingUsers by viewModel.typingUsers.collectAsState()
+    val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+    val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -964,17 +968,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                     val hoursUntilExpiry = chatDetails.connection.hoursUntilExpiry()
                     val showExpiryBanner = hoursUntilExpiry in 0..EXPIRY_WARNING_THRESHOLD_HOURS && !chatDetails.connection.isKept()
                     val reactionsMap by viewModel.messageReactions.collectAsState()
-                    val typingLabel = remember(typingUsers, chatDetails.otherUser.id, chatDetails.otherUser.name) {
-                        val displayNames = typingUsers.map { userId ->
-                            if (userId == chatDetails.otherUser.id) chatDetails.otherUser.name ?: "Someone"
-                            else "Someone"
-                        }.distinct()
-                        when (displayNames.size) {
-                            0 -> ""
-                            1 -> "${displayNames.first()} is typing…"
-                            2 -> "${displayNames[0]} and ${displayNames[1]} are typing…"
-                            else -> "${displayNames.first()} and ${displayNames.size - 1} others are typing…"
-                        }
+                    val typingPeerLabel = remember(chatDetails.otherUser.name) {
+                        "${chatDetails.otherUser.name ?: "Someone"} is typing"
                     }
 
                     val messageContentModifier = Modifier
@@ -1024,7 +1019,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
                                 Spacer(modifier = Modifier.width(10.dp))
 
-                                // Name + status
+                                // Name + realtime presence (channel) + legacy lastPolled when offline in channel
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = chatDetails.otherUser.name ?: "Unknown",
@@ -1034,11 +1029,40 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text(
-                                        text = presenceLabel(chatDetails.otherUser.lastPolled),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        AnimatedVisibility(
+                                            visible = isPeerOnline,
+                                            enter = fadeIn() + expandVertically(),
+                                            exit = fadeOut() + shrinkVertically()
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF22C55E))
+                                            )
+                                        }
+                                        AnimatedContent(
+                                            targetState = isPeerOnline,
+                                            transitionSpec = {
+                                                fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                                            },
+                                            label = "peer_presence_subtitle"
+                                        ) { online ->
+                                            Text(
+                                                text = if (online) "Online" else "Offline",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (online) {
+                                                    Color(0xFF16A34A)
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                                }
+                                            )
+                                        }
+                                    }
                                 }
 
                                 Box {
@@ -1224,9 +1248,9 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                         }
                     }
 
-                    // Typing indicator — rendered as a chat bubble for polish
+                    // Typing indicator — label + bouncing dots (Realtime Broadcast)
                     AnimatedVisibility(
-                        visible = typingUsers.isNotEmpty(),
+                        visible = isPeerTyping,
                         enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
                         exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
                     ) {
@@ -1234,7 +1258,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
-                            horizontalArrangement = Arrangement.Start
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
@@ -1247,12 +1272,18 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                Text(
-                                    text = typingLabel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontStyle = FontStyle.Italic
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = typingPeerLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontStyle = FontStyle.Italic
+                                    )
+                                    ChatTypingDots()
+                                }
                             }
                         }
                     }
@@ -1622,14 +1653,32 @@ private fun Connection.isExpiredConnection(nowMs: Long = Clock.System.now().toEp
     return !isKept() && expiry < nowMs
 }
 
-private fun presenceLabel(lastPolled: Long?, nowMs: Long = Clock.System.now().toEpochMilliseconds()): String {
-    if (lastPolled == null) return "Offline"
-    val elapsed = (nowMs - lastPolled).coerceAtLeast(0L)
-    return when {
-        elapsed <= 90_000L -> "Active now"
-        elapsed <= 10 * 60_000L -> "Active ${elapsed / 60_000L}m ago"
-        elapsed <= 60 * 60_000L -> "Active ${elapsed / 3_600_000L}h ago"
-        else -> "Offline"
+@Composable
+private fun ChatTypingDots() {
+    val transition = rememberInfiniteTransition(label = "typing_dots")
+    val delays = listOf(0, 140, 280)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        delays.forEachIndexed { index, delayMs ->
+            val offsetY by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(520, delayMillis = delayMs, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "dot_$index"
+            )
+            Box(
+                modifier = Modifier
+                    .offset(y = (-4f * offsetY).dp)
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
+            )
+        }
     }
 }
 
