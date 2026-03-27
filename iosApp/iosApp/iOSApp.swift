@@ -75,6 +75,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        // FORCE SYNC: Kotlin is definitely awake now. Push the cached VoIP token!
+        if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
+            ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")
+        }
+        
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
@@ -93,6 +98,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         ClickKt.savePushToken(token: token, platform: "ios", tokenType: "standard")
+        
+        // PIGGYBACK: Standard token worked. Push the VoIP token right behind it!
+        if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
+            ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")
+        }
     }
 
     func application(

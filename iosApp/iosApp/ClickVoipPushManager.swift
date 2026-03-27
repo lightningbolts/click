@@ -1,13 +1,11 @@
 import Foundation
-
-#if canImport(PushKit)
 import PushKit
 import ComposeApp
 
 final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     static let shared = ClickVoipPushManager()
 
-    /// Main queue: PushKit requires `CXProvider.reportNewIncomingCall` to be invoked immediately from this callback (no network/async before reporting).
+    /// Main queue: PushKit requires `CXProvider.reportNewIncomingCall` to be invoked immediately
     private let registry = PKPushRegistry(queue: .main)
     private var started = false
 
@@ -21,10 +19,16 @@ final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
     func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
         guard type == .voIP else { return }
         let token = pushCredentials.token.map { String(format: "%02.2hhx", $0) }.joined()
+        
+        // 1. Cache it natively so we survive the Kotlin race condition
+        UserDefaults.standard.set(token, forKey: "cached_voip_token")
+        
+        // 2. Try saving it immediately (may fail if Kotlin isn't awake yet)
         ClickKt.savePushToken(token: token, platform: "ios", tokenType: "voip")
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
+        UserDefaults.standard.removeObject(forKey: "cached_voip_token")
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
@@ -34,7 +38,6 @@ final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
         }
 
         let dictionaryPayload = payload.dictionaryPayload
-        // Caller UUID + name: top-level keys only, before CallKit (no async / network).
         let callerUUID = dictionaryPayload["caller_id"] as? String ?? dictionaryPayload["callerId"] as? String
         let callerName = dictionaryPayload["caller_name"] as? String ?? dictionaryPayload["callerName"] as? String
 
@@ -66,11 +69,3 @@ final class ClickVoipPushManager: NSObject, PKPushRegistryDelegate {
         ClickCallKitManager.shared.reportIncomingCall(incoming, voipPushCompletion: completion)
     }
 }
-#else
-final class ClickVoipPushManager {
-    static let shared = ClickVoipPushManager()
-
-    func start() {
-    }
-}
-#endif
