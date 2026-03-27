@@ -204,7 +204,8 @@ object AppDataManager {
                     }
                 }
 
-                _currentUser.value = user
+                val interestTags = supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty()
+                _currentUser.value = user.copy(tags = interestTags)
                 println("AppDataManager: Current user set to: ${user.name}")
                 startPresenceHeartbeat(user.id)
 

@@ -129,6 +129,8 @@ fun App() {
     var ambientNoiseOptIn by remember { mutableStateOf(true) }
     var barometricContextOptIn by remember { mutableStateOf(true) }
     var onboardingState by remember { mutableStateOf<OnboardingState?>(null) }
+    /** False until `user_interests` has been checked for this session (fresh install / login). */
+    var interestsRemoteResolved by remember { mutableStateOf(false) }
     var isCompletingPermissions by remember { mutableStateOf(false) }
 
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
@@ -177,8 +179,11 @@ fun App() {
     LaunchedEffect(authViewModel.isAuthenticated, currentUser.id) {
         if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
             onboardingState = null
+            interestsRemoteResolved = true
             return@LaunchedEffect
         }
+
+        interestsRemoteResolved = false
 
         val savedState = tokenStorage.getOnboardingState()
             ?.let { serialized ->
@@ -198,6 +203,32 @@ fun App() {
                 tokenStorage.saveOnboardingState(onboardingJson.encodeToString(shell))
             }
         }
+
+        val supabaseRepo = compose.project.click.click.data.repository.SupabaseRepository()
+        supabaseRepo.fetchUserInterests(currentUser.id).fold(
+            onSuccess = { row ->
+                if (row != null) {
+                    val base = onboardingState ?: OnboardingState()
+                    val merged = base.copy(
+                        interestsCompleted = true,
+                        flowVersion = if (base.permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
+                        completedAt = base.completedAt ?: if (base.permissionsCompleted) {
+                            kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                        } else {
+                            null
+                        },
+                    )
+                    onboardingState = merged
+                    tokenStorage.saveTagsInitialized(true)
+                    tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
+                }
+            },
+            onFailure = { err ->
+                println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
+            },
+        )
+
+        interestsRemoteResolved = true
     }
 
     // Coroutine scope for location-aware connection
@@ -442,7 +473,7 @@ fun App() {
             val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
             val onboardingScope = rememberCoroutineScope()
             val onboardingStep = when {
-                onboardingState == null || appDataUser == null -> "loading"
+                onboardingState == null || appDataUser == null || !interestsRemoteResolved -> "loading"
                 onboardingState?.permissionsCompleted != true -> "permissions"
                 onboardingState?.interestsCompleted != true -> "interests"
                 else -> "complete"
@@ -533,19 +564,21 @@ fun App() {
                             InterestTaggingScreen(
                                 onTagsSelected = { tags ->
                                     onboardingScope.launch {
-                                        val tagsUpdated = runCatching { supabaseRepo.updateUserTags(currentUser.id, tags) }
+                                        val saved = runCatching { supabaseRepo.updateUserInterests(currentUser.id, tags) }
                                             .getOrDefault(false)
-                                        val flagSet = runCatching { supabaseRepo.setTagsInitialized(currentUser.id) }
-                                            .getOrDefault(false)
-
-                                        if (tagsUpdated && flagSet) {
+                                        if (saved) {
                                             tokenStorage.saveTagsInitialized(true)
+                                            val base = onboardingState ?: OnboardingState()
                                             persistOnboardingState(
-                                                (onboardingState ?: OnboardingState()).copy(
+                                                base.copy(
                                                     interestsCompleted = true,
-                                                    flowVersion = ONBOARDING_FLOW_VERSION_COMPLETE,
-                                                    completedAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                                                )
+                                                    flowVersion = if (base.permissionsCompleted) {
+                                                        ONBOARDING_FLOW_VERSION_COMPLETE
+                                                    } else {
+                                                        base.flowVersion
+                                                    },
+                                                    completedAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                                                ),
                                             )
                                             AppDataManager.refresh(force = true)
                                         }

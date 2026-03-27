@@ -158,6 +158,16 @@ data class LocationPreferences(
     val includeInInsightsEnabled: Boolean = true
 )
 
+/** One row per user in `public.user_interests`; canonical source for interest tags and onboarding completion. */
+@Serializable
+data class UserInterests(
+    @SerialName("user_id")
+    val userId: String,
+    val tags: List<String> = emptyList(),
+    @SerialName("updated_at")
+    val updatedAt: Long = 0L,
+)
+
 @Serializable
 data class Message(
     val id: String,

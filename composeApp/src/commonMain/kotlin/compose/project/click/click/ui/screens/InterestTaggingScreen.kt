@@ -30,7 +30,7 @@ import androidx.compose.foundation.layout.FlowRow
 
 /**
  * Interest tagging onboarding screen.
- * Shows a grid of interest chips; user selects at least 5 to populate users.tags[].
+ * Shows a grid of interest chips; user selects at least 5 to persist to public.user_interests.
  * This data powers the B2B "Tribe Analysis" analytics layer.
  */
 

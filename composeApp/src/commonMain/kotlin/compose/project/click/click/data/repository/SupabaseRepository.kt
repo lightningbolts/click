@@ -5,6 +5,7 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.models.UserInterests
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
 import io.github.jan.supabase.postgrest.from
@@ -143,10 +144,11 @@ class SupabaseRepository {
             val rpcById = rpcUsers.associateBy { it.id }
 
             // Merge: prefer RPC-resolved name (checks auth metadata), fall back to table
+            val interestsByUserId = fetchUserInterestsMap(userIds)
             userIds.mapNotNull { userId ->
                 val rpcUser = rpcById[userId]
                 val tableUser = tableById[userId]
-                when {
+                val merged = when {
                     rpcUser != null && isResolvedDisplayName(rpcUser.name) -> {
                         // RPC gave a real name — merge with any extra table data
                         rpcUser.copy(
@@ -160,6 +162,7 @@ class SupabaseRepository {
                     tableUser != null -> tableUser
                     else -> null
                 }
+                merged?.copy(tags = interestsByUserId[userId] ?: merged.tags)
             }
         } catch (e: Exception) {
             println("Error fetching users: ${e.message}")
@@ -565,80 +568,97 @@ class SupabaseRepository {
         }
     }
 
-    /**
-     * Update a user's interest tags.
-     */
-    suspend fun updateUserTags(userId: String, tags: List<String>): Boolean {
-        return try {
-            supabase.from("users")
-                .update({
-                    set("tags", tags)
-                }) {
-                    filter {
-                        eq("id", userId)
-                    }
-                }
-            true
-        } catch (e: Exception) {
-            println("Error updating user tags: ${e.message}")
-            false
-        }
-    }
-
-/**
-     * Fetch a user's interest tags. Returns empty list if none set.
-     */
-    suspend fun fetchUserTags(userId: String): List<String> {
-        return try {
-            val user = fetchUserById(userId)
-            user?.tags ?: emptyList()
-        } catch (e: Exception) {
-            println("Error fetching user tags: ${e.message}")
-            emptyList()
-        }
-    }
-
-    /**
-     * DTO for reading only the tags_initialized column.
-     */
     @Serializable
-    private data class TagsInitializedDto(
-        @SerialName("tags_initialized")
-        val tagsInitialized: Boolean = false
+    private data class UserInterestsDto(
+        @SerialName("user_id")
+        val userId: String,
+        val tags: List<String> = emptyList(),
+        @SerialName("updated_at")
+        val updatedAt: Long = 0L,
+    )
+
+    @Serializable
+    private data class UserInterestsInsertDto(
+        @SerialName("user_id")
+        val userId: String,
+        val tags: List<String>,
+        @SerialName("updated_at")
+        val updatedAt: Long,
     )
 
     /**
-     * Check whether a user has completed or skipped the interest-tagging onboarding screen.
-     * Returns null on network/other errors so the caller can distinguish errors from "not initialized".
+     * Load the current user's row from [public.user_interests].
+     *
+     * @return [Result.success] with `null` when no row exists; [Result.failure] on transport/schema errors.
      */
-    suspend fun fetchTagsInitialized(userId: String): Boolean? {
+    suspend fun fetchUserInterests(userId: String): Result<UserInterests?> {
         return try {
-            val result = supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("tags_initialized")) {
-                    filter { eq("id", userId) }
+            val rows = supabase.from("user_interests")
+                .select {
+                    filter { eq("user_id", userId) }
+                    limit(1)
                 }
-                .decodeList<TagsInitializedDto>()
-            result.firstOrNull()?.tagsInitialized ?: false
+                .decodeList<UserInterestsDto>()
+            val row = rows.firstOrNull()
+            Result.success(
+                row?.let {
+                    UserInterests(userId = it.userId, tags = it.tags, updatedAt = it.updatedAt)
+                },
+            )
         } catch (e: Exception) {
-            println("Error fetching tags_initialized: ${e.message}")
-            null  // Return null on error — callers should not treat errors as "needs tagging"
+            println("Error fetching user_interests: ${e.message}")
+            Result.failure(e)
         }
     }
 
     /**
-     * Mark the user's interest-tagging onboarding as complete (or skipped).
-     * This prevents the tagging screen from re-appearing on subsequent app launches.
+     * Insert or update interest tags for the user (canonical store for onboarding + Common Ground).
      */
-    suspend fun setTagsInitialized(userId: String): Boolean {
+    suspend fun updateUserInterests(userId: String, tags: List<String>): Boolean {
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         return try {
-            supabase.from("users")
-                .update({ set("tags_initialized", true) }) {
-                    filter { eq("id", userId) }
+            when (val existing = fetchUserInterests(userId).getOrNull()) {
+                null -> {
+                    supabase.from("user_interests")
+                        .insert(
+                            UserInterestsInsertDto(
+                                userId = userId,
+                                tags = tags,
+                                updatedAt = now,
+                            ),
+                        )
                 }
+                else -> {
+                    supabase.from("user_interests")
+                        .update({
+                            set("tags", tags)
+                            set("updated_at", now)
+                        }) {
+                            filter { eq("user_id", userId) }
+                        }
+                }
+            }
             true
         } catch (e: Exception) {
-            println("Error setting tags_initialized: ${e.message}")
+            println("Error updating user_interests: ${e.message}")
             false
+        }
+    }
+
+    private suspend fun fetchUserInterestsMap(userIds: List<String>): Map<String, List<String>> {
+        if (userIds.isEmpty()) return emptyMap()
+        return try {
+            supabase.from("user_interests")
+                .select {
+                    filter {
+                        isIn("user_id", userIds)
+                    }
+                }
+                .decodeList<UserInterestsDto>()
+                .associate { it.userId to it.tags }
+        } catch (e: Exception) {
+            println("Error batch-fetching user_interests: ${e.message}")
+            emptyMap()
         }
     }
 
