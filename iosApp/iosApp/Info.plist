@@ -16,11 +16,15 @@
 		<string>processing</string>
 		<string>external-accessory</string>
 		<string>bluetooth-peripheral</string>
-		<string>push-to-talk</string>
 	</array>
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>
 		<string>TAG</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).refresh</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).processing</string>
 	</array>
 </dict>
 </plist>
