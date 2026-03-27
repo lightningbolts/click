@@ -26,6 +26,7 @@ class SupabaseRepository {
     /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
     private val userColumnSets = listOf(
+        listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
         listOf("id", "name", "full_name", "email", "image", "last_polled"),
         listOf("id", "name", "email", "image", "last_polled"),
         listOf("id", "name", "full_name", "email", "image"),
@@ -45,6 +46,8 @@ class SupabaseRepository {
         fun toUser(): User = User(
             id = id,
             name = resolveDisplayName(
+                firstName = null,
+                lastName = null,
                 fullName = displayName,
                 name = null,
                 email = email
@@ -464,13 +467,30 @@ class SupabaseRepository {
      * Update user's name
      */
     suspend fun updateUserName(userId: String, name: String): Boolean {
+        val trimmed = name.trim()
+        val spaceIdx = trimmed.indexOf(' ')
+        val first = if (spaceIdx < 0) trimmed else trimmed.take(spaceIdx).trim()
+        val last = if (spaceIdx < 0) "" else trimmed.substring(spaceIdx + 1).trim()
+        return updateUserProfileNames(userId, first, last)
+    }
+
+    /**
+     * Updates [public.users] display fields from explicit first/last name.
+     */
+    suspend fun updateUserProfileNames(userId: String, firstName: String, lastName: String): Boolean {
+        val f = firstName.trim()
+        val l = lastName.trim()
+        if (f.isEmpty()) return false
+        val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
         return try {
-            println("Updating user name for $userId to: $name")
+            println("Updating user profile names for $userId to: $display")
             runCatching {
                 supabase.from("users")
                     .update({
-                        set("name", name)
-                        set("full_name", name)
+                        set("name", display)
+                        set("full_name", display)
+                        set("first_name", f)
+                        set("last_name", l)
                     }) {
                         filter {
                             eq("id", userId)
@@ -479,17 +499,17 @@ class SupabaseRepository {
             }.getOrElse {
                 supabase.from("users")
                     .update({
-                        set("name", name)
+                        set("name", display)
                     }) {
                         filter {
                             eq("id", userId)
                         }
                     }
             }
-            println("Successfully updated user name for $userId to: $name")
+            println("Successfully updated user profile names for $userId")
             true
         } catch (e: Exception) {
-            println("Error updating user name: ${e.message}")
+            println("Error updating user profile names: ${e.message}")
             e.printStackTrace()
             false
         }
@@ -508,15 +528,27 @@ class SupabaseRepository {
             val resolvedName = user.name?.trim()?.takeIf { it.isNotEmpty() }
                 ?: user.email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
                 ?: "User"
-            
+            val resolvedFirst = user.firstName?.trim()?.takeIf { it.isNotEmpty() }
+            val resolvedLast = user.lastName?.trim()?.takeIf { it.isNotEmpty() }
+            val resolvedBirthday = user.birthday?.trim()?.takeIf { it.isNotEmpty() }
+
             if (existing != null) {
-                // Update existing user if name changed
-                if (existing.name != resolvedName || (user.email != null && existing.email != user.email) || existing.image != user.image) {
+                val profileChanged =
+                    existing.name != resolvedName ||
+                        (user.email != null && existing.email != user.email) ||
+                        existing.image != user.image ||
+                        (user.firstName != null && user.firstName != existing.firstName) ||
+                        (user.lastName != null && user.lastName != existing.lastName) ||
+                        (user.birthday != null && user.birthday != existing.birthday)
+                if (profileChanged) {
                     runCatching {
                         supabase.from("users")
                             .update({
                                 set("name", resolvedName)
                                 set("full_name", resolvedName)
+                                resolvedFirst?.let { set("first_name", it) }
+                                resolvedLast?.let { set("last_name", it) }
+                                resolvedBirthday?.let { set("birthday", it) }
                                 user.email?.let { set("email", it) }
                                 user.image?.let { set("image", it) }
                             }) {
@@ -548,6 +580,9 @@ class SupabaseRepository {
                                 put("id", user.id)
                                 put("name", resolvedName)
                                 put("full_name", resolvedName)
+                                resolvedFirst?.let { put("first_name", it) }
+                                resolvedLast?.let { put("last_name", it) }
+                                resolvedBirthday?.let { put("birthday", it) }
                                 put("email", user.email ?: "")
                                 put("created_at", if (user.createdAt > 0L) user.createdAt else kotlinx.datetime.Clock.System.now().toEpochMilliseconds())
                                 user.image?.let { put("image", it) }

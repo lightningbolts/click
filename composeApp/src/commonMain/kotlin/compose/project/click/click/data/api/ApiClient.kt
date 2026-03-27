@@ -66,11 +66,17 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
-    suspend fun signUp(email: String, password: String, name: String): Result<AuthResponse> {
+    suspend fun signUp(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String,
+        birthdayIso: String,
+    ): Result<AuthResponse> {
         return try {
             val response = client.post("$baseUrl/create_account") {
                 contentType(ContentType.Application.Json)
-                setBody(SignUpRequest(email, password, name))
+                setBody(SignUpRequest(email, password, firstName, lastName, birthdayIso))
             }
 
             if (response.status.value in 200..299) {

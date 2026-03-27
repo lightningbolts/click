@@ -50,6 +50,12 @@ data class User(
     val createdAt: Long = 0L,  // Made optional with default for schema compatibility
     @SerialName("last_polled")
     val lastPolled: Long? = null,
+    @SerialName("first_name")
+    val firstName: String? = null,
+    @SerialName("last_name")
+    val lastName: String? = null,
+    /** ISO calendar date string from DB (yyyy-MM-dd) when present. */
+    val birthday: String? = null,
     val connections: List<String> = emptyList(),
     val paired_with: List<String> = emptyList(),
     val connection_today: Int = -1,
@@ -90,6 +96,11 @@ data class UserCore(
     val id: String,
     val name: String? = null,
     val full_name: String? = null,
+    @SerialName("first_name")
+    val firstName: String? = null,
+    @SerialName("last_name")
+    val lastName: String? = null,
+    val birthday: String? = null,
     val email: String? = null,
     val image: String? = null,
     @SerialName("last_polled")
@@ -97,10 +108,12 @@ data class UserCore(
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
-     * Resolves display name: full_name > name > email prefix > "Connection".
+     * Resolves display name: first+last > full_name > name > email prefix > "Connection".
      */
     fun toUser(): User {
         val resolvedName = resolveDisplayName(
+            firstName = firstName,
+            lastName = lastName,
             fullName = full_name,
             name = name,
             email = email
@@ -112,6 +125,9 @@ data class UserCore(
             image = image,
             createdAt = 0L,
             lastPolled = lastPolled,
+            firstName = firstName,
+            lastName = lastName,
+            birthday = birthday,
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,
@@ -121,6 +137,8 @@ data class UserCore(
 }
 
 fun resolveDisplayName(
+    firstName: String? = null,
+    lastName: String? = null,
     fullName: String?,
     name: String?,
     email: String?
@@ -130,6 +148,12 @@ fun resolveDisplayName(
             ?.trim()
             ?.takeIf { it.isNotEmpty() && !it.equals("Connection", ignoreCase = true) }
     }
+
+    val fromParts = listOfNotNull(
+        normalizedCandidate(firstName),
+        normalizedCandidate(lastName)
+    ).joinToString(" ").trim()
+    if (fromParts.isNotEmpty()) return fromParts
 
     return normalizedCandidate(fullName)
         ?: normalizedCandidate(name)

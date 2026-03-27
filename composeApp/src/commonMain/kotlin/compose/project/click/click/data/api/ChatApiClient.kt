@@ -587,6 +587,8 @@ class ChatApiClient(
 
     private fun UserApiModel.toUser(): User {
         val resolvedName = resolveDisplayName(
+            firstName = null,
+            lastName = null,
             fullName = full_name,
             name = name,
             email = email
@@ -599,6 +601,9 @@ class ChatApiClient(
             image = image,
             createdAt = 0,
             lastPolled = null,
+            firstName = null,
+            lastName = null,
+            birthday = null,
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,

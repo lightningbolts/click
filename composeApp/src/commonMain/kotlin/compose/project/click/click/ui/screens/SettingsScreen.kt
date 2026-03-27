@@ -45,6 +45,7 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.User
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
@@ -85,7 +86,8 @@ fun SettingsScreen(
     }
 
     var showNameDialog by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
+    var newFirstName by remember { mutableStateOf("") }
+    var newLastName by remember { mutableStateOf("") }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -187,6 +189,7 @@ fun SettingsScreen(
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.fillMaxWidth()) {
+                            val (shownFirst, shownLast) = namePartsForEditor(currentUser)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -202,26 +205,44 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        "Full name",
+                                        "Name",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        currentUser?.name ?: "Not set",
+                                        "First name",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        shownFirst.ifEmpty { "—" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        "Last name",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        shownLast.ifEmpty { "—" },
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
                                 IconButton(
                                     onClick = {
-                                        newName = currentUser?.name ?: ""
+                                        val (f, l) = namePartsForEditor(currentUser)
+                                        newFirstName = f
+                                        newLastName = l
                                         showNameDialog = true
                                     }
                                 ) {
                                     Icon(
                                         Icons.Default.Edit,
-                                        contentDescription = "Edit full name",
+                                        contentDescription = "Edit name",
                                         modifier = Modifier.size(20.dp),
                                         tint = PrimaryBlue
                                     )
@@ -260,21 +281,33 @@ fun SettingsScreen(
         if (showNameDialog) {
             AlertDialog(
                 onDismissRequest = { showNameDialog = false },
-                title = { Text("Change Full Name") },
+                title = { Text("Edit name") },
                 text = {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Full name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newFirstName,
+                            onValueChange = { newFirstName = it },
+                            label = { Text("First name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = newLastName,
+                            onValueChange = { newLastName = it },
+                            label = { Text("Last name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            if (newName.isNotBlank()) {
-                                AppDataManager.updateUsername(newName.trim())
+                            if (newFirstName.isNotBlank()) {
+                                AppDataManager.updateProfileName(newFirstName, newLastName)
                                 showNameDialog = false
                             }
                         }
@@ -289,6 +322,24 @@ fun SettingsScreen(
                 }
             )
         }
+    }
+}
+
+/** Values shown in settings and prefilled in the editor (falls back to splitting [User.name]). */
+private fun namePartsForEditor(user: User?): Pair<String, String> {
+    if (user == null) return "" to ""
+    val fn = user.firstName?.trim()?.takeIf { it.isNotEmpty() }
+    val ln = user.lastName?.trim()?.takeIf { it.isNotEmpty() }
+    if (fn != null || ln != null) {
+        return (fn ?: "") to (ln ?: "")
+    }
+    val n = user.name?.trim().orEmpty()
+    if (n.isEmpty()) return "" to ""
+    val sp = n.indexOf(' ')
+    return if (sp < 0) {
+        n to ""
+    } else {
+        n.take(sp).trim() to n.substring(sp + 1).trim()
     }
 }
 

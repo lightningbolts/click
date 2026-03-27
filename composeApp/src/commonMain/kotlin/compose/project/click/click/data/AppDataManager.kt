@@ -155,11 +155,16 @@ object AppDataManager {
             println("AppDataManager: Loading data for user ${authUser.id}")
 
             withTimeout(STARTUP_TIMEOUT_MS) {
-                // Extract name from auth metadata (prefer full_name over name, set during signup/update)
-                val fullName = authUser.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
-                val legacyName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
-                val authName = fullName ?: legacyName
-                println("AppDataManager: Auth metadata - full_name: $fullName, name: $legacyName, using: $authName")
+                val meta = authUser.userMetadata
+                fun metaStr(key: String) =
+                    meta?.get(key)?.toString()?.removeSurrounding("\"")?.trim()?.takeIf { it.isNotEmpty() }
+                val metaFirst = metaStr("first_name")
+                val metaLast = metaStr("last_name")
+                val metaBirthday = metaStr("birthday")
+                val authDisplay = authUser.displayNameFromMetadata()
+                println(
+                    "AppDataManager: Auth metadata — first/last: $metaFirst / $metaLast, display: $authDisplay"
+                )
 
                 // Fetch user data from database
                 var user = supabaseRepository.fetchUserById(authUser.id)
@@ -170,7 +175,9 @@ object AppDataManager {
                     val newUser = User(
                         id = authUser.id,
                         name = resolveDisplayName(
-                            fullName = authName,
+                            firstName = metaFirst,
+                            lastName = metaLast,
+                            fullName = metaStr("full_name") ?: authDisplay,
                             name = null,
                             email = authUser.email
                         ),
@@ -178,6 +185,9 @@ object AppDataManager {
                         image = null,
                         createdAt = Clock.System.now().toEpochMilliseconds(),
                         lastPolled = null,
+                        firstName = metaFirst,
+                        lastName = metaLast,
+                        birthday = metaBirthday,
                         connections = emptyList(),
                         paired_with = emptyList(),
                         connection_today = 0,
@@ -188,14 +198,19 @@ object AppDataManager {
                     user = newUser
                 } else {
                     val desiredName = resolveDisplayName(
-                        fullName = authName,
+                        firstName = metaFirst ?: user.firstName,
+                        lastName = metaLast ?: user.lastName,
+                        fullName = metaStr("full_name") ?: authDisplay,
                         name = user.name,
                         email = authUser.email ?: user.email
                     )
                     val desiredEmail = authUser.email ?: user.email
                     val syncedUser = user.copy(
                         name = desiredName,
-                        email = desiredEmail
+                        email = desiredEmail,
+                        firstName = metaFirst ?: user.firstName,
+                        lastName = metaLast ?: user.lastName,
+                        birthday = metaBirthday ?: user.birthday
                     )
                     if (syncedUser != user) {
                         println("AppDataManager: Syncing current user profile to users table: ${syncedUser.name}")
@@ -682,46 +697,53 @@ object AppDataManager {
     }
     
     /**
-     * Update the current user's full name
-     * Updates local state immediately, syncs with Supabase Auth metadata AND database
+     * Update the current user's first and last name in auth metadata and [public.users].
      */
-    fun updateUsername(newName: String) {
+    fun updateProfileName(firstName: String, lastName: String) {
         val user = _currentUser.value ?: run {
-            println("updateUsername: No current user")
+            println("updateProfileName: No current user")
             return
         }
-        
-        println("updateUsername: Changing name from '${user.name}' to '$newName' for user ${user.id}")
-        
-        val previousName = user.name
-        val updatedUser = user.copy(name = newName)
+
+        val f = firstName.trim()
+        val l = lastName.trim()
+        if (f.isEmpty()) {
+            println("updateProfileName: First name is required")
+            return
+        }
+
+        val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
+        println("updateProfileName: Changing profile to '$display' for user ${user.id}")
+
+        val previousUser = user
+        val updatedUser = user.copy(
+            name = display,
+            firstName = f,
+            lastName = l.ifEmpty { null },
+        )
         _currentUser.value = updatedUser
-        
+
         scope.launch {
             try {
-                // 1. Update auth metadata (this persists after app restart)
-                val authResult = authRepository.updateUserMetadata(newName)
+                val authResult = authRepository.updateUserProfileNames(f, l)
                 if (authResult.isFailure) {
-                    println("updateUsername: Warning - failed to update auth metadata")
+                    println("updateProfileName: Warning - failed to update auth metadata")
                 }
-                
-                // 2. Ensure user exists in database
+
                 val upsertResult = supabaseRepository.upsertUser(updatedUser)
-                println("updateUsername: Upsert user result: $upsertResult")
-                
-                // 3. Update user name in database  
-                val success = supabaseRepository.updateUserName(user.id, newName)
+                println("updateProfileName: Upsert user result: $upsertResult")
+
+                val success = supabaseRepository.updateUserProfileNames(user.id, f, l)
                 if (!success) {
-                    println("updateUsername: Failed to update name in database, but auth metadata was updated")
+                    println("updateProfileName: Failed to update names in database")
                 } else {
-                    println("updateUsername: Successfully updated full name to: $newName")
+                    println("updateProfileName: Successfully updated profile to: $display")
                 }
                 persistSnapshot()
             } catch (e: Exception) {
-                println("updateUsername: Error updating name: ${e.message}")
+                println("updateProfileName: Error updating profile: ${e.message}")
                 e.printStackTrace()
-                // Only revert if we couldn't update auth metadata either
-                _currentUser.value = user.copy(name = previousName)
+                _currentUser.value = previousUser
             }
         }
     }

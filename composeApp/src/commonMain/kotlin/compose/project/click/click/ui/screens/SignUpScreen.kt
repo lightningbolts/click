@@ -34,17 +34,36 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import androidx.compose.ui.zIndex
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.until
+
+private const val MinSignupAgeYears = 13
+
+private fun parseIsoLocalDate(raw: String): LocalDate? =
+    runCatching { LocalDate.parse(raw.trim()) }.getOrNull()
+
+private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
+    val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    val ageYears = birthDate.until(today, DateTimeUnit.YEAR)
+    return ageYears >= years
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpScreen(
     onSignUpSuccess: () -> Unit,
     onLoginClick: () -> Unit,
-    onEmailSignUp: (name: String, email: String, password: String) -> Unit,
+    onEmailSignUp: (firstName: String, lastName: String, birthdayIso: String, email: String, password: String) -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
-    var name by remember { mutableStateOf("") }
+    var firstName by remember { mutableStateOf("") }
+    var lastName by remember { mutableStateOf("") }
+    var birthdayIso by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -53,8 +72,19 @@ fun SignUpScreen(
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
 
+    val parsedBirth = remember(birthdayIso) { parseIsoLocalDate(birthdayIso) }
+    val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
+    val birthdayHelper = when {
+        birthdayIso.isBlank() -> "Required — format YYYY-MM-DD"
+        parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
+        !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
+        else -> null
+    }
+
     val passwordsMatch = password == confirmPassword
-    val canSignUp = name.isNotBlank() &&
+    val canSignUp = firstName.isNotBlank() &&
+                    lastName.isNotBlank() &&
+                    birthdayValid &&
                     email.isNotBlank() &&
                     password.isNotBlank() &&
                     confirmPassword.isNotBlank() &&
@@ -136,15 +166,73 @@ fun SignUpScreen(
             )
 
             Spacer(modifier = Modifier.height(40.dp))
-            // Name TextField
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = firstName,
+                    onValueChange = { firstName = it },
+                    label = { Text("First name") },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Person, contentDescription = null)
+                    },
+                    modifier = Modifier.weight(1f).height(64.dp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Next) }
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !isLoading
+                )
+                OutlinedTextField(
+                    value = lastName,
+                    onValueChange = { lastName = it },
+                    label = { Text("Last name") },
+                    modifier = Modifier.weight(1f).height(64.dp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !isLoading
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Full Name") },
+                value = birthdayIso,
+                onValueChange = { birthdayIso = it },
+                label = { Text("Birthday") },
+                placeholder = { Text("YYYY-MM-DD") },
                 leadingIcon = {
-                    Icon(Icons.Filled.Person, contentDescription = "Name")
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = null)
                 },
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                supportingText = {
+                    val h = birthdayHelper
+                    if (h != null) {
+                        Text(h, style = MaterialTheme.typography.bodySmall)
+                    }
+                },
+                isError = birthdayIso.isNotBlank() && !birthdayValid,
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
@@ -253,7 +341,7 @@ fun SignUpScreen(
                     onDone = {
                         focusManager.clearFocus()
                         if (canSignUp) {
-                            onEmailSignUp(name, email, password)
+                            onEmailSignUp(firstName.trim(), lastName.trim(), birthdayIso.trim(), email, password)
                         }
                     }
                 ),
@@ -284,7 +372,7 @@ fun SignUpScreen(
                 onClick = {
                     focusManager.clearFocus()
                     if (canSignUp) {
-                        onEmailSignUp(name, email, password)
+                        onEmailSignUp(firstName.trim(), lastName.trim(), birthdayIso.trim(), email, password)
                     }
                 },
                 modifier = Modifier

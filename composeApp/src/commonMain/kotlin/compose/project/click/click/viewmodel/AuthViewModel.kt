@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.displayNameFromMetadata
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
 import kotlinx.coroutines.delay
@@ -53,13 +54,10 @@ class AuthViewModel(
                 userResult.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
-                        // Prefer full_name over name (full_name is updated by user, name is legacy)
-                        val fullName = user.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
-                        val legacyName = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         authState = AuthState.Success(
                             userId = user.id,
                             email = user.email ?: "",
-                            name = fullName ?: legacyName
+                            name = user.displayNameFromMetadata()
                         )
                     },
                     onFailure = {
@@ -105,12 +103,10 @@ class AuthViewModel(
                 result.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
-                        val fullName = user.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
-                        val legacyName = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         authState = AuthState.Success(
                             userId = user.id,
                             email = user.email ?: email,
-                            name = fullName ?: legacyName
+                            name = user.displayNameFromMetadata()
                         )
                         // Trigger data load for the newly logged-in user
                         AppDataManager.resetAndReload()
@@ -125,22 +121,26 @@ class AuthViewModel(
         }
     }
 
-    fun signUpWithEmail(name: String, email: String, password: String) {
+    fun signUpWithEmail(firstName: String, lastName: String, birthdayIso: String, email: String, password: String) {
         viewModelScope.launch {
             try {
                 authState = AuthState.Loading
 
-                val result = authRepository.signUpWithEmail(email, password, name)
+                val result = authRepository.signUpWithEmail(
+                    email = email,
+                    password = password,
+                    firstName = firstName,
+                    lastName = lastName,
+                    birthdayIso = birthdayIso,
+                )
 
                 result.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
-                        val fullName = user.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
-                        val legacyName = user.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
                         authState = AuthState.Success(
                             userId = user.id,
                             email = user.email ?: email,
-                            name = fullName ?: legacyName
+                            name = user.displayNameFromMetadata()
                         )
                         // Trigger data load for the newly signed-up user
                         AppDataManager.resetAndReload()

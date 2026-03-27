@@ -18,8 +18,25 @@ BEGIN
     SELECT
         requested.user_id,
         COALESCE(
+            NULLIF(
+                NULLIF(BTRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''),
+                'Connection'
+            ),
             NULLIF(NULLIF(BTRIM(to_jsonb(u) ->> 'full_name'), ''), 'Connection'),
             NULLIF(NULLIF(BTRIM(to_jsonb(u) ->> 'name'), ''), 'Connection'),
+            NULLIF(
+                NULLIF(
+                    BTRIM(
+                        CONCAT_WS(
+                            ' ',
+                            NULLIF(BTRIM(au.raw_user_meta_data ->> 'first_name'), ''),
+                            NULLIF(BTRIM(au.raw_user_meta_data ->> 'last_name'), '')
+                        )
+                    ),
+                    ''
+                ),
+                'Connection'
+            ),
             NULLIF(NULLIF(BTRIM(au.raw_user_meta_data ->> 'full_name'), ''), 'Connection'),
             NULLIF(NULLIF(BTRIM(au.raw_user_meta_data ->> 'name'), ''), 'Connection'),
             NULLIF(BTRIM(split_part(COALESCE(to_jsonb(u) ->> 'email', au.email, ''), '@', 1)), ''),

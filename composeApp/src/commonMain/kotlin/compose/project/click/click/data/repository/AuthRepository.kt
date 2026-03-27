@@ -5,6 +5,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import compose.project.click.click.data.storage.TokenStorage
@@ -48,16 +49,29 @@ class AuthRepository(
         }
     }
 
-    suspend fun signUpWithEmail(email: String, password: String, name: String): Result<UserInfo> {
+    suspend fun signUpWithEmail(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String,
+        birthdayIso: String,
+    ): Result<UserInfo> {
         return try {
+            val f = firstName.trim()
+            val l = lastName.trim()
+            val b = birthdayIso.trim()
+            val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
             // Sign up with Supabase
             withTimeout(AUTH_TIMEOUT_MS) {
                 supabase.auth.signUpWith(Email) {
                     this.email = email
                     this.password = password
                     data = buildJsonObject {
-                        put("full_name", name)
-                        put("name", name)
+                        put("first_name", f)
+                        put("last_name", l)
+                        put("birthday", b)
+                        put("full_name", display.ifEmpty { f })
+                        put("name", display.ifEmpty { f })
                     }
                 }
             }
@@ -216,23 +230,41 @@ class AuthRepository(
     }
     
     /**
-     * Update user metadata (like full_name)
+     * Update auth user_metadata with explicit first/last names (and derived full_name / name).
      */
-    suspend fun updateUserMetadata(fullName: String): Result<Unit> {
+    suspend fun updateUserProfileNames(firstName: String, lastName: String): Result<Unit> {
         return try {
-            println("AuthRepository: Updating user metadata with full_name: $fullName")
+            val f = firstName.trim()
+            val l = lastName.trim()
+            if (f.isEmpty()) {
+                return Result.failure(IllegalArgumentException("First name is required"))
+            }
+            val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
+            println("AuthRepository: Updating profile names: $display")
             supabase.auth.updateUser {
-                data = kotlinx.serialization.json.buildJsonObject {
-                    put("full_name", kotlinx.serialization.json.JsonPrimitive(fullName))
+                data = buildJsonObject {
+                    put("first_name", JsonPrimitive(f))
+                    put("last_name", JsonPrimitive(l))
+                    put("full_name", JsonPrimitive(display))
+                    put("name", JsonPrimitive(display))
                 }
             }
-            println("AuthRepository: Successfully updated user metadata")
+            println("AuthRepository: Successfully updated user profile names")
             Result.success(Unit)
         } catch (e: Exception) {
-            println("AuthRepository: Error updating user metadata: ${e.message}")
+            println("AuthRepository: Error updating user profile names: ${e.message}")
             e.printStackTrace()
             Result.failure(e)
         }
+    }
+
+    /** Splits a single display string into first/last and calls [updateUserProfileNames]. */
+    suspend fun updateUserMetadata(fullName: String): Result<Unit> {
+        val trimmed = fullName.trim()
+        val spaceIdx = trimmed.indexOf(' ')
+        val first = if (spaceIdx < 0) trimmed else trimmed.take(spaceIdx).trim()
+        val last = if (spaceIdx < 0) "" else trimmed.substring(spaceIdx + 1).trim()
+        return updateUserProfileNames(first, last)
     }
 
     private fun mapAuthErrorMessage(error: Throwable, defaultMessage: String): String {
