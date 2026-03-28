@@ -160,7 +160,7 @@ class ChatViewModelTest {
                 )
             },
             onFetchReactionsForChat = { emptyList() },
-            onSendMessage = { chatId, userId, content ->
+            onSendMessage = { chatId, userId, content, _, _ ->
                 if (chatId == apiChatId && userId == selfId && content == "hi") sent else null
             },
             onGetUserById = { id ->

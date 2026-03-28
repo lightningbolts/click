@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.JsonElement
 
 /** Handle for attaching/detaching a Supabase realtime messages channel (testable without [RealtimeChannel]). */
 interface ChatMessageSubscription {
@@ -29,11 +30,23 @@ interface ChatRepository {
 
     suspend fun fetchMessagesForChat(chatId: String): List<Message>
 
-    suspend fun sendMessage(chatId: String, userId: String, content: String): Message?
+    suspend fun sendMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        messageType: String = "text",
+        metadata: JsonElement? = null,
+    ): Message?
 
     suspend fun ensureChatForConnection(connectionId: String): Chat?
 
-    suspend fun sendMessageForConnection(connectionId: String, userId: String, content: String): Message?
+    suspend fun sendMessageForConnection(
+        connectionId: String,
+        userId: String,
+        content: String,
+        messageType: String = "text",
+        metadata: JsonElement? = null,
+    ): Message?
 
     suspend fun markMessagesAsRead(chatId: String, userId: String)
 

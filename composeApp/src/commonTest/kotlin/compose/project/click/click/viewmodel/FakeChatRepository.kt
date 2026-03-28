@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.serialization.json.JsonElement
 
 private object NoopMessageSubscription : ChatMessageSubscription {
     override suspend fun attach() {}
@@ -46,7 +47,7 @@ class FakeChatRepository(
         flow { awaitCancellation() }
     },
     var onObservePeerOnline: (String, String) -> Flow<Boolean> = { _, _ -> flowOf(false) },
-    var onSendMessage: suspend (String, String, String) -> Message? = { _, _, _ -> null },
+    var onSendMessage: suspend (String, String, String, String, JsonElement?) -> Message? = { _, _, _, _, _ -> null },
     var onEnsureChatForConnection: suspend (String) -> Chat? = { null },
     var onGetUserById: suspend (String) -> User? = { null },
 ) : ChatRepository {
@@ -59,16 +60,28 @@ class FakeChatRepository(
     override suspend fun fetchMessagesForChat(chatId: String): List<Message> =
         onFetchMessagesForChat(chatId)
 
-    override suspend fun sendMessage(chatId: String, userId: String, content: String): Message? =
-        onSendMessage(chatId, userId, content)
+    override suspend fun sendMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        messageType: String,
+        metadata: JsonElement?,
+    ): Message? =
+        onSendMessage(chatId, userId, content, messageType, metadata)
 
     override suspend fun ensureChatForConnection(connectionId: String): Chat? =
         onEnsureChatForConnection(connectionId)
 
-    override suspend fun sendMessageForConnection(connectionId: String, userId: String, content: String): Message? {
+    override suspend fun sendMessageForConnection(
+        connectionId: String,
+        userId: String,
+        content: String,
+        messageType: String,
+        metadata: JsonElement?,
+    ): Message? {
         val chat = ensureChatForConnection(connectionId) ?: return null
         val id = chat.id ?: return null
-        return sendMessage(id, userId, content)
+        return sendMessage(id, userId, content, messageType, metadata)
     }
 
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {}

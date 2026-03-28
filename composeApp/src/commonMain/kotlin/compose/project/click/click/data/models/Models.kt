@@ -2,6 +2,7 @@ package compose.project.click.click.data.models
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class GeoLocation(
@@ -202,7 +203,10 @@ data class Message(
     @SerialName("time_edited")
     val timeEdited: Long? = null,
     @SerialName("is_read")
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    @SerialName("message_type")
+    val messageType: String = "text",
+    val metadata: JsonElement? = null,
 )
 
 @Serializable

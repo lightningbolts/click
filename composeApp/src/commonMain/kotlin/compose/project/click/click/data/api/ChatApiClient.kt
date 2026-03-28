@@ -9,6 +9,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /**
  * API client for chat-related operations with the Flask backend
@@ -44,7 +45,12 @@ class ChatApiClient(
     data class ParticipantsResponse(val participants: List<UserApiModel>)
 
     @Serializable
-    data class SendMessageRequest(val user_id: String, val content: String)
+    data class SendMessageRequest(
+        val user_id: String,
+        val content: String,
+        val message_type: String? = null,
+        val metadata: JsonElement? = null,
+    )
 
     @Serializable
     data class MarkReadRequest(val user_id: String)
@@ -112,8 +118,10 @@ class ChatApiClient(
         val content: String,
         val created_at: Long,
         val updated_at: Long? = null,
-        val is_read: Boolean,
-        val status: String? = null
+        val is_read: Boolean = false,
+        val status: String? = null,
+        val message_type: String? = null,
+        val metadata: JsonElement? = null,
     )
 
     @Serializable
@@ -581,7 +589,10 @@ class ChatApiClient(
             user_id = user_id,
             content = content,
             timeCreated = created_at,
-            timeEdited = updated_at
+            timeEdited = updated_at,
+            isRead = is_read,
+            messageType = message_type ?: "text",
+            metadata = metadata,
         )
     }
 

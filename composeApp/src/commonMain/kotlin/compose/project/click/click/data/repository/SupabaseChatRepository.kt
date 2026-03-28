@@ -42,6 +42,7 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -144,6 +145,7 @@ class SupabaseChatRepository(
     }
 
     private fun decryptMessage(message: Message, keys: MessageCrypto.DerivedKeys?): Message {
+        if (message.messageType == "call_log") return message
         if (keys == null || !MessageCrypto.isEncrypted(message.content)) return message
         return message.copy(content = MessageCrypto.decryptContent(message.content, keys))
     }
@@ -190,7 +192,10 @@ class SupabaseChatRepository(
         @SerialName("time_edited")
         val timeEdited: Long? = null,
         @SerialName("is_read")
-        val isRead: Boolean = false
+        val isRead: Boolean = false,
+        @SerialName("message_type")
+        val messageType: String = "text",
+        val metadata: JsonElement? = null,
     ) {
         fun toMessage(): Message = Message(
             id = id,
@@ -198,7 +203,9 @@ class SupabaseChatRepository(
             content = content,
             timeCreated = timeCreated,
             timeEdited = timeEdited,
-            isRead = isRead
+            isRead = isRead,
+            messageType = messageType,
+            metadata = metadata,
         )
     }
 
@@ -327,10 +334,20 @@ class SupabaseChatRepository(
         }
     }
 
-    override suspend fun sendMessage(chatId: String, userId: String, content: String): Message? {
+    override suspend fun sendMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        messageType: String,
+        metadata: JsonElement?,
+    ): Message? {
         return try {
             val keys = getEncryptionKeysForChat(chatId)
-            val wireContent = if (keys != null) MessageCrypto.encryptContent(content, keys) else content
+            val wireContent = when {
+                messageType == "call_log" -> content
+                keys != null -> MessageCrypto.encryptContent(content, keys)
+                else -> content
+            }
 
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             val payload = buildJsonObject {
@@ -338,6 +355,8 @@ class SupabaseChatRepository(
                 put("user_id", userId)
                 put("content", wireContent)
                 put("time_created", now)
+                put("message_type", messageType)
+                if (metadata != null) put("metadata", metadata)
             }
 
             val inserted = runCatching {
@@ -354,6 +373,7 @@ class SupabaseChatRepository(
                             eq("user_id", userId)
                             eq("content", wireContent)
                             eq("time_created", now)
+                            eq("message_type", messageType)
                         }
                         order("time_created", Order.DESCENDING)
                         limit(1)
@@ -379,15 +399,17 @@ class SupabaseChatRepository(
             } catch (_: Exception) {
             }
 
-            runCatching {
-                chatPushNotifier.notifyNewMessage(
-                    chatId = chatId,
-                    messageId = decrypted.id,
-                    senderUserId = userId,
-                    messagePreviewPlaintext = content,
-                ).getOrThrow()
-            }.onFailure {
-                println("ChatRepository: Failed to dispatch chat push: ${it.message}")
+            if (messageType != "call_log") {
+                runCatching {
+                    chatPushNotifier.notifyNewMessage(
+                        chatId = chatId,
+                        messageId = decrypted.id,
+                        senderUserId = userId,
+                        messagePreviewPlaintext = content,
+                    ).getOrThrow()
+                }.onFailure {
+                    println("ChatRepository: Failed to dispatch chat push: ${it.message}")
+                }
             }
 
             decrypted
@@ -426,9 +448,15 @@ class SupabaseChatRepository(
         }
     }
 
-    override suspend fun sendMessageForConnection(connectionId: String, userId: String, content: String): Message? {
+    override suspend fun sendMessageForConnection(
+        connectionId: String,
+        userId: String,
+        content: String,
+        messageType: String,
+        metadata: JsonElement?,
+    ): Message? {
         val chat = ensureChatForConnection(connectionId) ?: return null
-        return sendMessage(chat.id ?: return null, userId, content)
+        return sendMessage(chat.id ?: return null, userId, content, messageType, metadata)
     }
 
     // Mark messages as read via API
