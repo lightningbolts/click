@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
@@ -1454,7 +1455,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                             maxLines = 5,
                             keyboardOptions = KeyboardOptions(
                                 capitalization = KeyboardCapitalization.Sentences,
-                                imeAction = ImeAction.Default
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.None
                             )
                         )
 

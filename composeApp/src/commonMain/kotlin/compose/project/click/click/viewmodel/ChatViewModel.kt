@@ -17,6 +17,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
@@ -33,6 +34,49 @@ import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatReactionSubscription
 import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.ReactionChangeEvent
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.RealtimeChannel
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.decodeRecordOrNull
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+
+@Serializable
+private data class ConnectionRealtimeRow(
+    val id: String,
+    @SerialName("user_ids") val userIds: List<String>? = null,
+)
+
+private fun JsonObject.stringField(key: String): String? =
+    (get(key) as? JsonPrimitive)?.contentOrNull
+
+/**
+ * Realtime payloads for [PostgresAction.Update] are often partial; [decodeRecordOrNull] plus raw
+ * [JsonObject] fields avoid missing refreshes when only [Connection.last_message_at] changes.
+ */
+private fun connectionRowRelevantToUser(action: PostgresAction, userId: String): Boolean {
+    val knownIds = AppDataManager.connections.value.map { it.id }.toSet()
+    return when (action) {
+        is PostgresAction.Insert -> {
+            val row = action.decodeRecordOrNull<ConnectionRealtimeRow>()
+            row?.userIds?.contains(userId) == true
+        }
+        is PostgresAction.Update -> {
+            val row = action.decodeRecordOrNull<ConnectionRealtimeRow>()
+            val id = row?.id ?: action.record.stringField("id")
+            row?.userIds?.contains(userId) == true || (id != null && id in knownIds)
+        }
+        is PostgresAction.Delete -> {
+            val id = action.oldRecord.stringField("id") ?: return false
+            id in knownIds
+        }
+        else -> false
+    }
+}
 
 sealed class ChatListState {
     data object Loading : ChatListState()
@@ -147,6 +191,9 @@ class ChatViewModel(
     private var peerTypingTimeoutJob: Job? = null
     private var peerOnlineJob: Job? = null
     private var localTypingIdleJob: Job? = null
+    private var connectionsRealtimeJob: Job? = null
+    private var connectionsRealtimeChannel: RealtimeChannel? = null
+    private var debouncedChatListRefreshJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var lastTypingSent: Long = 0L
     private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
@@ -188,30 +235,18 @@ class ChatViewModel(
                         .map { chat ->
                             val cachedChat = cachedChatsByConnectionId[chat.connection.id]
                             val freshUser = cachedChat?.otherUser ?: connectedUsers[chat.otherUser.id]
-                            when {
-                                cachedChat != null &&
-                                    freshUser != null &&
-                                    freshUser != chat.otherUser &&
-                                    (isResolvedDisplayName(freshUser.name) || !isResolvedDisplayName(chat.otherUser.name)) -> {
-                                    chat.copy(
-                                        connection = cachedChat.connection,
-                                        otherUser = freshUser
-                                    )
-                                }
-                                cachedChat != null && cachedChat.connection != chat.connection -> {
-                                    chat.copy(connection = cachedChat.connection)
-                                }
-                                else -> chat
-                            }
+                            mergeChatRowWithCache(chat, cachedChat, freshUser)
                         }
 
                     val currentConnectionIds = mergedChats.map { it.connection.id }.toSet()
                     val missingChats = cachedChatsByConnectionId.values
                         .filter { it.connection.id !in currentConnectionIds }
-                        .sortedByDescending { it.connection.created }
+                        .sortedByDescending { chatListActivityTimestamp(it) }
 
                     val reconciledChats = applyConnectionVisibilityFilters(
-                        (missingChats + mergedChats).distinctBy { it.connection.id }
+                        (missingChats + mergedChats)
+                            .distinctBy { it.connection.id }
+                            .sortedByDescending { chatListActivityTimestamp(it) }
                     )
 
                     if (reconciledChats != currentListState.chats) {
@@ -251,15 +286,71 @@ class ChatViewModel(
     // Set the current user
     fun setCurrentUser(userId: String) {
         val userUnchanged = _currentUserId.value == userId
-        if (userUnchanged && _chatListState.value is ChatListState.Success) return
         if (!userUnchanged) {
             prefetchedChatPayloads.clear()
         }
         _currentUserId.value = userId
+        startGlobalConnectionsRealtime(userId)
         viewModelScope.launch {
             _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(userId)
         }
+        if (userUnchanged && _chatListState.value is ChatListState.Success) return
         loadChats()
+    }
+
+    private fun scheduleDebouncedChatListRefresh() {
+        debouncedChatListRefreshJob?.cancel()
+        debouncedChatListRefreshJob = viewModelScope.launch {
+            delay(CONNECTIONS_LIST_DEBOUNCE_MS)
+            loadChats(isForced = true)
+        }
+    }
+
+    /**
+     * Supabase updates [connections.last_message_at] when a row is inserted into [messages]
+     * (see DB trigger). Subscribing here keeps the connections list preview and order fresh
+     * even when no per-chat message channel is open.
+     */
+    private fun startGlobalConnectionsRealtime(userId: String) {
+        connectionsRealtimeJob?.cancel()
+        debouncedChatListRefreshJob?.cancel()
+        val previous = connectionsRealtimeChannel
+        connectionsRealtimeChannel = null
+        if (previous != null) {
+            viewModelScope.launch {
+                runCatching { previous.unsubscribe() }
+            }
+        }
+        // Keep collection in this same Job: `flow.launchIn(this)` + a short `subscribe()` lets the
+        // parent coroutine finish and cancels the child collector (no events delivered).
+        connectionsRealtimeJob = viewModelScope.launch {
+            try {
+                val channel = SupabaseConfig.client.channel("chatvm:connections:$userId")
+                connectionsRealtimeChannel = channel
+                try {
+                    channel.subscribe(blockUntilSubscribed = true)
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connections"
+                    }.collect { action ->
+                        if (connectionRowRelevantToUser(action, userId)) {
+                            scheduleDebouncedChatListRefresh()
+                        }
+                    }
+                } finally {
+                    runCatching { channel.unsubscribe() }
+                    if (connectionsRealtimeChannel === channel) {
+                        connectionsRealtimeChannel = null
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // JVM/Robolectric tests and pre-client init: no Supabase — list still updates via
+                // bumpConnectionInChatList / loadChats.
+                println("ChatViewModel: global connections realtime unavailable: ${e.message}")
+                connectionsRealtimeChannel = null
+            }
+        }
     }
 
     // Load all chats for the current user
@@ -369,7 +460,7 @@ class ChatViewModel(
                 lastMessage = connection.chat.messages.lastOrNull(),
                 unreadCount = 0
             )
-        }
+        }.sortedByDescending { chatListActivityTimestamp(it) }
     }
 
     private fun applyConnectionVisibilityFilters(chats: List<ChatWithDetails>): List<ChatWithDetails> {
@@ -382,6 +473,63 @@ class ChatViewModel(
 
     private fun isExpiredConnection(connection: Connection, now: Long): Boolean {
         return connection.expiry_state == "expired" && connection.expiry < now
+    }
+
+    private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
+        chat.connection.last_message_at
+            ?: chat.lastMessage?.timeCreated
+            ?: chat.connection.created
+
+    /**
+     * Reconcile a server/AppDataManager-derived row with the in-memory chat list without
+     * clobbering fresher [lastMessage] / [Connection.last_message_at] from realtime or send paths.
+     */
+    private fun mergeChatRowWithCache(
+        listChat: ChatWithDetails,
+        cachedChat: ChatWithDetails?,
+        freshUser: User?
+    ): ChatWithDetails {
+        if (cachedChat == null) {
+            return if (freshUser != null &&
+                freshUser != listChat.otherUser &&
+                (isResolvedDisplayName(freshUser.name) || !isResolvedDisplayName(listChat.otherUser.name))
+            ) {
+                listChat.copy(otherUser = freshUser)
+            } else {
+                listChat
+            }
+        }
+
+        val listTs = chatListActivityTimestamp(listChat)
+        val cacheTs = chatListActivityTimestamp(cachedChat)
+        val bestLast = when {
+            listChat.lastMessage == null -> cachedChat.lastMessage
+            cachedChat.lastMessage == null -> listChat.lastMessage
+            listChat.lastMessage.timeCreated >= cachedChat.lastMessage.timeCreated -> listChat.lastMessage
+            else -> cachedChat.lastMessage
+        }
+        val preferredConnection = if (listTs >= cacheTs) listChat.connection else cachedChat.connection
+        val mergedAt = listOfNotNull(
+            listChat.connection.last_message_at,
+            cachedChat.connection.last_message_at,
+            bestLast?.timeCreated
+        ).maxOrNull()
+        val mergedConnection = preferredConnection.copy(
+            last_message_at = mergedAt ?: preferredConnection.last_message_at
+        )
+        val resolvedOther = when {
+            freshUser != null &&
+                freshUser != listChat.otherUser &&
+                (isResolvedDisplayName(freshUser.name) || !isResolvedDisplayName(listChat.otherUser.name)) -> freshUser
+            cachedChat.otherUser != listChat.otherUser &&
+                (isResolvedDisplayName(cachedChat.otherUser.name) || !isResolvedDisplayName(listChat.otherUser.name)) -> cachedChat.otherUser
+            else -> listChat.otherUser
+        }
+        return listChat.copy(
+            connection = mergedConnection,
+            lastMessage = bestLast,
+            otherUser = resolvedOther
+        )
     }
 
     private fun updateConnectionState(connectionId: String, transform: (Connection) -> Connection) {
@@ -856,14 +1004,13 @@ class ChatViewModel(
         bumpConnectionInChatList(connectionId, message)
     }
 
-    private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
-        chat.connection.last_message_at
-            ?: chat.lastMessage?.timeCreated
-            ?: chat.connection.created
-
     /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
     private fun bumpConnectionInChatList(connectionId: String, message: Message) {
-        val state = _chatListState.value as? ChatListState.Success ?: return
+        AppDataManager.updateConnectionChatActivity(connectionId, message.timeCreated, message)
+        val state = _chatListState.value as? ChatListState.Success ?: run {
+            loadChats(isForced = true)
+            return
+        }
         val updated = state.chats.map { chat ->
             if (chat.connection.id == connectionId) {
                 chat.copy(
@@ -1685,6 +1832,16 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        connectionsRealtimeJob?.cancel()
+        connectionsRealtimeJob = null
+        debouncedChatListRefreshJob?.cancel()
+        debouncedChatListRefreshJob = null
+        connectionsRealtimeChannel?.let { ch ->
+            runBlocking(Dispatchers.Default) {
+                runCatching { ch.unsubscribe() }
+            }
+        }
+        connectionsRealtimeChannel = null
         realtimeJob?.cancel()
         reactionsJob?.cancel()
         typingPollingJob?.cancel()
@@ -1716,3 +1873,4 @@ class ChatViewModel(
 private const val MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS = 3
 private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
 private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 1500L
+private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L

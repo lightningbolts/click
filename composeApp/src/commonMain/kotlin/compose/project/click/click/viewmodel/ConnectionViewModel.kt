@@ -29,8 +29,15 @@ class ConnectionViewModel : ViewModel() {
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    // Use AppDataManager for connections to avoid reloading
+    /**
+     * Shared connection rows from [AppDataManager] (`MutableStateFlow` backed).
+     * Screens such as [compose.project.click.click.ui.screens.ConnectionsScreen] use [ChatViewModel.chatListState]
+     * for chat previews; use this flow when you only need raw [Connection] rows.
+     */
     val userConnections: StateFlow<List<Connection>> = AppDataManager.connections
+
+    /** Alias for callers that expect a `connections` name (same backing flow as [userConnections]). */
+    val connections: StateFlow<List<Connection>> = userConnections
 
     /**
      * Connect with a user via QR code scan.

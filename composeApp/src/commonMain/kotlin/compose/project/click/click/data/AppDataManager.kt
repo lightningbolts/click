@@ -1,6 +1,7 @@
 package compose.project.click.click.data
 
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.CachedAppSnapshot
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
@@ -435,6 +436,28 @@ object AppDataManager {
         scope.launch {
             persistSnapshot()
         }
+    }
+
+    /**
+     * Patch in-memory [Connection] rows when chat activity changes so [connections] consumers
+     * see fresh [Connection.last_message_at] and optional preview text without a full reload.
+     */
+    fun updateConnectionChatActivity(
+        connectionId: String,
+        lastMessageAt: Long,
+        lastMessagePreview: Message? = null
+    ) {
+        _connections.value = _connections.value.map { c ->
+            if (c.id != connectionId) return@map c
+            val mergedAt = listOfNotNull(c.last_message_at, lastMessageAt).maxOrNull()
+            val newChat = if (lastMessagePreview != null) {
+                c.chat.copy(messages = listOf(lastMessagePreview))
+            } else {
+                c.chat
+            }
+            c.copy(last_message_at = mergedAt, chat = newChat)
+        }
+        scope.launch { persistSnapshot() }
     }
 
     fun setPendingConnectionsCount(count: Int) {
