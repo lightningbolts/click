@@ -9,6 +9,7 @@ import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatReactionSubscription
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.MessageChangeEvent
+import compose.project.click.click.data.repository.MessageListInsertEvent
 import compose.project.click.click.data.repository.ReactionChangeEvent
 import compose.project.click.click.data.repository.TypingStatus
 import kotlinx.coroutines.awaitCancellation
@@ -38,6 +39,9 @@ class FakeChatRepository(
     var onFetchChatParticipants: suspend (String) -> List<User> = { emptyList() },
     var onFetchReactionsForChat: suspend (String) -> List<MessageReaction> = { emptyList() },
     var onSubscribeToMessages: suspend (String) -> Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> = {
+        NoopMessageSubscription to emptyFlow()
+    },
+    var onSubscribeToMessageInserts: suspend () -> Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> = {
         NoopMessageSubscription to emptyFlow()
     },
     var onSubscribeToReactions: (String) -> Pair<ChatReactionSubscription, Flow<ReactionChangeEvent>> = {
@@ -88,6 +92,9 @@ class FakeChatRepository(
 
     override suspend fun subscribeToMessages(chatId: String): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> =
         onSubscribeToMessages(chatId)
+
+    override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> =
+        onSubscribeToMessageInserts()
 
     override suspend fun fetchChatById(chatId: String): Chat? = null
 

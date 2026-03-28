@@ -25,9 +25,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -37,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
@@ -64,6 +68,9 @@ class SupabaseChatRepository(
     private val chatPushNotifier = ChatPushNotifier(tokenStorage)
 
     private val encryptionKeyCache = mutableMapOf<String, MessageCrypto.DerivedKeys>()
+
+    private val chatConnectionRouteMutex = Mutex()
+    private val chatIdToConnectionId = mutableMapOf<String, String>()
 
     private val ephemeralMutex = Mutex()
     private val ephemeralSessions = mutableMapOf<String, ChatEphemeralSession>()
@@ -150,6 +157,27 @@ class SupabaseChatRepository(
         return message.copy(content = MessageCrypto.decryptContent(message.content, keys))
     }
 
+    private suspend fun rememberChatConnectionRouting(chatId: String, connectionId: String) {
+        if (chatId.isBlank() || connectionId.isBlank()) return
+        chatConnectionRouteMutex.withLock {
+            chatIdToConnectionId[chatId] = connectionId
+        }
+    }
+
+    private suspend fun resolveConnectionIdForChat(chatId: String): String? {
+        val fromCache = chatConnectionRouteMutex.withLock { chatIdToConnectionId[chatId] }
+        if (fromCache != null) return fromCache
+        val row = supabase.from("chats")
+            .select {
+                filter { eq("id", chatId) }
+                limit(1)
+            }
+            .decodeList<ChatRow>()
+            .firstOrNull() ?: return null
+        rememberChatConnectionRouting(chatId, row.connectionId)
+        return row.connectionId
+    }
+
     @Serializable
     private data class ChatConnectionIdOnly(
         @SerialName("connection_id")
@@ -209,6 +237,68 @@ class SupabaseChatRepository(
         )
     }
 
+    /**
+     * Newest message per chat. A single global messages query ordered by time is row-capped by
+     * PostgREST; the first row per chat in that window is not always the true latest, while
+     * [Connection.last_message_at] (maintained by a DB trigger) still advances — causing sort/preview mismatch.
+     */
+    private suspend fun fetchLatestMessageRowPerChat(chatIds: List<String>): Map<String, MessageRow> {
+        if (chatIds.isEmpty()) return emptyMap()
+        val distinctIds = chatIds.distinct()
+        val limitParallel = Semaphore(12)
+        suspend fun queryLatestRow(chatId: String): MessageRow? {
+            return supabase.from("messages")
+                .select {
+                    filter { eq("chat_id", chatId) }
+                    order("time_created", Order.DESCENDING)
+                    limit(1)
+                }
+                .decodeList<MessageRow>()
+                .firstOrNull()
+        }
+        return coroutineScope {
+            distinctIds.map { chatId ->
+                async {
+                    limitParallel.withPermit {
+                        val row = try {
+                            queryLatestRow(chatId)
+                        } catch (_: Exception) {
+                            delay(80)
+                            try {
+                                queryLatestRow(chatId)
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                        row?.let { chatId to it }
+                    }
+                }
+            }.awaitAll().filterNotNull().associate { it }
+        }
+    }
+
+    /** Fills gaps when per-chat queries fail partially; still row-capped but better than nothing. */
+    private suspend fun fetchLatestMessageRowsBulkFallback(chatIds: List<String>): Map<String, MessageRow> {
+        if (chatIds.isEmpty()) return emptyMap()
+        return try {
+            val messages = supabase.from("messages")
+                .select {
+                    filter { isIn("chat_id", chatIds) }
+                    order("time_created", Order.DESCENDING)
+                    limit(25_000)
+                }
+                .decodeList<MessageRow>()
+            buildMap {
+                for (row in messages) {
+                    if (!containsKey(row.chatId)) put(row.chatId, row)
+                }
+            }
+        } catch (e: Exception) {
+            println("ChatRepository: bulk last-message fallback failed: ${e.message}")
+            emptyMap()
+        }
+    }
+
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
@@ -246,33 +336,38 @@ class SupabaseChatRepository(
 
             val chatByConnectionId = chats.associateBy { it.connectionId }
 
+            chats.forEach { chatRow ->
+                rememberChatConnectionRouting(chatRow.id, chatRow.connectionId)
+            }
+
             val chatIds = chats.map { it.id }
-            val messages = if (chatIds.isNotEmpty()) {
+            val perChatLatest = runCatching { fetchLatestMessageRowPerChat(chatIds) }
+                .getOrElse {
+                    println("ChatRepository: per-chat latest messages failed: ${it.message}")
+                    emptyMap()
+                }
+            val bulkLatest = if (perChatLatest.size < chatIds.size) {
+                fetchLatestMessageRowsBulkFallback(chatIds)
+            } else {
+                emptyMap()
+            }
+            val latestByChatId = bulkLatest.toMutableMap().apply { putAll(perChatLatest) }
+
+            val unreadRows = if (chatIds.isNotEmpty()) {
                 supabase.from("messages")
                     .select {
                         filter {
                             isIn("chat_id", chatIds)
+                            eq("is_read", false)
+                            neq("user_id", userId)
                         }
-                        order("time_created", Order.DESCENDING)
+                        limit(10_000)
                     }
                     .decodeList<MessageRow>()
             } else {
                 emptyList()
             }
-
-            val firstByChatId = linkedMapOf<String, MessageRow>()
-            messages.forEach { row ->
-                if (!firstByChatId.containsKey(row.chatId)) {
-                    firstByChatId[row.chatId] = row
-                }
-            }
-
-            val unreadByChatId = mutableMapOf<String, Int>()
-            messages.forEach { row ->
-                if (row.userId != userId && !row.isRead) {
-                    unreadByChatId[row.chatId] = (unreadByChatId[row.chatId] ?: 0) + 1
-                }
-            }
+            val unreadByChatId = unreadRows.groupingBy { it.chatId }.eachCount()
 
             connections.mapNotNull { connection ->
                 val chatRow = chatByConnectionId[connection.id]
@@ -285,7 +380,7 @@ class SupabaseChatRepository(
                     createdAt = 0L
                 )
 
-                val rawLastMessage = chatRow?.let { firstByChatId[it.id]?.toMessage() }
+                val rawLastMessage = chatRow?.let { latestByChatId[it.id]?.toMessage() }
                 val keys = if (chatRow != null) {
                     val k = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
                     encryptionKeyCache[chatRow.id] = k
@@ -432,6 +527,7 @@ class SupabaseChatRepository(
                 .firstOrNull()
 
             if (existing != null) {
+                rememberChatConnectionRouting(existing.id, existing.connectionId)
                 return Chat(id = existing.id, connectionId = existing.connectionId, messages = emptyList())
             }
 
@@ -441,6 +537,7 @@ class SupabaseChatRepository(
                 }
                 .decodeSingle<ChatRow>()
 
+            rememberChatConnectionRouting(inserted.id, inserted.connectionId)
             Chat(id = inserted.id, connectionId = inserted.connectionId, messages = emptyList())
         } catch (e: Exception) {
             println("Error ensuring chat for connection $connectionId: ${e.message}")
@@ -522,6 +619,24 @@ class SupabaseChatRepository(
         }
 
         return SupabaseMessageSubscription(channel) to changeFlow
+    }
+
+    override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> {
+        val channel = supabase.channel("clicks:msg-list:${Clock.System.now().toEpochMilliseconds()}")
+        val flow = channelFlow {
+            channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "messages"
+            }.collect { action ->
+                if (action !is PostgresAction.Insert) return@collect
+                val row = runCatching { action.decodeRecord<MessageRow>() }.getOrNull() ?: return@collect
+                val connectionId = resolveConnectionIdForChat(row.chatId) ?: return@collect
+                val keys = encryptionKeyCache[row.chatId] ?: getEncryptionKeysForChat(row.chatId)
+                    ?: return@collect
+                val message = decryptMessage(row.toMessage(), keys)
+                send(MessageListInsertEvent(connectionId = connectionId, message = message))
+            }
+        }
+        return SupabaseMessageSubscription(channel) to flow
     }
 
     // Fetch a specific chat by ID via API

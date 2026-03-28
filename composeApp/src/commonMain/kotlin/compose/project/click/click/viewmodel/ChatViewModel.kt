@@ -193,6 +193,7 @@ class ChatViewModel(
     private var localTypingIdleJob: Job? = null
     private var connectionsRealtimeJob: Job? = null
     private var connectionsRealtimeChannel: RealtimeChannel? = null
+    private var globalMessageListJob: Job? = null
     private var debouncedChatListRefreshJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var lastTypingSent: Long = 0L
@@ -291,6 +292,7 @@ class ChatViewModel(
         }
         _currentUserId.value = userId
         startGlobalConnectionsRealtime(userId)
+        startGlobalMessageListRealtime()
         viewModelScope.launch {
             _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(userId)
         }
@@ -349,6 +351,31 @@ class ChatViewModel(
                 // bumpConnectionInChatList / loadChats.
                 println("ChatViewModel: global connections realtime unavailable: ${e.message}")
                 connectionsRealtimeChannel = null
+            }
+        }
+    }
+
+    /**
+     * Listens for INSERT on [messages] (RLS-scoped). Updates the Clicks list snippet immediately
+     * via [bumpConnectionInChatList], independent of debounced [loadChats] or per-chat subscriptions.
+     */
+    private fun startGlobalMessageListRealtime() {
+        globalMessageListJob?.cancel()
+        globalMessageListJob = viewModelScope.launch {
+            var sub: ChatMessageSubscription? = null
+            try {
+                val (subscription, flow) = chatRepository.subscribeToMessageInserts()
+                sub = subscription
+                subscription.attach()
+                flow.collect { event ->
+                    bumpConnectionInChatList(event.connectionId, event.message)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("ChatViewModel: global message list realtime unavailable: ${e.message}")
+            } finally {
+                runCatching { sub?.detach() }
             }
         }
     }
@@ -1860,6 +1887,8 @@ class ChatViewModel(
         super.onCleared()
         connectionsRealtimeJob?.cancel()
         connectionsRealtimeJob = null
+        globalMessageListJob?.cancel()
+        globalMessageListJob = null
         debouncedChatListRefreshJob?.cancel()
         debouncedChatListRefreshJob = null
         connectionsRealtimeChannel?.let { ch ->

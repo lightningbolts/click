@@ -52,6 +52,12 @@ interface ChatRepository {
 
     suspend fun subscribeToMessages(chatId: String): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>>
 
+    /**
+     * Realtime INSERT on [messages] rows the current session may read. Emits [MessageListInsertEvent]
+     * with [MessageListInsertEvent.connectionId] resolved from [chats].
+     */
+    suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>>
+
     suspend fun fetchChatById(chatId: String): Chat?
 
     suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails?

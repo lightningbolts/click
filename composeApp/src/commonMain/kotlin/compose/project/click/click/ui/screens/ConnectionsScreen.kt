@@ -554,8 +554,9 @@ fun ConnectionsListView(
                             filteredChats,
                             key = { chat ->
                                 val lm = chat.lastMessage
-                                if (lm != null) "${chat.connection.id}\u0001${lm.id}\u0001${lm.timeCreated}"
-                                else chat.connection.id
+                                val at = chat.connection.last_message_at
+                                if (lm != null) "${chat.connection.id}\u0001${lm.id}\u0001${lm.timeCreated}\u0001$at"
+                                else "${chat.connection.id}\u0001$at"
                             }
                         ) { chatDetails ->
                             Column(modifier = Modifier.fillMaxWidth()) {
@@ -701,11 +702,13 @@ fun ConnectionItem(
     val connection = chatDetails.connection
     val lastMessage = chatDetails.lastMessage
     val unreadCount = chatDetails.unreadCount
-    val timeText = lastMessage?.let { formatTimestamp(it.timeCreated) } ?: "No messages"
+    val activityTs = lastMessage?.timeCreated ?: connection.last_message_at
+    val timeText = activityTs?.let { formatTimestamp(it) } ?: "No messages"
     val hoursUntilExpiry = connection.hoursUntilExpiry()
     val showExpiryWarning = hoursUntilExpiry in 0..EXPIRY_WARNING_THRESHOLD_HOURS && !connection.isKept()
     val isExpired = connection.isExpiredConnection()
-    val showLoadingSubtitle = lastMessage == null && user.name == "Connection"
+    val showLoadingSubtitle =
+        lastMessage == null && user.name == "Connection" && connection.last_message_at == null
 
     val rowTapModifier = if (isIOS) {
         Modifier.clickable(onClick = onClick)
@@ -777,8 +780,13 @@ fun ConnectionItem(
                         LoadingSubtitlePlaceholder()
                     }
                 } else {
+                    val previewText = when {
+                        lastMessage != null -> lastMessage.content
+                        connection.last_message_at != null -> "New message"
+                        else -> "Start a conversation"
+                    }
                     Text(
-                        lastMessage?.content ?: "Start a conversation",
+                        previewText,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,

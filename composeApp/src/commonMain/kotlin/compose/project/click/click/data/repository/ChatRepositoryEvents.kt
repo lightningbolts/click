@@ -14,6 +14,12 @@ sealed class MessageChangeEvent {
 }
 
 /**
+ * INSERT on [messages] visible to the user (RLS). Used to refresh the connections list preview
+ * without opening each chat or waiting for a debounced full reload.
+ */
+data class MessageListInsertEvent(val connectionId: String, val message: Message)
+
+/**
  * Events emitted by the realtime reactions subscription ([ChatRepository.subscribeToReactions]).
  */
 sealed class ReactionChangeEvent {
