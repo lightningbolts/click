@@ -245,13 +245,15 @@ class ChatApiClient(
         chatId: String,
         userId: String,
         content: String,
-        authToken: String
+        authToken: String,
+        messageType: String? = null,
+        metadata: JsonElement? = null,
     ): Result<Message> {
         return try {
             val response = client.post("$baseUrl/api/chats/$chatId/messages") {
                 header("Authorization", authToken)
                 contentType(ContentType.Application.Json)
-                setBody(SendMessageRequest(userId, content))
+                setBody(SendMessageRequest(userId, content, messageType, metadata))
             }
 
             if (response.status.value in 200..299) {

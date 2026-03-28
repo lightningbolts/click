@@ -97,3 +97,10 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Inserts into public.messages use PostgREST / app servers (no Postgres RPC in this repo).
+-- Optional message_type and metadata are accepted by:
+--   - KMP: direct Supabase insert (SupabaseChatRepository.sendMessage)
+--   - Web: POST /api/chat/messages (Next.js route)
+--   - Python: ChatOperations.create_message via POST /api/chats/<chat_id>/messages
+-- The trigger above runs on every INSERT and skips push for call_log rows.

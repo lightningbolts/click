@@ -1310,24 +1310,29 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                             val messageWithUser = entry.messageWithUser
                                             val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
                                             Column {
-                                                AnimatedVisibilityChatBubble(
-                                                    messageId = messageWithUser.message.id,
-                                                    isSent = messageWithUser.isSent,
-                                                    content = {
-                                                        ChatMessageBubble(
-                                                            messageWithUser = messageWithUser,
-                                                            currentUserId = viewModel.currentUserId.collectAsState().value,
-                                                            reactions = msgReactions,
-                                                            onToggleReaction = { reaction ->
-                                                                viewModel.toggleReaction(messageWithUser.message.id, reaction)
-                                                            },
-                                                            onForward = { msgId ->
-                                                                forwardMessageId = msgId
-                                                            },
-                                                            onLongPress = { contextMenuMessage = messageWithUser }
-                                                        )
-                                                    }
-                                                )
+                                                val bubble: @Composable () -> Unit = {
+                                                    ChatMessageBubble(
+                                                        messageWithUser = messageWithUser,
+                                                        currentUserId = viewModel.currentUserId.collectAsState().value,
+                                                        reactions = msgReactions,
+                                                        onToggleReaction = { reaction ->
+                                                            viewModel.toggleReaction(messageWithUser.message.id, reaction)
+                                                        },
+                                                        onForward = { msgId ->
+                                                            forwardMessageId = msgId
+                                                        },
+                                                        onLongPress = { contextMenuMessage = messageWithUser }
+                                                    )
+                                                }
+                                                if (messageWithUser.message.messageType == "call_log") {
+                                                    bubble()
+                                                } else {
+                                                    AnimatedVisibilityChatBubble(
+                                                        messageId = messageWithUser.message.id,
+                                                        isSent = messageWithUser.isSent,
+                                                        content = bubble
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1977,6 +1982,12 @@ private fun CallLogSystemRow(message: Message) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = formatMessageTime(message.timeCreated),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(start = 4.dp)
                 )
             }
         }
