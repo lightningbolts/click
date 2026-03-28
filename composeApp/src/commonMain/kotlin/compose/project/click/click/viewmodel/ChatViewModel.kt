@@ -77,6 +77,10 @@ class ChatViewModel(
     private val _messageInput = MutableStateFlow("")
     val messageInput: StateFlow<String> = _messageInput.asStateFlow()
 
+    /** True while a send or edit-submit is in flight; UI uses this to avoid double sends. */
+    private val _isMessageSubmitInProgress = MutableStateFlow(false)
+    val isSending: StateFlow<Boolean> = _isMessageSubmitInProgress.asStateFlow()
+
     private val _isPeerTyping = MutableStateFlow(false)
     val isPeerTyping: StateFlow<Boolean> = _isPeerTyping.asStateFlow()
 
@@ -848,6 +852,30 @@ class ChatViewModel(
                 isSent = message.user_id == currentUserId
             )
         )
+        val connectionId = currentState.chatDetails.connection.id
+        bumpConnectionInChatList(connectionId, message)
+    }
+
+    private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
+        chat.connection.last_message_at
+            ?: chat.lastMessage?.timeCreated
+            ?: chat.connection.created
+
+    /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
+    private fun bumpConnectionInChatList(connectionId: String, message: Message) {
+        val state = _chatListState.value as? ChatListState.Success ?: return
+        val updated = state.chats.map { chat ->
+            if (chat.connection.id == connectionId) {
+                chat.copy(
+                    lastMessage = message,
+                    connection = chat.connection.copy(last_message_at = message.timeCreated)
+                )
+            } else {
+                chat
+            }
+        }
+        val sorted = updated.sortedByDescending { chatListActivityTimestamp(it) }
+        _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(sorted))
     }
 
     private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {
@@ -891,28 +919,49 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         val content = _messageInput.value.trim()
         if (content.isEmpty()) return
+        if (_isMessageSubmitInProgress.value) return
+
         _messageSendError.value = null
+        _isMessageSubmitInProgress.value = true
+        _messageInput.value = ""
+        localTypingIdleJob?.cancel()
+        localTypingIdleJob = null
+        _isLocalTypingActive.value = false
+        val successState = _chatMessagesState.value as? ChatMessagesState.Success
+        val typingChatId = successState?.chatDetails?.chat?.id?.takeIf { it.isNotBlank() }
+            ?: currentApiChatId?.takeIf { it.isNotBlank() }
+        if (typingChatId != null) {
+            onUserStoppedTyping(typingChatId)
+        }
+
         viewModelScope.launch {
             try {
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
                     _messageSendError.value = "Failed to send — unable to start chat"
+                    _messageInput.value = content
+                    updateMessageInput(content)
                     return@launch
                 }
                 onUserStoppedTyping(apiChatId)
                 val message = chatRepository.sendMessage(apiChatId, userId, content)
                 if (message != null) {
-                    _messageInput.value = ""
                     resolveMessageUser(userId, apiChatId)?.let { currentUser ->
                         applyInsertedMessage(message, currentUser, userId)
                     }
                     activateConnectionIfPending(connectionId)
                 } else {
                     _messageSendError.value = "Failed to send message"
+                    _messageInput.value = content
+                    updateMessageInput(content)
                     println("Failed to send message")
                 }
             } catch (e: Exception) {
                 _messageSendError.value = "Failed to send — ${e.message ?: "encryption or network error"}"
+                _messageInput.value = content
+                updateMessageInput(content)
                 println("Error sending message: ${e.message}")
+            } finally {
+                _isMessageSubmitInProgress.value = false
             }
         }
     }
@@ -1002,6 +1051,7 @@ class ChatViewModel(
         _isPeerTyping.value = false
         _isPeerOnline.value = false
         _isLocalTypingActive.value = false
+        _isMessageSubmitInProgress.value = false
         _chatMessagesState.value = ChatMessagesState.Loading
         resetVibeCheckState()
         resetIcebreakerState()
@@ -1388,6 +1438,7 @@ class ChatViewModel(
      * Submit the edited message content to Supabase.
      */
     private fun confirmEditMessage(messageId: String) {
+        if (_isMessageSubmitInProgress.value) return
         val connectionId = currentConnectionId ?: return
         val newContent = _messageInput.value.trim()
         if (newContent.isEmpty()) return
@@ -1412,6 +1463,7 @@ class ChatViewModel(
             )
         }
 
+        _isMessageSubmitInProgress.value = true
         viewModelScope.launch {
             try {
                 val success = supabaseRepository.editMessage(messageId, newContent, chatId = apiChatId)
@@ -1424,6 +1476,8 @@ class ChatViewModel(
             } catch (e: Exception) {
                 println("Error editing message: ${e.message}")
                 loadChatMessages(connectionId)
+            } finally {
+                _isMessageSubmitInProgress.value = false
             }
         }
     }

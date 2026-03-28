@@ -10,6 +10,11 @@ const FCM_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const APNS_URL = "https://api.push.apple.com/3/device";
 
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 interface PushRequestBody {
   recipient_user_id?: string;
   title?: string;
@@ -228,14 +233,26 @@ async function sendIosPush(
         ...(requestBody.data ?? {}),
       };
 
-  const response = await fetch(`${APNS_URL}/${pushToken.token}`, {
+  const apnsRequestUrl = `${APNS_URL}/${pushToken.token}`;
+  if (isVoipIncomingCall) {
+    console.log("[APNs VoIP] APNs request URL:", apnsRequestUrl);
+  }
+
+  const response = await fetch(apnsRequestUrl, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
   });
 
+  const responseText = await response.text();
+  if (isVoipIncomingCall) {
+    console.log(
+      `[APNs VoIP] Apple response: status=${response.status}, body=${responseText || "(empty)"}`,
+    );
+  }
+
   if (!response.ok) {
-    throw new Error(`APNs send failed: ${response.status} ${await response.text()}`);
+    throw new Error(`APNs send failed: ${response.status} ${responseText}`);
   }
 }
 
@@ -580,15 +597,20 @@ async function recipientAllowsPush(
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ success: false, sent: 0, error: "Method not allowed" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
 
   try {
     const requestBody = await req.json() as PushRequestBody;
+    console.log("Received request body:", requestBody);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -599,7 +621,7 @@ Deno.serve(async (req: Request) => {
     if (!(await recipientAllowsPush(supabase, resolvedRequestBody))) {
       return new Response(JSON.stringify({ success: true, sent: 0, skipped: true }), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
@@ -615,7 +637,7 @@ Deno.serve(async (req: Request) => {
     if (!tokens || tokens.length === 0) {
       return new Response(JSON.stringify({ success: true, sent: 0 }), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
@@ -646,8 +668,25 @@ Deno.serve(async (req: Request) => {
 
           await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken, fcmProjectId);
         } else {
+          const isVoipCallPush =
+            (token.token_type ?? "standard") === "voip" &&
+            getPushCategory(resolvedRequestBody) === "incoming_call";
+          if (isVoipCallPush) {
+            console.log(
+              "[APNs VoIP] VoIP token loaded from database for recipient",
+              resolvedRequestBody.recipient_user_id,
+            );
+          }
+
           if (!apnsJwt) {
-            apnsJwt = await getApnsJwt();
+            try {
+              apnsJwt = await getApnsJwt();
+            } catch (jwtError) {
+              if (isVoipCallPush) {
+                console.error("[APNs VoIP] JWT signing error:", jwtError);
+              }
+              throw jwtError;
+            }
           }
 
           await sendIosPush(token, resolvedRequestBody, apnsJwt);
@@ -670,13 +709,13 @@ Deno.serve(async (req: Request) => {
       errors,
     }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (error) {
     console.error("Fatal error in send-push-notification", error);
     return new Response(JSON.stringify({ success: false, sent: 0, error: String(error) }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
 });

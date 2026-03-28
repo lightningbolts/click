@@ -35,6 +35,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -285,6 +287,11 @@ private const val CHAT_TRANSITION_DURATION_MS = 300L
 private const val EXPIRY_WARNING_THRESHOLD_HOURS = 48
 private val ExpiryWarningColor = Color(0xFFFFA500)
 
+/** Sort key for Clicks list: prefer server `last_message_at`, then last message time, then connection created. */
+private fun connectionListActivityTs(chat: ChatWithDetails): Long =
+    chat.connection.last_message_at
+        ?: chat.lastMessage?.timeCreated
+        ?: chat.connection.created
 
 @Composable
 fun ConnectionsListView(
@@ -306,6 +313,8 @@ fun ConnectionsListView(
 
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
+
+    val connectionsLazyListState = rememberLazyListState()
 
     // Build effective chat list: prefer ViewModel Success data, fall back to
     // cached connections during Loading/Error to prevent blank-screen flashes.
@@ -476,11 +485,24 @@ fun ConnectionsListView(
                 val archivedChats = effectiveChats.filter { it.connection.id in archivedConnectionIds }
                 val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
 
+                val sortedTabChats = tabChats.sortedByDescending { connectionListActivityTs(it) }
                 val filteredChats = if (searchQuery.isBlank()) {
-                    tabChats
+                    sortedTabChats
                 } else {
-                    tabChats.filter { chat ->
+                    sortedTabChats.filter { chat ->
                         chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
+                    }
+                }
+
+                val clicksListOrderSignature = filteredChats.joinToString("\u0000") {
+                    "${it.connection.id}\t${connectionListActivityTs(it)}"
+                }
+                LaunchedEffect(clicksListOrderSignature) {
+                    if (filteredChats.isEmpty()) return@LaunchedEffect
+                    val nearTop = connectionsLazyListState.firstVisibleItemIndex <= 1 &&
+                        connectionsLazyListState.firstVisibleItemScrollOffset < 96
+                    if (nearTop) {
+                        connectionsLazyListState.animateScrollToItem(0)
                     }
                 }
 
@@ -516,6 +538,7 @@ fun ConnectionsListView(
                     }
                 } else {
                     LazyColumn(
+                        state = connectionsLazyListState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
@@ -838,6 +861,7 @@ private fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
 fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val messageInput by viewModel.messageInput.collectAsState()
+    val isSending by viewModel.isSending.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
@@ -1429,7 +1453,7 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        val canSend = messageInput.trim().isNotEmpty()
+                        val canSend = messageInput.trim().isNotEmpty() && !isSending
                         val sendGradient = Brush.linearGradient(
                             colors = if (canSend) listOf(PrimaryBlue, LightBlue)
                             else listOf(
@@ -1787,32 +1811,41 @@ private fun ForwardDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         title = { Text("Forward to...") },
         text = {
-            when (chatListState) {
-                is ChatListState.Success -> {
-                    val options = chatListState.chats.filter { it.connection.id != currentChatId }
-                    if (options.isEmpty()) Text("No other chats available")
-                    else LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                        items(options, key = { it.connection.id }) { item ->
-                            ListItem(
-                                headlineContent = { Text(item.otherUser.name ?: "Unknown") },
-                                supportingContent = { Text(item.otherUser.email ?: "") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(8.dp)
-                                    .clickable {
-                                        onSelect(item.connection.id)
-                                    }
-                            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .wrapContentHeight()
+            ) {
+                when (chatListState) {
+                    is ChatListState.Success -> {
+                        val options = chatListState.chats
+                            .filter { it.connection.id != currentChatId }
+                            .sortedByDescending { connectionListActivityTs(it) }
+                        if (options.isEmpty()) Text("No other chats available")
+                        else LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
+                            items(options, key = { it.connection.id }) { item ->
+                                ListItem(
+                                    headlineContent = { Text(item.otherUser.name ?: "Unknown") },
+                                    supportingContent = { Text(item.otherUser.email ?: "") },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(8.dp)
+                                        .clickable {
+                                            onSelect(item.connection.id)
+                                        }
+                                )
+                            }
                         }
                     }
+                    is ChatListState.Loading -> { AdaptiveCircularProgressIndicator() }
+                    is ChatListState.Error -> { Text("Failed to load chats") }
                 }
-                is ChatListState.Loading -> { AdaptiveCircularProgressIndicator() }
-                is ChatListState.Error -> { Text("Failed to load chats") }
             }
         },
         confirmButton = {
@@ -2018,7 +2051,7 @@ private fun MessageActionSheet(
     val isSent = messageWithUser.isSent
     val message = messageWithUser.message
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
@@ -2032,12 +2065,14 @@ private fun MessageActionSheet(
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
+        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
         containerColor = if (sheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
         dragHandle = if (sheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .wrapContentHeight()
                 .padding(bottom = 32.dp)
         ) {
             // ── Emoji reaction strip ──────────────────────────────────────────
@@ -2175,7 +2210,7 @@ private fun ConnectionActionSheet(
     onReport: (String) -> Unit = {},
     onBlock: () -> Unit = {}
 ) {
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
@@ -2213,12 +2248,14 @@ private fun ConnectionActionSheet(
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
+        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
         containerColor = if (actionSheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
         dragHandle = if (actionSheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .wrapContentHeight()
                 .padding(bottom = 32.dp)
         ) {
             // Connection name header
