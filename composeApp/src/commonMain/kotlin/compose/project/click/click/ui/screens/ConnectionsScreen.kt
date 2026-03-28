@@ -5,6 +5,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -883,6 +884,8 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val chatOverlayPointerIntercept = remember { MutableInteractionSource() }
+    val sendButtonAbsorbInteraction = remember { MutableInteractionSource() }
 
     // Connection action sheet (archive, delete, report, block)
     var showConnectionSheet by remember { mutableStateOf(false) }
@@ -936,7 +939,12 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                indication = null,
+                interactionSource = chatOverlayPointerIntercept
+            ) { }
     ) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -1476,8 +1484,14 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 .clip(RoundedCornerShape(fieldCorner))
                                 .background(sendGradient)
                                 .then(
-                                    if (canSend) Modifier.clickable { viewModel.sendMessage() }
-                                    else Modifier
+                                    if (canSend) {
+                                        Modifier.clickable { viewModel.sendMessage() }
+                                    } else {
+                                        Modifier.clickable(
+                                            indication = null,
+                                            interactionSource = sendButtonAbsorbInteraction
+                                        ) { }
+                                    }
                                 ),
                             contentAlignment = Alignment.Center
                         ) {

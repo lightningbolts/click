@@ -418,7 +418,15 @@ class ChatViewModel(
                             chat
                         }
                     }
-                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(enriched))
+                    val cachedChatsById =
+                        buildCachedChats(cachedConnections, cachedUsers, userId).associateBy { it.connection.id }
+                    val mergedWithLocalPreview = enriched.map { apiChat ->
+                        val cachedRow = cachedChatsById[apiChat.connection.id]
+                        val freshUser = cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
+                        mergeChatRowWithCache(apiChat, cachedRow, freshUser)
+                    }
+                    _chatListState.value =
+                        ChatListState.Success(applyConnectionVisibilityFilters(mergedWithLocalPreview))
                     prefetchChatPayloads(userId, enriched)
                 } else if (cachedConnections.isNotEmpty() && canRenderCachedChats) {
                     // Keep hydrated/cached connections visible when API is empty
@@ -514,8 +522,14 @@ class ChatViewModel(
             cachedChat.connection.last_message_at,
             bestLast?.timeCreated
         ).maxOrNull()
+        val mergedChat = if (bestLast != null) {
+            preferredConnection.chat.copy(messages = listOf(bestLast))
+        } else {
+            preferredConnection.chat
+        }
         val mergedConnection = preferredConnection.copy(
-            last_message_at = mergedAt ?: preferredConnection.last_message_at
+            last_message_at = mergedAt ?: preferredConnection.last_message_at,
+            chat = mergedChat
         )
         val resolvedOther = when {
             freshUser != null &&
@@ -1015,7 +1029,10 @@ class ChatViewModel(
             if (chat.connection.id == connectionId) {
                 chat.copy(
                     lastMessage = message,
-                    connection = chat.connection.copy(last_message_at = message.timeCreated)
+                    connection = chat.connection.copy(
+                        last_message_at = message.timeCreated,
+                        chat = chat.connection.chat.copy(messages = listOf(message))
+                    )
                 )
             } else {
                 chat
