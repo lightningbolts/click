@@ -2,6 +2,8 @@ package compose.project.click.click.calls
 
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.repository.AuthRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
+import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
@@ -102,28 +104,23 @@ object CallSessionManager {
         Decline,
     }
 
+    private val chatRepository by lazy { SupabaseChatRepository(tokenStorage = createTokenStorage()) }
+
+    /** Wall-clock ms when LiveKit reached [CallState.Connected]; used for call_log duration. */
+    private var callConnectedAtMs: Long? = null
+
+    /** Ensures we only insert one `completed` call_log per connected session. */
+    private var completedCallLogInserted: Boolean = false
+
+    private var previousCallState: CallState = CallState.Idle
+
     init {
         scope.launch {
             callState.collectLatest { state ->
                 when (state) {
-                    CallState.Idle -> {
-                        if (_overlayState.value !is CallOverlayState.Incoming &&
-                            _overlayState.value !is CallOverlayState.Outgoing &&
-                            _overlayState.value !is CallOverlayState.Connecting
-                        ) {
-                            activeInviteValue = null
-                        }
-                    }
-
-                    is CallState.Ended -> {
-                        CallRingtonePlayer.stop()
-                        activeInviteValue?.let { invite ->
-                            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, state.reason)
-                        }
-                        _overlayState.value = CallOverlayState.Ended(activeInviteValue, state.reason ?: "Call ended")
-                    }
-
                     is CallState.Connected -> {
+                        callConnectedAtMs = Clock.System.now().toEpochMilliseconds()
+                        completedCallLogInserted = false
                         CallRingtonePlayer.stop()
                         activeInviteValue?.let { invite ->
                             PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
@@ -133,11 +130,89 @@ object CallSessionManager {
                         }
                     }
 
+                    is CallState.Ended -> {
+                        tryInsertCompletedCallLog()
+                        CallRingtonePlayer.stop()
+                        activeInviteValue?.let { invite ->
+                            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, state.reason)
+                        }
+                        _overlayState.value = CallOverlayState.Ended(activeInviteValue, state.reason ?: "Call ended")
+                    }
+
+                    CallState.Idle -> {
+                        if (previousCallState is CallState.Connected) {
+                            tryInsertCompletedCallLog()
+                        }
+                        if (_overlayState.value !is CallOverlayState.Incoming &&
+                            _overlayState.value !is CallOverlayState.Outgoing &&
+                            _overlayState.value !is CallOverlayState.Connecting
+                        ) {
+                            activeInviteValue = null
+                        }
+                    }
+
                     else -> {
                         CallRingtonePlayer.stop()
                     }
                 }
+                previousCallState = state
             }
+        }
+    }
+
+    /**
+     * Caller-only: inserts a `call_log` row when the in-room session ends (covers Android hang-up → Idle
+     * without [CallState.Ended], and iOS / disconnect paths that emit Ended).
+     */
+    private fun tryInsertCompletedCallLog() {
+        if (completedCallLogInserted) return
+        val invite = activeInviteValue
+        val uid = resolvedCurrentUserId()
+        val startedAt = callConnectedAtMs
+        if (invite == null || uid == null || startedAt == null) return
+
+        if (uid != invite.callerId) {
+            completedCallLogInserted = true
+            callConnectedAtMs = null
+            return
+        }
+
+        completedCallLogInserted = true
+        callConnectedAtMs = null
+        val durationSec =
+            ((Clock.System.now().toEpochMilliseconds() - startedAt) / 1000L).toInt().coerceAtLeast(0)
+        scope.launch {
+            insertCallChatLog(invite.connectionId, uid, "completed", durationSec)
+        }
+    }
+
+    private fun insertCallChatLogAsync(connectionId: String, callStateKey: String, durationSeconds: Int) {
+        val uid = resolvedCurrentUserId() ?: return
+        scope.launch {
+            insertCallChatLog(connectionId, uid, callStateKey, durationSeconds)
+        }
+    }
+
+    private suspend fun insertCallChatLog(
+        connectionId: String,
+        userId: String,
+        callStateKey: String,
+        durationSeconds: Int,
+    ) {
+        val metadata = buildJsonObject {
+            put("call_state", callStateKey)
+            put("duration_seconds", durationSeconds)
+        }
+        runCatching {
+            chatRepository.sendMessageForConnection(
+                connectionId = connectionId,
+                userId = userId,
+                content = "",
+                messageType = "call_log",
+                metadata = metadata,
+            )
+        }.onFailure {
+            println("CallSessionManager: call_log insert failed: ${it.message}")
         }
     }
 
@@ -213,6 +288,7 @@ object CallSessionManager {
             delay(30_000)
             if (activeInviteValue?.callId == invite.callId && _overlayState.value is CallOverlayState.Outgoing) {
                 sendCancel(invite, invite.calleeId, "missed")
+                insertCallChatLogAsync(invite.connectionId, "missed", 0)
                 failCall(invite, "No answer")
             }
         }
@@ -419,7 +495,10 @@ object CallSessionManager {
             }
 
             response.busy -> failCall(invite, "${invite.calleeName} is busy")
-            else -> failCall(invite, "${invite.calleeName} declined the call")
+            else -> {
+                insertCallChatLogAsync(invite.connectionId, "declined", 0)
+                failCall(invite, "${invite.calleeName} declined the call")
+            }
         }
     }
 

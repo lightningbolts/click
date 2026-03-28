@@ -86,6 +86,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.IcebreakerPrompt
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.User
 import compose.project.click.click.viewmodel.ChatViewModel
@@ -98,6 +99,8 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.absoluteValue
 import com.mohamedrejeb.calf.ui.dialog.AdaptiveAlertDialog
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
@@ -1913,6 +1916,61 @@ private fun AnimatedVisibilityChatBubble(
     }
 }
 
+private fun formatCallDurationForLog(totalSeconds: Int): String {
+    val s = totalSeconds.coerceAtLeast(0)
+    val m = s / 60
+    val r = s % 60
+    return if (m > 0) "${m}m ${r.toString().padStart(2, '0')}s" else "${r}s"
+}
+
+private fun callLogLabel(message: Message): Pair<String, Boolean> {
+    val meta = message.metadata as? JsonObject ?: return "Call" to false
+    val state = (meta["call_state"] as? JsonPrimitive)?.content ?: return "Call" to false
+    val dur = (meta["duration_seconds"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+    return when (state) {
+        "missed" -> "Missed Voice Call" to true
+        "declined" -> "Declined Call" to false
+        "completed" -> ("Call Ended • ${formatCallDurationForLog(dur)}") to false
+        else -> "Call" to false
+    }
+}
+
+@Composable
+private fun CallLogSystemRow(message: Message) {
+    val (label, isMissed) = remember(message.id, message.metadata) { callLogLabel(message) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+            tonalElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Call,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun ChatMessageBubble(
     messageWithUser: MessageWithUser,
@@ -1923,6 +1981,10 @@ fun ChatMessageBubble(
     onLongPress: (MessageWithUser) -> Unit = {}
 ) {
     val message = messageWithUser.message
+    if (message.messageType == "call_log") {
+        CallLogSystemRow(message = message)
+        return
+    }
     val isSent = messageWithUser.isSent
 
     // Gradient for sent bubbles — matches brand violet palette
