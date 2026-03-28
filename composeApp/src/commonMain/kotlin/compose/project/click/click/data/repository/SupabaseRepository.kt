@@ -5,6 +5,7 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.models.UserPublicProfile
 import compose.project.click.click.data.models.UserInterests
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
@@ -76,6 +77,49 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("Error fetching user by ID '$userId': ${e.message}")
             e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Loads [User], [user_interests] tags, and [user_availability] for a profile sheet.
+     * When [viewerUserId] is non-null, attaches the most relevant mutual [Connection] row.
+     * RLS must allow the current user to read the target (e.g. mutual connection).
+     */
+    suspend fun fetchUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {
+        val user = fetchUserById(targetUserId) ?: return null
+        val tags = fetchUserInterests(targetUserId).getOrNull()?.tags.orEmpty()
+        val availability = fetchUserAvailability(targetUserId)
+        val shared = viewerUserId?.takeIf { it.isNotBlank() && it != targetUserId }?.let { v ->
+            fetchSharedConnectionBetween(v, targetUserId)
+        }
+        return UserPublicProfile(
+            user = user,
+            interestTags = tags,
+            availability = availability,
+            sharedConnection = shared,
+        )
+    }
+
+    /**
+     * Mutual connection between two users (same `user_ids` pair). If multiple rows exist,
+     * picks the one with the latest activity (`last_message_at` or `created`).
+     */
+    suspend fun fetchSharedConnectionBetween(viewerUserId: String, peerUserId: String): Connection? {
+        if (viewerUserId.isBlank() || peerUserId.isBlank()) return null
+        return try {
+            val rows = supabase.from("connections")
+                .select {
+                    filter {
+                        contains("user_ids", listOf(viewerUserId, peerUserId))
+                    }
+                }
+                .decodeList<Connection>()
+            rows.maxByOrNull { conn ->
+                (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
+            }
+        } catch (e: Exception) {
+            println("Error fetchSharedConnectionBetween: ${e.message}")
             null
         }
     }

@@ -14,6 +14,9 @@ import compose.project.click.click.data.repository.ReactionChangeEvent
 import compose.project.click.click.data.repository.TypingStatus
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -51,10 +54,19 @@ class FakeChatRepository(
         flow { awaitCancellation() }
     },
     var onObservePeerOnline: (String, String) -> Flow<Boolean> = { _, _ -> flowOf(false) },
+    var onStartGlobalPresence: suspend (String) -> Unit = { },
+    var onStopGlobalPresence: suspend () -> Unit = { },
     var onSendMessage: suspend (String, String, String, String, JsonElement?) -> Message? = { _, _, _, _, _ -> null },
     var onEnsureChatForConnection: suspend (String) -> Chat? = { null },
     var onGetUserById: suspend (String) -> User? = { null },
 ) : ChatRepository {
+
+    private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
+    override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
+
+    override suspend fun startGlobalPresence(userId: String) = onStartGlobalPresence(userId)
+
+    override suspend fun stopGlobalPresence() = onStopGlobalPresence()
 
     override fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {}
 

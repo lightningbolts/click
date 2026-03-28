@@ -78,7 +78,17 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.AdaptiveSurface
 import compose.project.click.click.ui.components.GlassCard
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material3.ripple
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
+import compose.project.click.click.ui.components.EmojiCatalog
 import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.UserProfileBottomSheet
+import compose.project.click.click.data.models.replyRef
+import compose.project.click.click.data.models.replySnippetForMetadata
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
@@ -123,6 +133,7 @@ fun ConnectionsScreen(
     var isTapCloseInFlight by remember { mutableStateOf(false) }
     val screenScope = rememberCoroutineScope()
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
+    var profileUserId by remember { mutableStateOf<String?>(null) }
 
     fun finalizeChatClose() {
         viewModel.leaveChatRoom()
@@ -187,6 +198,7 @@ fun ConnectionsScreen(
         viewModel.loadChatMessages(chatId)
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     if (isIOS) {
         // Persistent base layer + chat overlay architecture.
         // ConnectionsListView is always composed and never torn down, so the
@@ -196,7 +208,8 @@ fun ConnectionsScreen(
                 viewModel = viewModel,
                 searchQuery = searchQuery,
                 onChatSelected = { chatId -> openChat(chatId) },
-                onNavigateToLocationSettings = onNavigateToLocationSettings
+                onNavigateToLocationSettings = onNavigateToLocationSettings,
+                onUserProfileClick = { profileUserId = it }
             )
 
             AnimatedContent(
@@ -236,14 +249,16 @@ fun ConnectionsScreen(
                                 viewModel = viewModel,
                                 searchQuery = searchQuery,
                                 onChatSelected = { chatId -> openChat(chatId) },
-                                onNavigateToLocationSettings = onNavigateToLocationSettings
+                                onNavigateToLocationSettings = onNavigateToLocationSettings,
+                                onUserProfileClick = { profileUserId = it }
                             )
                         },
                         currentContent = {
                             ChatView(
                                 viewModel = viewModel,
                                 chatId = activeChatId,
-                                onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) }
+                                onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
+                                onOpenUserProfile = { profileUserId = it }
                             )
                         }
                     )
@@ -273,16 +288,24 @@ fun ConnectionsScreen(
                     viewModel = viewModel,
                     searchQuery = searchQuery,
                     onChatSelected = { chatId -> openChat(chatId) },
-                    onNavigateToLocationSettings = onNavigateToLocationSettings
+                    onNavigateToLocationSettings = onNavigateToLocationSettings,
+                    onUserProfileClick = { profileUserId = it }
                 )
             } else {
                 ChatView(
                     viewModel = viewModel,
                     chatId = activeChatId,
-                    onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) }
+                    onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
+                    onOpenUserProfile = { profileUserId = it }
                 )
             }
         }
+    }
+    UserProfileBottomSheet(
+        userId = profileUserId,
+        viewerUserId = userId,
+        onDismiss = { profileUserId = null }
+    )
     }
 }
 
@@ -306,12 +329,14 @@ fun ConnectionsListView(
     viewModel: ChatViewModel,
     searchQuery: String = "",
     onChatSelected: (String) -> Unit,
-    onNavigateToLocationSettings: (() -> Unit)? = null
+    onNavigateToLocationSettings: (() -> Unit)? = null,
+    onUserProfileClick: (String) -> Unit = {},
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val cachedConnections by AppDataManager.connections.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -562,6 +587,8 @@ fun ConnectionsListView(
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 ConnectionItem(
                                     chatDetails = chatDetails,
+                                    showOnlineIndicator = chatDetails.otherUser.id in onlineUsers,
+                                    onAvatarClick = { onUserProfileClick(chatDetails.otherUser.id) },
                                     onClick = {
                                         if (chatDetails.connection.isExpiredConnection()) {
                                             coroutineScope.launch {
@@ -692,6 +719,8 @@ private fun LocationGapNudge(
 @Composable
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
+    showOnlineIndicator: Boolean = false,
+    onAvatarClick: () -> Unit = {},
     onClick: () -> Unit,
     onNudge: () -> Unit = {},
     onOpenMenu: () -> Unit = {},
@@ -731,21 +760,32 @@ fun ConnectionItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Avatar
-        Box(
+        AvatarWithOnlineIndicator(
+            isOnline = showOnlineIndicator,
             modifier = Modifier
                 .size(44.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(
-                    Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
-                ),
-            contentAlignment = Alignment.Center
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(bounded = false, radius = 24.dp),
+                    onClick = onAvatarClick,
+                )
         ) {
-            Text(
-                user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(
+                        Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -885,7 +925,12 @@ private fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit) {
+fun ChatView(
+    viewModel: ChatViewModel,
+    chatId: String,
+    onBackPressed: () -> Unit,
+    onOpenUserProfile: (String) -> Unit = {},
+) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val messageInput by viewModel.messageInput.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
@@ -893,10 +938,12 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
+    val replyingTo by viewModel.replyingTo.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val messageSendError by viewModel.messageSendError.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
+    val onlineUsers by AppDataManager.onlineUsers.collectAsState()
 
     // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
@@ -1051,28 +1098,41 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                 }
 
                                 // Avatar
-                                Box(
+                                AvatarWithOnlineIndicator(
+                                    isOnline = chatDetails.otherUser.id in onlineUsers || isPeerOnline,
                                     modifier = Modifier
                                         .size(36.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(
-                                            Brush.linearGradient(
-                                                colors = listOf(PrimaryBlue, LightBlue)
-                                            )
-                                        )
-                                        .border(
-                                            width = 1.dp,
-                                            color = PrimaryBlue.copy(alpha = 0.4f),
-                                            shape = RoundedCornerShape(18.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = ripple(bounded = false, radius = 22.dp),
+                                            onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
                                         ),
-                                    contentAlignment = Alignment.Center
+                                    indicatorSize = 9.dp,
+                                    indicatorBorder = 1.25.dp
                                 ) {
-                                    Text(
-                                        chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    colors = listOf(PrimaryBlue, LightBlue)
+                                                )
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = PrimaryBlue.copy(alpha = 0.4f),
+                                                shape = RoundedCornerShape(18.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.width(10.dp))
@@ -1431,6 +1491,54 @@ fun ChatView(viewModel: ChatViewModel, chatId: String, onBackPressed: () -> Unit
                                         contentDescription = "Cancel edit",
                                         modifier = Modifier.size(16.dp),
                                         tint = PrimaryBlue
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Reply-to indicator strip
+                    if (replyingTo != null && editingMessageId == null) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Reply,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Replying to ${replyingTo!!.user.name ?: "message"}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        replySnippetForMetadata(replyingTo!!.message.content, maxLen = 100),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.clearReplyTarget() },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Cancel reply",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
@@ -2009,6 +2117,7 @@ fun ChatMessageBubble(
         return
     }
     val isSent = messageWithUser.isSent
+    val replyRef = message.replyRef()
 
     // Gradient for sent bubbles — matches brand violet palette
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
@@ -2047,6 +2156,29 @@ fun ChatMessageBubble(
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Column {
+                        replyRef?.let { r ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.Black.copy(alpha = 0.12f))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Reply",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.55f)
+                                )
+                                Text(
+                                    text = r.replyToContent.ifBlank { "Message" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.78f),
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                         Text(
                             text = message.content,
                             color = Color.White,
@@ -2090,6 +2222,29 @@ fun ChatMessageBubble(
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Column {
+                        replyRef?.let { r ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Reply",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                                Text(
+                                    text = r.replyToContent.ifBlank { "Message" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                         Text(
                             text = message.content,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -2171,6 +2326,7 @@ private fun MessageActionSheet(
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
     var showDeleteMessageFinalConfirm by remember { mutableStateOf(false) }
+    var emojiPickMode by remember { mutableStateOf(false) }
 
     fun dismiss() {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
@@ -2190,6 +2346,71 @@ private fun MessageActionSheet(
                 .wrapContentHeight()
                 .padding(bottom = 32.dp)
         ) {
+            if (emojiPickMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { emojiPickMode = false }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                    Text(
+                        "Choose emoji",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(44.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(EmojiCatalog.all, key = { it }) { em ->
+                        Text(
+                            text = em,
+                            fontSize = 24.sp,
+                            modifier = Modifier
+                                .clickable {
+                                    viewModel.addReaction(message.id, em)
+                                    dismiss()
+                                }
+                                .padding(8.dp)
+                        )
+                    }
+                }
+            } else {
+            // ── Reply ─────────────────────────────────────────────────────────
+            ListItem(
+                headlineContent = {
+                    Text("Reply", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                },
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Reply,
+                        contentDescription = "Reply",
+                        tint = LightBlue
+                    )
+                },
+                modifier = Modifier.clickable {
+                    if (message.messageType != "call_log") {
+                        viewModel.startReplyTo(messageWithUser)
+                        dismiss()
+                    }
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
             // ── Emoji reaction strip ──────────────────────────────────────────
             Row(
                 modifier = Modifier
@@ -2210,6 +2431,13 @@ private fun MessageActionSheet(
                             .padding(8.dp)
                     )
                 }
+            }
+
+            TextButton(
+                onClick = { emojiPickMode = true },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text("More emojis…", color = LightBlue)
             }
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
@@ -2270,6 +2498,7 @@ private fun MessageActionSheet(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
+            }
             }
         }
     }

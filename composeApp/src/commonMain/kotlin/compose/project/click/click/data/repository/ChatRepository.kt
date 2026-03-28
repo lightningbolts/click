@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonElement
 
 /** Handle for attaching/detaching a Supabase realtime messages channel (testable without [RealtimeChannel]). */
@@ -24,6 +25,13 @@ interface ChatReactionSubscription {
  * Abstraction for chat data and realtime subscriptions (implemented by [SupabaseChatRepository]).
  */
 interface ChatRepository {
+    /** User IDs currently present on the shared Realtime channel `room:presence`. */
+    val onlineUsers: StateFlow<Set<String>>
+
+    suspend fun startGlobalPresence(userId: String)
+
+    suspend fun stopGlobalPresence()
+
     fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>)
 
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails>

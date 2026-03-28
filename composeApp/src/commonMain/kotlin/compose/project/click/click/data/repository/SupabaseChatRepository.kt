@@ -30,9 +30,11 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.isActive
@@ -75,6 +77,31 @@ class SupabaseChatRepository(
     private val ephemeralMutex = Mutex()
     private val ephemeralSessions = mutableMapOf<String, ChatEphemeralSession>()
 
+    private val globalPresenceMutex = Mutex()
+    private var globalPresenceSession: GlobalPresenceSession? = null
+    private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
+    override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
+
+    private data class GlobalPresenceSession(
+        val channel: RealtimeChannel,
+        val trackedUserId: String,
+        val scope: CoroutineScope,
+        val jobs: List<Job>,
+    )
+
+    private suspend fun disposeGlobalPresenceSession(session: GlobalPresenceSession) {
+        session.jobs.forEach { it.cancel() }
+        session.scope.cancel()
+        try {
+            session.channel.untrack()
+        } catch (_: Exception) {
+        }
+        try {
+            session.channel.unsubscribe()
+        } catch (_: Exception) {
+        }
+    }
+
     @Serializable
     private data class TypingBroadcastPayload(val userId: String)
 
@@ -102,6 +129,78 @@ class SupabaseChatRepository(
         session.scope.cancel()
         runCatching { session.channel.untrack() }
         runCatching { session.channel.unsubscribe() }
+    }
+
+    override suspend fun startGlobalPresence(userId: String) {
+        if (userId.isBlank()) return
+        globalPresenceMutex.withLock {
+            globalPresenceSession?.let { existing ->
+                if (existing.trackedUserId == userId) return@withLock
+                disposeGlobalPresenceSession(existing)
+                globalPresenceSession = null
+            }
+
+            val channel = supabase.channel(GLOBAL_PRESENCE_CHANNEL) {
+                presence {
+                    key = userId
+                }
+            }
+
+            val presenceKeysOnline = mutableSetOf<String>()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val presenceFlow = channel.presenceChangeFlow()
+
+            try {
+                channel.subscribe(blockUntilSubscribed = true)
+                channel.track(buildJsonObject { put("userId", userId) })
+            } catch (e: Exception) {
+                println("ChatRepository: startGlobalPresence failed: ${e.message}")
+                scope.cancel()
+                return@withLock
+            }
+
+            val presenceJob = scope.launch {
+                try {
+                    presenceFlow.collect { action ->
+                        action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
+                        action.joins.keys.forEach { key -> presenceKeysOnline.add(key) }
+                        action.joins.values.forEach { p ->
+                            userIdFromPresence(p)?.let { presenceKeysOnline.add(it) }
+                        }
+                        action.leaves.values.forEach { p ->
+                            userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
+                        }
+                        _onlineUsers.value = presenceKeysOnline.toSet()
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
+            val presenceRefreshJob = scope.launch {
+                while (isActive) {
+                    delay(PRESENCE_TRACK_REFRESH_MS)
+                    runCatching {
+                        channel.track(buildJsonObject { put("userId", userId) })
+                    }
+                }
+            }
+
+            globalPresenceSession = GlobalPresenceSession(
+                channel = channel,
+                trackedUserId = userId,
+                scope = scope,
+                jobs = listOf(presenceJob, presenceRefreshJob),
+            )
+        }
+    }
+
+    override suspend fun stopGlobalPresence() {
+        globalPresenceMutex.withLock {
+            val session = globalPresenceSession ?: return@withLock
+            globalPresenceSession = null
+            disposeGlobalPresenceSession(session)
+            _onlineUsers.value = emptySet()
+        }
     }
 
     private suspend fun awaitEphemeralSession(chatId: String): ChatEphemeralSession? {
@@ -1095,3 +1194,4 @@ private class SupabaseReactionSubscription(private val channel: RealtimeChannel)
 private const val EPHEMERAL_SESSION_POLL_MS = 50L
 private const val EPHEMERAL_SESSION_WAIT_STEPS = 100
 private const val PRESENCE_TRACK_REFRESH_MS = 25_000L
+private const val GLOBAL_PRESENCE_CHANNEL = "room:presence"

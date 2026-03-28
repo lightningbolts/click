@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.IcebreakerPrompt
 import compose.project.click.click.data.models.IcebreakerRepository
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isResolvedDisplayName
@@ -43,7 +44,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 
 @Serializable
 private data class ConnectionRealtimeRow(
@@ -120,6 +123,9 @@ class ChatViewModel(
 
     private val _messageInput = MutableStateFlow("")
     val messageInput: StateFlow<String> = _messageInput.asStateFlow()
+
+    private val _replyingTo = MutableStateFlow<MessageWithUser?>(null)
+    val replyingTo: StateFlow<MessageWithUser?> = _replyingTo.asStateFlow()
 
     /** True while a send or edit-submit is in flight; UI uses this to avoid double sends. */
     private val _isMessageSubmitInProgress = MutableStateFlow(false)
@@ -1156,8 +1162,23 @@ class ChatViewModel(
                     return@launch
                 }
                 onUserStoppedTyping(apiChatId)
-                val message = chatRepository.sendMessage(apiChatId, userId, content)
+                val replyTarget = _replyingTo.value
+                val metadata = if (replyTarget != null) {
+                    buildJsonObject {
+                        put("reply_to_id", replyTarget.message.id)
+                        put("reply_to_content", replySnippetForMetadata(replyTarget.message.content))
+                    }
+                } else {
+                    null
+                }
+                val message = chatRepository.sendMessage(
+                    chatId = apiChatId,
+                    userId = userId,
+                    content = content,
+                    metadata = metadata,
+                )
                 if (message != null) {
+                    _replyingTo.value = null
                     val currentUser = resolveMessageUser(userId, apiChatId)
                         ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
                         ?: User(id = userId, name = "You", createdAt = 0L)
@@ -1182,6 +1203,15 @@ class ChatViewModel(
 
     fun clearMessageSendError() {
         _messageSendError.value = null
+    }
+
+    fun startReplyTo(target: MessageWithUser) {
+        _editingMessageId.value = null
+        _replyingTo.value = target
+    }
+
+    fun clearReplyTarget() {
+        _replyingTo.value = null
     }
 
     /**
@@ -1636,6 +1666,7 @@ class ChatViewModel(
      * Pre-fills the message input with the current content.
      */
     fun startEditMessage(messageId: String, currentContent: String) {
+        _replyingTo.value = null
         _editingMessageId.value = messageId
         _messageInput.value = currentContent
     }

@@ -48,6 +48,9 @@ object AppDataManager {
     private val authRepository by lazy { AuthRepository(tokenStorage = tokenStorage) }
     private val supabaseRepository by lazy { SupabaseRepository() }
     private val chatRepository by lazy { SupabaseChatRepository(tokenStorage = tokenStorage) }
+
+    /** Supabase Realtime Presence on channel `room:presence` (user IDs with an active app session). */
+    val onlineUsers: StateFlow<Set<String>> get() = chatRepository.onlineUsers
     private val notificationPreferencesRepository by lazy { NotificationPreferencesRepository() }
     private val connectionRepository by lazy { ConnectionRepository() }
     private val pushNotificationService by lazy { createPushNotificationService() }
@@ -223,6 +226,8 @@ object AppDataManager {
                 val interestTags = supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty()
                 _currentUser.value = user.copy(tags = interestTags)
                 println("AppDataManager: Current user set to: ${user.name}")
+                runCatching { chatRepository.startGlobalPresence(user.id) }
+                    .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.message}") }
                 startPresenceHeartbeat(user.id)
 
                 // Load location preferences from Supabase
@@ -348,7 +353,9 @@ object AppDataManager {
     /**
      * Clear all data (on logout)
      */
-    fun clearData() {
+    suspend fun clearData() {
+        runCatching { chatRepository.stopGlobalPresence() }
+            .onFailure { e -> println("AppDataManager: Global presence stop failed: ${e.message}") }
         presenceHeartbeatJob?.cancel()
         presenceHeartbeatJob = null
         _currentUser.value = null
@@ -371,8 +378,8 @@ object AppDataManager {
      * chats, and other data are fetched fresh.
      */
     fun resetAndReload() {
-        clearData()
         scope.launch {
+            clearData()
             loadAllData()
         }
     }

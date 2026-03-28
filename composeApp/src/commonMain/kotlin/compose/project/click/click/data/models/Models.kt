@@ -193,6 +193,15 @@ data class UserInterests(
     val updatedAt: Long = 0L,
 )
 
+/** Hydrated profile for the profile viewer (connections may read via RLS). */
+data class UserPublicProfile(
+    val user: User,
+    val interestTags: List<String>,
+    val availability: UserAvailability?,
+    /** Mutual `connections` row (most recently active), when viewer is known. */
+    val sharedConnection: Connection? = null,
+)
+
 @Serializable
 data class Message(
     val id: String,
