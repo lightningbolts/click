@@ -547,7 +547,14 @@ fun ConnectionsListView(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(filteredChats, key = { it.connection.id }) { chatDetails ->
+                        items(
+                            filteredChats,
+                            key = { chat ->
+                                val lm = chat.lastMessage
+                                if (lm != null) "${chat.connection.id}\u0001${lm.id}\u0001${lm.timeCreated}"
+                                else chat.connection.id
+                            }
+                        ) { chatDetails ->
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 ConnectionItem(
                                     chatDetails = chatDetails,

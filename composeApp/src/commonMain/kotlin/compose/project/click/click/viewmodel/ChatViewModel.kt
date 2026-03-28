@@ -851,11 +851,10 @@ class ChatViewModel(
                             when (event) {
                                 is MessageChangeEvent.Insert -> {
                                     val user = resolveMessageUser(event.message.user_id, chatId)
-                                    if (user != null) {
-                                        applyInsertedMessage(event.message, user, userId)
-                                        if (event.message.user_id != userId) {
-                                            chatRepository.markMessagesAsRead(chatId, userId)
-                                        }
+                                        ?: User(id = event.message.user_id, name = null, createdAt = 0L)
+                                    applyInsertedMessage(event.message, user, userId)
+                                    if (event.message.user_id != userId) {
+                                        chatRepository.markMessagesAsRead(chatId, userId)
                                     }
                                 }
                                 is MessageChangeEvent.Update -> {
@@ -983,6 +982,10 @@ class ChatViewModel(
 
         _chatMessagesState.value = currentState.copy(messages = refreshedMessages)
 
+        latestMessages.lastOrNull()?.let { newest ->
+            bumpConnectionInChatList(currentState.chatDetails.connection.id, newest)
+        }
+
         if (latestMessages.any { it.user_id != userId && !it.isRead }) {
             chatRepository.markMessagesAsRead(chatId, userId)
         }
@@ -1004,8 +1007,14 @@ class ChatViewModel(
 
     private fun applyInsertedMessage(message: Message, user: User, currentUserId: String) {
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
+        val connectionId = currentState.chatDetails.connection.id
         val exists = currentState.messages.any { it.message.id == message.id }
-        if (exists) return
+        if (exists) {
+            // Realtime often delivers the insert before the REST send returns, or sync refreshes
+            // the thread first — the list row must still bump or the Clicks preview stays stale.
+            bumpConnectionInChatList(connectionId, message)
+            return
+        }
 
         _chatMessagesState.value = currentState.copy(
             messages = currentState.messages + MessageWithUser(
@@ -1014,7 +1023,6 @@ class ChatViewModel(
                 isSent = message.user_id == currentUserId
             )
         )
-        val connectionId = currentState.chatDetails.connection.id
         bumpConnectionInChatList(connectionId, message)
     }
 
@@ -1109,9 +1117,10 @@ class ChatViewModel(
                 onUserStoppedTyping(apiChatId)
                 val message = chatRepository.sendMessage(apiChatId, userId, content)
                 if (message != null) {
-                    resolveMessageUser(userId, apiChatId)?.let { currentUser ->
-                        applyInsertedMessage(message, currentUser, userId)
-                    }
+                    val currentUser = resolveMessageUser(userId, apiChatId)
+                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                        ?: User(id = userId, name = "You", createdAt = 0L)
+                    applyInsertedMessage(message, currentUser, userId)
                     activateConnectionIfPending(connectionId)
                 } else {
                     _messageSendError.value = "Failed to send message"
