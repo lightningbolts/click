@@ -709,6 +709,9 @@ fun ConnectionItem(
     val isExpired = connection.isExpiredConnection()
     val showLoadingSubtitle =
         lastMessage == null && user.name == "Connection" && connection.last_message_at == null
+    val previewNeedsRefresh = connection.last_message_at?.let { latestAt ->
+        lastMessage == null || lastMessage.timeCreated < latestAt
+    } ?: false
 
     val rowTapModifier = if (isIOS) {
         Modifier.clickable(onClick = onClick)
@@ -781,6 +784,7 @@ fun ConnectionItem(
                     }
                 } else {
                     val previewText = when {
+                        previewNeedsRefresh -> "New message"
                         lastMessage != null -> lastMessage.content
                         connection.last_message_at != null -> "New message"
                         else -> "Start a conversation"

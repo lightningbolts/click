@@ -549,8 +549,14 @@ class ChatViewModel(
             cachedChat.connection.last_message_at,
             bestLast?.timeCreated
         ).maxOrNull()
-        val mergedChat = if (bestLast != null) {
-            preferredConnection.chat.copy(messages = listOf(bestLast))
+        val normalizedLast = bestLast?.takeIf { msg ->
+            mergedAt == null || msg.timeCreated >= mergedAt
+        }
+        val mergedChat = if (normalizedLast != null) {
+            preferredConnection.chat.copy(messages = listOf(normalizedLast))
+        } else if (mergedAt != null) {
+            // last_message_at moved ahead, but we don't have the plaintext yet; drop stale preview.
+            preferredConnection.chat.copy(messages = emptyList())
         } else {
             preferredConnection.chat
         }
@@ -568,7 +574,7 @@ class ChatViewModel(
         }
         return listChat.copy(
             connection = mergedConnection,
-            lastMessage = bestLast,
+            lastMessage = normalizedLast,
             otherUser = resolvedOther
         )
     }
@@ -893,6 +899,14 @@ class ChatViewModel(
                                             } else mwu
                                         }
                                         _chatMessagesState.value = currentState.copy(messages = updatedMessages)
+                                        // Refresh the Connections preview when the latest row is edited.
+                                        updatedMessages
+                                            .maxByOrNull { it.message.timeCreated }
+                                            ?.message
+                                            ?.takeIf { it.id == event.message.id }
+                                            ?.let { newest ->
+                                                bumpConnectionInChatList(currentState.chatDetails.connection.id, newest)
+                                            }
                                     }
                                 }
                                 is MessageChangeEvent.Delete -> {

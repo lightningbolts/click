@@ -146,6 +146,23 @@ class SupabaseChatRepository(
         }
     }
 
+    private suspend fun getEncryptionKeysForConnection(connectionId: String): MessageCrypto.DerivedKeys? {
+        if (connectionId.isBlank()) return null
+        return try {
+            val connection = supabase.from("connections")
+                .select(columns = Columns.list("id", "user_ids")) {
+                    filter { eq("id", connectionId) }
+                    limit(1)
+                }
+                .decodeList<ConnectionUserIdsRow>()
+                .firstOrNull() ?: return null
+            MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
+        } catch (e: Exception) {
+            println("ChatRepository: Failed to derive connection keys: ${e.message}")
+            null
+        }
+    }
+
     override fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {
         val keys = MessageCrypto.deriveKeysForConnection(connectionId, userIds)
         encryptionKeyCache[chatId] = keys
@@ -627,12 +644,23 @@ class SupabaseChatRepository(
             channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                 table = "messages"
             }.collect { action ->
-                if (action !is PostgresAction.Insert) return@collect
-                val row = runCatching { action.decodeRecord<MessageRow>() }.getOrNull() ?: return@collect
+                val row = when (action) {
+                    is PostgresAction.Insert -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
+                    is PostgresAction.Update -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
+                    else -> null
+                } ?: return@collect
                 val connectionId = resolveConnectionIdForChat(row.chatId) ?: return@collect
-                val keys = encryptionKeyCache[row.chatId] ?: getEncryptionKeysForChat(row.chatId)
-                    ?: return@collect
-                val message = decryptMessage(row.toMessage(), keys)
+                val keys = encryptionKeyCache[row.chatId]
+                    ?: getEncryptionKeysForChat(row.chatId)
+                    ?: getEncryptionKeysForConnection(connectionId)?.also {
+                        encryptionKeyCache[row.chatId] = it
+                    }
+                val rawMessage = row.toMessage()
+                val message = when {
+                    keys != null -> decryptMessage(rawMessage, keys)
+                    MessageCrypto.isEncrypted(rawMessage.content) -> rawMessage.copy(content = "New message")
+                    else -> rawMessage
+                }
                 send(MessageListInsertEvent(connectionId = connectionId, message = message))
             }
         }
