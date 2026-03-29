@@ -1,114 +1,114 @@
-# Click — The seamless offline-to-online connection app
+# Click (KMP) — Mobile app
 
-Click is a Kotlin Multiplatform (KMP) social product for discovering people, staying present, and chatting—bridging in-person moments (NFC, QR) with a shared cloud backend and real-time experiences.
-
-This workspace is a **multi-project** layout:
-
-| Path | Role |
-|------|------|
-| [`click/`](./click/) | **Primary mobile app** — Compose Multiplatform UI, shared business logic, Android + iOS targets |
-| [`click-web/`](./click-web/) | **Companion web stack** — Next.js app with APIs used by the mobile clients (e.g. QR flows, LiveKit token issuance) |
-| [`click/supabase/`](./click/supabase/) | **Supabase Edge Functions** (e.g. push delivery) |
-| [`click/database/`](./click/database/) | **SQL migrations and schema helpers** for PostgreSQL |
+**Click — The seamless offline-to-online connection app.**  
+This repository directory is the **Kotlin Multiplatform** mobile client: **Compose Multiplatform** UI with **Android** and **iOS** targets. Backend pieces (Postgres, Edge Functions, companion HTTP APIs) live in sibling folders or services; the app integrates via **Supabase** and a configurable **web base URL** for QR and LiveKit token calls.
 
 ---
 
-## Feature overview
+## Source sets and entry points
 
-- **NFC & QR connections** — Exchange secure connection flows in person; QR integrates with the web API (`CLICK_WEB_BASE_URL` / `click-web`). Connection metadata records methods such as `"qr"` or `"nfc"`.
-- **Real-time chat** — Supabase Realtime channels, repositories in `commonMain`, and push-triggered delivery for background awareness.
-- **VoIP video & audio (LiveKit)** — Room tokens and WebSocket URL from the web API (`/api/livekit/token`); **Android** uses `livekit-android`; **iOS** uses the LiveKit Swift SDK and a native bridge (`ClickLiveKitBridge`) plus CallKit for the system call UI.
-- **Presence tracking** — Realtime subscriptions and view-layer state for online/typing and connection-oriented presence (see chat and home/map view models).
-- **Interactive maps** — Map-focused screens and realtime map channels (e.g. connection discovery) backed by Supabase.
-- **Ambient environment signals** — Optional microphone-based ambient noise sampling and barometric/height-style monitors for richer context during connections (user-controlled opt-in in settings and connection flows).
+| Location | Purpose |
+|----------|---------|
+| [`composeApp/src/commonMain/kotlin/`](./composeApp/src/commonMain/kotlin/) | Shared UI (Compose), ViewModels, repositories, Supabase client, call coordination, chat, connections, maps, most business logic |
+| [`composeApp/src/androidMain/kotlin/`](./composeApp/src/androidMain/kotlin/) | Android `actual` implementations: FCM service, LiveKit Android SDK, `TokenStorage`, crypto, location, incoming-call UI bridge |
+| [`composeApp/src/iosMain/kotlin/`](./composeApp/src/iosMain/kotlin/) | iOS `actual` implementations: `TokenStorage`, push helpers, permission requesters, stubs/bridges to Swift where needed |
+| [`iosApp/iosApp/`](./iosApp/iosApp/) | Xcode app: **Swift** for PushKit, CallKit, UserNotifications, **ClickLiveKitBridge** (LiveKit Swift SDK), app lifecycle and Kotlin entry |
+| [`composeApp/build.gradle.kts`](./composeApp/build.gradle.kts) | Multiplatform targets, dependencies (e.g. Supabase KMP, Ktor, `livekit-android`) |
 
----
-
-## Tech stack
-
-- **Kotlin Multiplatform** — Shared module under `click/composeApp/src/commonMain`.
-- **Jetpack Compose** — Compose Multiplatform UI (`composeApp`).
-- **Supabase** — PostgreSQL, Auth, Realtime, and **Edge Functions** (e.g. `send-push-notification` for FCM + APNs/VoIP).
-- **LiveKit** — Real-time WebRTC rooms (`io.livekit:livekit-android` on Android; Swift package on iOS).
-- **PushKit (iOS)** — VoIP push registration, token caching, and CallKit integration in the Xcode target.
-- **FCM (Android)** — Firebase Cloud Messaging for standard notifications; service account JSON is configured for the Edge Function (not for iOS VoIP).
+**Guideline:** add new features in **`commonMain`** first; use **`expect`/`actual`** (or small platform facades) only when you must touch **NFC, CallKit, PushKit, Keychain, EncryptedSharedPreferences, platform location, or platform LiveKit**.
 
 ---
 
-## Architecture
+## Features (app scope)
 
-### Shared `commonMain` vs native code
-
-- **`commonMain`** holds the majority of product logic: repositories, view models, Compose UI, Supabase client usage (`SupabaseConfig`), call coordination (`CallSessionManager`, `CallCoordinator`, `CallApiClient`), chat, connections, maps, and shared notification helpers.
-- **`androidMain` / `iosMain`** supply **expect/actual** boundaries and platform injections where native APIs are required: `TokenStorage`, `PlatformCrypto`, `LocationService`, push token pending store, `PlatformIncomingCallUi`, LiveKit room implementation on Android, permission requesters, etc.
-- **iOS Swift** (`click/iosApp/`) hosts PushKit, CallKit, UserNotifications, and the LiveKit bridge—Kotlin is invoked where the shared layer must receive tokens or call events.
-
-Prefer adding new business rules and data flow in **`commonMain`** first; only split to a platform source set when the platform SDK forces it.
+- **NFC & QR** — In-person discovery and connection flows; QR uses HTTP against the configured web base URL (see `QRModels.kt` / `QrCodeView.kt`). Connection metadata includes `connectionMethod` such as `"qr"` or `"nfc"`.
+- **Real-time chat** — Supabase **Realtime** channels, `SupabaseChatRepository` / `ChatViewModel`, typing and presence-oriented state, push hooks for background delivery (Edge Function + FCM/APNs).
+- **Voice & video calls (LiveKit)** — `CallSessionManager`, `CallCoordinator`, `CallApiClient` fetch a JWT and `wsUrl` from `{CLICK_WEB_BASE_URL}/api/livekit/token`. **Android:** `livekit-android` in `CallManager.android.kt`. **iOS:** native room in **Swift** (`ClickLiveKitBridge.swift`) with Compose driving state from shared Kotlin.
+- **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.
+- **Maps** — Map screens and Realtime channels (e.g. connection discovery) backed by Supabase-backed repositories.
+- **Ambient context (opt-in)** — Microphone-based ambient noise sampling and barometric/height-style monitors (`rememberAmbientNoiseMonitor`, `rememberBarometricHeightMonitor`) used when the user opts in (settings + connection sheets).
 
 ---
 
-## Local setup
+## Tech stack (mobile)
 
-### Prerequisites
+- **Kotlin Multiplatform** + **Compose Multiplatform**
+- **Android:** Gradle, Jetpack lifecycle/viewmodel where used, **FCM** (`google-services.json` in `composeApp/`)
+- **iOS:** Xcode project, **PushKit** (VoIP), **CallKit**, **APNs** (via backend—not Firebase for VoIP)
+- **Supabase KMP:** Auth (with `SettingsSessionManager` + app `TokenStorage` sync in `SupabaseConfig`), Postgrest, Realtime
+- **Ktor** client for companion HTTP APIs (QR, waitlist, LiveKit token)
+- **LiveKit:** `io.livekit:livekit-android` (see `build.gradle.kts`); iOS via Swift Package in Xcode
 
-- **JDK** compatible with the Gradle wrapper in `click/`
-- **Android Studio** or IntelliJ with KMP plugins, **Xcode** (for iOS)
-- **Node.js** (for `click-web`)
-- **Supabase CLI** (optional but recommended for functions — see [`click/EXTERNAL_SETUP.md`](./click/EXTERNAL_SETUP.md))
+---
 
-### 1. Supabase (`SupabaseConfig.kt`)
+## Configuration (this app)
 
-1. Open [`click/composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt`](./click/composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt).
-2. Set **`SUPABASE_URL`** and **`SUPABASE_ANON_KEY`** to your project’s values (do not commit real production secrets to public repos).
-3. Run SQL from [`click/database/`](./click/database/) in the order described in [`click/EXTERNAL_SETUP.md`](./click/EXTERNAL_SETUP.md) (extensions, `push_tokens`, triggers, etc.).
+### Supabase
 
-Auth uses a custom URL scheme (`click://login`) configured in the Supabase Auth settings to match the client.
+Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt`](./composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt):
 
-### 2. LiveKit & web base URL
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+- Auth redirect scheme/host (`click` / `login`) must match Supabase Auth and the iOS/Android URL handlers.
 
-- **Mobile → token API**: [`CallApiClient`](./click/composeApp/src/commonMain/kotlin/compose/project/click/click/calls/CallApiClient.kt) posts to `{CLICK_WEB_BASE_URL}/api/livekit/token` with the user’s JWT.
-- **Configure** [`CLICK_WEB_BASE_URL`](./click/composeApp/src/commonMain/kotlin/QRModels.kt) to point at your deployed or local `click-web` instance (default in repo may point at a hosted environment).
-- **Server env**: set LiveKit API credentials and WebSocket URL on the Next.js side (see `click-web` and `click/EXTERNAL_SETUP.md` sections on LiveKit Cloud / self-hosted).
+`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs) to avoid stale tokens after refresh.
 
-### 3. Run **click-web** (for QR + LiveKit token routes)
+### Web base URL (QR, LiveKit token, waitlist)
 
-```bash
-cd click-web
-npm install
-cp .env.example .env.local   # if present; otherwise create .env.local per project docs
-npm run dev
-```
+[`composeApp/src/commonMain/kotlin/QRModels.kt`](./composeApp/src/commonMain/kotlin/QRModels.kt) defines **`CLICK_WEB_BASE_URL`**. Point it at your deployed or local companion app that exposes `/api/qr`, `/api/livekit/token`, etc. (typically the **click-web** project next to this repo).
 
-Default dev server: [http://localhost:3000](http://localhost:3000).
+### Android push (FCM)
 
-### 4. Run **Android**
+Place **`google-services.json`** in [`composeApp/`](./composeApp/) (package `compose.project.click.click`). The Supabase Edge Function uses a Firebase **service account** for server-side FCM—not a substitute for iOS VoIP pushes.
 
-From `click/`:
+### iOS capabilities
 
-```bash
+Enable Push Notifications, Background Modes (**Voice over IP**), and associated entitlements. VoIP token is cached in **UserDefaults** (`cached_voip_token`) before syncing to Kotlin; see `iosApp/iosApp/ClickVoipPushManager.swift` and `iOSApp.swift`.
+
+---
+
+## Build and run
+
+### Android
+
+From this directory:
+
+```shell
 ./gradlew :composeApp:assembleDebug
 ```
 
-Or use Android Studio run configurations. Place **`google-services.json`** in `click/composeApp/` when using FCM (see `EXTERNAL_SETUP.md`).
+Use Android Studio’s **composeApp** run configuration, or install the debug APK from `composeApp/build/outputs/`.
 
-### 5. Run **iOS**
+### iOS
 
-1. Open **`click/iosApp/iosApp.xcodeproj`** in Xcode.
-2. Ensure Swift Package dependencies resolve (including **LiveKit**).
-3. Configure signing, Push Notifications, and Background Modes (VoIP) per `EXTERNAL_SETUP.md`.
-4. Build and run the `iosApp` target.
+1. Open [`iosApp/iosApp.xcodeproj`](./iosApp/iosApp.xcodeproj) in Xcode.
+2. Resolve Swift packages (**LiveKit** and transitive deps).
+3. Select the **iosApp** scheme, set signing team, build and run.
 
----
+### Database and server-side setup
 
-## Further reading
+SQL migrations and ordering: [`database/`](./database/). Full operator checklist (Edge Function secrets, APNs, FCM, LiveKit env): **[`EXTERNAL_SETUP.md`](./EXTERNAL_SETUP.md)**.
 
-- **[`click/EXTERNAL_SETUP.md`](./click/EXTERNAL_SETUP.md)** — End-to-end checklist: database, Edge Function secrets (FCM JSON, APNs key, VoIP topic), Apple capabilities, and LiveKit.
-- **[`click/README.md`](./click/README.md)** — KMP module layout (`commonMain`, `iosMain`, `androidMain`).
-- **AI / contributor guardrails** — See **[`AI.md`](./AI.md)** in this directory for architecture and platform rules intended for humans and coding agents.
+Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts around Supabase config.
 
 ---
 
-## License / contributing
+## Notable modules (navigation)
 
-Add your license and contribution guidelines here when finalized.
+| Area | Starting points |
+|------|------------------|
+| Auth & session | `data/SupabaseConfig.kt`, `viewmodel/AuthViewModel.kt`, `data/repository/AuthRepository.kt` |
+| Chat | `viewmodel/ChatViewModel.kt`, `data/repository/SupabaseChatRepository.kt` |
+| Connections / NFC / QR | `viewmodel/ConnectionViewModel.kt`, `ui/screens/ConnectionsScreen.kt`, `nfc/`, `ui/components/QrCodeView.kt` |
+| Calls | `calls/CallSessionManager.kt`, `calls/CallCoordinator.kt`, `calls/CallApiClient.kt` |
+| Maps | `viewmodel/MapViewModel.kt` |
+| Push (Kotlin side) | `notifications/ChatPushNotifier.kt`, `notifications/CallPushNotifier.kt`, `data/repository/PushTokenRepository.kt` |
+
+---
+
+## Monorepo note
+
+If your checkout includes **`click-web`** beside **`click/`**, run that Next.js app locally when developing QR or LiveKit token flows against `http://localhost:3000` (and set `CLICK_WEB_BASE_URL` accordingly). The KMP app does not embed that server—only calls it over HTTP.
+
+Repository-level docs for the whole workspace may live in the parent folder’s `README.md` / `AI.md`.
+
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lightningbolts/click)
