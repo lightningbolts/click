@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,22 +9,22 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,7 +33,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.Surface
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.models.UserPublicProfile
@@ -226,7 +227,6 @@ fun UserProfileBottomSheet(
                         conn.profileContextLine(),
                         conn.profilePlaceLine(),
                         conn.profileAddressDetailLine(),
-                        conn.profileGeoHintLine(),
                         conn.profileWhenLine(),
                         conn.profileWeatherLine(),
                         conn.profileNoiseLine(),
@@ -237,53 +237,98 @@ fun UserProfileBottomSheet(
                             text = "When you connected",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
-                            tonalElevation = 0.dp,
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            val muted = MaterialTheme.colorScheme.onSurfaceVariant
+                            val body = MaterialTheme.colorScheme.onSurface
+                            val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+                            val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+
+                            @Composable
+                            fun MomentCard(
+                                icon: ImageVector,
+                                iconTint: Color,
+                                label: String,
+                                value: String,
                             ) {
-                                val placeBits = listOfNotNull(
-                                    conn.profileContextLine(),
-                                    conn.profilePlaceLine(),
-                                    conn.profileAddressDetailLine(),
-                                    conn.profileGeoHintLine(),
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .border(1.dp, cardBorder, RoundedCornerShape(14.dp))
+                                        .background(cardBg)
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = iconTint,
+                                        modifier = Modifier.size(20.dp).padding(top = 2.dp),
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = label.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = muted,
+                                            letterSpacing = 0.4.sp,
+                                        )
+                                        Text(
+                                            text = value,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = body,
+                                            modifier = Modifier.padding(top = 2.dp),
+                                        )
+                                    }
+                                }
+                            }
+
+                            conn.profileContextLine()?.let { line ->
+                                MomentCard(
+                                    icon = Icons.Filled.AutoAwesome,
+                                    iconTint = PrimaryBlue.copy(alpha = 0.9f),
+                                    label = "Moment",
+                                    value = line,
                                 )
-                                if (placeBits.isNotEmpty()) {
-                                    MomentRow(
-                                        icon = { Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                                        label = "Place",
-                                        lines = placeBits,
-                                    )
-                                }
-                                conn.profileWhenLine()?.let { whenLine ->
-                                    MomentRow(
-                                        icon = { Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
-                                        label = "Time",
-                                        lines = listOf(whenLine),
-                                    )
-                                }
-                                conn.profileWeatherLine()?.let { w ->
-                                    MomentRow(
-                                        icon = { Icon(Icons.Filled.CloudQueue, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) },
-                                        label = "Weather",
-                                        lines = listOf(w),
-                                    )
-                                }
-                                conn.profileNoiseLine()?.let { n ->
-                                    MomentRow(
-                                        icon = { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
-                                        label = "Ambience",
-                                        lines = listOf(n),
-                                    )
-                                }
+                            }
+                            val placeLine = listOfNotNull(
+                                conn.profilePlaceLine(),
+                                conn.profileAddressDetailLine(),
+                            ).joinToString(" · ").takeIf { it.isNotEmpty() }
+                            placeLine?.let { line ->
+                                MomentCard(
+                                    icon = Icons.Outlined.LocationOn,
+                                    iconTint = LightBlue.copy(alpha = 0.95f),
+                                    label = "Place",
+                                    value = line,
+                                )
+                            }
+                            conn.profileWhenLine()?.let { line ->
+                                MomentCard(
+                                    icon = Icons.Outlined.Schedule,
+                                    iconTint = Color(0xFFFFCC80).copy(alpha = 0.95f),
+                                    label = "Time",
+                                    value = line,
+                                )
+                            }
+                            conn.profileWeatherLine()?.let { line ->
+                                MomentCard(
+                                    icon = Icons.Outlined.Cloud,
+                                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                                    label = "Weather",
+                                    value = line,
+                                )
+                            }
+                            conn.profileNoiseLine()?.let { line ->
+                                MomentCard(
+                                    icon = Icons.Outlined.GraphicEq,
+                                    iconTint = Color(0xFF69F0AE).copy(alpha = 0.9f),
+                                    label = "Ambience",
+                                    value = line,
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -377,45 +422,6 @@ fun UserProfileBottomSheet(
                 else -> {
                     Text("Profile unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MomentRow(
-    icon: @Composable () -> Unit,
-    label: String,
-    lines: List<String>,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Surface(
-            modifier = Modifier.size(40.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                icon()
-            }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            lines.forEach { line ->
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }

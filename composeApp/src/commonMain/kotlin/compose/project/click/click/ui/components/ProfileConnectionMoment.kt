@@ -81,13 +81,6 @@ fun Connection.profileAddressDetailLine(): String? {
     return fromFull.takeIf { it != sem }
 }
 
-fun Connection.profileGeoHintLine(): String? {
-    val lat = geo_location.lat
-    val lon = geo_location.lon
-    if (!lat.isFinite() || !lon.isFinite() || (lat == 0.0 && lon == 0.0)) return null
-    return "${"%.4f".format(lat)}°, ${"%.4f".format(lon)}°"
-}
-
 fun Connection.profileWhenLine(): String? {
     val instant: Instant? = createdUtc?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
         runCatching { Instant.parse(iso) }.getOrNull()
@@ -104,8 +97,7 @@ fun Connection.profileWhenLine(): String? {
         else -> hour24
     }
     val timePart = "$h12:${minute.toString().padStart(2, '0')} $ampm"
-    val tod = timeOfDayUtc?.trim()?.takeIf { it.isNotEmpty() }?.replace('_', ' ')
-    return listOfNotNull(datePart, timePart, tod).joinToString(" · ")
+    return "$datePart · $timePart"
 }
 
 fun Connection.profileWeatherLine(): String? {

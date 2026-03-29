@@ -5,6 +5,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -50,6 +51,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -66,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.getPlatform
 import compose.project.click.click.calls.CallSessionManager
@@ -112,6 +115,8 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
+import kotlin.math.tanh
 import com.mohamedrejeb.calf.ui.dialog.AdaptiveAlertDialog
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
@@ -1381,7 +1386,10 @@ fun ChatView(
                                                         onForward = { msgId ->
                                                             forwardMessageId = msgId
                                                         },
-                                                        onLongPress = { contextMenuMessage = messageWithUser }
+                                                        onLongPress = { contextMenuMessage = messageWithUser },
+                                                        onSwipeReply = {
+                                                            viewModel.startReplyTo(it)
+                                                        },
                                                     )
                                                 }
                                                 if (messageWithUser.message.messageType == "call_log") {
@@ -1497,16 +1505,33 @@ fun ChatView(
                         }
                     }
 
-                    // Reply-to indicator strip
-                    if (replyingTo != null && editingMessageId == null) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        ) {
+                    // Calculate keyboard padding accounting for the Scaffold bottom bar
+                    val density = LocalDensity.current
+                    val imeBottomPx = WindowInsets.ime.getBottom(density)
+                    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
+                    // Subtract system nav bar + approximate Scaffold NavigationBar (~80dp)
+                    val bottomBarPx = with(density) { 80.dp.roundToPx() }
+                    val effectiveImePadding = with(density) {
+                        (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
+                    }
+
+                    val composerStyle = LocalPlatformStyle.current
+                    val composerCorner = if (composerStyle.isIOS) 20.dp else 22.dp
+                    val composerBorderW = if (composerStyle.isIOS) 0.5.dp else 1.dp
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = effectiveImePadding)
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(composerCorner))
+                            .background(Color.White.copy(alpha = composerStyle.glassBackgroundAlpha))
+                            .border(composerBorderW, Color.White.copy(alpha = composerStyle.glassBorderAlpha), RoundedCornerShape(composerCorner))
+                    ) {
+                        if (replyingTo != null && editingMessageId == null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -1542,33 +1567,17 @@ fun ChatView(
                                     )
                                 }
                             }
+                            HorizontalDivider(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                            )
                         }
-                    }
-
-                    // Calculate keyboard padding accounting for the Scaffold bottom bar
-                    val density = LocalDensity.current
-                    val imeBottomPx = WindowInsets.ime.getBottom(density)
-                    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
-                    // Subtract system nav bar + approximate Scaffold NavigationBar (~80dp)
-                    val bottomBarPx = with(density) { 80.dp.roundToPx() }
-                    val effectiveImePadding = with(density) {
-                        (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
-                    }
-
-                    val composerStyle = LocalPlatformStyle.current
-                    val composerCorner = if (composerStyle.isIOS) 20.dp else 22.dp
-                    val composerBorderW = if (composerStyle.isIOS) 0.5.dp else 1.dp
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = effectiveImePadding)
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .clip(RoundedCornerShape(composerCorner))
-                            .background(Color.White.copy(alpha = composerStyle.glassBackgroundAlpha))
-                            .border(composerBorderW, Color.White.copy(alpha = composerStyle.glassBorderAlpha), RoundedCornerShape(composerCorner))
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                         val fieldCorner = if (composerStyle.isIOS) 10.dp else 12.dp
                         OutlinedTextField(
                             value = messageInput,
@@ -1638,6 +1647,7 @@ fun ChatView(
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                                 modifier = Modifier.size(20.dp)
                             )
+                        }
                         }
                     }
                 }
@@ -2102,6 +2112,27 @@ private fun CallLogSystemRow(message: Message) {
     }
 }
 
+/** 0..1 — how close the swipe is to triggering reply (for hint UI). */
+private fun replyDragHintProgress(rawTravelPx: Float, isSent: Boolean, thresholdPx: Float): Float {
+    if (thresholdPx <= 0f) return 0f
+    val directed = if (isSent) (-rawTravelPx).coerceAtLeast(0f) else rawTravelPx.coerceAtLeast(0f)
+    return (directed / thresholdPx).coerceIn(0f, 1f)
+}
+
+/** Maps finger travel to on-screen offset with rubber-band resistance (asymptotic cap). */
+private fun swipeRubberVisual(directedTravel: Float, maxVisual: Float): Float {
+    if (directedTravel == 0f) return 0f
+    val cap = maxVisual.coerceAtLeast(1f)
+    val a = kotlin.math.abs(directedTravel)
+    val t = tanh((a / (cap * 1.75f)).toDouble()).toFloat()
+    val sgn = when {
+        directedTravel > 0f -> 1f
+        directedTravel < 0f -> -1f
+        else -> 0f
+    }
+    return sgn * cap * t
+}
+
 @Composable
 fun ChatMessageBubble(
     messageWithUser: MessageWithUser,
@@ -2109,7 +2140,9 @@ fun ChatMessageBubble(
     reactions: List<compose.project.click.click.data.models.MessageReaction> = emptyList(),
     onToggleReaction: (String) -> Unit = {},
     onForward: (String) -> Unit,
-    onLongPress: (MessageWithUser) -> Unit = {}
+    onLongPress: (MessageWithUser) -> Unit = {},
+    /** Horizontal swipe toward the center of the screen starts a reply (same idea as drag L→R on incoming). */
+    onSwipeReply: (MessageWithUser) -> Unit = {},
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -2132,174 +2165,234 @@ fun ChatMessageBubble(
         .entries
         .sortedByDescending { it.value }
 
+    val density = LocalDensity.current
+    val swipeThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
+    val maxSwipeVisualPx = remember(density) { with(density) { 56.dp.toPx() } }
+    var rawSwipeTravelPx by remember(message.id) { mutableFloatStateOf(0f) }
+    val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
+    val messageWithUserState = rememberUpdatedState(messageWithUser)
+
+    val swipeModifier = Modifier
+        .pointerInput(message.id, isSent, swipeThresholdPx, maxSwipeVisualPx) {
+            detectHorizontalDragGestures(
+                onHorizontalDrag = { _, dx ->
+                    rawSwipeTravelPx = (rawSwipeTravelPx + dx).coerceIn(-280f, 280f)
+                },
+                onDragEnd = {
+                    if (isSent) {
+                        if (rawSwipeTravelPx <= -swipeThresholdPx) {
+                            onSwipeReplyState.value(messageWithUserState.value)
+                        }
+                    } else {
+                        if (rawSwipeTravelPx >= swipeThresholdPx) {
+                            onSwipeReplyState.value(messageWithUserState.value)
+                        }
+                    }
+                    rawSwipeTravelPx = 0f
+                },
+                onDragCancel = { rawSwipeTravelPx = 0f },
+            )
+        }
+        .offset {
+            val directed = if (isSent) rawSwipeTravelPx.coerceAtMost(0f) else rawSwipeTravelPx.coerceAtLeast(0f)
+            IntOffset(swipeRubberVisual(directed, maxSwipeVisualPx).roundToInt(), 0)
+        }
+
+    val hintProgress = replyDragHintProgress(rawSwipeTravelPx, isSent, swipeThresholdPx)
+    val hintAlpha = (0.35f + 0.65f * hintProgress).coerceIn(0f, 1f)
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp),
-            horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
+                .padding(horizontal = 6.dp)
+                .then(swipeModifier)
         ) {
-            if (isSent) {
-                // ── Sent bubble: violet gradient ─────────────────────────────────
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 280.dp)
-                        .clip(sentShape)
-                        .background(sentGradient)
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = { onLongPress(messageWithUser) }
-                        )
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Column {
-                        replyRef?.let { r ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 6.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.Black.copy(alpha = 0.12f))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "Reply",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.55f)
-                                )
-                                Text(
-                                    text = r.replyToContent.ifBlank { "Message" },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.78f),
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        Text(
-                            text = message.content,
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        // "(edited)" label for edited messages
-                        if (message.timeEdited != null) {
-                            Text(
-                                text = "(edited)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.5f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = formatMessageTime(message.timeCreated),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.65f),
-                            modifier = Modifier.align(Alignment.End)
-                        )
-                        Text(
-                            text = if (message.isRead) "Read" else "Sent",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.55f),
-                            modifier = Modifier.align(Alignment.End)
-                        )
-                    }
-                }
-            } else {
-                // ── Received bubble: glass-style surface ──────────────────────────
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 280.dp)
-                        .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
-                        .clip(receivedShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = { onLongPress(messageWithUser) }
-                        )
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Column {
-                        replyRef?.let { r ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 6.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "Reply",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    text = r.replyToContent.ifBlank { "Message" },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        Text(
-                            text = message.content,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        // "(edited)" label for edited messages
-                        if (message.timeEdited != null) {
-                            Text(
-                                text = "(edited)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = formatMessageTime(message.timeCreated),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.align(Alignment.End)
-                        )
-                    }
-                }
-            }
-        }
-
-        // ── Reaction chips row below the bubble ────────────────────────────────
-        if (reactionGroups.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            Column(
+                modifier = Modifier.align(if (isSent) Alignment.CenterEnd else Alignment.CenterStart),
+                horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
             ) {
-                reactionGroups.forEach { (emoji, count) ->
-                    val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
-                    Box(
+                if (hintProgress > 0.06f) {
+                    Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (isOwnReaction) PrimaryBlue.copy(alpha = 0.25f)
-                                else Color.White.copy(alpha = 0.08f)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = if (isOwnReaction) PrimaryBlue.copy(alpha = 0.5f)
-                                else Color.White.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .clickable { onToggleReaction(emoji) }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .background(LightBlue.copy(alpha = 0.18f + 0.2f * hintProgress))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(
-                            text = if (count > 1) "$emoji $count" else emoji,
-                            fontSize = 13.sp,
-                            color = Color.White
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Reply,
+                            contentDescription = null,
+                            tint = LightBlue.copy(alpha = hintAlpha),
+                            modifier = Modifier.size(18.dp),
                         )
+                        Text(
+                            text = "Release to reply",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = hintAlpha),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                if (isSent) {
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 280.dp)
+                            .clip(sentShape)
+                            .background(sentGradient)
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = { onLongPress(messageWithUser) },
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Column {
+                            replyRef?.let { r ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.Black.copy(alpha = 0.12f))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "Reply",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.55f),
+                                    )
+                                    Text(
+                                        text = r.replyToContent.ifBlank { "Message" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.78f),
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Text(
+                                text = message.content,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (message.timeEdited != null) {
+                                Text(
+                                    text = "(edited)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = formatMessageTime(message.timeCreated),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.65f),
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                            Text(
+                                text = if (message.isRead) "Read" else "Sent",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.55f),
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 280.dp)
+                            .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
+                            .clip(receivedShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = { onLongPress(messageWithUser) },
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Column {
+                            replyRef?.let { r ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "Reply",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                    Text(
+                                        text = r.replyToContent.ifBlank { "Message" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Text(
+                                text = message.content,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (message.timeEdited != null) {
+                                Text(
+                                    text = "(edited)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = formatMessageTime(message.timeCreated),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
+                    }
+                }
+
+                if (reactionGroups.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        reactionGroups.forEach { (emoji, count) ->
+                            val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (isOwnReaction) PrimaryBlue.copy(alpha = 0.25f)
+                                        else Color.White.copy(alpha = 0.08f),
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isOwnReaction) PrimaryBlue.copy(alpha = 0.5f)
+                                        else Color.White.copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(12.dp),
+                                    )
+                                    .clickable { onToggleReaction(emoji) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = if (count > 1) "$emoji $count" else emoji,
+                                    fontSize = 13.sp,
+                                    color = Color.White,
+                                )
+                            }
+                        }
                     }
                 }
             }

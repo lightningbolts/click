@@ -19,6 +19,7 @@ import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.track
 import io.github.jan.supabase.realtime.RealtimeChannel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -150,16 +151,8 @@ class SupabaseChatRepository(
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val presenceFlow = channel.presenceChangeFlow()
 
-            try {
-                channel.subscribe(blockUntilSubscribed = true)
-                channel.track(buildJsonObject { put("userId", userId) })
-            } catch (e: Exception) {
-                println("ChatRepository: startGlobalPresence failed: ${e.message}")
-                scope.cancel()
-                return@withLock
-            }
-
-            val presenceJob = scope.launch {
+            /** Register before subscribe so the initial presence sync is not dropped (matches web `sync` handler). */
+            val presenceJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
                     presenceFlow.collect { action ->
                         action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
@@ -174,6 +167,16 @@ class SupabaseChatRepository(
                     }
                 } catch (_: Exception) {
                 }
+            }
+
+            try {
+                channel.subscribe(blockUntilSubscribed = true)
+                channel.track(buildJsonObject { put("userId", userId) })
+            } catch (e: Exception) {
+                println("ChatRepository: startGlobalPresence failed: ${e.message}")
+                presenceJob.cancel()
+                scope.cancel()
+                return@withLock
             }
 
             val presenceRefreshJob = scope.launch {
@@ -1058,26 +1061,7 @@ class SupabaseChatRepository(
             val broadcastFlow = channel.broadcastFlow<TypingBroadcastPayload>(event = "typing")
             val presenceFlow = channel.presenceChangeFlow()
 
-            try {
-                channel.subscribe(blockUntilSubscribed = true)
-                channel.track(buildJsonObject { put("userId", currentUserId) })
-            } catch (e: Exception) {
-                println("ChatRepository: join chat ephemeral failed: ${e.message}")
-                scope.cancel()
-                return
-            }
-
-            val broadcastJob = scope.launch {
-                try {
-                    broadcastFlow.collect { payload ->
-                        if (payload.userId != currentUserId) {
-                            typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-            }
-            val presenceJob = scope.launch {
+            val presenceJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
                     presenceFlow.collect { action ->
                         action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
@@ -1089,6 +1073,27 @@ class SupabaseChatRepository(
                             userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
                         }
                         peerOnline.value = peerUserId in presenceKeysOnline
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
+            try {
+                channel.subscribe(blockUntilSubscribed = true)
+                channel.track(buildJsonObject { put("userId", currentUserId) })
+            } catch (e: Exception) {
+                println("ChatRepository: join chat ephemeral failed: ${e.message}")
+                presenceJob.cancel()
+                scope.cancel()
+                return
+            }
+
+            val broadcastJob = scope.launch {
+                try {
+                    broadcastFlow.collect { payload ->
+                        if (payload.userId != currentUserId) {
+                            typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
+                        }
                     }
                 } catch (_: Exception) {
                 }
