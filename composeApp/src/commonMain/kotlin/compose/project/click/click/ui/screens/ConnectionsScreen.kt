@@ -5,12 +5,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -18,7 +21,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -51,7 +56,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -115,8 +121,9 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.absoluteValue
+import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.tanh
+import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.dialog.AdaptiveAlertDialog
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
@@ -1518,6 +1525,7 @@ fun ChatView(
                     val composerStyle = LocalPlatformStyle.current
                     val composerCorner = if (composerStyle.isIOS) 20.dp else 22.dp
                     val composerBorderW = if (composerStyle.isIOS) 0.5.dp else 1.dp
+                    val replyBannerVisible = replyingTo != null && editingMessageId == null
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1527,50 +1535,66 @@ fun ChatView(
                             .background(Color.White.copy(alpha = composerStyle.glassBackgroundAlpha))
                             .border(composerBorderW, Color.White.copy(alpha = composerStyle.glassBorderAlpha), RoundedCornerShape(composerCorner))
                     ) {
-                        if (replyingTo != null && editingMessageId == null) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Reply,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Replying to ${replyingTo!!.user.name ?: "message"}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        replySnippetForMetadata(replyingTo!!.message.content, maxLen = 100),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { viewModel.clearReplyTarget() },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "Cancel reply",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                        Crossfade(
+                            targetState = replyBannerVisible,
+                            animationSpec = tween(320, easing = FastOutSlowInEasing),
+                            modifier = Modifier.fillMaxWidth(),
+                            label = "replyComposerBanner",
+                        ) { showBanner ->
+                            if (!showBanner) {
+                                Spacer(Modifier.height(0.dp).fillMaxWidth())
+                            } else {
+                                val rt = replyingTo
+                                if (rt == null) {
+                                    Spacer(Modifier.height(0.dp).fillMaxWidth())
+                                } else {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.Reply,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    "Replying to ${rt.user.name ?: "message"}",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                                Text(
+                                                    replySnippetForMetadata(rt.message.content, maxLen = 100),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { viewModel.clearReplyTarget() },
+                                                modifier = Modifier.size(28.dp),
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.Close,
+                                                    contentDescription = "Cancel reply",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
+                                        }
+                                        HorizontalDivider(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                        )
+                                    }
                                 }
                             }
-                            HorizontalDivider(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                            )
                         }
                         Row(
                             modifier = Modifier
@@ -2032,20 +2056,17 @@ private fun AnimatedVisibilityChatBubble(
     LaunchedEffect(messageId) {
         visible = true
     }
-    val bounce = spring<Float>(
-        dampingRatio = Spring.DampingRatioMediumBouncy,
-        stiffness = Spring.StiffnessLow
-    )
+    val enterFade = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
+    val enterSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
+    val exitSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(bounce) +
-            slideInHorizontally { full -> if (isSent) full / 3 else -full / 3 } +
-            scaleIn(bounce, initialScale = 0.9f),
+        enter = fadeIn(enterFade) +
+            slideInVertically(animationSpec = enterSlide, initialOffsetY = { it / 10 }) +
+            scaleIn(enterFade, initialScale = 0.97f),
         exit = fadeOut(animationSpec = tween(140)) +
-            slideOutHorizontally(animationSpec = tween(200)) { full ->
-                if (isSent) full / 4 else -full / 4
-            } +
-            scaleOut(animationSpec = tween(200), targetScale = 0.92f)
+            slideOutVertically(animationSpec = exitSlide, targetOffsetY = { it / 12 }) +
+            scaleOut(animationSpec = tween(200), targetScale = 0.96f)
     ) {
         content()
     }
@@ -2119,18 +2140,97 @@ private fun replyDragHintProgress(rawTravelPx: Float, isSent: Boolean, threshold
     return (directed / thresholdPx).coerceIn(0f, 1f)
 }
 
-/** Maps finger travel to on-screen offset with rubber-band resistance (asymptotic cap). */
-private fun swipeRubberVisual(directedTravel: Float, maxVisual: Float): Float {
-    if (directedTravel == 0f) return 0f
-    val cap = maxVisual.coerceAtLeast(1f)
-    val a = kotlin.math.abs(directedTravel)
-    val t = tanh((a / (cap * 1.75f)).toDouble()).toFloat()
-    val sgn = when {
-        directedTravel > 0f -> 1f
-        directedTravel < 0f -> -1f
-        else -> 0f
+/**
+ * Maps finger travel → bubble translation: **quadratic** for the first pixels (zero slope at 0 so
+ * nothing “snaps”), then **linear** to the cap, then rubber. Paired with [swipeRawTravelFromVisual]
+ * for picking up mid-settle.
+ */
+private fun swipeVisualFromRawTravel(
+    rawTravelPx: Float,
+    isSent: Boolean,
+    maxVisualPx: Float,
+    softKneePx: Float,
+    trackGain: Float,
+    overflowRubberGain: Float,
+): Float {
+    val cap = maxVisualPx.coerceAtLeast(1f)
+    val directed = if (isSent) (-rawTravelPx).coerceAtLeast(0f) else rawTravelPx.coerceAtLeast(0f)
+    if (directed <= 0f) return 0f
+
+    val d1 = softKneePx.coerceAtLeast(1f)
+    val gain = trackGain.coerceIn(0.01f, 1f)
+    val k = gain / (2f * d1)
+    val v1 = k * d1 * d1
+    val rubber = overflowRubberGain.coerceAtLeast(0.001f)
+    val dReach = d1 + (cap - v1) / gain
+
+    val magnitude = when {
+        directed <= d1 -> k * directed * directed
+        directed <= dReach -> v1 + gain * (directed - d1)
+        else -> cap + (directed - dReach) * rubber
     }
-    return sgn * cap * t
+    return if (isSent) -magnitude else magnitude
+}
+
+/** Inverse of [swipeVisualFromRawTravel]. */
+private fun swipeRawTravelFromVisual(
+    visualPx: Float,
+    isSent: Boolean,
+    maxVisualPx: Float,
+    softKneePx: Float,
+    trackGain: Float,
+    overflowRubberGain: Float,
+): Float {
+    val cap = maxVisualPx.coerceAtLeast(1f)
+    val v = if (isSent) (-visualPx).coerceAtLeast(0f) else visualPx.coerceAtLeast(0f)
+    if (v <= 0f) return 0f
+
+    val d1 = softKneePx.coerceAtLeast(1f)
+    val gain = trackGain.coerceIn(0.01f, 1f)
+    val k = gain / (2f * d1)
+    val v1 = k * d1 * d1
+    val rubber = overflowRubberGain.coerceAtLeast(0.001f)
+    val dReach = d1 + (cap - v1) / gain
+
+    val directedRaw = when {
+        v <= v1 -> sqrt((v / k).coerceAtLeast(0f))
+        v <= cap -> d1 + (v - v1) / gain
+        else -> dReach + (v - cap) / rubber
+    }
+    return if (isSent) -directedRaw else directedRaw
+}
+
+/** Reply affordance drawn **behind** the bubble; uncovered as the bubble slides (no layout gutter). */
+@Composable
+private fun ReplySwipeSideIcon(
+    hintProgress: Float,
+    hintAlpha: Float,
+    modifier: Modifier = Modifier,
+) {
+    val t = hintProgress.coerceIn(0f, 1f)
+    val smooth = t * t * (3f - 2f * t)
+    val scale = 0.82f + 0.18f * smooth
+    val visibility = smooth * (0.28f + 0.72f * smooth).coerceIn(0f, 1f)
+    val a = (visibility * hintAlpha).coerceIn(0f, 1f)
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                alpha = a
+                scaleX = scale
+                scaleY = scale
+            }
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(LightBlue.copy(alpha = (0.18f + 0.22f * smooth) * a)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Reply,
+            contentDescription = "Reply",
+            tint = LightBlue.copy(alpha = a),
+            modifier = Modifier.size(22.dp),
+        )
+    }
 }
 
 @Composable
@@ -2166,40 +2266,87 @@ fun ChatMessageBubble(
         .sortedByDescending { it.value }
 
     val density = LocalDensity.current
-    val swipeThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
-    val maxSwipeVisualPx = remember(density) { with(density) { 56.dp.toPx() } }
+    val swipeThresholdPx = remember(density) { with(density) { 52.dp.toPx() } }
+    val maxSwipeVisualPx = remember(density) { with(density) { 42.dp.toPx() } }
+    val swipeSoftKneePx = remember(density) { with(density) { 5.dp.toPx() } }
+    val swipeTrackGain = remember { 0.56f }
+    val swipeOverflowRubberGain = remember { 0.12f }
     var rawSwipeTravelPx by remember(message.id) { mutableFloatStateOf(0f) }
+    var displayVisualPx by remember(message.id) { mutableFloatStateOf(0f) }
+    var swipeDragging by remember(message.id) { mutableStateOf(false) }
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
     val messageWithUserState = rememberUpdatedState(messageWithUser)
+    val scope = rememberCoroutineScope()
+    var swipeSettleJob by remember(message.id) { mutableStateOf<Job?>(null) }
 
-    val swipeModifier = Modifier
-        .pointerInput(message.id, isSent, swipeThresholdPx, maxSwipeVisualPx) {
-            detectHorizontalDragGestures(
-                onHorizontalDrag = { _, dx ->
-                    rawSwipeTravelPx = (rawSwipeTravelPx + dx).coerceIn(-280f, 280f)
-                },
-                onDragEnd = {
-                    if (isSent) {
-                        if (rawSwipeTravelPx <= -swipeThresholdPx) {
-                            onSwipeReplyState.value(messageWithUserState.value)
-                        }
-                    } else {
-                        if (rawSwipeTravelPx >= swipeThresholdPx) {
-                            onSwipeReplyState.value(messageWithUserState.value)
-                        }
+    val draggableState = rememberDraggableState { delta ->
+        swipeSettleJob?.cancel()
+        swipeSettleJob = null
+        rawSwipeTravelPx = (rawSwipeTravelPx + delta).coerceIn(-340f, 340f)
+        displayVisualPx = swipeVisualFromRawTravel(
+            rawTravelPx = rawSwipeTravelPx,
+            isSent = isSent,
+            maxVisualPx = maxSwipeVisualPx,
+            softKneePx = swipeSoftKneePx,
+            trackGain = swipeTrackGain,
+            overflowRubberGain = swipeOverflowRubberGain,
+        )
+    }
+
+    val swipeDragModifier = Modifier.draggable(
+        state = draggableState,
+        orientation = Orientation.Horizontal,
+        onDragStarted = {
+            swipeSettleJob?.cancel()
+            swipeSettleJob = null
+            swipeDragging = true
+            if (displayVisualPx != 0f) {
+                rawSwipeTravelPx = swipeRawTravelFromVisual(
+                    visualPx = displayVisualPx,
+                    isSent = isSent,
+                    maxVisualPx = maxSwipeVisualPx,
+                    softKneePx = swipeSoftKneePx,
+                    trackGain = swipeTrackGain,
+                    overflowRubberGain = swipeOverflowRubberGain,
+                ).coerceIn(-340f, 340f)
+            }
+        },
+        onDragStopped = {
+            swipeDragging = false
+            val raw = rawSwipeTravelPx
+            val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
+            if (shouldReply) {
+                onSwipeReplyState.value(messageWithUserState.value)
+            }
+            rawSwipeTravelPx = 0f
+            swipeSettleJob = scope.launch {
+                try {
+                    animate(
+                        initialValue = displayVisualPx,
+                        targetValue = 0f,
+                        animationSpec = tween(
+                            durationMillis = 480,
+                            easing = CubicBezierEasing(0.17f, 0.88f, 0.24f, 1f),
+                        ),
+                    ) { v, _ ->
+                        displayVisualPx = v
                     }
-                    rawSwipeTravelPx = 0f
-                },
-                onDragCancel = { rawSwipeTravelPx = 0f },
-            )
-        }
-        .offset {
-            val directed = if (isSent) rawSwipeTravelPx.coerceAtMost(0f) else rawSwipeTravelPx.coerceAtLeast(0f)
-            IntOffset(swipeRubberVisual(directed, maxSwipeVisualPx).roundToInt(), 0)
-        }
+                } finally {
+                    swipeSettleJob = null
+                }
+            }
+        },
+    )
 
-    val hintProgress = replyDragHintProgress(rawSwipeTravelPx, isSent, swipeThresholdPx)
-    val hintAlpha = (0.35f + 0.65f * hintProgress).coerceIn(0f, 1f)
+    val dragging = swipeDragging
+    val rawHintP = replyDragHintProgress(rawSwipeTravelPx, isSent, swipeThresholdPx)
+    val visualHintP = (abs(displayVisualPx) / maxSwipeVisualPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
+    val hintProgress = if (dragging) maxOf(rawHintP, visualHintP) else visualHintP
+    val hintAlpha = if (dragging) {
+        (0.52f + 0.48f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
+    } else {
+        (0.38f + 0.5f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -2209,37 +2356,29 @@ fun ChatMessageBubble(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 6.dp)
-                .then(swipeModifier)
+                .then(swipeDragModifier)
         ) {
-            Column(
-                modifier = Modifier.align(if (isSent) Alignment.CenterEnd else Alignment.CenterStart),
-                horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
-            ) {
-                if (hintProgress > 0.06f) {
-                    Row(
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (!isSent) {
+                    ReplySwipeSideIcon(
+                        hintProgress = hintProgress,
+                        hintAlpha = hintAlpha,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(LightBlue.copy(alpha = 0.18f + 0.2f * hintProgress))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Reply,
-                            contentDescription = null,
-                            tint = LightBlue.copy(alpha = hintAlpha),
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text(
-                            text = "Release to reply",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = hintAlpha),
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
+                            .align(Alignment.CenterStart)
+                            .zIndex(0f),
+                    )
                 }
-
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .zIndex(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
+                ) {
+                    Column(
+                        horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
+                        modifier = Modifier.graphicsLayer { translationX = displayVisualPx },
+                    ) {
                 if (isSent) {
                     Box(
                         modifier = Modifier
@@ -2394,6 +2533,17 @@ fun ChatMessageBubble(
                             }
                         }
                     }
+                }
+                }
+                }
+                if (isSent) {
+                    ReplySwipeSideIcon(
+                        hintProgress = hintProgress,
+                        hintAlpha = hintAlpha,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .zIndex(0f),
+                    )
                 }
             }
         }
