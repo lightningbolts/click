@@ -107,8 +107,7 @@ BEGIN
         full_name,
         first_name,
         last_name,
-        birthday,
-        created_at
+        birthday
     )
     VALUES (
         NEW.id,
@@ -117,8 +116,7 @@ BEGIN
         v_display,
         v_first,
         v_last,
-        v_birth,
-        (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint
+        v_birth
     )
     ON CONFLICT (id) DO UPDATE SET
         email      = EXCLUDED.email,
