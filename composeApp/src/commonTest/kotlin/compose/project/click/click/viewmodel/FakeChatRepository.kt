@@ -156,4 +156,6 @@ class FakeChatRepository(
 
     override suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> =
         null to emptyList()
+
+    override suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String? = null
 }

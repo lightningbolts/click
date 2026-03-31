@@ -7,8 +7,10 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.IcebreakerPrompt
 import compose.project.click.click.data.models.IcebreakerRepository
+import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.replySnippetForMessage
 import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
@@ -47,6 +49,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
+import kotlin.random.Random
 
 @Serializable
 private data class ConnectionRealtimeRow(
@@ -1166,7 +1169,7 @@ class ChatViewModel(
                 val metadata = if (replyTarget != null) {
                     buildJsonObject {
                         put("reply_to_id", replyTarget.message.id)
-                        put("reply_to_content", replySnippetForMetadata(replyTarget.message.content))
+                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
                     }
                 } else {
                     null
@@ -1195,6 +1198,126 @@ class ChatViewModel(
                 _messageInput.value = content
                 updateMessageInput(content)
                 println("Error sending message: ${e.message}")
+            } finally {
+                _isMessageSubmitInProgress.value = false
+            }
+        }
+    }
+
+    fun sendChatImage(bytes: ByteArray, mimeType: String) {
+        if (bytes.isEmpty()) return
+        if (_isMessageSubmitInProgress.value) return
+        val connectionId = currentConnectionId ?: return
+        val userId = _currentUserId.value ?: return
+        val caption = _messageInput.value.trim()
+        _messageSendError.value = null
+        _isMessageSubmitInProgress.value = true
+        viewModelScope.launch {
+            try {
+                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                    _messageSendError.value = "Failed to send — unable to start chat"
+                    return@launch
+                }
+                val ext = extensionForChatMedia(mimeType, isImage = true)
+                val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
+                val path = "$userId/$apiChatId/$unique.$ext"
+                val url = chatRepository.uploadChatMedia(bytes, path, mimeType) ?: run {
+                    _messageSendError.value = "Failed to upload photo"
+                    return@launch
+                }
+                val replyTarget = _replyingTo.value
+                val meta = if (replyTarget != null) {
+                    buildJsonObject {
+                        put("media_url", url)
+                        put("reply_to_id", replyTarget.message.id)
+                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                    }
+                } else {
+                    buildJsonObject { put("media_url", url) }
+                }
+                val message = chatRepository.sendMessage(
+                    chatId = apiChatId,
+                    userId = userId,
+                    content = if (caption.isEmpty()) " " else caption,
+                    messageType = ChatMessageType.IMAGE,
+                    metadata = meta,
+                )
+                if (message != null) {
+                    _messageInput.value = ""
+                    updateMessageInput("")
+                    _replyingTo.value = null
+                    val currentUser = resolveMessageUser(userId, apiChatId)
+                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                        ?: User(id = userId, name = "You", createdAt = 0L)
+                    applyInsertedMessage(message, currentUser, userId)
+                    activateConnectionIfPending(connectionId)
+                } else {
+                    _messageSendError.value = "Failed to send photo"
+                }
+            } catch (e: Exception) {
+                _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
+            } finally {
+                _isMessageSubmitInProgress.value = false
+            }
+        }
+    }
+
+    fun sendChatAudio(bytes: ByteArray, mimeType: String, durationSeconds: Int?) {
+        if (bytes.isEmpty()) return
+        if (_isMessageSubmitInProgress.value) return
+        val connectionId = currentConnectionId ?: return
+        val userId = _currentUserId.value ?: return
+        val caption = _messageInput.value.trim()
+        _messageSendError.value = null
+        _isMessageSubmitInProgress.value = true
+        viewModelScope.launch {
+            try {
+                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                    _messageSendError.value = "Failed to send — unable to start chat"
+                    return@launch
+                }
+                val ext = extensionForChatMedia(mimeType, isImage = false)
+                val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
+                val path = "$userId/$apiChatId/$unique.$ext"
+                val url = chatRepository.uploadChatMedia(bytes, path, mimeType) ?: run {
+                    _messageSendError.value = "Failed to upload audio"
+                    return@launch
+                }
+                val replyTarget = _replyingTo.value
+                val meta = if (replyTarget != null) {
+                    buildJsonObject {
+                        put("media_url", url)
+                        if (durationSeconds != null) put("duration_seconds", durationSeconds)
+                        put("reply_to_id", replyTarget.message.id)
+                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                    }
+                } else {
+                    buildJsonObject {
+                        put("media_url", url)
+                        if (durationSeconds != null) put("duration_seconds", durationSeconds)
+                    }
+                }
+                val message = chatRepository.sendMessage(
+                    chatId = apiChatId,
+                    userId = userId,
+                    content = if (caption.isEmpty()) " " else caption,
+                    messageType = ChatMessageType.AUDIO,
+                    metadata = meta,
+                )
+                if (message != null) {
+                    _messageInput.value = ""
+                    updateMessageInput("")
+                    _replyingTo.value = null
+                    val currentUser = resolveMessageUser(userId, apiChatId)
+                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                        ?: User(id = userId, name = "You", createdAt = 0L)
+                    applyInsertedMessage(message, currentUser, userId)
+                    activateConnectionIfPending(connectionId)
+                } else {
+                    _messageSendError.value = "Failed to send voice message"
+                }
+            } catch (e: Exception) {
+                _messageSendError.value = "Failed to send audio — ${e.message ?: "error"}"
             } finally {
                 _isMessageSubmitInProgress.value = false
             }
@@ -1967,6 +2090,21 @@ class ChatViewModel(
             }
         }
         activeReactionSubscription = null
+    }
+
+    private fun extensionForChatMedia(mime: String, isImage: Boolean): String {
+        val m = mime.lowercase()
+        return when {
+            m.contains("png") -> "png"
+            m.contains("webp") -> "webp"
+            m.contains("jpeg") || m.contains("jpg") -> "jpg"
+            m.contains("mpeg") || m.contains("mp3") -> "mp3"
+            m.contains("mp4") || m.contains("m4a") || m.contains("aac") -> "m4a"
+            m.contains("ogg") -> "ogg"
+            m.contains("wav") -> "wav"
+            isImage -> "jpg"
+            else -> "bin"
+        }
     }
 }
 

@@ -17,6 +17,7 @@ import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
+import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,6 +25,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         configureScreenWakeForCalls(intent)
+
+        AndroidChatImageSaveContext.applicationContext = applicationContext
 
         // Initialize token storage with application context
         initTokenStorage(applicationContext)

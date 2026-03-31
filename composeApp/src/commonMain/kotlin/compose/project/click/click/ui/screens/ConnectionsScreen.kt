@@ -2,6 +2,7 @@ package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,10 +52,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,7 +83,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.getPlatform
 import compose.project.click.click.calls.CallSessionManager
@@ -105,12 +113,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.IcebreakerPrompt
+import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.copyableText
+import compose.project.click.click.data.models.mediaUrlOrNull
+import compose.project.click.click.data.models.previewLabel
+import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.User
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.ChatListState
 import compose.project.click.click.viewmodel.ChatMessagesState
+import compose.project.click.click.ui.chat.saveChatImageToGallery
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -128,6 +142,10 @@ import com.mohamedrejeb.calf.ui.dialog.AdaptiveAlertDialog
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import coil3.compose.AsyncImage
+import compose.project.click.click.media.rememberChatAudioPlayer
+import compose.project.click.click.ui.chat.ChatLinkifyText
+import compose.project.click.click.ui.chat.rememberChatMediaPickers
 
 @Composable
 fun ConnectionsScreen(
@@ -832,7 +850,7 @@ fun ConnectionItem(
                 } else {
                     val previewText = when {
                         previewNeedsRefresh -> "New message"
-                        lastMessage != null -> lastMessage.content
+                        lastMessage != null -> lastMessage.previewLabel()
                         connection.last_message_at != null -> "New message"
                         else -> "Start a conversation"
                     }
@@ -960,7 +978,6 @@ fun ChatView(
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val chatOverlayPointerIntercept = remember { MutableInteractionSource() }
     val sendButtonAbsorbInteraction = remember { MutableInteractionSource() }
 
     // Connection action sheet (archive, delete, report, block)
@@ -1014,14 +1031,7 @@ fun ChatView(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                indication = null,
-                interactionSource = chatOverlayPointerIntercept
-            ) { }
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
@@ -1083,6 +1093,11 @@ fun ChatView(
                     val typingPeerLabel = remember(chatDetails.otherUser.name) {
                         "${chatDetails.otherUser.name ?: "Someone"} is typing"
                     }
+                    val mediaPickers = rememberChatMediaPickers(
+                        onImagePicked = { bytes, mime -> viewModel.sendChatImage(bytes, mime) },
+                        onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
+                    )
+                    var attachmentMenuExpanded by remember { mutableStateOf(false) }
 
                     val messageContentModifier = Modifier
                         .weight(1f)
@@ -1594,10 +1609,107 @@ fun ChatView(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                         val fieldCorner = if (composerStyle.isIOS) 10.dp else 12.dp
+                        val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
+                        Box(modifier = Modifier.zIndex(4f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(CircleShape)
+                                    .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
+                                    .clickable(
+                                        enabled = !isSending,
+                                        onClick = { attachmentMenuExpanded = true },
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Filled.Add,
+                                    contentDescription = "Attach",
+                                    tint = attachTint,
+                                    modifier = Modifier.size(26.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = attachmentMenuExpanded,
+                                onDismissRequest = { attachmentMenuExpanded = false },
+                                shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = if (composerStyle.isIOS) {
+                                    BorderStroke(
+                                        0.5.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                    )
+                                } else {
+                                    null
+                                },
+                                tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
+                                shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
+                                modifier = Modifier.widthIn(min = 220.dp),
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Photo library",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.Image,
+                                            contentDescription = null,
+                                            tint = PrimaryBlue.copy(alpha = 0.9f),
+                                        )
+                                    },
+                                    onClick = {
+                                        attachmentMenuExpanded = false
+                                        mediaPickers.openPhotoLibrary()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Take photo",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.PhotoCamera,
+                                            contentDescription = null,
+                                            tint = PrimaryBlue.copy(alpha = 0.9f),
+                                        )
+                                    },
+                                    onClick = {
+                                        attachmentMenuExpanded = false
+                                        mediaPickers.openCamera()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Voice message",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.Mic,
+                                            contentDescription = null,
+                                            tint = PrimaryBlue.copy(alpha = 0.9f),
+                                        )
+                                    },
+                                    onClick = {
+                                        attachmentMenuExpanded = false
+                                        mediaPickers.openVoiceRecorder()
+                                    },
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                         OutlinedTextField(
                             value = messageInput,
                             onValueChange = {
@@ -2228,6 +2340,64 @@ private fun ReplySwipeSideIcon(
     }
 }
 
+private fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
+    val totalSec = when {
+        durationMs > 0 -> (durationMs / 1000).toInt()
+        fallbackSec != null && fallbackSec > 0 -> fallbackSec
+        else -> 0
+    }
+    val m = totalSec / 60
+    val s = totalSec % 60
+    return "$m:${s.toString().padStart(2, '0')}"
+}
+
+@Composable
+private fun ChatAudioBubbleRow(
+    mediaUrl: String,
+    durationSeconds: Int?,
+    contentColor: Color,
+    accentColor: Color,
+) {
+    val player = rememberChatAudioPlayer(mediaUrl)
+    val label = formatChatAudioDuration(player.durationMs, durationSeconds)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        IconButton(onClick = { player.togglePlayPause() }) {
+            Icon(
+                imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (player.isPlaying) "Pause" else "Play",
+                tint = accentColor,
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = contentColor,
+        )
+    }
+}
+
+@Composable
+private fun ChatMessageOverflowButton(
+    onClick: () -> Unit,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(30.dp),
+    ) {
+        Icon(
+            Icons.Outlined.MoreVert,
+            contentDescription = "Message actions",
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
 @Composable
 fun ChatMessageBubble(
     messageWithUser: MessageWithUser,
@@ -2246,6 +2416,10 @@ fun ChatMessageBubble(
     }
     val isSent = messageWithUser.isSent
     val replyRef = message.replyRef()
+    val mt = message.messageType.lowercase()
+    val mediaUrl = message.mediaUrlOrNull()
+    val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
+    val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
 
     // Gradient for sent bubbles — matches brand violet palette
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
@@ -2375,18 +2549,113 @@ fun ChatMessageBubble(
                         modifier = Modifier.graphicsLayer { translationX = displayVisualPx },
                     ) {
                 if (isSent) {
+                    if (isImageMessage) {
+                        Column(
+                            modifier = Modifier.widthIn(max = 280.dp),
+                            horizontalAlignment = Alignment.Start,
+                        ) {
+                            replyRef?.let { r ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "Reply",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                    )
+                                    Text(
+                                        text = r.replyToContent.ifBlank { "Message" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                AsyncImage(
+                                    model = mediaUrl,
+                                    contentDescription = "Photo",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 220.dp)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(6.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.35f))
+                                            .align(Alignment.Center),
+                                    )
+                                    ChatMessageOverflowButton(
+                                        onClick = { onLongPress(messageWithUser) },
+                                        tint = Color.White.copy(alpha = 0.92f),
+                                        modifier = Modifier.align(Alignment.Center),
+                                    )
+                                }
+                            }
+                            val capImg = message.content.trim()
+                            if (capImg.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                SelectionContainer {
+                                    ChatLinkifyText(
+                                        text = capImg,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        linkColor = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
+                            if (message.timeEdited != null) {
+                                Text(
+                                    text = "(edited)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = formatMessageTime(message.timeCreated),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                            Text(
+                                text = if (message.isRead) "Read" else "Sent",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
+                    } else {
                     Box(
                         modifier = Modifier
                             .widthIn(max = 280.dp)
                             .clip(sentShape)
                             .background(sentGradient)
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = { onLongPress(messageWithUser) },
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
-                        Column {
+                        ChatMessageOverflowButton(
+                            onClick = { onLongPress(messageWithUser) },
+                            tint = Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.align(Alignment.TopEnd),
+                        )
+                        Column(
+                            modifier = Modifier.padding(end = 22.dp),
+                            horizontalAlignment = Alignment.Start,
+                        ) {
                             replyRef?.let { r ->
                                 Column(
                                     modifier = Modifier
@@ -2410,11 +2679,42 @@ fun ChatMessageBubble(
                                     )
                                 }
                             }
-                            Text(
-                                text = message.content,
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                            when {
+                                mt == ChatMessageType.AUDIO && mediaUrl != null -> {
+                                    ChatAudioBubbleRow(
+                                        mediaUrl = mediaUrl,
+                                        durationSeconds = audioDurSec,
+                                        contentColor = Color.White,
+                                        accentColor = Color.White,
+                                    )
+                                    val cap = message.content.trim()
+                                    if (cap.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        SelectionContainer {
+                                            ChatLinkifyText(
+                                                text = cap,
+                                                color = Color.White,
+                                                linkColor = Color(0xFFB7E0FF),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    SelectionContainer {
+                                        Column {
+                                            if (message.content.isNotBlank()) {
+                                                ChatLinkifyText(
+                                                    text = message.content,
+                                                    color = Color.White,
+                                                    linkColor = Color(0xFFB7E0FF),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             if (message.timeEdited != null) {
                                 Text(
                                     text = "(edited)",
@@ -2437,20 +2737,13 @@ fun ChatMessageBubble(
                             )
                         }
                     }
+                    }
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = 280.dp)
-                            .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
-                            .clip(receivedShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = { onLongPress(messageWithUser) },
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
-                        Column {
+                    if (isImageMessage) {
+                        Column(
+                            modifier = Modifier.widthIn(max = 280.dp),
+                            horizontalAlignment = Alignment.Start,
+                        ) {
                             replyRef?.let { r ->
                                 Column(
                                     modifier = Modifier
@@ -2474,11 +2767,50 @@ fun ChatMessageBubble(
                                     )
                                 }
                             }
-                            Text(
-                                text = message.content,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                            val onBody = MaterialTheme.colorScheme.onSurface
+                            val linkC = MaterialTheme.colorScheme.primary
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                AsyncImage(
+                                    model = mediaUrl,
+                                    contentDescription = "Photo",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 220.dp)
+                                        .border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(16.dp)),
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(6.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.22f))
+                                            .align(Alignment.Center),
+                                    )
+                                    ChatMessageOverflowButton(
+                                        onClick = { onLongPress(messageWithUser) },
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.95f),
+                                        modifier = Modifier.align(Alignment.Center),
+                                    )
+                                }
+                            }
+                            val capRx = message.content.trim()
+                            if (capRx.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                SelectionContainer {
+                                    ChatLinkifyText(
+                                        text = capRx,
+                                        color = onBody,
+                                        linkColor = linkC,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
                             if (message.timeEdited != null) {
                                 Text(
                                     text = "(edited)",
@@ -2494,6 +2826,101 @@ fun ChatMessageBubble(
                                 modifier = Modifier.align(Alignment.End),
                             )
                         }
+                    } else {
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 280.dp)
+                            .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
+                            .clip(receivedShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        ChatMessageOverflowButton(
+                            onClick = { onLongPress(messageWithUser) },
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                            modifier = Modifier.align(Alignment.TopEnd),
+                        )
+                        Column(
+                            modifier = Modifier.padding(end = 22.dp),
+                            horizontalAlignment = Alignment.Start,
+                        ) {
+                            replyRef?.let { r ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "Reply",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    )
+                                    Text(
+                                        text = r.replyToContent.ifBlank { "Message" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            val onBody = MaterialTheme.colorScheme.onSurface
+                            val linkC = MaterialTheme.colorScheme.primary
+                            when {
+                                mt == ChatMessageType.AUDIO && mediaUrl != null -> {
+                                    ChatAudioBubbleRow(
+                                        mediaUrl = mediaUrl,
+                                        durationSeconds = audioDurSec,
+                                        contentColor = onBody,
+                                        accentColor = linkC,
+                                    )
+                                    val cap = message.content.trim()
+                                    if (cap.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        SelectionContainer {
+                                            ChatLinkifyText(
+                                                text = cap,
+                                                color = onBody,
+                                                linkColor = linkC,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    SelectionContainer {
+                                        Column {
+                                            if (message.content.isNotBlank()) {
+                                                ChatLinkifyText(
+                                                    text = message.content,
+                                                    color = onBody,
+                                                    linkColor = linkC,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (message.timeEdited != null) {
+                                Text(
+                                    text = "(edited)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = formatMessageTime(message.timeCreated),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
+                    }
                     }
                 }
 
@@ -2680,10 +3107,37 @@ private fun MessageActionSheet(
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
+            val imageUrl = message.mediaUrlOrNull()
+            if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
+                ListItem(
+                    headlineContent = {
+                        Text("Download image", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.Save,
+                            contentDescription = "Download image",
+                            tint = LightBlue
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        scope.launch {
+                            saveChatImageToGallery(imageUrl).onSuccess { dismiss() }
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
+
             // ── Copy action ───────────────────────────────────────────────────
             ListItem(
                 headlineContent = {
-                    Text("Copy", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (message.messageType.lowercase() == ChatMessageType.IMAGE) "Copy caption & link"
+                        else "Copy",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
                 },
                 leadingContent = {
                     Icon(
@@ -2693,7 +3147,7 @@ private fun MessageActionSheet(
                     )
                 },
                 modifier = Modifier.clickable {
-                    clipboardManager.setText(AnnotatedString(message.content))
+                    clipboardManager.setText(AnnotatedString(message.copyableText()))
                     dismiss()
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)

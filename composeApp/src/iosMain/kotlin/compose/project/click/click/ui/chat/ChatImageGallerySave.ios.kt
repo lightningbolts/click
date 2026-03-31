@@ -1,0 +1,68 @@
+package compose.project.click.click.ui.chat
+
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.darwin.Darwin
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsBytes
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSTemporaryDirectory
+import platform.posix.fclose
+import platform.posix.fopen
+import platform.posix.fwrite
+import platform.Photos.PHAccessLevelAddOnly
+import platform.Photos.PHAuthorizationStatusAuthorized
+import platform.Photos.PHAuthorizationStatusLimited
+import platform.Photos.PHPhotoLibrary
+import platform.UIKit.UIImage
+import platform.UIKit.UIImageWriteToSavedPhotosAlbum
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+
+@OptIn(ExperimentalForeignApi::class)
+actual suspend fun saveChatImageToGallery(imageUrl: String): Result<Unit> = withContext(Dispatchers.Default) {
+    runCatching {
+        val client = HttpClient(Darwin)
+        val bytes = try {
+            client.get(imageUrl).bodyAsBytes()
+        } finally {
+            client.close()
+        }
+        if (bytes.isEmpty()) error("Empty image response")
+
+        val path = NSTemporaryDirectory().trimEnd('/') + "/click_dl_${kotlin.random.Random.nextLong()}.jpg"
+        val f = fopen(path, "wb") ?: error("fopen")
+        bytes.usePinned { pinned ->
+            val n = fwrite(pinned.addressOf(0), 1u, bytes.size.toULong(), f)
+            if (n != bytes.size.toULong()) error("short write")
+        }
+        fclose(f)
+        val image = UIImage.imageWithContentsOfFile(path) ?: error("Invalid image data")
+
+        val authorized = suspendCoroutine { cont ->
+            val status = PHPhotoLibrary.authorizationStatusForAccessLevel(PHAccessLevelAddOnly)
+            when (status) {
+                PHAuthorizationStatusAuthorized, PHAuthorizationStatusLimited -> cont.resume(true)
+                else -> {
+                    PHPhotoLibrary.requestAuthorizationForAccessLevel(PHAccessLevelAddOnly) { newStatus ->
+                        cont.resume(
+                            newStatus == PHAuthorizationStatusAuthorized ||
+                                newStatus == PHAuthorizationStatusLimited,
+                        )
+                    }
+                }
+            }
+        }
+        if (!authorized) error("Photo library access denied")
+
+        withContext(Dispatchers.Main) {
+            UIImageWriteToSavedPhotosAlbum(image, null, null, null)
+        }
+        NSFileManager.defaultManager.removeItemAtPath(path, error = null)
+        Unit
+    }
+}

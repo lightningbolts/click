@@ -1,11 +1,13 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.*
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.notifications.ChatPushNotifier
+import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
@@ -1183,6 +1185,19 @@ class SupabaseChatRepository(
             else -> emptyList()
         }
         return resolvedChatId to messages
+    }
+
+    override suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String? {
+        if (bytes.isEmpty()) return null
+        return try {
+            supabase.storage.from(CHAT_MEDIA_BUCKET).upload(objectPath, bytes) {
+                upsert = true
+            }
+            supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(objectPath)
+        } catch (e: Exception) {
+            println("ChatRepository: uploadChatMedia failed: ${e.message}")
+            null
+        }
     }
 }
 

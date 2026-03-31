@@ -213,8 +213,10 @@ data class Message(
     val timeEdited: Long? = null,
     @SerialName("is_read")
     val isRead: Boolean = false,
+    /** See [compose.project.click.click.data.models.ChatMessageType] — e.g. `text`, `image`, `audio`, `call_log`. */
     @SerialName("message_type")
     val messageType: String = "text",
+    /** JSON payload; for media messages typically includes `media_url` and optional `duration_seconds`. */
     val metadata: JsonElement? = null,
 )
 
