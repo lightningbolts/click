@@ -45,6 +45,13 @@ fun InteractiveSwipeBackContainer(
     enabled: Boolean,
     edgeSwipeWidth: Dp = 24.dp,
     onBack: () -> Unit,
+    /**
+     * When false, the layer behind the sliding [currentContent] does not paint a solid
+     * [MaterialTheme] background. Use this when the real destination UI is already
+     * composed underneath this container (e.g. a persistent list) so the swipe reveals
+     * that surface instead of a duplicate subtree with fresh scroll state.
+     */
+    opaquePreviousBackground: Boolean = true,
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit
 ) {
@@ -121,7 +128,13 @@ fun InteractiveSwipeBackContainer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+                    .then(
+                        if (opaquePreviousBackground) {
+                            Modifier.background(MaterialTheme.colorScheme.background)
+                        } else {
+                            Modifier
+                        }
+                    )
             ) {
                 previousContent()
             }

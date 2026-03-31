@@ -43,7 +43,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -254,17 +254,10 @@ fun ConnectionsScreen(
                         enabled = true,
                         edgeSwipeWidth = 44.dp,
                         onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
-                        previousContent = {
-                            // Must mirror the persistent list layer so the edge swipe reveals
-                            // the connections UI instead of an empty (black) placeholder.
-                            ConnectionsListView(
-                                viewModel = viewModel,
-                                searchQuery = searchQuery,
-                                onChatSelected = { chatId -> openChat(chatId) },
-                                onNavigateToLocationSettings = onNavigateToLocationSettings,
-                                onUserProfileClick = { profileUserId = it }
-                            )
-                        },
+                        // Persistent ConnectionsListView is composed below AnimatedContent; do not
+                        // duplicate the list here (a second rememberLazyListState starts at index 0).
+                        opaquePreviousBackground = false,
+                        previousContent = {},
                         currentContent = {
                             ChatView(
                                 viewModel = viewModel,
@@ -359,7 +352,9 @@ fun ConnectionsListView(
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
 
-    val connectionsLazyListState = rememberLazyListState()
+    val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState(0, 0)
+    }
 
     // Build effective chat list: prefer ViewModel Success data, fall back to
     // cached connections during Loading/Error to prevent blank-screen flashes.
