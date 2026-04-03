@@ -40,6 +40,7 @@ class AndroidAmbientNoiseMonitor(
         if (minBufferSize <= 0) return@withContext null
 
         val audioRecord = try {
+            @Suppress("MissingPermission") // Guarded by hasPermission above
             AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 sampleRate,

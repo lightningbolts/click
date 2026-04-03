@@ -47,6 +47,8 @@ private data class HubMessageRow(
     @SerialName("created_at") val createdAt: String,
 )
 
+private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
+
 class HubChatViewModel(
     private val hubId: String,
     private val realtimeChannelName: String,
@@ -83,7 +85,7 @@ class HubChatViewModel(
     }
 
     fun updateDraft(text: String) {
-        _draft.value = text
+        _draft.value = text.take(HUB_CHAT_DRAFT_MAX_LENGTH)
     }
 
     private fun userIdFromPresence(p: Presence): String? {

@@ -90,9 +90,14 @@ actual object PlatformIncomingCallUi {
             } else {
                 @Suppress("DEPRECATION")
                 val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                vibrator?.vibrate(
-                    VibrationEffect.createWaveform(longArrayOf(0, 1000, 500, 1000, 500, 1000), 0)
-                )
+                val pattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(
+                        VibrationEffect.createWaveform(pattern, 0)
+                    )
+                } else {
+                    vibrator?.vibrate(pattern, -1)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Unable to start vibration: ${e.message}")

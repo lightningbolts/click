@@ -270,7 +270,7 @@ fun InterestTaggingScreen(
             ) {
                 OutlinedTextField(
                     value = customInterestInput,
-                    onValueChange = { customInterestInput = it },
+                    onValueChange = { customInterestInput = it.take(25) },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Add your own interest") },
                     singleLine = true,
