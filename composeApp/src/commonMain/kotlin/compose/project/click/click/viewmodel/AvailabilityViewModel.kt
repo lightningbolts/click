@@ -237,7 +237,7 @@ class AvailabilityViewModel(
     }
 
     fun updateIntentTagInput(raw: String) {
-        _intentTagInput.value = raw.replace(Regex("\\s+"), " ").take(AVAILABILITY_INTENT_TAG_MAX_LENGTH)
+        _intentTagInput.value = raw.replace(WHITESPACE_REGEX, " ").take(AVAILABILITY_INTENT_TAG_MAX_LENGTH)
     }
 
     fun setIntentDuration(duration: AvailabilityIntentDuration) {
@@ -253,6 +253,7 @@ class AvailabilityViewModel(
      */
     fun submitAvailabilityIntent(onSuccess: () -> Unit) {
         viewModelScope.launch {
+            if (_intentSubmitting.value) return@launch
             val userId = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
             if (userId == null) {
                 _intentSubmitError.value = "Sign in to share availability."
@@ -286,5 +287,6 @@ class AvailabilityViewModel(
 
     companion object {
         const val AVAILABILITY_INTENT_TAG_MAX_LENGTH = 25
+        private val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

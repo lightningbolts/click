@@ -96,7 +96,7 @@ actual object PlatformIncomingCallUi {
                         VibrationEffect.createWaveform(pattern, 0)
                     )
                 } else {
-                    vibrator?.vibrate(pattern, -1)
+                    vibrator?.vibrate(pattern, 0)
                 }
             }
         } catch (e: Exception) {
