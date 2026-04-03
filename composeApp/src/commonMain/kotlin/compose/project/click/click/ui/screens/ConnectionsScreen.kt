@@ -138,7 +138,6 @@ import kotlin.math.absoluteValue
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
-import com.mohamedrejeb.calf.ui.dialog.AdaptiveAlertDialog
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
@@ -1614,17 +1613,19 @@ fun ChatView(
                         ) {
                         val fieldCorner = if (composerStyle.isIOS) 10.dp else 12.dp
                         val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
-                        Box(modifier = Modifier.zIndex(4f)) {
-                            Box(
+                        // wrapContentSize so DropdownMenu measurement cannot widen the hit target (iOS)
+                        Box(
+                            modifier = Modifier
+                                .wrapContentSize(align = Alignment.TopStart)
+                                .zIndex(4f)
+                        ) {
+                            IconButton(
+                                onClick = { attachmentMenuExpanded = true },
+                                enabled = !isSending,
                                 modifier = Modifier
                                     .size(52.dp)
                                     .clip(CircleShape)
-                                    .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
-                                    .clickable(
-                                        enabled = !isSending,
-                                        onClick = { attachmentMenuExpanded = true },
-                                    ),
-                                contentAlignment = Alignment.Center,
+                                    .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f)),
                             ) {
                                 Icon(
                                     Icons.Filled.Add,
@@ -2351,6 +2352,13 @@ private fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String
     return "$m:${s.toString().padStart(2, '0')}"
 }
 
+private fun formatChatAudioPositionMs(ms: Long): String {
+    val totalSec = (ms / 1000).toInt().coerceAtLeast(0)
+    val m = totalSec / 60
+    val s = totalSec % 60
+    return "$m:${s.toString().padStart(2, '0')}"
+}
+
 @Composable
 private fun ChatAudioBubbleRow(
     mediaUrl: String,
@@ -2358,24 +2366,73 @@ private fun ChatAudioBubbleRow(
     contentColor: Color,
     accentColor: Color,
 ) {
-    val player = rememberChatAudioPlayer(mediaUrl)
-    val label = formatChatAudioDuration(player.durationMs, durationSeconds)
+    val hintMs = remember(durationSeconds) {
+        durationSeconds?.takeIf { it > 0 }?.times(1000L) ?: 0L
+    }
+    val player = rememberChatAudioPlayer(mediaUrl, durationHintMs = hintMs)
+    val durationMs = remember(player.durationMs, hintMs) {
+        when {
+            player.durationMs > 0 -> player.durationMs
+            hintMs > 0 -> hintMs
+            else -> 1L
+        }
+    }
+    var draggingSlider by remember(mediaUrl) { mutableStateOf(false) }
+    var sliderValue by remember(mediaUrl) { mutableFloatStateOf(0f) }
+    LaunchedEffect(player.positionMs, durationMs, player.isPlaying, draggingSlider) {
+        if (!draggingSlider && durationMs > 0) {
+            sliderValue = (player.positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+        }
+    }
+    val positionDisplayMs = if (draggingSlider) {
+        (sliderValue * durationMs).toLong()
+    } else {
+        player.positionMs
+    }
+    val timeLabel = "${formatChatAudioPositionMs(positionDisplayMs)} / ${formatChatAudioDuration(durationMs, durationSeconds)}"
     Row(
+        modifier = Modifier.widthIn(min = 0.dp, max = 280.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        IconButton(onClick = { player.togglePlayPause() }) {
+        IconButton(
+            onClick = { player.togglePlayPause() },
+            modifier = Modifier.size(40.dp),
+        ) {
             Icon(
                 imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = if (player.isPlaying) "Pause" else "Play",
                 tint = accentColor,
             )
         }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = contentColor,
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Slider(
+                value = sliderValue,
+                onValueChange = {
+                    draggingSlider = true
+                    sliderValue = it
+                },
+                onValueChangeFinished = {
+                    player.seekTo((sliderValue * durationMs).toLong().coerceIn(0L, durationMs))
+                    draggingSlider = false
+                },
+                valueRange = 0f..1f,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = accentColor,
+                    activeTrackColor = accentColor,
+                    inactiveTrackColor = contentColor.copy(alpha = 0.28f),
+                ),
+            )
+            Text(
+                text = timeLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.9f),
+            )
+        }
     }
 }
 
@@ -2997,14 +3054,16 @@ private fun MessageActionSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
-    val sheetStyle = LocalPlatformStyle.current
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = if (sheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
-        dragHandle = if (sheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
+        val onSurface = MaterialTheme.colorScheme.onSurface
+        val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3022,13 +3081,13 @@ private fun MessageActionSheet(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = onSurface
                         )
                     }
                     Text(
                         "Choose emoji",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = onSurface,
                         modifier = Modifier.padding(start = 4.dp)
                     )
                 }
@@ -3058,13 +3117,13 @@ private fun MessageActionSheet(
             // ── Reply ─────────────────────────────────────────────────────────
             ListItem(
                 headlineContent = {
-                    Text("Reply", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    Text("Reply", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                 },
                 leadingContent = {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Reply,
                         contentDescription = "Reply",
-                        tint = LightBlue
+                        tint = PrimaryBlue
                     )
                 },
                 modifier = Modifier.clickable {
@@ -3102,22 +3161,22 @@ private fun MessageActionSheet(
                 onClick = { emojiPickMode = true },
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                Text("More emojis…", color = LightBlue)
+                Text("More emojis…", color = PrimaryBlue)
             }
 
-            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
 
             val imageUrl = message.mediaUrlOrNull()
             if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
                 ListItem(
                     headlineContent = {
-                        Text("Download image", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                        Text("Download image", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                     },
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Outlined.Save,
                             contentDescription = "Download image",
-                            tint = LightBlue
+                            tint = PrimaryBlue
                         )
                     },
                     modifier = Modifier.clickable {
@@ -3135,7 +3194,7 @@ private fun MessageActionSheet(
                     Text(
                         if (message.messageType.lowercase() == ChatMessageType.IMAGE) "Copy caption & link"
                         else "Copy",
-                        color = Color.White,
+                        color = onSurface,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 },
@@ -3143,7 +3202,7 @@ private fun MessageActionSheet(
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = "Copy",
-                        tint = Color.White.copy(alpha = 0.7f)
+                        tint = onVariant
                     )
                 },
                 modifier = Modifier.clickable {
@@ -3157,13 +3216,13 @@ private fun MessageActionSheet(
             if (isSent) {
                 ListItem(
                     headlineContent = {
-                        Text("Edit", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                        Text("Edit", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                     },
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "Edit message",
-                            tint = LightBlue
+                            tint = PrimaryBlue
                         )
                     },
                     modifier = Modifier.clickable {
@@ -3197,32 +3256,50 @@ private fun MessageActionSheet(
 
     // ── Delete message confirmation dialog ──────────────────────────────────
     if (showDeleteMessageConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                showDeleteMessageConfirm = false
-                showDeleteMessageFinalConfirm = true
+        AlertDialog(
+            onDismissRequest = { showDeleteMessageConfirm = false },
+            title = { Text("Delete Message?") },
+            text = { Text("This message will be permanently deleted. This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteMessageConfirm = false
+                        showDeleteMessageFinalConfirm = true
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
             },
-            onDismiss = { showDeleteMessageConfirm = false },
-            confirmText = "Delete",
-            dismissText = "Cancel",
-            title = "Delete Message?",
-            text = "This message will be permanently deleted. This cannot be undone."
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessageConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
     // ── Final delete confirmation dialog ───────────────────────────────────
     if (showDeleteMessageFinalConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                viewModel.deleteMessage(message.id)
-                showDeleteMessageFinalConfirm = false
-                dismiss()
+        AlertDialog(
+            onDismissRequest = { showDeleteMessageFinalConfirm = false },
+            title = { Text("Delete Message Permanently?") },
+            text = { Text("This action is permanent and cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteMessage(message.id)
+                        showDeleteMessageFinalConfirm = false
+                        dismiss()
+                    }
+                ) {
+                    Text("Yes, Delete", color = MaterialTheme.colorScheme.error)
+                }
             },
-            onDismiss = { showDeleteMessageFinalConfirm = false },
-            confirmText = "Yes, Delete",
-            dismissText = "Cancel",
-            title = "Delete Message Permanently?",
-            text = "This action is permanent and cannot be undone."
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessageFinalConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }
@@ -3258,7 +3335,7 @@ private fun ConnectionActionSheet(
     var finalConfirmTitle by remember { mutableStateOf("") }
     var finalConfirmBody by remember { mutableStateOf("") }
     var finalConfirmButtonLabel by remember { mutableStateOf("") }
-    var finalConfirmButtonColor by remember { mutableStateOf(Color.White) }
+    var finalConfirmButtonColor by remember { mutableStateOf(PrimaryBlue) }
     var finalConfirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     fun dismiss() {
@@ -3280,14 +3357,16 @@ private fun ConnectionActionSheet(
         showFinalConfirm = true
     }
 
-    val actionSheetStyle = LocalPlatformStyle.current
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = if (actionSheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
-        dragHandle = if (actionSheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
+        val onSurface = MaterialTheme.colorScheme.onSurface
+        val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3299,21 +3378,21 @@ private fun ConnectionActionSheet(
                 Text(
                     text = details.otherUser.name ?: "Connection",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = onSurface,
                     modifier = Modifier
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                         .align(Alignment.CenterHorizontally)
                 )
-                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
             }
 
             // ── Nudge ──────────────────────────────────────────────────────────
             ListItem(
                 headlineContent = {
-                    Text("Nudge 👋", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                    Text("Nudge 👋", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                 },
                 supportingContent = {
-                    Text("Send a quick ping", color = Color.White.copy(alpha = 0.5f),
+                    Text("Send a quick ping", color = onVariant,
                         style = MaterialTheme.typography.bodySmall)
                 },
                 modifier = Modifier.clickable {
@@ -3326,15 +3405,15 @@ private fun ConnectionActionSheet(
             if (isArchived) {
                 ListItem(
                     headlineContent = {
-                        Text("Unarchive", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                        Text("Unarchive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                     },
                     supportingContent = {
-                        Text("Move this connection back to Active", color = Color.White.copy(alpha = 0.5f),
+                        Text("Move this connection back to Active", color = onVariant,
                             style = MaterialTheme.typography.bodySmall)
                     },
                     leadingContent = {
                         Icon(Icons.Default.Unarchive, contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.7f))
+                            tint = onVariant)
                     },
                     modifier = Modifier.clickable {
                         showUnarchiveConfirm = true
@@ -3345,15 +3424,15 @@ private fun ConnectionActionSheet(
                 // ── Archive ────────────────────────────────────────────────────
                 ListItem(
                     headlineContent = {
-                        Text("Archive", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+                        Text("Archive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                     },
                     supportingContent = {
-                        Text("Hide this connection (recoverable)", color = Color.White.copy(alpha = 0.5f),
+                        Text("Hide this connection (recoverable)", color = onVariant,
                             style = MaterialTheme.typography.bodySmall)
                     },
                     leadingContent = {
                         Icon(Icons.Default.Archive, contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.7f))
+                            tint = onVariant)
                     },
                     modifier = Modifier.clickable {
                         showArchiveConfirm = true
@@ -3362,7 +3441,7 @@ private fun ConnectionActionSheet(
                 )
             }
 
-            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
 
             // ── Remove Connection ──────────────────────────────────────────────
             ListItem(
@@ -3411,113 +3490,155 @@ private fun ConnectionActionSheet(
     }
 
     if (showUnarchiveConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                showUnarchiveConfirm = false
-                openFinalConfirm(
-                    title = "Confirm Unarchive",
-                    body = "Move this connection back to Active now?",
-                    buttonLabel = "Yes, Unarchive",
-                    buttonColor = PrimaryBlue
+        AlertDialog(
+            onDismissRequest = { showUnarchiveConfirm = false },
+            title = { Text("Unarchive Connection?") },
+            text = { Text("This connection will return to your Active list.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUnarchiveConfirm = false
+                        openFinalConfirm(
+                            title = "Confirm Unarchive",
+                            body = "Move this connection back to Active now?",
+                            buttonLabel = "Yes, Unarchive",
+                            buttonColor = PrimaryBlue
+                        ) {
+                            onUnarchive()
+                        }
+                    }
                 ) {
-                    onUnarchive()
+                    Text("Unarchive")
                 }
             },
-            onDismiss = { showUnarchiveConfirm = false },
-            confirmText = "Unarchive",
-            dismissText = "Cancel",
-            title = "Unarchive Connection?",
-            text = "This connection will return to your Active list."
+            dismissButton = {
+                TextButton(onClick = { showUnarchiveConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
     // ── Archive confirmation dialog ────────────────────────────────────────────
     if (showArchiveConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                showArchiveConfirm = false
-                openFinalConfirm(
-                    title = "Confirm Archive",
-                    body = "Archive this connection now? You can unarchive it later.",
-                    buttonLabel = "Yes, Archive",
-                    buttonColor = PrimaryBlue
+        AlertDialog(
+            onDismissRequest = { showArchiveConfirm = false },
+            title = { Text("Archive Connection?") },
+            text = { Text("This connection will be hidden from your list. You can recover it later.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showArchiveConfirm = false
+                        openFinalConfirm(
+                            title = "Confirm Archive",
+                            body = "Archive this connection now? You can unarchive it later.",
+                            buttonLabel = "Yes, Archive",
+                            buttonColor = PrimaryBlue
+                        ) {
+                            onArchive()
+                        }
+                    }
                 ) {
-                    onArchive()
+                    Text("Archive")
                 }
             },
-            onDismiss = { showArchiveConfirm = false },
-            confirmText = "Archive",
-            dismissText = "Cancel",
-            title = "Archive Connection?",
-            text = "This connection will be hidden from your list. You can recover it later."
+            dismissButton = {
+                TextButton(onClick = { showArchiveConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
     // ── Block confirmation dialog ──────────────────────────────────────────────
     if (showBlockConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                showBlockConfirm = false
-                openFinalConfirm(
-                    title = "Confirm Block",
-                    body = "Block this user and remove this connection? This cannot be undone.",
-                    buttonLabel = "Yes, Block",
-                    buttonColor = Color(0xFFFF4444)
+        AlertDialog(
+            onDismissRequest = { showBlockConfirm = false },
+            title = { Text("Block User?") },
+            text = {
+                Text("They won't be able to contact you and this connection will be removed. This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBlockConfirm = false
+                        openFinalConfirm(
+                            title = "Confirm Block",
+                            body = "Block this user and remove this connection? This cannot be undone.",
+                            buttonLabel = "Yes, Block",
+                            buttonColor = Color(0xFFFF4444)
+                        ) {
+                            onBlock()
+                        }
+                    }
                 ) {
-                    onBlock()
+                    Text("Block", color = MaterialTheme.colorScheme.error)
                 }
             },
-            onDismiss = { showBlockConfirm = false },
-            confirmText = "Block",
-            dismissText = "Cancel",
-            title = "Block User?",
-            text = "They won't be able to contact you and this connection will be removed. This cannot be undone."
+            dismissButton = {
+                TextButton(onClick = { showBlockConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
     // ── Delete confirmation dialog ─────────────────────────────────────────────
     if (showDeleteConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                showDeleteConfirm = false
-                openFinalConfirm(
-                    title = "Confirm Remove",
-                    body = "Permanently remove this connection and all messages? This cannot be undone.",
-                    buttonLabel = "Yes, Remove",
-                    buttonColor = Color(0xFFFF4444)
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Remove Connection?") },
+            text = {
+                Text("This will permanently remove this connection and all messages. This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        openFinalConfirm(
+                            title = "Confirm Remove",
+                            body = "Permanently remove this connection and all messages? This cannot be undone.",
+                            buttonLabel = "Yes, Remove",
+                            buttonColor = Color(0xFFFF4444)
+                        ) {
+                            onDelete()
+                        }
+                    }
                 ) {
-                    onDelete()
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
             },
-            onDismiss = { showDeleteConfirm = false },
-            confirmText = "Remove",
-            dismissText = "Cancel",
-            title = "Remove Connection?",
-            text = "This will permanently remove this connection and all messages. This cannot be undone."
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
     // ── Report reason dialog ───────────────────────────────────────────────────
     if (showReportDialog) {
+        val reportOn = MaterialTheme.colorScheme.onSurface
+        val reportVariant = MaterialTheme.colorScheme.onSurfaceVariant
         AlertDialog(
             onDismissRequest = { showReportDialog = false },
-            title = { Text("Report User", color = Color.White) },
+            title = { Text("Report User", color = reportOn) },
             text = {
                 Column {
                     Text(
                         "Please describe the issue:",
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = reportVariant,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     OutlinedTextField(
                         value = reportReason,
                         onValueChange = { reportReason = it },
-                        placeholder = { Text("Reason for report...", color = Color.White.copy(alpha = 0.4f)) },
+                        placeholder = { Text("Reason for report...", color = reportVariant.copy(alpha = 0.5f)) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedTextColor = reportOn,
+                            unfocusedTextColor = reportOn,
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -3543,30 +3664,44 @@ private fun ConnectionActionSheet(
             },
             dismissButton = {
                 TextButton(onClick = { showReportDialog = false }) {
-                    Text("Cancel", color = LightBlue)
+                    Text("Cancel", color = PrimaryBlue)
                 }
             },
-            containerColor = SurfaceDark
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
     // ── Final destructive-action confirmation dialog ────────────────────────
     if (showFinalConfirm) {
-        AdaptiveAlertDialog(
-            onConfirm = {
-                finalConfirmAction?.invoke()
-                showFinalConfirm = false
-                finalConfirmAction = null
-                dismiss()
-            },
-            onDismiss = {
+        AlertDialog(
+            onDismissRequest = {
                 showFinalConfirm = false
                 finalConfirmAction = null
             },
-            confirmText = finalConfirmButtonLabel,
-            dismissText = "Cancel",
-            title = finalConfirmTitle,
-            text = finalConfirmBody
+            title = { Text(finalConfirmTitle) },
+            text = { Text(finalConfirmBody) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        finalConfirmAction?.invoke()
+                        showFinalConfirm = false
+                        finalConfirmAction = null
+                        dismiss()
+                    }
+                ) {
+                    Text(finalConfirmButtonLabel, color = finalConfirmButtonColor)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showFinalConfirm = false
+                        finalConfirmAction = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

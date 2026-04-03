@@ -23,8 +23,6 @@ import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,12 +74,12 @@ fun ConnectionContextSheet(
         }
     }
 
-    val ctxSheetStyle = LocalPlatformStyle.current
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
-        containerColor = if (ctxSheetStyle.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
-        dragHandle = if (ctxSheetStyle.isIOS) null else {{ BottomSheetDefaults.DragHandle() }},
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         Column(
             modifier = Modifier

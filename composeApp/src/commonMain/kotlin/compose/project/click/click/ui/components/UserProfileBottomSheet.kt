@@ -59,7 +59,6 @@ import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.models.UserPublicProfile
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -125,13 +124,13 @@ fun UserProfileBottomSheet(
         }
     }
 
-    val style = LocalPlatformStyle.current
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = if (style.isIOS) Color.Transparent else BottomSheetDefaults.ContainerColor,
-        dragHandle = if (style.isIOS) null else { { BottomSheetDefaults.DragHandle() } },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         Column(
             modifier = Modifier

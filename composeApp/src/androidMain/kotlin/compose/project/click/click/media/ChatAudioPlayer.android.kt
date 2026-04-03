@@ -9,7 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 
 @Composable
-actual fun rememberChatAudioPlayer(mediaUrl: String): ChatAudioPlayer {
+actual fun rememberChatAudioPlayer(mediaUrl: String, durationHintMs: Long): ChatAudioPlayer {
     val player = remember(mediaUrl) { AndroidChatAudioPlayer(mediaUrl) }
     DisposableEffect(mediaUrl) {
         onDispose { player.dispose() }
@@ -78,6 +78,15 @@ private class AndroidChatAudioPlayer(private val url: String) : ChatAudioPlayer 
             handler.removeCallbacks(tick)
             handler.post(tick)
         }
+    }
+
+    override fun seekTo(positionMs: Long) {
+        val mp = mediaPlayer ?: return
+        if (!prepared) return
+        val d = mp.duration.takeIf { it > 0 } ?: return
+        val clamped = positionMs.coerceIn(0L, d.toLong())
+        mp.seekTo(clamped.toInt())
+        positionPulse.value = positionPulse.value + 1
     }
 
     override fun dispose() {

@@ -7,8 +7,16 @@ interface ChatAudioPlayer {
     val positionMs: Long
     val durationMs: Long
     fun togglePlayPause()
+    fun seekTo(positionMs: Long)
     fun dispose()
 }
 
+/**
+ * @param durationHintMs optional length from message metadata; used on iOS when the player
+ * does not expose duration immediately (slider and labels still work).
+ */
 @Composable
-expect fun rememberChatAudioPlayer(mediaUrl: String): ChatAudioPlayer
+expect fun rememberChatAudioPlayer(
+    mediaUrl: String,
+    durationHintMs: Long = 0L,
+): ChatAudioPlayer
