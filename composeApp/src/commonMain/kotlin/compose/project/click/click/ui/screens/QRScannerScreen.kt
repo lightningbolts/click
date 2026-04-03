@@ -75,6 +75,7 @@ private enum class QrScannerPresentationState {
 fun QRScannerScreen(
     onQRCodeScanned: (String) -> Unit,
     onQRCodeScannedWithToken: ((userId: String, token: String) -> Unit)? = null,
+    onCommunityHubScanned: ((hubId: String) -> Unit)? = null,
     onNavigateBack: () -> Unit
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -138,6 +139,17 @@ fun QRScannerScreen(
             is QrParseResult.Legacy -> {
                 lockAndContinue {
                     onQRCodeScanned(result.userId)
+                }
+            }
+            is QrParseResult.CommunityHub -> {
+                if (onCommunityHubScanned != null) {
+                    lockAndContinue {
+                        onCommunityHubScanned(result.hubId)
+                    }
+                } else {
+                    lastScannedRaw = qrData
+                    errorMessage = "This hub QR needs a newer version of Click."
+                    showError = true
                 }
             }
             is QrParseResult.Invalid -> {

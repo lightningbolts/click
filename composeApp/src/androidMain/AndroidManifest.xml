@@ -48,6 +48,27 @@
                     android:scheme="click"
                     android:host="login"/>
             </intent-filter>
+
+            <!-- Ephemeral community hub: click://hub/{hub_id} -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="click"
+                    android:host="hub"/>
+            </intent-filter>
+
+            <!-- Same hub links via web (e.g. QR opens in browser then opens app) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="click-us.vercel.app"
+                    android:pathPrefix="/hub"/>
+            </intent-filter>
         </activity>
 
         <meta-data

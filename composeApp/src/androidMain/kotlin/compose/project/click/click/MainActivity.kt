@@ -15,6 +15,7 @@ import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
+import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
 import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
 
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
+        handleCommunityHubViewIntent(intent)
 
         setContent {
             App()
@@ -62,6 +64,14 @@ class MainActivity : ComponentActivity() {
         configureScreenWakeForCalls(intent)
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
+        handleCommunityHubViewIntent(intent)
+    }
+
+    private fun handleCommunityHubViewIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uriString = intent.dataString ?: return
+        val hubId = uriString.toHubIdFromClickHubUrl() ?: return
+        ChatDeepLinkManager.setPendingCommunityHub(hubId)
     }
 
     private fun handleChatDeepLinkIntent(intent: Intent?) {

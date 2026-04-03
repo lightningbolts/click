@@ -40,6 +40,11 @@ fun setChatDeepLink(chatId: String) {
     ChatDeepLinkManager.setPendingChat(chatId)
 }
 
+/** iOS (and tests): open ephemeral hub from `click://hub/{id}` or universal link. */
+fun setCommunityHubDeepLink(hubId: String) {
+    ChatDeepLinkManager.setPendingCommunityHub(hubId)
+}
+
 fun handleIncomingCallPush(
     callId: String,
     connectionId: String,

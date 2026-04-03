@@ -74,6 +74,35 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        if let hubId = Self.communityHubId(from: url) {
+            ClickKt.setCommunityHubDeepLink(hubId: hubId)
+            return true
+        }
+        return false
+    }
+
+    private static func communityHubId(from url: URL) -> String? {
+        if url.scheme?.lowercased() == "click", url.host?.lowercased() == "hub" {
+            let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if path.isEmpty { return nil }
+            if path.contains("/") { return nil }
+            return path
+        }
+        if url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
+            guard url.host?.lowercased() == "click-us.vercel.app" else { return nil }
+            let parts = url.path.split(separator: "/").map(String.init)
+            guard parts.count >= 2, parts[0].lowercased() == "hub" else { return nil }
+            let id = parts[1]
+            return id.isEmpty ? nil : id
+        }
+        return nil
+    }
+
     func applicationDidBecomeActive(_ application: UIApplication) {
         // FORCE SYNC: Kotlin is definitely awake now. Push the cached VoIP token!
         if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {

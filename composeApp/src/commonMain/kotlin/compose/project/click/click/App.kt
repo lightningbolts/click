@@ -85,6 +85,8 @@ import kotlin.coroutines.resume
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.viewmodel.ConnectionState
+import compose.project.click.click.data.hub.HubConnectionManager
+import compose.project.click.click.data.hub.HubVerifyResult
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -643,7 +645,10 @@ fun App() {
             val focusManager = LocalFocusManager.current
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
+            var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
+            var hubVerifyInProgress by remember { mutableStateOf(false) }
             val activeScreenKey = when {
+                hubChatArgs != null -> "hub_chat"
                 showMyQRCode -> "my_qr"
                 showQRScanner -> "qr_scanner"
                 showNfcScreen -> "nfc"
@@ -653,6 +658,7 @@ fun App() {
             val canSwipeBackMainRoute = isIOS &&
                 isPrimaryNavRoute(currentRoute) &&
                 currentRoute != NavigationItem.Home.route &&
+                hubChatArgs == null &&
                 !showMyQRCode &&
                 !showQRScanner &&
                 !showNfcScreen &&
@@ -679,8 +685,71 @@ fun App() {
                 }
             }
 
+            val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
+
             // Snackbar for connection success/error feedback
             val snackbarHostState = remember { SnackbarHostState() }
+
+            fun launchCommunityHubJoin(hubId: String) {
+                if (hubId.isBlank() || currentUser.id.isBlank()) return
+                connectionScope.launch {
+                    hubVerifyInProgress = true
+                    try {
+                        requestLocationPermissionIfNeeded(
+                            shouldRequest = !locationService.hasLocationPermission()
+                        )
+                        if (!locationService.hasLocationPermission()) {
+                            snackbarHostState.showSnackbar(
+                                "Location permission is required to join this hub."
+                            )
+                            return@launch
+                        }
+                        val loc = resolveConnectionLocation()
+                        if (loc == null) {
+                            snackbarHostState.showSnackbar(
+                                "Could not read your location. Try again in an open area."
+                            )
+                            return@launch
+                        }
+                        val jwt = tokenStorage.getJwt()
+                        if (jwt.isNullOrBlank()) {
+                            snackbarHostState.showSnackbar(
+                                "Please sign in again to join the hub."
+                            )
+                            return@launch
+                        }
+                        when (
+                            val outcome = HubConnectionManager.verifyProximity(
+                                httpClient = client,
+                                hubId = hubId,
+                                userLat = loc.latitude,
+                                userLong = loc.longitude,
+                                bearerJwt = jwt,
+                            )
+                        ) {
+                            is HubVerifyResult.Success -> {
+                                hubChatArgs = HubChatNavArgs(
+                                    hubId = outcome.hubId,
+                                    realtimeChannel = outcome.channel,
+                                    hubTitle = outcome.name,
+                                )
+                            }
+                            is HubVerifyResult.Failure -> {
+                                snackbarHostState.showSnackbar(outcome.userMessage)
+                            }
+                        }
+                    } finally {
+                        hubVerifyInProgress = false
+                    }
+                }
+            }
+
+            LaunchedEffect(pendingCommunityHubId, currentUser.id) {
+                val hid = pendingCommunityHubId ?: return@LaunchedEffect
+                if (currentUser.id.isBlank()) return@LaunchedEffect
+                ChatDeepLinkManager.consumeCommunityHub()
+                launchCommunityHubJoin(hid)
+            }
             val connectionState by connectionViewModel.connectionState.collectAsState()
             LaunchedEffect(connectionState) {
                 when (val state = connectionState) {
@@ -713,9 +782,16 @@ fun App() {
 
             // Platform back handler — intercepts Android back gesture/button
             compose.project.click.click.ui.components.PlatformBackHandler(
-                enabled = (showMyQRCode || showQRScanner || showNfcScreen || currentRoute != "home") && !iOSSwipeOwnsBack
+                enabled = (
+                    hubChatArgs != null ||
+                        showMyQRCode ||
+                        showQRScanner ||
+                        showNfcScreen ||
+                        currentRoute != "home"
+                    ) && !iOSSwipeOwnsBack
             ) {
                 when {
+                    hubChatArgs != null -> hubChatArgs = null
                     showMyQRCode -> showMyQRCode = false
                     showQRScanner -> showQRScanner = false
                     showNfcScreen -> showNfcScreen = false
@@ -736,6 +812,7 @@ fun App() {
                         currentRoute = currentRoute,
                         onItemSelected = { item ->
                             navigateTo(item.route)
+                            hubChatArgs = null
                             showMyQRCode = false
                             showQRScanner = false
                             showNfcScreen = false
@@ -779,6 +856,9 @@ fun App() {
                                         onNavigateToNfc = { showNfcScreen = true },
                                         onShowMyQRCode = { showMyQRCode = true },
                                         onScanQRCode = { showQRScanner = true },
+                                        onJoinCommunityHub = { hubId ->
+                                            launchCommunityHubJoin(hubId)
+                                        },
                                         onStartChatting = { navigateTo(NavigationItem.Connections.route) }
                                     )
 
@@ -895,6 +975,10 @@ fun App() {
                                                     )
                                                 }
                                             },
+                                            onCommunityHubScanned = { hubId ->
+                                                showQRScanner = false
+                                                launchCommunityHubJoin(hubId)
+                                            },
                                             onNavigateBack = {
                                                 transitionMode = NavigationTransitionMode.Tap
                                                 showQRScanner = false
@@ -960,6 +1044,53 @@ fun App() {
                                             },
                                             previousContent = { renderScreen(previousKey, false) },
                                             currentContent = content
+                                        )
+                                    } else {
+                                        content()
+                                    }
+                                }
+
+                                "hub_chat" -> {
+                                    val previousKey = currentRoute
+                                    val interactive = allowInteractiveSwipeBack &&
+                                        swipeBackEnabled &&
+                                        previousKey != animatedScreen
+                                    val hubArgs = hubChatArgs
+                                    val hubUserId = when (val state = authViewModel.authState) {
+                                        is AuthState.Success -> state.userId
+                                        else -> ""
+                                    }
+
+                                    val content: @Composable () -> Unit = {
+                                        if (hubArgs != null && hubUserId.isNotEmpty()) {
+                                            HubChatScreen(
+                                                args = hubArgs,
+                                                currentUserId = hubUserId,
+                                                onNavigateBack = {
+                                                    transitionMode = NavigationTransitionMode.Tap
+                                                    hubChatArgs = null
+                                                },
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text("Unable to open hub chat.")
+                                            }
+                                        }
+                                    }
+
+                                    if (interactive) {
+                                        InteractiveSwipeBackContainer(
+                                            enabled = true,
+                                            edgeSwipeWidth = 44.dp,
+                                            onBack = {
+                                                transitionMode = NavigationTransitionMode.GestureBack
+                                                hubChatArgs = null
+                                            },
+                                            previousContent = { renderScreen(previousKey, false) },
+                                            currentContent = content,
                                         )
                                     } else {
                                         content()
@@ -1043,7 +1174,8 @@ fun App() {
                                     "search",
                                     "my_qr",
                                     "qr_scanner",
-                                    "nfc"
+                                    "nfc",
+                                    "hub_chat",
                                 )
 
                                 val initialIndex = routeOrder.indexOf(initialState).let { if (it >= 0) it else 0 }
@@ -1073,6 +1205,27 @@ fun App() {
                             label = "app_screen_transition"
                         ) { animatedScreen ->
                             renderScreen(animatedScreen)
+                        }
+
+                        if (hubVerifyInProgress) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.38f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
+                                    Text(
+                                        text = "Verifying you're at the hub…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White,
+                                    )
+                                }
+                            }
                         }
 
                         if (!isInitialLoading && (usingCachedData || pendingConnectionsCount > 0 || appError != null)) {
@@ -1205,7 +1358,8 @@ private fun isSwipeBackScreen(screenKey: String): Boolean {
     return screenKey == "search" ||
         screenKey == "my_qr" ||
         screenKey == "qr_scanner" ||
-        screenKey == "nfc"
+        screenKey == "nfc" ||
+        screenKey == "hub_chat"
 }
 
 private fun isPrimaryNavRoute(route: String): Boolean {
