@@ -391,6 +391,25 @@ data class Connection(
     }
 }
 
+/**
+ * A wingman introduction suggestion returned by the `get_wingman_suggestions` RPC.
+ * Represents two of the current user's connections (A and C) who are NOT yet
+ * connected to each other and share at least 2 interest tags.
+ */
+@Serializable
+data class WingmanSuggestion(
+    @SerialName("user_a_id")
+    val userAId: String,
+    @SerialName("user_a_name")
+    val userAName: String,
+    @SerialName("user_c_id")
+    val userCId: String,
+    @SerialName("user_c_name")
+    val userCName: String,
+    @SerialName("shared_tags")
+    val sharedTags: List<String> = emptyList()
+)
+
 // UI models for chat functionality
 data class ChatWithDetails(
     val chat: Chat,

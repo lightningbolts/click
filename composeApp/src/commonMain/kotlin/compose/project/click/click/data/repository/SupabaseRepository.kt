@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.data.models.UserPublicProfile
 import compose.project.click.click.data.models.UserInterests
+import compose.project.click.click.data.models.WingmanSuggestion
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
 import io.github.jan.supabase.postgrest.from
@@ -738,6 +739,27 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("Error batch-fetching user_interests: ${e.message}")
             emptyMap()
+        }
+    }
+
+    // ==================== Wingman Suggestions ====================
+
+    /**
+     * Fetch wingman introduction suggestions via the `get_wingman_suggestions` RPC.
+     * Returns pairs of the current user's connections who are NOT connected to each
+     * other and share at least 2 interest tags.
+     */
+    suspend fun fetchWingmanSuggestions(currentUserId: String): List<WingmanSuggestion> {
+        return try {
+            supabase.postgrest.rpc(
+                "get_wingman_suggestions",
+                buildJsonObject {
+                    put("current_user_id", currentUserId)
+                }
+            ).decodeList<WingmanSuggestion>()
+        } catch (e: Exception) {
+            println("Error fetching wingman suggestions: ${e.message}")
+            emptyList()
         }
     }
 
