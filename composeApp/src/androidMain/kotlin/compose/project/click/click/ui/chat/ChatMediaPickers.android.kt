@@ -35,7 +35,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import compose.project.click.click.ui.chat.VoiceMessageRecordDialogLayout
 
 @Composable
 actual fun rememberChatMediaPickers(
@@ -151,12 +150,13 @@ private fun VoiceRecordDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var isRecording by remember { mutableStateOf(false) }
+    var phase by remember { mutableStateOf(VoiceRecordUiPhase.Idle) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     val outputFile = remember {
         File(context.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
     }
     var elapsedSec by remember { mutableLongStateOf(0L) }
+    var recordedDurationSec by remember { mutableLongStateOf(0L) }
     var recordStartMs by remember { mutableLongStateOf(0L) }
 
     DisposableEffect(Unit) {
@@ -176,23 +176,33 @@ private fun VoiceRecordDialog(
 
     var waveformSamples by remember { mutableStateOf(List(40) { 0.06f }) }
 
-    LaunchedEffect(isRecording) {
-        if (!isRecording) return@LaunchedEffect
+    LaunchedEffect(phase) {
+        if (phase != VoiceRecordUiPhase.Recording) return@LaunchedEffect
         while (isActive) {
             delay(250)
             elapsedSec = kotlin.math.max(0L, (System.currentTimeMillis() - recordStartMs) / 1000L)
         }
     }
 
-    LaunchedEffect(isRecording, recorder) {
+    LaunchedEffect(phase, recorder) {
         val r = recorder
-        if (!isRecording || r == null) return@LaunchedEffect
+        if (phase != VoiceRecordUiPhase.Recording || r == null) return@LaunchedEffect
         while (isActive) {
             delay(50)
             val amp = r.maxAmplitude.coerceAtLeast(0).toFloat() / 32768f
             val v = (amp * 0.88f + 0.12f).coerceIn(0.08f, 1f)
             waveformSamples = waveformSamples.drop(1) + v
         }
+    }
+
+    val displaySeconds = when (phase) {
+        VoiceRecordUiPhase.Preview -> recordedDurationSec
+        else -> elapsedSec
+    }
+    val previewUrl = if (phase == VoiceRecordUiPhase.Preview && outputFile.exists() && outputFile.length() > 0L) {
+        outputFile.absolutePath
+    } else {
+        null
     }
 
     AlertDialog(
@@ -207,7 +217,7 @@ private fun VoiceRecordDialog(
                 }
             }
             recorder = null
-            isRecording = false
+            phase = VoiceRecordUiPhase.Idle
             if (outputFile.exists()) outputFile.delete()
             onDismiss()
         },
@@ -215,9 +225,10 @@ private fun VoiceRecordDialog(
         text = {
             androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()) {
             VoiceMessageRecordDialogLayout(
-                isRecording = isRecording,
-                elapsedSec = elapsedSec,
+                phase = phase,
+                displaySeconds = displaySeconds,
                 waveformSamples = waveformSamples,
+                previewLocalMediaUrl = previewUrl,
                 onCancel = {
                     runCatching {
                         recorder?.apply {
@@ -229,7 +240,7 @@ private fun VoiceRecordDialog(
                         }
                     }
                     recorder = null
-                    isRecording = false
+                    phase = VoiceRecordUiPhase.Idle
                     if (outputFile.exists()) outputFile.delete()
                     onDismiss()
                 },
@@ -241,10 +252,11 @@ private fun VoiceRecordDialog(
                     recorder = mr
                     recordStartMs = System.currentTimeMillis()
                     elapsedSec = 0L
+                    recordedDurationSec = 0L
                     waveformSamples = List(40) { 0.06f }
-                    isRecording = true
+                    phase = VoiceRecordUiPhase.Recording
                 },
-                onStopSend = {
+                onStopRecording = {
                     runCatching {
                         recorder?.apply {
                             stop()
@@ -252,8 +264,32 @@ private fun VoiceRecordDialog(
                         }
                     }
                     recorder = null
-                    isRecording = false
-                    val durationSec = (System.currentTimeMillis() - recordStartMs) / 1000L
+                    recordedDurationSec = kotlin.math.max(
+                        0L,
+                        (System.currentTimeMillis() - recordStartMs) / 1000L,
+                    )
+                    elapsedSec = recordedDurationSec
+                    phase = VoiceRecordUiPhase.Preview
+                },
+                onReRecord = {
+                    runCatching {
+                        recorder?.apply {
+                            try {
+                                stop()
+                            } catch (_: Exception) {
+                            }
+                            release()
+                        }
+                    }
+                    recorder = null
+                    phase = VoiceRecordUiPhase.Idle
+                    elapsedSec = 0L
+                    recordedDurationSec = 0L
+                    waveformSamples = List(40) { 0.06f }
+                    if (outputFile.exists()) outputFile.delete()
+                },
+                onSend = {
+                    val durationSec = recordedDurationSec
                     scope.launch {
                         val bytes = withContext(Dispatchers.IO) {
                             if (!outputFile.exists() || outputFile.length() == 0L) {

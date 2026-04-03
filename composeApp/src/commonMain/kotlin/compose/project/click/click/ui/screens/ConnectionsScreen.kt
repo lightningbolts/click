@@ -149,8 +149,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import coil3.compose.AsyncImage
 import compose.project.click.click.media.rememberChatAudioPlayer
 import compose.project.click.click.ui.chat.ChatLinkifyText
@@ -3253,7 +3251,7 @@ private fun MessageActionSheet(
     val isSent = messageWithUser.isSent
     val message = messageWithUser.message
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
@@ -3264,20 +3262,24 @@ private fun MessageActionSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
-    AdaptiveBottomSheet(
+    // Material ModalBottomSheet (not Calf): avoids native iOS sheet chrome / white bands in in-app dark mode.
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        adaptiveSheetState = sheetState,
+        sheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
+        val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
         val onSurface = MaterialTheme.colorScheme.onSurface
         val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
+                .background(sheetBg)
                 .padding(bottom = 32.dp)
         ) {
             if (emojiPickMode) {

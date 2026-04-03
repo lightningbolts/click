@@ -186,7 +186,7 @@ private fun IosVoiceRecordDialog(
     onFinished: (ByteArray, Long?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var isRecording by remember { mutableStateOf(false) }
+    var phase by remember { mutableStateOf(VoiceRecordUiPhase.Idle) }
     var recorder by remember { mutableStateOf<AVAudioRecorder?>(null) }
     val outputUrl = remember {
         NSURL.fileURLWithPath(
@@ -194,6 +194,7 @@ private fun IosVoiceRecordDialog(
         )
     }
     var elapsedSec by remember { mutableLongStateOf(0L) }
+    var recordedDurationSec by remember { mutableLongStateOf(0L) }
     var recordStartMs by remember { mutableLongStateOf(0L) }
     var waveformSamples by remember { mutableStateOf(List(40) { 0.06f }) }
 
@@ -221,17 +222,17 @@ private fun IosVoiceRecordDialog(
         }
     }
 
-    LaunchedEffect(isRecording) {
-        if (!isRecording) return@LaunchedEffect
+    LaunchedEffect(phase) {
+        if (phase != VoiceRecordUiPhase.Recording) return@LaunchedEffect
         while (isActive) {
             delay(250)
             elapsedSec = kotlin.math.max(0L, Clock.System.now().toEpochMilliseconds() - recordStartMs) / 1000L
         }
     }
 
-    LaunchedEffect(isRecording, recorder) {
+    LaunchedEffect(phase, recorder) {
         val rec = recorder
-        if (!isRecording || rec == null) return@LaunchedEffect
+        if (phase != VoiceRecordUiPhase.Recording || rec == null) return@LaunchedEffect
         while (isActive) {
             delay(50)
             rec.updateMeters()
@@ -240,6 +241,19 @@ private fun IosVoiceRecordDialog(
             val scaled = (v * 0.88f + 0.12f).coerceIn(0.08f, 1f)
             waveformSamples = waveformSamples.drop(1) + scaled
         }
+    }
+
+    val displaySeconds = when (phase) {
+        VoiceRecordUiPhase.Preview -> recordedDurationSec
+        else -> elapsedSec
+    }
+    val pathForPreview = outputUrl.path
+    val previewFileOk = pathForPreview != null &&
+        NSFileManager.defaultManager.fileExistsAtPath(pathForPreview)
+    val previewUrl = if (phase == VoiceRecordUiPhase.Preview && previewFileOk) {
+        outputUrl.absoluteString
+    } else {
+        null
     }
 
     AlertDialog(
@@ -253,7 +267,7 @@ private fun IosVoiceRecordDialog(
                 }
             }
             recorder = null
-            isRecording = false
+            phase = VoiceRecordUiPhase.Idle
             NSFileManager.defaultManager.removeItemAtURL(outputUrl, error = null)
             onDismiss()
         },
@@ -261,9 +275,10 @@ private fun IosVoiceRecordDialog(
         text = {
             Box(Modifier.fillMaxWidth()) {
                 VoiceMessageRecordDialogLayout(
-                    isRecording = isRecording,
-                    elapsedSec = elapsedSec,
+                    phase = phase,
+                    displaySeconds = displaySeconds,
                     waveformSamples = waveformSamples,
+                    previewLocalMediaUrl = previewUrl,
                     onCancel = {
                         runCatching {
                             recorder?.apply {
@@ -274,7 +289,7 @@ private fun IosVoiceRecordDialog(
                             }
                         }
                         recorder = null
-                        isRecording = false
+                        phase = VoiceRecordUiPhase.Idle
                         NSFileManager.defaultManager.removeItemAtURL(outputUrl, error = null)
                         onDismiss()
                     },
@@ -292,22 +307,43 @@ private fun IosVoiceRecordDialog(
                             recorder = rec
                             recordStartMs = Clock.System.now().toEpochMilliseconds()
                             elapsedSec = 0L
+                            recordedDurationSec = 0L
                             waveformSamples = List(40) { 0.06f }
-                            isRecording = true
+                            phase = VoiceRecordUiPhase.Recording
                         }
                     },
-                    onStopSend = {
+                    onStopRecording = {
                         runCatching {
                             recorder?.apply {
                                 stop()
                             }
                         }
                         recorder = null
-                        isRecording = false
-                        val durationSec = kotlin.math.max(
+                        recordedDurationSec = kotlin.math.max(
                             0L,
                             (Clock.System.now().toEpochMilliseconds() - recordStartMs) / 1000L,
                         )
+                        elapsedSec = recordedDurationSec
+                        phase = VoiceRecordUiPhase.Preview
+                    },
+                    onReRecord = {
+                        runCatching {
+                            recorder?.apply {
+                                try {
+                                    stop()
+                                } catch (_: Throwable) {
+                                }
+                            }
+                        }
+                        recorder = null
+                        phase = VoiceRecordUiPhase.Idle
+                        elapsedSec = 0L
+                        recordedDurationSec = 0L
+                        waveformSamples = List(40) { 0.06f }
+                        NSFileManager.defaultManager.removeItemAtURL(outputUrl, error = null)
+                    },
+                    onSend = {
+                        val durationSec = recordedDurationSec
                         scope.launch {
                             val path = outputUrl.path ?: return@launch
                             val fileData = NSFileManager.defaultManager.contentsAtPath(path)
