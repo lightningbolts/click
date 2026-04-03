@@ -1130,13 +1130,13 @@ fun ChatView(
                         .weight(1f)
                         .fillMaxWidth()
 
-                    // fillMaxSize so no gap above the tab bar passes touches through to ConnectionsListView.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 20.dp, top = topInset, end = 20.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
+                    // Match ConnectionsListView: list rows + composer are full width; only the top bar uses 20.dp gutters.
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, top = topInset, end = 20.dp)
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1334,6 +1334,7 @@ fun ChatView(
                                     )
                                 }
                             }
+                        }
 
                     if (showExpiryBanner) {
                         ExpiryBanner(
@@ -1598,8 +1599,7 @@ fun ChatView(
                     // iOS: ~44dp matches comfortable body text + cursor; Android unchanged.
                     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
                     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
-                    // Match header/message column width: avoid extra horizontal inset on iOS.
-                    val composerRowHPad = if (composerStyle.isIOS) 0.dp else 8.dp
+                    val composerRowHPad = 8.dp
                     val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
                     val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
                     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
@@ -1937,7 +1937,6 @@ fun ChatView(
                         }
                         }
                     }
-                        }
                     }
                 }
             }
