@@ -3,6 +3,8 @@ package compose.project.click.click.ui.components
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -61,6 +63,7 @@ fun InteractiveSwipeBackContainer(
     var settleJob by remember { mutableStateOf<Job?>(null) }
     val settleScope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val edgeTapInteraction = remember { MutableInteractionSource() }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
@@ -160,11 +163,17 @@ fun InteractiveSwipeBackContainer(
         }
 
         if (enabled) {
+            // Consume taps in the margin: draggable alone does not block clicks to content underneath
+            // (e.g. ConnectionsListView) when opaquePreviousBackground is false.
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
                     .width(edgeSwipeWidth)
+                    .clickable(
+                        indication = null,
+                        interactionSource = edgeTapInteraction,
+                    ) { }
                     .draggable(
                         state = dragState,
                         orientation = Orientation.Horizontal,

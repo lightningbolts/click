@@ -1,12 +1,14 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -69,11 +71,15 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
@@ -85,6 +91,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.getPlatform
 import compose.project.click.click.calls.CallSessionManager
@@ -243,6 +251,23 @@ fun ConnectionsScreen(
                 onUserProfileClick = { profileUserId = it }
             )
 
+            // Sits under the chat overlay; any pointer that misses the overlay (Compose "holes")
+            // hits this layer first and is consumed so the persistent list never activates.
+            if (selectedChatId != null) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                )
+            }
+
             AnimatedContent(
                 targetState = selectedChatId,
                 transitionSpec = {
@@ -272,7 +297,7 @@ fun ConnectionsScreen(
                     InteractiveSwipeBackContainer(
                         enabled = true,
                         // Narrow strip: full-width edge felt heavy and pushed composer inset off-balance.
-                        edgeSwipeWidth = 20.dp,
+                        edgeSwipeWidth = 12.dp,
                         onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
                         // Persistent ConnectionsListView is composed below AnimatedContent; do not
                         // duplicate the list here (a second rememberLazyListState starts at index 0).
@@ -1105,8 +1130,13 @@ fun ChatView(
                         .weight(1f)
                         .fillMaxWidth()
 
-                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                    // fillMaxSize so no gap above the tab bar passes touches through to ConnectionsListView.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = 20.dp, top = topInset, end = 20.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1304,8 +1334,6 @@ fun ChatView(
                                     )
                                 }
                             }
-                        }
-                    }
 
                     if (showExpiryBanner) {
                         ExpiryBanner(
@@ -1567,21 +1595,37 @@ fun ChatView(
 
                     val composerStyle = LocalPlatformStyle.current
                     val replyBannerVisible = replyingTo != null && editingMessageId == null
-                    // iMessage / Instagram-ish compact bar on iOS; Android stays a bit taller.
-                    val auxButtonSize = if (composerStyle.isIOS) 36.dp else 52.dp
-                    val fieldMinHeight = if (composerStyle.isIOS) 36.dp else 52.dp
+                    // iOS: ~44dp matches comfortable body text + cursor; Android unchanged.
+                    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
                     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
-                    val composerRowHPad = 8.dp
-                    val attachIconSize = if (composerStyle.isIOS) 22.dp else 26.dp
-                    val sendIconSize = if (composerStyle.isIOS) 18.dp else 20.dp
-                    val fieldCorner = if (composerStyle.isIOS) 18.dp else 12.dp
+                    // Match header/message column width: avoid extra horizontal inset on iOS.
+                    val composerRowHPad = if (composerStyle.isIOS) 0.dp else 8.dp
+                    val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
+                    val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
+                    val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
                     val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = effectiveImePadding)
-                            .padding(horizontal = composerRowHPad, vertical = composerRowVPad)
-                    ) {
+                    val composerStripInteraction = remember { MutableInteractionSource() }
+                    val composerStripBg = MaterialTheme.colorScheme.background
+                    // Match ChatMessageBubble / ChatLinkifyText (bodyMedium).
+                    val composerInputTextStyle = MaterialTheme.typography.bodyMedium
+                    // Full-bleed hit target behind composer so gaps between + / field / send do not
+                    // pass touches through to ConnectionsListView (iOS overlay stack).
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(composerStripBg)
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = composerStripInteraction,
+                                ) {},
+                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = effectiveImePadding)
+                                .padding(horizontal = composerRowHPad, vertical = composerRowVPad)
+                        ) {
                         Crossfade(
                             targetState = replyBannerVisible,
                             animationSpec = tween(320, easing = FastOutSlowInEasing),
@@ -1633,7 +1677,7 @@ fun ChatView(
                                                 )
                                                 Text(
                                                     replySnippetForMetadata(rt.message.content, maxLen = 100),
-                                                    style = MaterialTheme.typography.bodySmall,
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
@@ -1658,152 +1702,10 @@ fun ChatView(
                         if (replyBannerVisible) {
                             Spacer(modifier = Modifier.height(6.dp))
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
+                        val fieldSideInset = auxButtonSize + composerGap
                         val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
                         val attachInteraction = remember { MutableInteractionSource() }
-                        Box(
-                            modifier = Modifier
-                                .size(auxButtonSize)
-                                .zIndex(4f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
-                                    .clickable(
-                                        interactionSource = attachInteraction,
-                                        indication = if (composerStyle.useRipple) {
-                                            ripple(bounded = true)
-                                        } else {
-                                            null
-                                        },
-                                        enabled = !isSending,
-                                        onClick = { attachmentMenuExpanded = true },
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Filled.Add,
-                                    contentDescription = "Attach",
-                                    tint = attachTint,
-                                    modifier = Modifier.size(attachIconSize),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = attachmentMenuExpanded,
-                                onDismissRequest = { attachmentMenuExpanded = false },
-                                shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = if (composerStyle.isIOS) {
-                                    BorderStroke(
-                                        0.5.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                                    )
-                                } else {
-                                    null
-                                },
-                                tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
-                                shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
-                            ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Photo library",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Outlined.Image,
-                                            contentDescription = null,
-                                            tint = PrimaryBlue.copy(alpha = 0.9f),
-                                        )
-                                    },
-                                    onClick = {
-                                        attachmentMenuExpanded = false
-                                        mediaPickers.openPhotoLibrary()
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Take photo",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Outlined.PhotoCamera,
-                                            contentDescription = null,
-                                            tint = PrimaryBlue.copy(alpha = 0.9f),
-                                        )
-                                    },
-                                    onClick = {
-                                        attachmentMenuExpanded = false
-                                        mediaPickers.openCamera()
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Voice message",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Outlined.Mic,
-                                            contentDescription = null,
-                                            tint = PrimaryBlue.copy(alpha = 0.9f),
-                                        )
-                                    },
-                                    onClick = {
-                                        attachmentMenuExpanded = false
-                                        mediaPickers.openVoiceRecorder()
-                                    },
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(if (composerStyle.isIOS) 6.dp else 8.dp))
-                        OutlinedTextField(
-                            value = messageInput,
-                            onValueChange = {
-                                viewModel.updateMessageInput(it)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .defaultMinSize(minHeight = fieldMinHeight),
-                            placeholder = {
-                                Text(
-                                    if (editingMessageId != null) "Edit message…"
-                                    else "Message ${chatDetails.otherUser.name}…",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            },
-                            shape = RoundedCornerShape(fieldCorner),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f)
-                            ),
-                            textStyle = MaterialTheme.typography.bodyMedium,
-                            singleLine = false,
-                            maxLines = 5,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Sentences,
-                                keyboardType = KeyboardType.Text,
-                                imeAction = ImeAction.None
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.width(if (composerStyle.isIOS) 6.dp else 8.dp))
-
                         val canSend = messageInput.trim().isNotEmpty() && !isSending
                         val sendGradient = Brush.linearGradient(
                             colors = if (canSend) listOf(PrimaryBlue, LightBlue)
@@ -1812,32 +1714,229 @@ fun ChatView(
                                 MaterialTheme.colorScheme.surfaceVariant
                             )
                         )
+                        // Box layout: outlined field is inset between buttons; overlay circles stay on top for hits.
                         Box(
                             modifier = Modifier
-                                .size(auxButtonSize)
-                                .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                                .background(sendGradient)
-                                .then(
-                                    if (canSend) {
-                                        Modifier.clickable { viewModel.sendMessage() }
-                                    } else {
-                                        Modifier.clickable(
-                                            indication = null,
-                                            interactionSource = sendButtonAbsorbInteraction
-                                        ) { }
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .height(auxButtonSize)
                         ) {
-                            Icon(
-                                if (editingMessageId != null) Icons.Filled.Check
-                                else Icons.AutoMirrored.Filled.Send,
-                                contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
-                                tint = if (canSend) Color.White
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                modifier = Modifier.size(sendIconSize)
+                            val composerFieldInteraction = remember { MutableInteractionSource() }
+                            val fieldColors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f)
                             )
+                            val fieldShape = RoundedCornerShape(fieldCorner)
+                            // Vertically center single-line cap / placeholder within the fixed bar height.
+                            val composerTextStyleCentered = composerInputTextStyle.merge(
+                                TextStyle(
+                                    lineHeightStyle = LineHeightStyle(
+                                        alignment = LineHeightStyle.Alignment.Center,
+                                        trim = LineHeightStyle.Trim.Both,
+                                    ),
+                                ),
+                            )
+                            val approxLineBodyDp = 24.dp
+                            val innerVerticalPad =
+                                ((auxButtonSize - approxLineBodyDp) / 2).coerceIn(6.dp, 12.dp)
+                            val innerHorizontalPad = 12.dp
+                            val fieldDecorPadding = PaddingValues(
+                                start = innerHorizontalPad,
+                                end = innerHorizontalPad,
+                                top = innerVerticalPad,
+                                bottom = innerVerticalPad,
+                            )
+                            // Horizontal Modifier.padding shrinks the outlined region so it does not wrap the
+                            // attach/send buttons; DecorationBox contentPadding is inner text only.
+                            BasicTextField(
+                                value = messageInput,
+                                onValueChange = { viewModel.updateMessageInput(it) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = fieldSideInset, end = fieldSideInset)
+                                    .height(auxButtonSize)
+                                    .align(Alignment.Center),
+                                enabled = !isSending,
+                                textStyle = composerTextStyleCentered.merge(
+                                    TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                                ),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Sentences,
+                                    keyboardType = KeyboardType.Text,
+                                    imeAction = ImeAction.None
+                                ),
+                                singleLine = false,
+                                maxLines = 5,
+                                interactionSource = composerFieldInteraction,
+                                cursorBrush = SolidColor(PrimaryBlue),
+                                decorationBox = { innerTextField ->
+                                    OutlinedTextFieldDefaults.DecorationBox(
+                                        value = messageInput,
+                                        innerTextField = innerTextField,
+                                        enabled = !isSending,
+                                        singleLine = false,
+                                        visualTransformation = VisualTransformation.None,
+                                        interactionSource = composerFieldInteraction,
+                                        placeholder = {
+                                            Text(
+                                                if (editingMessageId != null) "Edit message…"
+                                                else "Message ${chatDetails.otherUser.name}…",
+                                                style = composerTextStyleCentered,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                            )
+                                        },
+                                        colors = fieldColors,
+                                        contentPadding = fieldDecorPadding,
+                                        container = {
+                                            OutlinedTextFieldDefaults.Container(
+                                                enabled = !isSending,
+                                                isError = false,
+                                                interactionSource = composerFieldInteraction,
+                                                modifier = Modifier,
+                                                colors = fieldColors,
+                                                shape = fieldShape,
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .size(auxButtonSize)
+                                    .zIndex(4f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
+                                        .clickable(
+                                            interactionSource = attachInteraction,
+                                            indication = if (composerStyle.useRipple) {
+                                                ripple(bounded = true)
+                                            } else {
+                                                null
+                                            },
+                                            enabled = !isSending,
+                                            onClick = { attachmentMenuExpanded = true },
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = "Attach",
+                                        tint = attachTint,
+                                        modifier = Modifier.size(attachIconSize),
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = attachmentMenuExpanded,
+                                    onDismissRequest = { attachmentMenuExpanded = false },
+                                    shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = if (composerStyle.isIOS) {
+                                        BorderStroke(
+                                            0.5.dp,
+                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                        )
+                                    } else {
+                                        null
+                                    },
+                                    tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
+                                    shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Photo library",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Outlined.Image,
+                                                contentDescription = null,
+                                                tint = PrimaryBlue.copy(alpha = 0.9f),
+                                            )
+                                        },
+                                        onClick = {
+                                            attachmentMenuExpanded = false
+                                            mediaPickers.openPhotoLibrary()
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Take photo",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Outlined.PhotoCamera,
+                                                contentDescription = null,
+                                                tint = PrimaryBlue.copy(alpha = 0.9f),
+                                            )
+                                        },
+                                        onClick = {
+                                            attachmentMenuExpanded = false
+                                            mediaPickers.openCamera()
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Voice message",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Outlined.Mic,
+                                                contentDescription = null,
+                                                tint = PrimaryBlue.copy(alpha = 0.9f),
+                                            )
+                                        },
+                                        onClick = {
+                                            attachmentMenuExpanded = false
+                                            mediaPickers.openVoiceRecorder()
+                                        },
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .size(auxButtonSize)
+                                    .zIndex(4f)
+                                    .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
+                                    .background(sendGradient)
+                                    .then(
+                                        if (canSend) {
+                                            Modifier.clickable { viewModel.sendMessage() }
+                                        } else {
+                                            Modifier.clickable(
+                                                indication = null,
+                                                interactionSource = sendButtonAbsorbInteraction
+                                            ) { }
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    if (editingMessageId != null) Icons.Filled.Check
+                                    else Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
+                                    tint = if (canSend) Color.White
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(sendIconSize)
+                                )
+                            }
                         }
+                        }
+                    }
                         }
                     }
                 }
