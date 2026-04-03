@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -124,14 +126,22 @@ fun UserProfileBottomSheet(
         }
     }
 
+    val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = sheetBg,
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
+        // Fill sheet height so the home-indicator / safe-area gap is not UIKit white in dark mode.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(sheetBg)
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -160,6 +170,7 @@ fun UserProfileBottomSheet(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 220.dp)
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -193,7 +204,7 @@ fun UserProfileBottomSheet(
                     ) {
                         Text(
                             text = u.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                            color = Color.White,
+                            color = LightBlue.copy(alpha = 0.96f),
                             fontWeight = FontWeight.Bold,
                             fontSize = 36.sp
                         )
@@ -422,6 +433,7 @@ fun UserProfileBottomSheet(
                     Text("Profile unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
         }
     }
 }

@@ -854,9 +854,12 @@ fun ConnectionMarkerSheet(
     onNudge: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight()
+            .background(sheetBg)
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -885,7 +888,7 @@ fun ConnectionMarkerSheet(
                 otherUser?.name?.firstOrNull()?.uppercase() ?: "?",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = LightBlue.copy(alpha = 0.96f)
             )
         }
 
@@ -956,6 +959,11 @@ fun ConnectionMarkerSheet(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+        Spacer(
+            modifier = Modifier
+                .weight(1f, fill = true)
+                .fillMaxWidth()
+        )
     }
 }
 

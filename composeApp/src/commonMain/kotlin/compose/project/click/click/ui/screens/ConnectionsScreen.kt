@@ -81,6 +81,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -1149,7 +1151,7 @@ fun ChatView(
                                     ) {
                                         Text(
                                             chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                            color = Color.White,
+                                            color = LightBlue.copy(alpha = 0.96f),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.labelMedium
                                         )
@@ -1204,8 +1206,12 @@ fun ChatView(
                                     }
                                 }
 
-                                Box {
-                                    IconButton(onClick = { showCallMenu = true }) {
+                                // Fixed-size anchor only; iOS uses Popup+Surface (Material DropdownMenu leaves white window bands).
+                                Box(modifier = Modifier.size(48.dp)) {
+                                    IconButton(
+                                        onClick = { showCallMenu = true },
+                                        modifier = Modifier.fillMaxSize(),
+                                    ) {
                                         Icon(
                                             Icons.Filled.Call,
                                             contentDescription = "Call options",
@@ -1213,52 +1219,79 @@ fun ChatView(
                                         )
                                     }
                                     val menuStyle = LocalPlatformStyle.current
-                                    DropdownMenu(
-                                        expanded = showCallMenu,
-                                        onDismissRequest = { showCallMenu = false },
-                                        shape = RoundedCornerShape(if (menuStyle.isIOS) 14.dp else 22.dp),
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        border = if (menuStyle.isIOS) {
-                                            BorderStroke(
-                                                0.5.dp,
-                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                    val density = LocalDensity.current
+                                    if (menuStyle.isIOS && showCallMenu) {
+                                        Popup(
+                                            alignment = Alignment.TopStart,
+                                            offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
+                                            onDismissRequest = { showCallMenu = false },
+                                            properties = PopupProperties(
+                                                focusable = true,
+                                                dismissOnBackPress = true,
+                                                dismissOnClickOutside = true,
+                                            ),
+                                        ) {
+                                            ChatCallOptionsIosSurface(
+                                                onVoice = {
+                                                    showCallMenu = false
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = false
+                                                    )
+                                                },
+                                                onVideo = {
+                                                    showCallMenu = false
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = true
+                                                    )
+                                                },
                                             )
-                                        } else {
-                                            null
-                                        },
-                                        tonalElevation = if (menuStyle.isIOS) 0.dp else 8.dp,
-                                        shadowElevation = if (menuStyle.isIOS) 0.dp else 16.dp
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Voice call") },
-                                            leadingIcon = {
-                                                Icon(Icons.Filled.Call, contentDescription = null)
-                                            },
-                                            onClick = {
-                                                showCallMenu = false
-                                                CallSessionManager.startOutgoingCall(
-                                                    connectionId = chatDetails.connection.id,
-                                                    otherUserId = chatDetails.otherUser.id,
-                                                    otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                    videoEnabled = false
-                                                )
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Video call") },
-                                            leadingIcon = {
-                                                Icon(Icons.Filled.Videocam, contentDescription = null)
-                                            },
-                                            onClick = {
-                                                showCallMenu = false
-                                                CallSessionManager.startOutgoingCall(
-                                                    connectionId = chatDetails.connection.id,
-                                                    otherUserId = chatDetails.otherUser.id,
-                                                    otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                    videoEnabled = true
-                                                )
-                                            }
-                                        )
+                                        }
+                                    } else if (!menuStyle.isIOS) {
+                                        DropdownMenu(
+                                            expanded = showCallMenu,
+                                            onDismissRequest = { showCallMenu = false },
+                                            shape = RoundedCornerShape(22.dp),
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            tonalElevation = 8.dp,
+                                            shadowElevation = 16.dp
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Voice call") },
+                                                leadingIcon = {
+                                                    Icon(Icons.Filled.Call, contentDescription = null)
+                                                },
+                                                onClick = {
+                                                    showCallMenu = false
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = false
+                                                    )
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Video call") },
+                                                leadingIcon = {
+                                                    Icon(Icons.Filled.Videocam, contentDescription = null)
+                                                },
+                                                onClick = {
+                                                    showCallMenu = false
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = true
+                                                    )
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                                 // Overflow / connection options
@@ -1613,17 +1646,18 @@ fun ChatView(
                         ) {
                         val fieldCorner = if (composerStyle.isIOS) 10.dp else 12.dp
                         val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
-                        // wrapContentSize so DropdownMenu measurement cannot widen the hit target (iOS)
+                        // Strict 52×52 anchor: never use widthIn on DropdownMenu — it widens this Box and
+                        // leaves a transparent strip where touches fall through to the message list (iOS).
                         Box(
                             modifier = Modifier
-                                .wrapContentSize(align = Alignment.TopStart)
+                                .size(52.dp)
                                 .zIndex(4f)
                         ) {
                             IconButton(
                                 onClick = { attachmentMenuExpanded = true },
                                 enabled = !isSending,
                                 modifier = Modifier
-                                    .size(52.dp)
+                                    .fillMaxSize()
                                     .clip(CircleShape)
                                     .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f)),
                             ) {
@@ -1649,7 +1683,6 @@ fun ChatView(
                                 },
                                 tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
                                 shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
-                                modifier = Modifier.widthIn(min = 220.dp),
                             ) {
                                 DropdownMenuItem(
                                     text = {
@@ -2306,6 +2339,60 @@ private fun swipeRawTravelFromVisual(
         else -> dReach + (v - cap) / rubber
     }
     return if (isSent) -directedRaw else directedRaw
+}
+
+/** iOS: Material [DropdownMenu] uses a platform popup that can show white bands in dark mode; this is fully themed. */
+@Composable
+private fun ChatCallOptionsIosSurface(
+    onVoice: () -> Unit,
+    onVideo: () -> Unit,
+) {
+    val bg = MaterialTheme.colorScheme.surfaceContainerHigh
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    Surface(
+        modifier = Modifier.widthIn(min = 200.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = bg,
+        tonalElevation = 3.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(0.5.dp, outline),
+    ) {
+        Column(Modifier.padding(vertical = 6.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = true),
+                        onClick = onVoice,
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Call, contentDescription = null, tint = onSurface)
+                Spacer(Modifier.width(12.dp))
+                Text("Voice call", style = MaterialTheme.typography.bodyLarge, color = onSurface)
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = true),
+                        onClick = onVideo,
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Videocam, contentDescription = null, tint = onSurface)
+                Spacer(Modifier.width(12.dp))
+                Text("Video call", style = MaterialTheme.typography.bodyLarge, color = onSurface)
+            }
+        }
+    }
 }
 
 /** Reply affordance drawn **behind** the bubble; uncovered as the bubble slides (no layout gutter). */
