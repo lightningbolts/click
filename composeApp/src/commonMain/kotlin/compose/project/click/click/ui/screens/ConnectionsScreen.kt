@@ -271,7 +271,8 @@ fun ConnectionsScreen(
                 if (activeChatId != null) {
                     InteractiveSwipeBackContainer(
                         enabled = true,
-                        edgeSwipeWidth = 44.dp,
+                        // Narrow strip: full-width edge felt heavy and pushed composer inset off-balance.
+                        edgeSwipeWidth = 20.dp,
                         onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
                         // Persistent ConnectionsListView is composed below AnimatedContent; do not
                         // duplicate the list here (a second rememberLazyListState starts at index 0).
@@ -1565,17 +1566,21 @@ fun ChatView(
                     }
 
                     val composerStyle = LocalPlatformStyle.current
-                    val composerCorner = if (composerStyle.isIOS) 20.dp else 22.dp
-                    val composerBorderW = if (composerStyle.isIOS) 0.5.dp else 1.dp
                     val replyBannerVisible = replyingTo != null && editingMessageId == null
+                    // iMessage / Instagram-ish compact bar on iOS; Android stays a bit taller.
+                    val auxButtonSize = if (composerStyle.isIOS) 36.dp else 52.dp
+                    val fieldMinHeight = if (composerStyle.isIOS) 36.dp else 52.dp
+                    val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
+                    val composerRowHPad = 8.dp
+                    val attachIconSize = if (composerStyle.isIOS) 22.dp else 26.dp
+                    val sendIconSize = if (composerStyle.isIOS) 18.dp else 20.dp
+                    val fieldCorner = if (composerStyle.isIOS) 18.dp else 12.dp
+                    val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = effectiveImePadding)
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .clip(RoundedCornerShape(composerCorner))
-                            .background(Color.White.copy(alpha = composerStyle.glassBackgroundAlpha))
-                            .border(composerBorderW, Color.White.copy(alpha = composerStyle.glassBorderAlpha), RoundedCornerShape(composerCorner))
+                            .padding(horizontal = composerRowHPad, vertical = composerRowVPad)
                     ) {
                         Crossfade(
                             targetState = replyBannerVisible,
@@ -1590,11 +1595,27 @@ fun ChatView(
                                 if (rt == null) {
                                     Spacer(Modifier.height(0.dp).fillMaxWidth())
                                 } else {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = replyShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                            alpha = if (composerStyle.isIOS) 0.45f else 0.55f,
+                                        ),
+                                        border = if (composerStyle.isIOS) {
+                                            BorderStroke(
+                                                0.5.dp,
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+                                            )
+                                        } else {
+                                            null
+                                        },
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp,
+                                    ) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                .padding(horizontal = 12.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Icon(
@@ -1630,42 +1651,46 @@ fun ChatView(
                                                 )
                                             }
                                         }
-                                        HorizontalDivider(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                                        )
                                     }
                                 }
                             }
                         }
+                        if (replyBannerVisible) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                        val fieldCorner = if (composerStyle.isIOS) 10.dp else 12.dp
                         val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
-                        // Strict 52×52 anchor: never use widthIn on DropdownMenu — it widens this Box and
-                        // leaves a transparent strip where touches fall through to the message list (iOS).
+                        val attachInteraction = remember { MutableInteractionSource() }
                         Box(
                             modifier = Modifier
-                                .size(52.dp)
+                                .size(auxButtonSize)
                                 .zIndex(4f)
                         ) {
-                            IconButton(
-                                onClick = { attachmentMenuExpanded = true },
-                                enabled = !isSending,
+                            Box(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(CircleShape)
-                                    .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f)),
+                                    .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
+                                    .clickable(
+                                        interactionSource = attachInteraction,
+                                        indication = if (composerStyle.useRipple) {
+                                            ripple(bounded = true)
+                                        } else {
+                                            null
+                                        },
+                                        enabled = !isSending,
+                                        onClick = { attachmentMenuExpanded = true },
+                                    ),
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     Icons.Filled.Add,
                                     contentDescription = "Attach",
                                     tint = attachTint,
-                                    modifier = Modifier.size(26.dp),
+                                    modifier = Modifier.size(attachIconSize),
                                 )
                             }
                             DropdownMenu(
@@ -1743,7 +1768,7 @@ fun ChatView(
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(if (composerStyle.isIOS) 6.dp else 8.dp))
                         OutlinedTextField(
                             value = messageInput,
                             onValueChange = {
@@ -1751,7 +1776,7 @@ fun ChatView(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .defaultMinSize(minHeight = 52.dp),
+                                .defaultMinSize(minHeight = fieldMinHeight),
                             placeholder = {
                                 Text(
                                     if (editingMessageId != null) "Edit message…"
@@ -1777,7 +1802,7 @@ fun ChatView(
                             )
                         )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(if (composerStyle.isIOS) 6.dp else 8.dp))
 
                         val canSend = messageInput.trim().isNotEmpty() && !isSending
                         val sendGradient = Brush.linearGradient(
@@ -1789,8 +1814,8 @@ fun ChatView(
                         )
                         Box(
                             modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(fieldCorner))
+                                .size(auxButtonSize)
+                                .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
                                 .background(sendGradient)
                                 .then(
                                     if (canSend) {
@@ -1810,7 +1835,7 @@ fun ChatView(
                                 contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
                                 tint = if (canSend) Color.White
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(sendIconSize)
                             )
                         }
                         }
