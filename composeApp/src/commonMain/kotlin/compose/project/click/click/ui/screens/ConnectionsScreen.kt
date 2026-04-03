@@ -3410,7 +3410,7 @@ private fun ConnectionActionSheet(
     onReport: (String) -> Unit = {},
     onBlock: () -> Unit = {}
 ) {
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
@@ -3444,20 +3444,25 @@ private fun ConnectionActionSheet(
         showFinalConfirm = true
     }
 
-    AdaptiveBottomSheet(
+    // Material ModalBottomSheet (not Calf): native iOS page sheet was forcing system chrome / white bands
+    // while the app uses in-app dark mode; this stays in Compose and follows MaterialTheme.
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        adaptiveSheetState = sheetState,
+        sheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
+        val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
         val onSurface = MaterialTheme.colorScheme.onSurface
         val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .wrapContentHeight()
+                .fillMaxHeight()
+                .background(sheetBg)
                 .padding(bottom = 32.dp)
         ) {
             // Connection name header
@@ -3572,6 +3577,12 @@ private fun ConnectionActionSheet(
                     showBlockConfirm = true
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            Spacer(
+                modifier = Modifier
+                    .weight(1f, fill = true)
+                    .fillMaxWidth()
             )
         }
     }
