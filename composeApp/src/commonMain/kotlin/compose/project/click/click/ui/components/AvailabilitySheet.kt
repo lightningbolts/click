@@ -1,11 +1,14 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -32,6 +36,7 @@ import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import kotlinx.coroutines.launch
 
 /**
  * Bottom sheet to post a short intent tag for a fixed time window ([public.availability_intents]).
@@ -46,109 +51,141 @@ fun AvailabilitySheet(
     val duration by viewModel.intentDuration.collectAsState()
     val submitting by viewModel.intentSubmitting.collectAsState()
     val submitError by viewModel.intentSubmitError.collectAsState()
+    val editingIntentId by viewModel.editingAvailabilityIntentId.collectAsState()
+    val isEditing = !editingIntentId.isNullOrBlank()
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
+    val scope = rememberCoroutineScope()
     val canSubmit = tag.trim().isNotEmpty() && !submitting
 
+    fun dismissWithAnimation() {
+        scope.launch {
+            sheetState.hide()
+        }.invokeOnCompletion {
+            onDismiss()
+        }
+    }
+
+    val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
+        containerColor = sheetBg,
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
-        Column(
+        // Fill sheet height so expanded drag / safe-area gaps are not UIKit white in dark mode.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxHeight()
+                .background(sheetBg),
         ) {
-            Text(
-                text = "Share availability",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "Pick how long you're open, and a short tag so connections know what you're up for.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Text(
-                text = "Timeframe",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 20.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                AvailabilityIntentDuration.entries.forEach { option ->
-                    FilterChip(
-                        selected = duration == option,
-                        onClick = { viewModel.setIntentDuration(option) },
-                        enabled = !submitting,
-                        label = { Text(option.label) },
+                Text(
+                    text = if (isEditing) "Edit availability" else "Share availability",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = if (isEditing) {
+                        "Time window starts again from now with the length you pick. Update your tag or timeframe below."
+                    } else {
+                        "Pick how long you're open, and a short tag so connections know what you're up for."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Text(
+                    text = "Timeframe",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AvailabilityIntentDuration.entries.forEach { option ->
+                        FilterChip(
+                            selected = duration == option,
+                            onClick = { viewModel.setIntentDuration(option) },
+                            enabled = !submitting,
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = tag,
+                    onValueChange = viewModel::updateIntentTagInput,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Intent tag") },
+                    placeholder = { Text("Coffee, study, walk…") },
+                    supportingText = {
+                        Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
+                    },
+                    singleLine = true,
+                    enabled = !submitting,
+                    maxLines = 1,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done,
+                    ),
+                )
+
+                submitError?.let { err ->
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
-            }
 
-            OutlinedTextField(
-                value = tag,
-                onValueChange = viewModel::updateIntentTagInput,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Intent tag") },
-                placeholder = { Text("Coffee, study, walk…") },
-                supportingText = {
-                    Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
-                },
-                singleLine = true,
-                enabled = !submitting,
-                maxLines = 1,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words,
-                    imeAction = ImeAction.Done,
-                ),
-            )
+                Spacer(modifier = Modifier.height(4.dp))
 
-            submitError?.let { err ->
-                Text(
-                    text = err,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                TextButton(
-                    onClick = {
-                        viewModel.clearIntentSubmitError()
-                        onDismiss()
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !submitting,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Cancel")
+                    TextButton(
+                        onClick = {
+                            viewModel.clearIntentSubmitError()
+                            dismissWithAnimation()
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !submitting,
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.submitAvailabilityIntent(onSuccess = { dismissWithAnimation() })
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = canSubmit,
+                    ) {
+                        Text(
+                            when {
+                                submitting -> "Saving…"
+                                isEditing -> "Save"
+                                else -> "Post"
+                            },
+                        )
+                    }
                 }
-                Button(
-                    onClick = {
-                        viewModel.submitAvailabilityIntent(onSuccess = onDismiss)
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = canSubmit,
-                ) {
-                    Text(if (submitting) "Saving…" else "Post")
-                }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+            }
         }
     }
 }

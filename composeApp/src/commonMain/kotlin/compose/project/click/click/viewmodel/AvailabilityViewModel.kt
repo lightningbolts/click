@@ -3,10 +3,12 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.AvailabilityHelper
 import compose.project.click.click.data.models.AvailabilityStatus
 import compose.project.click.click.data.models.DayOfWeek
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MutualAvailability
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -15,15 +17,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import io.github.jan.supabase.auth.auth
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 
 /** Preset duration for [public.availability_intents] windows (from now). */
-enum class AvailabilityIntentDuration(val hours: Long, val label: String) {
-    ONE_HOUR(1L, "Next hour"),
-    THREE_HOURS(3L, "Next 3 hours"),
-    SIX_HOURS(6L, "Next 6 hours"),
-    TWENTY_FOUR_HOURS(24L, "Next 24 hours"),
+enum class AvailabilityIntentDuration(val durationMs: Long, val label: String) {
+    FIFTEEN_MIN(15L * 60_000L, "15 min"),
+    THIRTY_MIN(30L * 60_000L, "30 min"),
+    FORTY_FIVE_MIN(45L * 60_000L, "45 min"),
+    ONE_HOUR(60L * 60_000L, "1 hour"),
+    NINETY_MIN(90L * 60_000L, "90 min"),
+    TWO_HOURS(2L * 60L * 60_000L, "2 hours"),
+    THREE_HOURS(3L * 60L * 60_000L, "3 hours"),
+    SIX_HOURS(6L * 60L * 60_000L, "6 hours"),
+    TWENTY_FOUR_HOURS(24L * 60L * 60_000L, "24 hours"),
 }
 
 class AvailabilityViewModel(
@@ -64,12 +72,78 @@ class AvailabilityViewModel(
 
     private val _intentSubmitError = MutableStateFlow<String?>(null)
     val intentSubmitError: StateFlow<String?> = _intentSubmitError.asStateFlow()
+
+    /** Non-expired rows from [public.availability_intents] for the signed-in user. */
+    private val _activeAvailabilityIntents = MutableStateFlow<List<AvailabilityIntentRow>>(emptyList())
+    val activeAvailabilityIntents: StateFlow<List<AvailabilityIntentRow>> =
+        _activeAvailabilityIntents.asStateFlow()
+
+    private val _loadingActiveAvailabilityIntents = MutableStateFlow(false)
+    val loadingActiveAvailabilityIntents: StateFlow<Boolean> =
+        _loadingActiveAvailabilityIntents.asStateFlow()
+
+    /** Non-null while the sheet is editing an existing row (insert when null). */
+    private val _editingAvailabilityIntentId = MutableStateFlow<String?>(null)
+    val editingAvailabilityIntentId: StateFlow<String?> = _editingAvailabilityIntentId.asStateFlow()
+
+    /** Inline message under the active-intents list (e.g. delete/update failure). */
+    private val _intentListFeedback = MutableStateFlow<String?>(null)
+    val intentListFeedback: StateFlow<String?> = _intentListFeedback.asStateFlow()
     
     init {
         // Observe availability changes to update status
         viewModelScope.launch {
             currentAvailability.collectLatest { availability ->
                 _availabilityStatus.value = AvailabilityHelper.getAvailabilityStatus(availability)
+            }
+        }
+        viewModelScope.launch {
+            refreshActiveAvailabilityIntentsInternal()
+        }
+    }
+
+    private suspend fun refreshActiveAvailabilityIntentsInternal() {
+        val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+        if (uid == null) {
+            _activeAvailabilityIntents.value = emptyList()
+            return
+        }
+        _intentListFeedback.value = null
+        _loadingActiveAvailabilityIntents.value = true
+        try {
+            _activeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+        } finally {
+            _loadingActiveAvailabilityIntents.value = false
+        }
+    }
+
+    /**
+     * Reload active intent posts from Supabase (call when opening Settings or after a successful save).
+     */
+    fun refreshActiveAvailabilityIntents() {
+        viewModelScope.launch {
+            refreshActiveAvailabilityIntentsInternal()
+        }
+    }
+
+    fun beginEditAvailabilityIntent(row: AvailabilityIntentRow) {
+        val id = row.id?.takeIf { it.isNotBlank() } ?: return
+        _editingAvailabilityIntentId.value = id
+        _intentTagInput.value = row.intentTag.orEmpty()
+        val tf = row.timeframe?.trim().orEmpty()
+        _intentDuration.value = AvailabilityIntentDuration.entries.find { it.label == tf }
+            ?: AvailabilityIntentDuration.entries.find { entry -> tf.contains(entry.label, ignoreCase = true) }
+            ?: AvailabilityIntentDuration.THREE_HOURS
+        _intentSubmitError.value = null
+        _intentSubmitting.value = false
+    }
+
+    fun deleteAvailabilityIntent(intentId: String) {
+        viewModelScope.launch {
+            val result = supabaseRepository.deleteAvailabilityIntent(intentId)
+            refreshActiveAvailabilityIntentsInternal()
+            if (!result.success) {
+                _intentListFeedback.value = formatAvailabilityIntentSaveError(result.errorMessage)
             }
         }
     }
@@ -230,6 +304,7 @@ class AvailabilityViewModel(
     }
 
     fun resetAvailabilityIntentSheet() {
+        _editingAvailabilityIntentId.value = null
         _intentTagInput.value = ""
         _intentDuration.value = AvailabilityIntentDuration.THREE_HOURS
         _intentSubmitError.value = null
@@ -254,7 +329,8 @@ class AvailabilityViewModel(
     fun submitAvailabilityIntent(onSuccess: () -> Unit) {
         viewModelScope.launch {
             if (_intentSubmitting.value) return@launch
-            val userId = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+            // RLS uses auth.uid(); must match JWT subject (not only cached profile id).
+            val userId = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
             if (userId == null) {
                 _intentSubmitError.value = "Sign in to share availability."
                 return@launch
@@ -265,22 +341,41 @@ class AvailabilityViewModel(
                 return@launch
             }
             val startMs = Clock.System.now().toEpochMilliseconds()
-            val endMs = startMs + _intentDuration.value.hours * 60L * 60L * 1000L
-            val row = AvailabilityIntentInsert(
-                userId = userId,
-                intentTag = tag,
-                startsAt = Instant.fromEpochMilliseconds(startMs).toString(),
-                endsAt = Instant.fromEpochMilliseconds(endMs).toString(),
-            )
+            val endMs = startMs + _intentDuration.value.durationMs
+            val startsIso = Instant.fromEpochMilliseconds(startMs).toString()
+            val endsIso = Instant.fromEpochMilliseconds(endMs).toString()
+            val editingId = _editingAvailabilityIntentId.value?.takeIf { it.isNotBlank() }
             _intentSubmitting.value = true
             _intentSubmitError.value = null
-            val ok = supabaseRepository.insertAvailabilityIntent(row)
+            val result = if (editingId != null) {
+                supabaseRepository.updateAvailabilityIntent(
+                    id = editingId,
+                    userId = userId,
+                    intentTag = tag,
+                    timeframe = _intentDuration.value.label,
+                    startsAt = startsIso,
+                    endsAt = endsIso,
+                    expiresAt = endsIso,
+                )
+            } else {
+                supabaseRepository.insertAvailabilityIntent(
+                    AvailabilityIntentInsert(
+                        userId = userId,
+                        intentTag = tag,
+                        timeframe = _intentDuration.value.label,
+                        startsAt = startsIso,
+                        endsAt = endsIso,
+                        expiresAt = endsIso,
+                    ),
+                )
+            }
             _intentSubmitting.value = false
-            if (ok) {
+            if (result.success) {
                 resetAvailabilityIntentSheet()
+                refreshActiveAvailabilityIntentsInternal()
                 onSuccess()
             } else {
-                _intentSubmitError.value = "Could not save. Try again."
+                _intentSubmitError.value = formatAvailabilityIntentSaveError(result.errorMessage)
             }
         }
     }
@@ -288,5 +383,25 @@ class AvailabilityViewModel(
     companion object {
         const val AVAILABILITY_INTENT_TAG_MAX_LENGTH = 25
         private val WHITESPACE_REGEX = Regex("\\s+")
+
+        private fun formatAvailabilityIntentSaveError(raw: String?): String {
+            val detail = raw?.trim().orEmpty()
+            return when {
+                detail.contains("availability_intents", ignoreCase = true) &&
+                    (detail.contains("does not exist", ignoreCase = true) ||
+                        detail.contains("schema cache", ignoreCase = true)) ->
+                    "Availability isn’t set up on the server yet. Ask your admin to run the database migration."
+                detail.contains("row-level security", ignoreCase = true) ||
+                    detail.contains("violates row-level security", ignoreCase = true) ||
+                    detail.contains("42501", ignoreCase = true) ->
+                    "Couldn’t save (permissions). Sign out, sign in again, then retry."
+                detail.contains("JWT", ignoreCase = true) ||
+                    detail.contains("not authenticated", ignoreCase = true) ||
+                    detail.contains("401", ignoreCase = true) ->
+                    "Session issue. Sign in again, then retry."
+                detail.isNotEmpty() -> detail.take(240)
+                else -> "Could not save. Try again."
+            }
+        }
     }
 }

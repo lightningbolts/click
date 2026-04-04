@@ -1,5 +1,12 @@
 package compose.project.click.click.data.models
 
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.todayIn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -57,6 +64,8 @@ data class UserAvailabilityInsert(
 /**
  * Insert row for [public.availability_intents] (intent-based availability windows).
  * Timestamps are ISO-8601 strings for `timestamptz` columns.
+ *
+ * Server schemas vary: some require [timeframe] text and [expiresAt] (usually equal to [endsAt]).
  */
 @Serializable
 data class AvailabilityIntentInsert(
@@ -64,11 +73,60 @@ data class AvailabilityIntentInsert(
     val userId: String,
     @SerialName("intent_tag")
     val intentTag: String,
+    /** Preset label shown in the app (e.g. "15 min", "3 hours"); required if the table has NOT NULL timeframe. */
+    @SerialName("timeframe")
+    val timeframe: String,
     @SerialName("starts_at")
     val startsAt: String,
     @SerialName("ends_at")
     val endsAt: String,
+    /**
+     * When the intent stops being active; matches [endsAt] unless the product differentiates them later.
+     * Required if the table has NOT NULL expires_at.
+     */
+    @SerialName("expires_at")
+    val expiresAt: String,
 )
+
+/**
+ * Row from [public.availability_intents] (PostgREST select). Fields optional to tolerate schema drift.
+ */
+@Serializable
+data class AvailabilityIntentRow(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("intent_tag") val intentTag: String? = null,
+    @SerialName("timeframe") val timeframe: String? = null,
+    @SerialName("starts_at") val startsAt: String? = null,
+    @SerialName("ends_at") val endsAt: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+) {
+    fun expiresInstantOrNull(): Instant? =
+        runCatching { Instant.parse(expiresAt ?: endsAt ?: return null) }.getOrNull()
+
+    /** Newest first when sorting. */
+    fun createdOrStartInstant(): Instant =
+        runCatching { Instant.parse(createdAt ?: startsAt ?: "") }.getOrNull()
+            ?: Instant.fromEpochMilliseconds(0L)
+
+    /** Short label for when this intent stops being active (local time). */
+    fun activeUntilLabel(): String {
+        val iso = expiresAt ?: endsAt ?: return ""
+        val instant = runCatching { Instant.parse(iso) }.getOrNull() ?: return iso
+        val tz = TimeZone.currentSystemDefault()
+        val local = instant.toLocalDateTime(tz)
+        val today = Clock.System.todayIn(tz)
+        val d = local.date
+        fun pad(n: Int) = n.toString().padStart(2, '0')
+        val timePart = "${pad(local.hour)}:${pad(local.minute)}"
+        return when {
+            d == today -> "Today · $timePart"
+            d == today.plus(DatePeriod(days = 1)) -> "Tomorrow · $timePart"
+            else -> "${d.monthNumber}/${d.dayOfMonth} · $timePart"
+        }
+    }
+}
 
 /**
  * Availability status options

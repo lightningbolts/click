@@ -46,6 +46,7 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
@@ -68,6 +69,9 @@ fun SettingsScreen(
     availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
+    val activeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
+    val loadingActiveAvailabilityIntents by availabilityViewModel.loadingActiveAvailabilityIntents.collectAsState()
+    val intentListFeedback by availabilityViewModel.intentListFeedback.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
@@ -86,10 +90,17 @@ fun SettingsScreen(
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
     }
 
+    LaunchedEffect(currentUser?.id) {
+        if (currentUser?.id != null) {
+            availabilityViewModel.refreshActiveAvailabilityIntents()
+        }
+    }
+
     var showNameDialog by remember { mutableStateOf(false) }
     var newFirstName by remember { mutableStateOf("") }
     var newLastName by remember { mutableStateOf("") }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
+    var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -131,6 +142,99 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(12.dp),
                             ) {
                                 Text("Share intent & timeframe")
+                            }
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = "Active availability post",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                intentListFeedback?.let { fb ->
+                                    Text(
+                                        text = fb,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                when {
+                                    loadingActiveAvailabilityIntents && activeAvailabilityIntents.isEmpty() -> {
+                                        Text(
+                                            text = "Loading…",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    activeAvailabilityIntents.isEmpty() -> {
+                                        Text(
+                                            text = "Nothing active yet. Post above to show connections what you’re up for and for how long.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    else -> {
+                                        activeAvailabilityIntents.forEachIndexed { index, row ->
+                                            if (index > 0) {
+                                                HorizontalDivider(
+                                                    modifier = Modifier.padding(vertical = 4.dp),
+                                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                                )
+                                            }
+                                            Text(
+                                                text = row.intentTag?.trim().orEmpty().ifEmpty { "—" },
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            val timeframe = row.timeframe?.trim().orEmpty()
+                                            val until = row.activeUntilLabel()
+                                            val detail = buildString {
+                                                if (timeframe.isNotEmpty()) {
+                                                    append(timeframe)
+                                                    append(" · ")
+                                                }
+                                                append(until)
+                                            }
+                                            Text(
+                                                text = detail,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            if (!row.id.isNullOrBlank()) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.End,
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            availabilityViewModel.beginEditAvailabilityIntent(row)
+                                                            showAvailabilityIntentSheet = true
+                                                        },
+                                                    ) {
+                                                        Text("Edit")
+                                                    }
+                                                    TextButton(
+                                                        onClick = {
+                                                            pendingDeleteAvailabilityIntent = row
+                                                        },
+                                                        colors = ButtonDefaults.textButtonColors(
+                                                            contentColor = MaterialTheme.colorScheme.error,
+                                                        ),
+                                                    ) {
+                                                        Text("Remove")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -298,7 +402,42 @@ fun SettingsScreen(
         if (showAvailabilityIntentSheet) {
             AvailabilitySheet(
                 viewModel = availabilityViewModel,
-                onDismiss = { showAvailabilityIntentSheet = false },
+                onDismiss = {
+                    showAvailabilityIntentSheet = false
+                    availabilityViewModel.resetAvailabilityIntentSheet()
+                },
+            )
+        }
+
+        val pendingDelete = pendingDeleteAvailabilityIntent
+        if (pendingDelete != null) {
+            AlertDialog(
+                onDismissRequest = { pendingDeleteAvailabilityIntent = null },
+                title = { Text("Remove availability?") },
+                text = {
+                    val label = pendingDelete.intentTag?.trim().orEmpty().ifEmpty { "this intent" }
+                    Text("Stop showing \"$label\" as your active availability.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingDelete.id?.let { id ->
+                                availabilityViewModel.deleteAvailabilityIntent(id)
+                            }
+                            pendingDeleteAvailabilityIntent = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text("Remove")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDeleteAvailabilityIntent = null }) {
+                        Text("Cancel")
+                    }
+                },
             )
         }
 

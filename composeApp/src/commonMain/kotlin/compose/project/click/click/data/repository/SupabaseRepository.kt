@@ -1,12 +1,14 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig
+import io.github.jan.supabase.exceptions.RestException
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.data.models.UserPublicProfile
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.UserInterests
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
@@ -17,8 +19,15 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+/** Result of inserting into [public.availability_intents]. */
+data class AvailabilityIntentInsertResult(
+    val success: Boolean,
+    val errorMessage: String? = null,
+)
 
 /**
  * Repository for Supabase operations
@@ -511,14 +520,103 @@ class SupabaseRepository {
     /**
      * Inserts one row into [public.availability_intents] for the current user.
      */
-    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): Boolean {
+    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): AvailabilityIntentInsertResult {
         return try {
             supabase.from("availability_intents").insert(row)
-            true
+            AvailabilityIntentInsertResult(success = true)
         } catch (e: Exception) {
-            println("Error inserting availability_intent: ${e.message}")
+            val short = restErrorSummary(e)
+            println("Error inserting availability_intent: $short")
             e.printStackTrace()
-            false
+            AvailabilityIntentInsertResult(success = false, errorMessage = short)
+        }
+    }
+
+    /**
+     * Active intent rows for [userId] where expiry is in the future (local server/client clock).
+     */
+    suspend fun fetchActiveAvailabilityIntentsForUser(userId: String): List<AvailabilityIntentRow> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            val rows = supabase.from("availability_intents")
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                }
+                .decodeList<AvailabilityIntentRow>()
+            val now = Clock.System.now()
+            rows
+                .filter { row ->
+                    val end = row.expiresInstantOrNull() ?: return@filter false
+                    end > now
+                }
+                .sortedByDescending { it.createdOrStartInstant() }
+        } catch (e: Exception) {
+            println("Error fetching availability_intents: ${e.message}")
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    /**
+     * Updates one [public.availability_intents] row (must belong to [userId]; enforced by RLS).
+     */
+    suspend fun updateAvailabilityIntent(
+        id: String,
+        userId: String,
+        intentTag: String,
+        timeframe: String,
+        startsAt: String,
+        endsAt: String,
+        expiresAt: String,
+    ): AvailabilityIntentInsertResult {
+        if (id.isBlank() || userId.isBlank()) {
+            return AvailabilityIntentInsertResult(success = false, errorMessage = "Missing intent id.")
+        }
+        return try {
+            supabase.from("availability_intents")
+                .update({
+                    set("intent_tag", intentTag)
+                    set("timeframe", timeframe)
+                    set("starts_at", startsAt)
+                    set("ends_at", endsAt)
+                    set("expires_at", expiresAt)
+                }) {
+                    filter {
+                        eq("id", id)
+                        eq("user_id", userId)
+                    }
+                }
+            AvailabilityIntentInsertResult(success = true)
+        } catch (e: Exception) {
+            val short = restErrorSummary(e)
+            println("Error updating availability_intent: $short")
+            e.printStackTrace()
+            AvailabilityIntentInsertResult(success = false, errorMessage = short)
+        }
+    }
+
+    /**
+     * Deletes one row by primary key (RLS restricts to the signed-in user’s rows).
+     */
+    suspend fun deleteAvailabilityIntent(intentId: String): AvailabilityIntentInsertResult {
+        if (intentId.isBlank()) {
+            return AvailabilityIntentInsertResult(success = false, errorMessage = "Missing intent id.")
+        }
+        return try {
+            supabase.from("availability_intents")
+                .delete {
+                    filter {
+                        eq("id", intentId)
+                    }
+                }
+            AvailabilityIntentInsertResult(success = true)
+        } catch (e: Exception) {
+            val short = restErrorSummary(e)
+            println("Error deleting availability_intent: $short")
+            e.printStackTrace()
+            AvailabilityIntentInsertResult(success = false, errorMessage = short)
         }
     }
     
@@ -981,6 +1079,23 @@ class SupabaseRepository {
             println("Error deleting message: ${e.message}")
             false
         }
+    }
+
+    /** Short PostgREST / Supabase error (not the long RestException message with URL/headers). */
+    private fun restErrorSummary(e: Throwable): String {
+        var t: Throwable? = e
+        while (t != null) {
+            if (t is RestException) return t.error
+            t = t.cause
+        }
+        return e.message
+            ?.substringBefore("\nURL:")
+            ?.trim()
+            ?.lineSequence()
+            ?.firstOrNull()
+            ?.trim()
+            ?: e::class.simpleName
+            ?: "Unknown error"
     }
 }
 

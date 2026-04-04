@@ -8,14 +8,14 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 sealed class HubVerifyResult {
     data class Success(
@@ -40,6 +40,13 @@ private data class HubVerifyErrBody(
     val error: String? = null,
 )
 
+@Serializable
+private data class HubVerifyRequestBody(
+    @SerialName("hub_id") val hubId: String,
+    @SerialName("user_lat") val userLat: Double,
+    @SerialName("user_long") val userLong: Double,
+)
+
 /**
  * Calls the Supabase Edge Function [verify-hub-proximity] with the user's coordinates.
  */
@@ -57,16 +64,17 @@ object HubConnectionManager {
         val url = SupabaseConfig.functionUrl("verify-hub-proximity")
         return try {
             val response = httpClient.post(url) {
+                contentType(ContentType.Application.Json)
                 headers {
                     append("apikey", SupabaseConfig.supabaseAnonApiKey)
                     append(HttpHeaders.Authorization, "Bearer $bearerJwt")
                 }
                 setBody(
-                    buildJsonObject {
-                        put("hub_id", hubId)
-                        put("user_lat", userLat)
-                        put("user_long", userLong)
-                    },
+                    HubVerifyRequestBody(
+                        hubId = hubId,
+                        userLat = userLat,
+                        userLong = userLong,
+                    ),
                 )
             }
             if (response.status.isSuccess()) {
