@@ -1354,7 +1354,7 @@ class ChatViewModel(
     }
 
     fun updateMessageInput(text: String) {
-        _messageInput.value = text
+        _messageInput.value = text.take(CHAT_MESSAGE_INPUT_MAX_LENGTH)
         val success = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         if (success.chatDetails.connection.id != currentConnectionId) return
         val apiChatId = success.chatDetails.chat.id?.takeIf { it.isNotBlank() }
@@ -2108,6 +2108,7 @@ class ChatViewModel(
     }
 }
 
+private const val CHAT_MESSAGE_INPUT_MAX_LENGTH = 1000
 private const val MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS = 3
 private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
 private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 1500L

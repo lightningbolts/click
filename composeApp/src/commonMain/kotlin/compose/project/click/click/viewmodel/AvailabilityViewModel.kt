@@ -6,6 +6,7 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.AvailabilityHelper
 import compose.project.click.click.data.models.AvailabilityStatus
 import compose.project.click.click.data.models.DayOfWeek
+import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.MutualAvailability
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -15,6 +16,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+
+/** Preset duration for [public.availability_intents] windows (from now). */
+enum class AvailabilityIntentDuration(val hours: Long, val label: String) {
+    ONE_HOUR(1L, "Next hour"),
+    THREE_HOURS(3L, "Next 3 hours"),
+    SIX_HOURS(6L, "Next 6 hours"),
+    TWENTY_FOUR_HOURS(24L, "Next 24 hours"),
+}
 
 class AvailabilityViewModel(
     private val supabaseRepository: SupabaseRepository = SupabaseRepository()
@@ -41,6 +51,19 @@ class AvailabilityViewModel(
     // Show availability settings dialog
     private val _showSettingsDialog = MutableStateFlow(false)
     val showSettingsDialog: StateFlow<Boolean> = _showSettingsDialog.asStateFlow()
+
+    // Intent-based availability sheet (availability_intents)
+    private val _intentTagInput = MutableStateFlow("")
+    val intentTagInput: StateFlow<String> = _intentTagInput.asStateFlow()
+
+    private val _intentDuration = MutableStateFlow(AvailabilityIntentDuration.THREE_HOURS)
+    val intentDuration: StateFlow<AvailabilityIntentDuration> = _intentDuration.asStateFlow()
+
+    private val _intentSubmitting = MutableStateFlow(false)
+    val intentSubmitting: StateFlow<Boolean> = _intentSubmitting.asStateFlow()
+
+    private val _intentSubmitError = MutableStateFlow<String?>(null)
+    val intentSubmitError: StateFlow<String?> = _intentSubmitError.asStateFlow()
     
     init {
         // Observe availability changes to update status
@@ -204,5 +227,66 @@ class AvailabilityViewModel(
      */
     fun clearError() {
         _error.value = null
+    }
+
+    fun resetAvailabilityIntentSheet() {
+        _intentTagInput.value = ""
+        _intentDuration.value = AvailabilityIntentDuration.THREE_HOURS
+        _intentSubmitError.value = null
+        _intentSubmitting.value = false
+    }
+
+    fun updateIntentTagInput(raw: String) {
+        _intentTagInput.value = raw.replace(WHITESPACE_REGEX, " ").take(AVAILABILITY_INTENT_TAG_MAX_LENGTH)
+    }
+
+    fun setIntentDuration(duration: AvailabilityIntentDuration) {
+        _intentDuration.value = duration
+    }
+
+    fun clearIntentSubmitError() {
+        _intentSubmitError.value = null
+    }
+
+    /**
+     * Inserts a row into [public.availability_intents] for the signed-in user.
+     */
+    fun submitAvailabilityIntent(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            if (_intentSubmitting.value) return@launch
+            val userId = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+            if (userId == null) {
+                _intentSubmitError.value = "Sign in to share availability."
+                return@launch
+            }
+            val tag = _intentTagInput.value.trim()
+            if (tag.isEmpty()) {
+                _intentSubmitError.value = "Add a short intent tag."
+                return@launch
+            }
+            val startMs = Clock.System.now().toEpochMilliseconds()
+            val endMs = startMs + _intentDuration.value.hours * 60L * 60L * 1000L
+            val row = AvailabilityIntentInsert(
+                userId = userId,
+                intentTag = tag,
+                startsAt = Instant.fromEpochMilliseconds(startMs).toString(),
+                endsAt = Instant.fromEpochMilliseconds(endMs).toString(),
+            )
+            _intentSubmitting.value = true
+            _intentSubmitError.value = null
+            val ok = supabaseRepository.insertAvailabilityIntent(row)
+            _intentSubmitting.value = false
+            if (ok) {
+                resetAvailabilityIntentSheet()
+                onSuccess()
+            } else {
+                _intentSubmitError.value = "Could not save. Try again."
+            }
+        }
+    }
+
+    companion object {
+        const val AVAILABILITY_INTENT_TAG_MAX_LENGTH = 25
+        private val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

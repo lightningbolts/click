@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.data.models.UserPublicProfile
+import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.UserInterests
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
@@ -502,6 +503,20 @@ class SupabaseRepository {
             result
         } catch (e: Exception) {
             println("Error setting free this week: ${e.message}")
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Inserts one row into [public.availability_intents] for the current user.
+     */
+    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): Boolean {
+        return try {
+            supabase.from("availability_intents").insert(row)
+            true
+        } catch (e: Exception) {
+            println("Error inserting availability_intent: ${e.message}")
             e.printStackTrace()
             false
         }

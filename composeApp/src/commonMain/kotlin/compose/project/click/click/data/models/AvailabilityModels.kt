@@ -55,6 +55,22 @@ data class UserAvailabilityInsert(
 )
 
 /**
+ * Insert row for [public.availability_intents] (intent-based availability windows).
+ * Timestamps are ISO-8601 strings for `timestamptz` columns.
+ */
+@Serializable
+data class AvailabilityIntentInsert(
+    @SerialName("user_id")
+    val userId: String,
+    @SerialName("intent_tag")
+    val intentTag: String,
+    @SerialName("starts_at")
+    val startsAt: String,
+    @SerialName("ends_at")
+    val endsAt: String,
+)
+
+/**
  * Availability status options
  */
 enum class AvailabilityStatus {

@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -88,6 +89,7 @@ fun SettingsScreen(
     var showNameDialog by remember { mutableStateOf(false) }
     var newFirstName by remember { mutableStateOf("") }
     var newLastName by remember { mutableStateOf("") }
+    var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -108,14 +110,29 @@ fun SettingsScreen(
                 }
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        SettingsToggleRow(
-                            icon = Icons.Default.EventAvailable,
-                            iconTint = if (currentAvailability?.isFreeThisWeek == true)
-                                PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                            title = "Free currently",
-                            checked = currentAvailability?.isFreeThisWeek ?: false,
-                            onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() }
-                        )
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SettingsToggleRow(
+                                icon = Icons.Default.EventAvailable,
+                                iconTint = if (currentAvailability?.isFreeThisWeek == true)
+                                    PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                title = "Free currently",
+                                checked = currentAvailability?.isFreeThisWeek ?: false,
+                                onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() }
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            Button(
+                                onClick = {
+                                    availabilityViewModel.resetAvailabilityIntentSheet()
+                                    showAvailabilityIntentSheet = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text("Share intent & timeframe")
+                            }
+                        }
                     }
                 }
 
@@ -276,6 +293,13 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        if (showAvailabilityIntentSheet) {
+            AvailabilitySheet(
+                viewModel = availabilityViewModel,
+                onDismiss = { showAvailabilityIntentSheet = false },
+            )
         }
 
         if (showNameDialog) {

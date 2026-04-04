@@ -39,7 +39,8 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
-private const val CUSTOM_CONTEXT_MAX_LENGTH = 48
+/** Matches DB limits for profile-style short labels (align with interests max length). */
+private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
