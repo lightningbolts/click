@@ -516,6 +516,7 @@ class ChatViewModel(
     }
 
     private fun isExpiredConnection(connection: Connection, now: Long): Boolean {
+        if (!connection.isVisibleInActiveUi()) return true
         return connection.expiry_state == "expired" && connection.expiry < now
     }
 
@@ -1694,9 +1695,8 @@ class ChatViewModel(
     }
     
     /**
-     * Handle dismissal of an expired connection.
-     * Server-side Edge Function owns actual deletion via pg_cron schedule.
-     * Client just refreshes local state so the connection disappears from the list.
+     * Handle dismissal when a connection is no longer shown (archived / expired client rule).
+     * Server-side [expire-connections] archives idle rows; client refreshes lists.
      */
     fun handleExpiredConnectionDismiss() {
         val userId = _currentUserId.value ?: return
@@ -1926,7 +1926,7 @@ class ChatViewModel(
     }
 
     /**
-     * Hard-delete the current connection (removes from DB).
+     * Soft-remove the current connection (server `status = removed`; row retained).
      */
     fun deleteConnectionPermanently(onComplete: (Boolean) -> Unit = {}) {
         val connectionId = currentConnectionId ?: return
@@ -1934,7 +1934,7 @@ class ChatViewModel(
     }
 
     /**
-     * Hard-delete a specific connection by ID.
+     * Soft-remove a specific connection by ID (server `status = removed`; row retained).
      */
     fun deleteConnectionPermanentlyById(connectionId: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {

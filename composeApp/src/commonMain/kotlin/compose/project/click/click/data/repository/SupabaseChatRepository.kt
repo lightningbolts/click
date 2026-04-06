@@ -431,6 +431,7 @@ class SupabaseChatRepository(
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
+                .filter { it.isVisibleInActiveUi() }
 
             if (connections.isEmpty()) return emptyList()
 

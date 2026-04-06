@@ -131,12 +131,15 @@ import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.previewLabel
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.ChatListState
 import compose.project.click.click.viewmodel.ChatMessagesState
 import compose.project.click.click.ui.chat.saveChatImageToGallery
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -391,6 +394,13 @@ fun ConnectionsListView(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Archived
+    var listBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            delay(60_000)
+            listBannerNow = Clock.System.now().toEpochMilliseconds()
+        }
+    }
 
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
@@ -530,6 +540,20 @@ fun ConnectionsListView(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            if (effectiveChats.isNotEmpty() && selectedTabIndex == 0) {
+                val bannerNotice = effectiveChats
+                    .filter { it.connection.id !in archivedConnectionIds }
+                    .map { it.connection }
+                    .mostUrgentArchiveNotice(listBannerNow)
+                bannerNotice?.let { notice ->
+                    ConnectionArchiveWarningBanner(
+                        notice = notice,
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
             }
 
             if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {

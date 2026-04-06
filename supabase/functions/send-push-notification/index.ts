@@ -60,7 +60,7 @@ type PushError = {
   error: string;
 };
 
-type PushCategory = "chat_message" | "incoming_call";
+type PushCategory = "chat_message" | "incoming_call" | "archive_warning";
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
@@ -145,6 +145,9 @@ async function sendAndroidPush(
     // Data-only: Android client decrypts when possible; preview_text is always safe to show if decrypt fails.
     delete data.title;
     delete data.body;
+  } else if (category === "archive_warning") {
+    if (requestBody.title && !data.title) data.title = requestBody.title;
+    if (requestBody.body && !data.body) data.body = requestBody.body;
   } else {
     if (requestBody.title && !data.title) data.title = requestBody.title;
     if (requestBody.body && !data.body) data.body = requestBody.body;
@@ -257,7 +260,10 @@ async function sendIosPush(
 }
 
 function getPushCategory(requestBody: PushRequestBody): PushCategory {
-  return requestBody.data?.type === "incoming_call" ? "incoming_call" : "chat_message";
+  const t = requestBody.data?.type;
+  if (t === "incoming_call") return "incoming_call";
+  if (t === "archive_warning") return "archive_warning";
+  return "chat_message";
 }
 
 function shouldSendToToken(
@@ -271,7 +277,7 @@ function shouldSendToToken(
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  if (category === "chat_message") {
+  if (category === "chat_message" || category === "archive_warning") {
     return tokenType != "voip";
   }
 
@@ -551,11 +557,37 @@ async function resolveChatMessageRequest(
   };
 }
 
+function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
+  if (requestBody.data?.type !== "archive_warning") return false;
+  const provided = req.headers.get("x-archive-warning-secret");
+  const expected =
+    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET") ??
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+    Deno.env.get("SUPABASE_SERVICE_KEY") ??
+    Deno.env.get("SUPABASE_KEY");
+  return !!provided && !!expected && provided === expected;
+}
+
 async function resolvePushRequest(
   req: Request,
   supabase: ReturnType<typeof createClient>,
   requestBody: PushRequestBody,
 ): Promise<ResolvedPushRequestBody> {
+  if (isArchiveWarningServiceRequest(req, requestBody)) {
+    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
+    const title = asNonEmptyString(requestBody.title);
+    const body = asNonEmptyString(requestBody.body);
+    if (!recipientUserId || !title || !body) {
+      throw new Error("archive_warning pushes require recipient_user_id, title, and body");
+    }
+    return {
+      recipient_user_id: recipientUserId,
+      title,
+      body,
+      data: requestBody.data,
+    };
+  }
+
   if (getPushCategory(requestBody) === "incoming_call") {
     await validateIncomingCallRequest(req, supabase, requestBody);
 
@@ -591,9 +623,11 @@ async function recipientAllowsPush(
     return true;
   }
 
-  return getPushCategory(requestBody) === "incoming_call"
-    ? data.call_push_enabled !== false
-    : data.message_push_enabled !== false;
+  const cat = getPushCategory(requestBody);
+  if (cat === "incoming_call") {
+    return data.call_push_enabled !== false;
+  }
+  return data.message_push_enabled !== false;
 }
 
 Deno.serve(async (req: Request) => {

@@ -46,11 +46,17 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.viewmodel.HomeViewModel
 import compose.project.click.click.viewmodel.HomeState
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsights
 import compose.project.click.click.data.models.ReconnectReminder
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -87,6 +93,17 @@ fun HomeScreen(
     val connectedUsers by viewModel.connectedUsers.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by viewModel.pollPairSuggestion.collectAsState()
+    val connectionsForArchiveBanner by AppDataManager.connections.collectAsState()
+    var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            delay(60_000)
+            archiveBannerNow = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+    val archiveBannerNotice = remember(connectionsForArchiveBanner, archiveBannerNow) {
+        connectionsForArchiveBanner.mostUrgentArchiveNotice(archiveBannerNow)
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -168,6 +185,14 @@ fun HomeScreen(
                         )
                     }
                     Spacer(modifier = Modifier.height(CardSpacing))
+
+                    archiveBannerNotice?.let { notice ->
+                        ConnectionArchiveWarningBanner(
+                            notice = notice,
+                            modifier = Modifier.padding(horizontal = ScreenPaddingHorizontal),
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),

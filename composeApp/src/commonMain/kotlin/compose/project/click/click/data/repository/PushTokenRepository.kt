@@ -7,6 +7,13 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+/**
+ * Persists FCM / APNs tokens to [public.push_tokens].
+ *
+ * **Archive-warning pushes:** the scheduled Edge Function `expire-connections` loads tokens
+ * from this table and calls `send-push-notification` with `data.type = archive_warning`
+ * (12h before auto-archive). No extra client hook is required after registration.
+ */
 class PushTokenRepository {
     private val supabase by lazy { SupabaseConfig.client }
 
