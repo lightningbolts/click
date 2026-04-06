@@ -125,6 +125,7 @@ class SupabaseRepository {
                     }
                 }
                 .decodeList<Connection>()
+                .filter { it.isVisibleInActiveUi() }
             rows.maxByOrNull { conn ->
                 (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
             }
@@ -152,6 +153,7 @@ class SupabaseRepository {
                     range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
                 }
                 .decodeList<Connection>()
+                .filter { it.isVisibleInActiveUi() }
         } catch (e: Exception) {
             println("Error fetching connections: ${e.message}")
             emptyList()
@@ -336,6 +338,19 @@ class SupabaseRepository {
         state: String
     ): Boolean {
         return try {
+            if (state == "pending" || state == "active" || state == "kept") {
+                val withStatus = runCatching {
+                    supabase.from("connections")
+                        .update({
+                            set("expiry_state", state)
+                            set("status", state)
+                        }) {
+                            filter { eq("id", connectionId) }
+                        }
+                }
+                if (withStatus.isSuccess) return true
+                println("updateConnectionExpiryState (status column may be missing): ${withStatus.exceptionOrNull()?.message}")
+            }
             supabase.from("connections")
                 .update({
                     set("expiry_state", state)
@@ -397,19 +412,31 @@ class SupabaseRepository {
     }
     
     /**
-     * Delete a connection (used when Vibe Check expires without mutual keep)
+     * Soft-remove a connection (user-initiated "Remove Connection").
+     * Row stays in the database for possible future reconnection tracking.
      */
     suspend fun deleteConnection(connectionId: String): Boolean {
         return try {
-            supabase.from("connections")
-                .delete {
-                    filter {
-                        eq("id", connectionId)
+            val withStatus = runCatching {
+                supabase.from("connections")
+                    .update({
+                        set("status", "removed")
+                        set("expiry_state", "expired")
+                    }) {
+                        filter { eq("id", connectionId) }
                     }
+            }
+            if (withStatus.isSuccess) return true
+            println("deleteConnection soft-remove (retry without status): ${withStatus.exceptionOrNull()?.message}")
+            supabase.from("connections")
+                .update({
+                    set("expiry_state", "expired")
+                }) {
+                    filter { eq("id", connectionId) }
                 }
             true
         } catch (e: Exception) {
-            println("Error deleting connection: ${e.message}")
+            println("Error soft-removing connection: ${e.message}")
             false
         }
     }

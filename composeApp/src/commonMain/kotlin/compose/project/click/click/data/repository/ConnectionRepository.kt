@@ -506,7 +506,8 @@ class ConnectionRepository(
                         filter("user_ids", io.github.jan.supabase.postgrest.query.filter.FilterOperator.CS, "{${userId1},${userId2}}")
                     }
                 }
-                .decodeSingleOrNull<Connection>()
+                .decodeList<Connection>()
+                .firstOrNull { it.isVisibleInActiveUi() }
         } catch (e: Exception) {
             println("Error checking connection: ${e.message}")
             null
@@ -528,7 +529,9 @@ class ConnectionRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         return connections
             .asSequence()
-            .filter { !(it.expiry_state == "expired" && it.expiry < now) }
+            .filter {
+                it.isVisibleInActiveUi() && !(it.expiry_state == "expired" && it.expiry < now)
+            }
             .mapNotNull { connection ->
                 val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
                 val lastInteraction = connection.last_message_at ?: connection.created
@@ -572,6 +575,7 @@ class ConnectionRepository(
                     }
                 }
                 .decodeList<Connection>()
+                .filter { it.isVisibleInActiveUi() }
             
             Result.success(result)
         } catch (e: Exception) {
@@ -707,13 +711,22 @@ class ConnectionRepository(
      */
     suspend fun deleteConnection(connectionId: String): Result<Unit> {
         return try {
-            supabase.from("connections")
-                .delete {
-                    filter {
-                        eq("id", connectionId)
+            val withStatus = runCatching {
+                supabase.from("connections")
+                    .update({
+                        set("status", "removed")
+                        set("expiry_state", "expired")
+                    }) {
+                        filter { eq("id", connectionId) }
                     }
-                }
-
+            }
+            if (withStatus.isFailure) {
+                println("ConnectionRepository.deleteConnection (retry without status): ${withStatus.exceptionOrNull()?.message}")
+                supabase.from("connections")
+                    .update({ set("expiry_state", "expired") }) {
+                        filter { eq("id", connectionId) }
+                    }
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

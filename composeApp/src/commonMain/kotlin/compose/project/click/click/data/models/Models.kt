@@ -303,8 +303,13 @@ data class Connection(
     val chat: Chat = Chat(),
     val should_continue: List<Boolean> = listOf(false, false),
     val has_begun: Boolean = false,
-    // Server-side expiry lifecycle: 'pending' | 'active' | 'kept' | 'expired'
+    // Server-side expiry lifecycle: 'pending' | 'active' | 'kept' | 'expired' (mirrors status via DB trigger)
     val expiry_state: String = "pending",
+    /**
+     * Canonical lifecycle: pending | active | kept | archived | removed.
+     * Null when older API responses omit the column — use [normalizedConnectionStatus].
+     */
+    val status: String? = null,
     // Timestamp (ms) of the most recent message in this connection's chat
     val last_message_at: Long? = null,
     // Proximity verification fields
@@ -319,6 +324,8 @@ data class Connection(
         const val VIBE_CHECK_DURATION_MS = 30L * 60 * 1000
         // 48 hours in milliseconds for the pending "Say Hi" window
         const val PENDING_DURATION_MS = 48L * 60 * 60 * 1000
+        // 7-day rolling window for continued interaction (after first message)
+        const val IDLE_ARCHIVE_DURATION_MS = 7L * 24 * 60 * 60 * 1000
     }
 
     val context_tag: String?
@@ -341,15 +348,34 @@ data class Connection(
 
     val displayLocationLabel: String?
         get() = context_tag ?: semantic_location
+
+    /** Resolved status when [status] column is missing (legacy rows). */
+    fun normalizedConnectionStatus(): String {
+        status?.takeIf { it.isNotBlank() }?.let { return it }
+        return when (expiry_state) {
+            "kept" -> "kept"
+            "active" -> "active"
+            "expired" -> "archived"
+            else -> "pending"
+        }
+    }
     
     /** Connection is awaiting first message (48h window). */
-    fun isPending(): Boolean = expiry_state == "pending"
+    fun isPending(): Boolean = normalizedConnectionStatus() == "pending"
 
     /** Connection is active — messages flowing, 7-day rolling window. */
-    fun isActive(): Boolean = expiry_state == "active"
+    fun isActive(): Boolean = normalizedConnectionStatus() == "active"
 
     /** Connection permanently kept via mutual opt-in. */
-    fun isKept(): Boolean = expiry_state == "kept"
+    fun isKept(): Boolean = normalizedConnectionStatus() == "kept"
+
+    fun isArchivedOrRemoved(): Boolean {
+        val s = normalizedConnectionStatus()
+        return s == "archived" || s == "removed"
+    }
+
+    /** Visible in main UI (not soft-deleted / auto-archived). */
+    fun isVisibleInActiveUi(): Boolean = !isArchivedOrRemoved()
 
     /**
      * Calculate remaining time in the 48-hour pending window.
@@ -358,6 +384,16 @@ data class Connection(
     fun getPendingRemainingMs(currentTimeMs: Long): Long {
         val endTime = created + PENDING_DURATION_MS
         return maxOf(0L, endTime - currentTimeMs)
+    }
+
+    /**
+     * Remaining ms before 7-day idle archive (active only). Uses [last_message_at] when set, else [created].
+     */
+    fun getIdleArchiveRemainingMs(currentTimeMs: Long): Long {
+        if (normalizedConnectionStatus() != "active") return Long.MAX_VALUE
+        val anchor = last_message_at ?: created
+        val end = anchor + IDLE_ARCHIVE_DURATION_MS
+        return maxOf(0L, end - currentTimeMs)
     }
 
     /**
