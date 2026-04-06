@@ -8,6 +8,7 @@ import io.github.jan.supabase.auth.user.UserSession
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import kotlinx.coroutines.withTimeout
@@ -252,8 +253,7 @@ class AuthRepository(
             println("AuthRepository: Successfully updated user profile names")
             Result.success(Unit)
         } catch (e: Exception) {
-            println("AuthRepository: Error updating user profile names: ${e.message}")
-            e.printStackTrace()
+            println("AuthRepository: Error updating user profile names (redacted): ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }

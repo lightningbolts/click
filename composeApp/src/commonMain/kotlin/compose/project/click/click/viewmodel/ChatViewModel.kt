@@ -37,6 +37,7 @@ import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatReactionSubscription
 import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.ReactionChangeEvent
+import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -339,10 +340,11 @@ class ChatViewModel(
                 val channel = SupabaseConfig.client.channel("chatvm:connections:$userId")
                 connectionsRealtimeChannel = channel
                 try {
-                    channel.subscribe(blockUntilSubscribed = true)
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                         table = "connections"
-                    }.collect { action ->
+                    }
+                    channel.subscribe(blockUntilSubscribed = true)
+                    changes.collect { action ->
                         if (connectionRowRelevantToUser(action, userId)) {
                             scheduleDebouncedChatListRefresh()
                         }
@@ -358,7 +360,7 @@ class ChatViewModel(
             } catch (e: Exception) {
                 // JVM/Robolectric tests and pre-client init: no Supabase — list still updates via
                 // bumpConnectionInChatList / loadChats.
-                println("ChatViewModel: global connections realtime unavailable: ${e.message}")
+                println("ChatViewModel: global connections realtime unavailable: ${e.redactedRestMessage()}")
                 connectionsRealtimeChannel = null
             }
         }
@@ -1775,6 +1777,31 @@ class ChatViewModel(
                 content = "👋 ${currentUser.name ?: "Someone"} nudged you!"
             )
             _nudgeResult.value = if (msg != null) "Nudge sent to $otherUserName! 👋" else "Failed to send nudge"
+        }
+    }
+
+    /**
+     * Send one contextual icebreaker from the Clicks list archive banner (matches home poll-pair behavior).
+     */
+    fun sendArchiveBannerIcebreaker(connectionId: String, otherDisplayName: String) {
+        val userId = _currentUserId.value ?: return
+        val name = otherDisplayName.trim().ifBlank { "them" }
+        viewModelScope.launch {
+            try {
+                val details = chatRepository.fetchChatWithDetails(connectionId, userId)
+                val chatId = details?.chat?.id ?: resolveOrCreateApiChatId(connectionId) ?: run {
+                    _nudgeResult.value = "Couldn't open chat"
+                    return@launch
+                }
+                val contextTag = details?.connection?.context_tag
+                val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
+                    ?: IcebreakerRepository.getRandomPrompt()
+                val msg = chatRepository.sendMessage(chatId, userId, prompt.text)
+                _nudgeResult.value =
+                    if (msg != null) "Icebreaker sent to $name!" else "Failed to send icebreaker"
+            } catch (_: Exception) {
+                _nudgeResult.value = "Failed to send icebreaker"
+            }
         }
     }
 

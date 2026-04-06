@@ -46,6 +46,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -542,20 +544,6 @@ fun ConnectionsListView(
                 Spacer(modifier = Modifier.height(6.dp))
             }
 
-            if (effectiveChats.isNotEmpty() && selectedTabIndex == 0) {
-                val bannerNotice = effectiveChats
-                    .filter { it.connection.id !in archivedConnectionIds }
-                    .map { it.connection }
-                    .mostUrgentArchiveNotice(listBannerNow)
-                bannerNotice?.let { notice ->
-                    ConnectionArchiveWarningBanner(
-                        notice = notice,
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-            }
-
             if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -601,12 +589,29 @@ fun ConnectionsListView(
                     }
                 }
 
+                val chatLabelByConnectionId = effectiveChats.associate { chat ->
+                    val who = chat.otherUser.name?.trim()?.takeIf { it.isNotBlank() }
+                        ?: chat.connection.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }
+                        ?: "this connection"
+                    chat.connection.id to who
+                }
+                val archiveBannerNotice =
+                    if (effectiveChats.isNotEmpty() && selectedTabIndex == 0) {
+                        activeChats
+                            .map { it.connection }
+                            .mostUrgentArchiveNotice(listBannerNow) { conn ->
+                                chatLabelByConnectionId[conn.id] ?: "this connection"
+                            }
+                    } else {
+                        null
+                    }
+
                 val clicksListOrderSignature = filteredChats.joinToString("\u0000") {
                     "${it.connection.id}\t${connectionListActivityTs(it)}"
                 }
                 LaunchedEffect(clicksListOrderSignature) {
                     if (filteredChats.isEmpty()) return@LaunchedEffect
-                    val nearTop = connectionsLazyListState.firstVisibleItemIndex <= 1 &&
+                    val nearTop = connectionsLazyListState.firstVisibleItemIndex <= 2 &&
                         connectionsLazyListState.firstVisibleItemScrollOffset < 96
                     if (nearTop) {
                         connectionsLazyListState.animateScrollToItem(0)
@@ -614,33 +619,58 @@ fun ConnectionsListView(
                 }
 
                 if (filteredChats.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                    val emptyScroll = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(emptyScroll)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        archiveBannerNotice?.let { notice ->
+                            ConnectionArchiveWarningBanner(
+                                notice = notice,
+                                onOpenChat = { onChatSelected(notice.connectionId) },
+                                onSendIcebreaker = {
+                                    viewModel.sendArchiveBannerIcebreaker(
+                                        notice.connectionId,
+                                        notice.chatLabel,
+                                    )
+                                },
+                                modifier = Modifier
+                                    .padding(horizontal = 20.dp)
+                                    .padding(bottom = 10.dp),
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                if (searchQuery.isNotBlank()) "No matches found"
-                                else if (selectedTabIndex == 1) "No archived connections"
-                                else "No connections yet",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                if (searchQuery.isNotBlank()) "Try a different search term"
-                                else if (selectedTabIndex == 1) "Archived chats will appear here"
-                                else "Start clicking with people nearby!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 360.dp)
+                                .padding(horizontal = 20.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    if (searchQuery.isNotBlank()) "No matches found"
+                                    else if (selectedTabIndex == 1) "No archived connections"
+                                    else "No connections yet",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    if (searchQuery.isNotBlank()) "Try a different search term"
+                                    else if (selectedTabIndex == 1) "Archived chats will appear here"
+                                    else "Start clicking with people nearby!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 } else {
@@ -649,6 +679,24 @@ fun ConnectionsListView(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
+                        archiveBannerNotice?.let { notice ->
+                            item(key = "archive_banner") {
+                                ConnectionArchiveWarningBanner(
+                                    notice = notice,
+                                    onOpenChat = { onChatSelected(notice.connectionId) },
+                                    onSendIcebreaker = {
+                                        viewModel.sendArchiveBannerIcebreaker(
+                                            notice.connectionId,
+                                            notice.chatLabel,
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .padding(horizontal = 20.dp)
+                                        .padding(bottom = 10.dp),
+                                )
+                            }
+                        }
+
                         items(
                             filteredChats,
                             key = { chat ->

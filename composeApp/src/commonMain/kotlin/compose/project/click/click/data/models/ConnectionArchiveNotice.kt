@@ -3,6 +3,10 @@ package compose.project.click.click.data.models // pragma: allowlist secret
 private const val TWELVE_H_MS = 12L * 60 * 60 * 1000
 
 data class ConnectionArchiveNotice(
+    /** Connection this warning applies to (e.g. deep link / analytics). */
+    val connectionId: String,
+    /** Other party or place label shown in copy ("Alex", "Coffee shop", …). */
+    val chatLabel: String,
     val headline: String,
     val body: String,
     val urgent: Boolean,
@@ -12,17 +16,24 @@ data class ConnectionArchiveNotice(
  * Banner copy for connections in the 48h "Say Hi" window or the 7-day idle window.
  * Returns null when no warning should be shown.
  */
-fun Connection.archiveNotice(nowMs: Long): ConnectionArchiveNotice? {
+fun Connection.archiveNotice(nowMs: Long, chatLabel: String): ConnectionArchiveNotice? {
     if (!isVisibleInActiveUi()) return null
     if (isKept()) return null
+
+    val who = chatLabel.trim().ifBlank { "this connection" }
 
     if (isPending() && last_message_at == null) {
         val remaining = getPendingRemainingMs(nowMs)
         if (remaining <= 0L) return null
         val urgent = remaining <= TWELVE_H_MS
         return ConnectionArchiveNotice(
+            connectionId = id,
+            chatLabel = who,
             headline = if (urgent) "Say hi soon" else "New connection",
-            body = formatRemainingLabel(remaining, "until this connection is archived if no one sends a message"),
+            body = formatRemainingLabel(
+                remaining,
+                "until your connection with $who is archived if no one sends a message",
+            ),
             urgent = urgent,
         )
     }
@@ -32,8 +43,13 @@ fun Connection.archiveNotice(nowMs: Long): ConnectionArchiveNotice? {
         if (remaining <= 0L || remaining == Long.MAX_VALUE) return null
         val urgent = remaining <= TWELVE_H_MS
         return ConnectionArchiveNotice(
+            connectionId = id,
+            chatLabel = who,
             headline = if (urgent) "Reconnect soon" else "Stay in touch",
-            body = formatRemainingLabel(remaining, "until this chat may archive without new messages"),
+            body = formatRemainingLabel(
+                remaining,
+                "until your chat with $who may be archived without new messages",
+            ),
             urgent = urgent,
         )
     }
@@ -44,10 +60,14 @@ fun Connection.archiveNotice(nowMs: Long): ConnectionArchiveNotice? {
 /**
  * Single banner for dashboard: most urgent expiring connection in the list.
  */
-fun Iterable<Connection>.mostUrgentArchiveNotice(nowMs: Long): ConnectionArchiveNotice? {
+fun Iterable<Connection>.mostUrgentArchiveNotice(
+    nowMs: Long,
+    chatLabelFor: (Connection) -> String,
+): ConnectionArchiveNotice? {
     data class Scored(val notice: ConnectionArchiveNotice, val remainingMs: Long)
     val scored = mapNotNull { conn ->
-        val notice = conn.archiveNotice(nowMs) ?: return@mapNotNull null
+        val label = chatLabelFor(conn)
+        val notice = conn.archiveNotice(nowMs, label) ?: return@mapNotNull null
         val remaining = when {
             conn.isPending() && conn.last_message_at == null -> conn.getPendingRemainingMs(nowMs)
             conn.isActive() -> conn.getIdleArchiveRemainingMs(nowMs).takeIf { it != Long.MAX_VALUE } ?: Long.MAX_VALUE

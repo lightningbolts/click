@@ -12,6 +12,7 @@ import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: 
 import compose.project.click.click.data.models.UserInterests
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.resolveDisplayName
+import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -36,6 +37,28 @@ data class AvailabilityIntentInsertResult(
 class SupabaseRepository {
     /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
+
+    /**
+     * When the remote `users.last_polled` column is missing, PostgREST rejects PATCHes; skip further writes
+     * for this process (apply [database/add_users_last_polled_column.sql] on the project to restore).
+     */
+    private var lastPolledWritesDisabled: Boolean = false
+
+    /**
+     * When PostgREST has no `connection_archives` table, skip further queries until process restart
+     * (apply [database/add_connection_archives.sql] to enable user-level archives).
+     */
+    private var connectionArchivesTableMissing: Boolean = false
+
+    private fun isConnectionArchivesUnavailableError(e: Throwable): Boolean {
+        val msg = e.redactedRestMessage()
+        return msg.contains("connection_archives", ignoreCase = true) &&
+            (
+                msg.contains("schema cache", ignoreCase = true) ||
+                    msg.contains("Could not find the table", ignoreCase = true) ||
+                    msg.contains("does not exist", ignoreCase = true)
+                )
+    }
     private val userColumnSets = listOf(
         listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
         listOf("id", "name", "full_name", "email", "image", "last_polled"),
@@ -80,13 +103,10 @@ class SupabaseRepository {
      */
     suspend fun fetchUserById(userId: String): User? {
         return try {
-            println("Fetching user with ID: $userId")
             val result = fetchUserCoresByIds(listOf(userId))
-            println("Found ${result.size} user(s)")
             result.firstOrNull()?.toUser()
         } catch (e: Exception) {
-            println("Error fetching user by ID '$userId': ${e.message}")
-            e.printStackTrace()
+            println("Error fetching user by ID (redacted): ${e.redactedRestMessage()}")
             null
         }
     }
@@ -130,7 +150,7 @@ class SupabaseRepository {
                 (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
             }
         } catch (e: Exception) {
-            println("Error fetchSharedConnectionBetween: ${e.message}")
+            println("Error fetchSharedConnectionBetween (redacted): ${e.redactedRestMessage()}")
             null
         }
     }
@@ -174,7 +194,7 @@ class SupabaseRepository {
                 .decodeList<Connection>()
                 .filter { it.isVisibleInActiveUi() }
         } catch (e: Exception) {
-            println("Error fetching connections: ${e.message}")
+            println("Error fetching connections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -193,7 +213,7 @@ class SupabaseRepository {
                 .decodeList<Connection>()
             connections.firstOrNull()
         } catch (e: Exception) {
-            println("Error fetching connection: ${e.message}")
+            println("Error fetching connection (redacted): ${e.redactedRestMessage()}")
             null
         }
     }
@@ -243,7 +263,7 @@ class SupabaseRepository {
                 merged?.copy(tags = interestsByUserId[userId] ?: merged.tags)
             }
         } catch (e: Exception) {
-            println("Error fetching users: ${e.message}")
+            println("Error fetching users (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -254,7 +274,7 @@ class SupabaseRepository {
                 put("user_ids", kotlinx.serialization.json.JsonArray(userIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))
             }).decodeList<DisplayNameRpcRow>().map { it.toUser() }
         } catch (e: Exception) {
-            println("Error resolving display names via RPC: ${e.message}")
+            println("Error resolving display names via RPC (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -278,7 +298,7 @@ class SupabaseRepository {
             lastError = attempt.exceptionOrNull()
         }
 
-        println("Error fetching users with all schema variants: ${lastError?.message}")
+        println("Error fetching users with all schema variants (redacted): ${lastError?.redactedRestMessage()}")
         return emptyList()
     }
 
@@ -286,6 +306,7 @@ class SupabaseRepository {
      * Update user's last polled timestamp
      */
     suspend fun updateUserLastPolled(userId: String, timestamp: Long): Boolean {
+        if (lastPolledWritesDisabled) return true
         return try {
             supabase.from("users")
                 .update({
@@ -297,8 +318,12 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error updating user: ${e.message}")
-            false
+            val msg = e.redactedRestMessage()
+            if (msg.contains("last_polled", ignoreCase = true)) {
+                lastPolledWritesDisabled = true
+            }
+            println("Error updating user last_polled (redacted): $msg")
+            true
         }
     }
 
@@ -320,7 +345,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error updating connection: ${e.message}")
+            println("Error updating connection (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -343,7 +368,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error updating connection has_begun: ${e.message}")
+            println("Error updating connection has_begun (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -368,7 +393,7 @@ class SupabaseRepository {
                         }
                 }
                 if (withStatus.isSuccess) return true
-                println("updateConnectionExpiryState (status column may be missing): ${withStatus.exceptionOrNull()?.message}")
+                println("updateConnectionExpiryState (status column may be missing): ${withStatus.exceptionOrNull()?.redactedRestMessage()}")
             }
             supabase.from("connections")
                 .update({
@@ -380,7 +405,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error updating connection expiry_state: ${e.message}")
+            println("Error updating connection expiry_state (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -425,7 +450,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error updating user keep decision: ${e.message}")
+            println("Error updating user keep decision (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -446,7 +471,7 @@ class SupabaseRepository {
                     }
             }
             if (withStatus.isSuccess) return true
-            println("deleteConnection soft-remove (retry without status): ${withStatus.exceptionOrNull()?.message}")
+            println("deleteConnection soft-remove (retry without status): ${withStatus.exceptionOrNull()?.redactedRestMessage()}")
             supabase.from("connections")
                 .update({
                     set("expiry_state", "expired")
@@ -455,7 +480,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error soft-removing connection: ${e.message}")
+            println("Error soft-removing connection (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -476,7 +501,7 @@ class SupabaseRepository {
                 .decodeList<compose.project.click.click.data.models.UserAvailability>()
             availabilities.firstOrNull()
         } catch (e: Exception) {
-            println("Error fetching user availability: ${e.message}")
+            println("Error fetching user availability (redacted): ${e.redactedRestMessage()}")
             null
         }
     }
@@ -497,7 +522,7 @@ class SupabaseRepository {
                 .decodeList<compose.project.click.click.data.models.UserAvailability>()
             availabilities.associateBy { it.userId }
         } catch (e: Exception) {
-            println("Error fetching availabilities: ${e.message}")
+            println("Error fetching availabilities (redacted): ${e.redactedRestMessage()}")
             emptyMap()
         }
     }
@@ -533,8 +558,7 @@ class SupabaseRepository {
             println("Successfully updated availability for user ${availability.userId}: isFreeThisWeek=${availability.isFreeThisWeek}")
             true
         } catch (e: Exception) {
-            println("Error updating availability: ${e.message}")
-            e.printStackTrace()
+            println("Error updating availability (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -557,8 +581,7 @@ class SupabaseRepository {
             println("setFreeThisWeek for $userId: isFree=$isFree, result=$result")
             result
         } catch (e: Exception) {
-            println("Error setting free this week: ${e.message}")
-            e.printStackTrace()
+            println("Error setting free this week (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -572,8 +595,7 @@ class SupabaseRepository {
             AvailabilityIntentInsertResult(success = true)
         } catch (e: Exception) {
             val short = restErrorSummary(e)
-            println("Error inserting availability_intent: $short")
-            e.printStackTrace()
+            println("Error inserting availability_intent (redacted): $short")
             AvailabilityIntentInsertResult(success = false, errorMessage = short)
         }
     }
@@ -599,8 +621,7 @@ class SupabaseRepository {
                 }
                 .sortedByDescending { it.createdOrStartInstant() }
         } catch (e: Exception) {
-            println("Error fetching availability_intents: ${e.message}")
-            e.printStackTrace()
+            println("Error fetching availability_intents (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -637,8 +658,7 @@ class SupabaseRepository {
             AvailabilityIntentInsertResult(success = true)
         } catch (e: Exception) {
             val short = restErrorSummary(e)
-            println("Error updating availability_intent: $short")
-            e.printStackTrace()
+            println("Error updating availability_intent (redacted): $short")
             AvailabilityIntentInsertResult(success = false, errorMessage = short)
         }
     }
@@ -660,8 +680,7 @@ class SupabaseRepository {
             AvailabilityIntentInsertResult(success = true)
         } catch (e: Exception) {
             val short = restErrorSummary(e)
-            println("Error deleting availability_intent: $short")
-            e.printStackTrace()
+            println("Error deleting availability_intent (redacted): $short")
             AvailabilityIntentInsertResult(success = false, errorMessage = short)
         }
     }
@@ -686,7 +705,6 @@ class SupabaseRepository {
         if (f.isEmpty()) return false
         val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
         return try {
-            println("Updating user profile names for $userId to: $display")
             runCatching {
                 supabase.from("users")
                     .update({
@@ -709,11 +727,9 @@ class SupabaseRepository {
                         }
                     }
             }
-            println("Successfully updated user profile names for $userId")
             true
         } catch (e: Exception) {
-            println("Error updating user profile names: ${e.message}")
-            e.printStackTrace()
+            println("Error updating user profile names (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -724,8 +740,6 @@ class SupabaseRepository {
      */
     suspend fun upsertUser(user: compose.project.click.click.data.models.User): Boolean {
         return try {
-            println("Upserting user: ${user.id}, name: ${user.name}")
-            
             // Check if user exists
             val existing = fetchUserById(user.id)
             val resolvedName = user.name?.trim()?.takeIf { it.isNotEmpty() }
@@ -771,7 +785,6 @@ class SupabaseRepository {
                                 }
                             }
                     }
-                    println("Updated existing user profile: $resolvedName")
                 }
                 true
             } else {
@@ -789,19 +802,16 @@ class SupabaseRepository {
                                 put("email", user.email ?: "")
                                 put("created_at", if (user.createdAt > 0L) user.createdAt else kotlinx.datetime.Clock.System.now().toEpochMilliseconds())
                                 user.image?.let { put("image", it) }
-                                user.lastPolled?.let { put("last_polled", it) }
                             }
                         )
                 }.getOrElse {
                     supabase.from("users")
                         .insert(user.toInsertDto().copy(name = resolvedName, email = user.email ?: ""))
                 }
-                println("Inserted new user: ${user.id}")
                 true
             }
         } catch (e: Exception) {
-            println("Error upserting user: ${e.message}")
-            e.printStackTrace()
+            println("Error upserting user (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -844,7 +854,7 @@ class SupabaseRepository {
                 },
             )
         } catch (e: Exception) {
-            println("Error fetching user_interests: ${e.message}")
+            println("Error fetching user_interests (redacted): ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -878,7 +888,7 @@ class SupabaseRepository {
             }
             true
         } catch (e: Exception) {
-            println("Error updating user_interests: ${e.message}")
+            println("Error updating user_interests (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -895,7 +905,7 @@ class SupabaseRepository {
                 .decodeList<UserInterestsDto>()
                 .associate { it.userId to it.tags }
         } catch (e: Exception) {
-            println("Error batch-fetching user_interests: ${e.message}")
+            println("Error batch-fetching user_interests (redacted): ${e.redactedRestMessage()}")
             emptyMap()
         }
     }
@@ -919,7 +929,7 @@ class SupabaseRepository {
                 .decodeList<LocationPreferences>()
             result.firstOrNull() ?: LocationPreferences()
         } catch (e: Exception) {
-            println("Error fetching location preferences: ${e.message}")
+            println("Error fetching location preferences (redacted): ${e.redactedRestMessage()}")
             LocationPreferences()
         }
     }
@@ -939,7 +949,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error updating location preferences: ${e.message}")
+            println("Error updating location preferences (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -958,7 +968,7 @@ class SupabaseRepository {
                 })
             true
         } catch (e: Exception) {
-            println("Error blocking user: ${e.message}")
+            println("Error blocking user (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -976,7 +986,7 @@ class SupabaseRepository {
                 })
             true
         } catch (e: Exception) {
-            println("Error reporting connection: ${e.message}")
+            println("Error reporting connection (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -989,6 +999,7 @@ class SupabaseRepository {
      * Silently no-ops if the table has not been provisioned yet.
      */
     suspend fun archiveConnection(userId: String, connectionId: String): Boolean {
+        if (connectionArchivesTableMissing) return false
         return try {
             supabase.from("connection_archives")
                 .insert(buildJsonObject {
@@ -997,7 +1008,11 @@ class SupabaseRepository {
                 })
             true
         } catch (e: Exception) {
-            println("archiveConnection (non-fatal): ${e.message}")
+            if (isConnectionArchivesUnavailableError(e)) {
+                connectionArchivesTableMissing = true
+            } else {
+                println("archiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
+            }
             false // table may not exist yet; in-memory fallback handles UI state
         }
     }
@@ -1006,6 +1021,7 @@ class SupabaseRepository {
      * Unarchive a connection, removing it from the user's archive list.
      */
     suspend fun unarchiveConnection(userId: String, connectionId: String): Boolean {
+        if (connectionArchivesTableMissing) return false
         return try {
             supabase.from("connection_archives")
                 .delete {
@@ -1016,7 +1032,11 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("unarchiveConnection (non-fatal): ${e.message}")
+            if (isConnectionArchivesUnavailableError(e)) {
+                connectionArchivesTableMissing = true
+            } else {
+                println("unarchiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
+            }
             false
         }
     }
@@ -1025,6 +1045,7 @@ class SupabaseRepository {
      * Fetch all archived connection IDs for a user.
      */
     suspend fun getArchivedConnectionIds(userId: String): Set<String> {
+        if (connectionArchivesTableMissing) return emptySet()
         return try {
             @kotlinx.serialization.Serializable
             data class ArchiveRow(
@@ -1037,7 +1058,11 @@ class SupabaseRepository {
                 .decodeList<ArchiveRow>()
             rows.map { it.connectionId }.toSet()
         } catch (e: Exception) {
-            println("getArchivedConnectionIds (non-fatal): ${e.message}")
+            if (isConnectionArchivesUnavailableError(e)) {
+                connectionArchivesTableMissing = true
+            } else {
+                println("getArchivedConnectionIds (non-fatal, redacted): ${e.redactedRestMessage()}")
+            }
             emptySet()
         }
     }
@@ -1093,7 +1118,7 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error editing message: ${e.message}")
+            println("Error editing message (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -1122,26 +1147,22 @@ class SupabaseRepository {
                 }
             true
         } catch (e: Exception) {
-            println("Error deleting message: ${e.message}")
+            println("Error deleting message (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
 
-    /** Short PostgREST / Supabase error (not the long RestException message with URL/headers). */
+    /** Short PostgREST / Supabase error (never includes URL, headers, or tokens). */
     private fun restErrorSummary(e: Throwable): String {
         var t: Throwable? = e
         while (t != null) {
-            if (t is RestException) return t.error
+            if (t is RestException) {
+                val err = t.error.trim()
+                if (err.isNotEmpty()) return err.take(400)
+            }
             t = t.cause
         }
-        return e.message
-            ?.substringBefore("\nURL:")
-            ?.trim()
-            ?.lineSequence()
-            ?.firstOrNull()
-            ?.trim()
-            ?: e::class.simpleName
-            ?: "Unknown error"
+        return e.redactedRestMessage()
     }
 }
 

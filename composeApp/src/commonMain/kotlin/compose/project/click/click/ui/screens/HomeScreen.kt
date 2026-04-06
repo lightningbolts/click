@@ -101,8 +101,20 @@ fun HomeScreen(
             archiveBannerNow = Clock.System.now().toEpochMilliseconds()
         }
     }
-    val archiveBannerNotice = remember(connectionsForArchiveBanner, archiveBannerNow) {
-        connectionsForArchiveBanner.mostUrgentArchiveNotice(archiveBannerNow)
+
+    val archiveBannerNotice = remember(
+        homeState,
+        connectionsForArchiveBanner,
+        archiveBannerNow,
+        connectedUsers,
+    ) {
+        val success = homeState as? HomeState.Success ?: return@remember null
+        connectionsForArchiveBanner.mostUrgentArchiveNotice(archiveBannerNow) { conn ->
+            val otherId = conn.user_ids.firstOrNull { it != success.user.id }
+            otherId?.let { connectedUsers[it]?.name?.trim() }?.takeIf { it.isNotBlank() }
+                ?: conn.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }
+                ?: "this connection"
+        }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -186,14 +198,6 @@ fun HomeScreen(
                     }
                     Spacer(modifier = Modifier.height(CardSpacing))
 
-                    archiveBannerNotice?.let { notice ->
-                        ConnectionArchiveWarningBanner(
-                            notice = notice,
-                            modifier = Modifier.padding(horizontal = ScreenPaddingHorizontal),
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
@@ -203,6 +207,16 @@ fun HomeScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(CardSpacing)
                     ) {
+                        archiveBannerNotice?.let { notice ->
+                            item(key = "archive_banner") {
+                                ConnectionArchiveWarningBanner(
+                                    notice = notice,
+                                    onOpenChat = { onNavigateToChat(notice.connectionId) },
+                                    onSendIcebreaker = { viewModel.sendArchiveBannerIcebreaker(notice) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
                         pollPairSuggestion?.let { suggestion ->
                             item(key = "poll_pair_card") {
                                 PollPairCard(

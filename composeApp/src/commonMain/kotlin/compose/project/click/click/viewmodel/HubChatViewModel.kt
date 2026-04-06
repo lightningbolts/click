@@ -139,6 +139,10 @@ class HubChatViewModel(
                 }
                 hubChannel = channel
 
+                val hubMessageChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "hub_messages"
+                }
+
                 val occupantKeys = mutableSetOf<String>()
                 fun recomputeOccupants() {
                     val n = occupantKeys.size.coerceAtLeast(1)
@@ -179,9 +183,7 @@ class HubChatViewModel(
                 }
 
                 try {
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "hub_messages"
-                    }.collect { action ->
+                    hubMessageChanges.collect { action ->
                         when (action) {
                             is PostgresAction.Insert -> {
                                 val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect

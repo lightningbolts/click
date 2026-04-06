@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionInsights
 import compose.project.click.click.data.models.IcebreakerRepository
 import compose.project.click.click.data.models.PollPairSuggestion
@@ -329,6 +330,22 @@ class HomeViewModel(
                 _nudgeResult.value = "Failed to send icebreaker"
             }
         }
+    }
+
+    /**
+     * Icebreaker from the archive / idle-window banner (same flow as poll-pair).
+     */
+    fun sendArchiveBannerIcebreaker(notice: ConnectionArchiveNotice) {
+        sendPollPairIcebreaker(
+            PollPairSuggestion(
+                connectionId = notice.connectionId,
+                otherUserId = "",
+                otherUserName = notice.chatLabel,
+                lastInteractionAt = 0L,
+                daysSinceContact = 0,
+                contextTag = null,
+            ),
+        )
     }
 
     /**
