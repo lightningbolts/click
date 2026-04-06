@@ -1348,7 +1348,7 @@ class ChatViewModel(
             val connection = currentState.chatDetails.connection
             if (connection.isPending()) {
                 if (supabaseRepository.updateConnectionExpiryState(connectionId, "active")) {
-                    updateConnectionState(connectionId) { it.copy(expiry_state = "active") }
+                    updateConnectionState(connectionId) { it.copy(expiry_state = "active", status = "active") }
                 }
             }
         }
@@ -1656,7 +1656,7 @@ class ChatViewModel(
 
             if (success) {
                 _currentUserHasKept.value = true
-                updateConnectionState(connectionId) { it.copy(expiry_state = "kept") }
+                updateConnectionState(connectionId) { it.copy(expiry_state = "kept", status = "kept") }
                 if (!vibeCheckEnabled) {
                     _connectionKept.value = true
                     vibeCheckTimerJob?.cancel()

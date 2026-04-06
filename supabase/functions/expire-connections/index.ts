@@ -43,15 +43,23 @@ async function sendArchiveWarningPushes(
 
   let pushAttempts = 0;
 
+  const now = Date.now();
+
   for (const c of connections) {
+    const anchor = kind === "pending" ? c.created : (c.last_message_at ?? c.created);
+    const deadline = anchor + (kind === "pending" ? FORTY_EIGHT_HOURS_MS : SEVEN_DAYS_MS);
+    const remainingMs = Math.max(0, deadline - now);
+    const remainingHours = Math.round(remainingMs / (60 * 60 * 1000));
+    const timeLabel = remainingHours >= 1 ? `~${remainingHours} hour${remainingHours === 1 ? "" : "s"}` : "less than an hour";
+
     const title =
       kind === "pending"
         ? "Say hi before this connection archives"
         : "Reconnect soon";
     const body =
       kind === "pending"
-        ? "You have about 12 hours left to send a first message."
-        : "No messages in a week — reply within ~12 hours to keep this chat active.";
+        ? `You have ${timeLabel} left to send a first message.`
+        : `No messages in a week — reply within ${timeLabel} to keep this chat active.`;
 
     for (const uid of c.user_ids) {
       try {
