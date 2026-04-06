@@ -1,23 +1,102 @@
 // Supabase Edge Function: expire-connections
-// Scheduled via pg_cron every 15 minutes to enforce server-side connection expiry.
+// Scheduled via pg_cron (e.g. every 15 minutes).
 //
-// Logic:
-//   1. Pending connections with no messages after 48h → DELETE
-//   2. Active connections with no messages in 7 days and not mutually kept → DELETE  
-//   3. Log connections approaching expiry (48h warning) for future push notification
+// - Pending + no messages after 48h → status = 'archived' (not DELETE)
+// - Active + no message in 7d + not mutually kept → status = 'archived'
+// - Active + mutually kept → status = 'kept'
+// - 12h before archive: send push via send-push-notification (deduped per connection)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.83.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_KEY")!;
 
+const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
 interface ConnectionRow {
   id: string;
   created: number;
-  expiry_state: string;
+  status: string;
   last_message_at: number | null;
   should_continue: boolean[];
   user_ids: string[];
+  archive_warning_pending_sent_at: number | null;
+  archive_warning_idle_sent_at: number | null;
+}
+
+function isMutuallyKept(sc: boolean[] | null | undefined): boolean {
+  return !!(sc && sc.length >= 2 && sc[0] === true && sc[1] === true);
+}
+
+async function sendArchiveWarningPushes(
+  supabase: ReturnType<typeof createClient>,
+  connections: ConnectionRow[],
+  kind: "pending" | "idle",
+): Promise<number> {
+  if (connections.length === 0) return 0;
+
+  const secret =
+    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET") ?? SUPABASE_SERVICE_KEY;
+  const pushUrl = `${SUPABASE_URL}/functions/v1/send-push-notification`;
+
+  let pushAttempts = 0;
+
+  for (const c of connections) {
+    const title =
+      kind === "pending"
+        ? "Say hi before this connection archives"
+        : "Reconnect soon";
+    const body =
+      kind === "pending"
+        ? "You have about 12 hours left to send a first message."
+        : "No messages in a week — reply within ~12 hours to keep this chat active.";
+
+    for (const uid of c.user_ids) {
+      try {
+        const res = await fetch(pushUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+            "x-archive-warning-secret": secret,
+          },
+          body: JSON.stringify({
+            recipient_user_id: uid,
+            title,
+            body,
+            data: {
+              type: "archive_warning",
+              connection_id: c.id,
+              warning_kind: kind,
+            },
+          }),
+        });
+        pushAttempts += 1;
+        if (res.ok) {
+          await res.json().catch(() => ({}));
+        } else {
+          console.error(
+            "send-push-notification failed:",
+            res.status,
+            await res.text(),
+          );
+        }
+      } catch (e) {
+        console.error("send-push-notification error:", e);
+      }
+    }
+
+    const col =
+      kind === "pending"
+        ? "archive_warning_pending_sent_at"
+        : "archive_warning_idle_sent_at";
+    const now = Date.now();
+    await supabase.from("connections").update({ [col]: now }).eq("id", c.id);
+  }
+
+  return pushAttempts;
 }
 
 Deno.serve(async (req: Request) => {
@@ -27,139 +106,144 @@ Deno.serve(async (req: Request) => {
     });
 
     const now = Date.now();
-    const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    let pendingArchived = 0;
+    let activeArchived = 0;
+    let upgradedKept = 0;
+    let pendingWarnings = 0;
+    let idleWarnings = 0;
 
-    let pendingDeleted = 0;
-    let activeDeleted = 0;
-    let warningCount = 0;
-
-    // =========================================================================
-    // 1. Pending connections: no message sent within 48 hours → DELETE
-    // =========================================================================
     const pendingCutoff = now - FORTY_EIGHT_HOURS_MS;
+    const activeIdleCutoff = now - SEVEN_DAYS_MS;
+    const pendingWarnStart = pendingCutoff + TWELVE_HOURS_MS;
+    const idleWarnStart = activeIdleCutoff + TWELVE_HOURS_MS;
 
+    // -------------------------------------------------------------------------
+    // 0) Pending: 12h warning (no first message yet)
+    // -------------------------------------------------------------------------
+    const { data: pendingWarnRows, error: pwErr } = await supabase
+      .from("connections")
+      .select(
+        "id, created, status, last_message_at, should_continue, user_ids, archive_warning_pending_sent_at, archive_warning_idle_sent_at",
+      )
+      .eq("status", "pending")
+      .is("last_message_at", null)
+      .gte("created", pendingCutoff)
+      .lt("created", pendingWarnStart);
+
+    if (pwErr) {
+      console.error("pending warning query:", pwErr.message);
+    } else if (pendingWarnRows && pendingWarnRows.length > 0) {
+      const toWarn = (pendingWarnRows as ConnectionRow[]).filter((c) =>
+        !c.archive_warning_pending_sent_at
+      );
+      pendingWarnings = await sendArchiveWarningPushes(supabase, toWarn, "pending");
+    }
+
+    // -------------------------------------------------------------------------
+    // 1) Pending: archive after 48h with no messages
+    // -------------------------------------------------------------------------
     const { data: pendingExpired, error: pendingError } = await supabase
       .from("connections")
-      .select("id, created, last_message_at")
-      .eq("expiry_state", "pending")
+      .select("id")
+      .eq("status", "pending")
       .is("last_message_at", null)
       .lt("created", pendingCutoff);
 
     if (pendingError) {
       console.error("Error querying pending connections:", pendingError.message);
     } else if (pendingExpired && pendingExpired.length > 0) {
-      const idsToDelete = pendingExpired.map((c: { id: string }) => c.id);
-      const { error: deleteError } = await supabase
+      const ids = pendingExpired.map((c: { id: string }) => c.id);
+      const { error: updErr } = await supabase
         .from("connections")
-        .delete()
-        .in("id", idsToDelete);
-
-      if (deleteError) {
-        console.error("Error deleting pending connections:", deleteError.message);
+        .update({ status: "archived" })
+        .in("id", ids);
+      if (updErr) {
+        console.error("Error archiving pending:", updErr.message);
       } else {
-        pendingDeleted = idsToDelete.length;
-        console.log(`Deleted ${pendingDeleted} expired pending connections`);
+        pendingArchived = ids.length;
+        console.log(`Archived ${pendingArchived} pending connections (48h no message)`);
       }
     }
 
-    // =========================================================================
-    // 2. Active connections: no message in 7 days AND not mutually kept → DELETE
-    // =========================================================================
-    const activeCutoff = now - SEVEN_DAYS_MS;
+    // -------------------------------------------------------------------------
+    // 2) Active: 12h warning before 7-day idle archive
+    // -------------------------------------------------------------------------
+    const { data: idleWarnRows, error: iwErr } = await supabase
+      .from("connections")
+      .select(
+        "id, created, status, last_message_at, should_continue, user_ids, archive_warning_pending_sent_at, archive_warning_idle_sent_at",
+      )
+      .eq("status", "active")
+      .not("last_message_at", "is", null)
+      .gte("last_message_at", activeIdleCutoff)
+      .lt("last_message_at", idleWarnStart);
 
+    if (iwErr) {
+      console.error("idle warning query:", iwErr.message);
+    } else if (idleWarnRows && idleWarnRows.length > 0) {
+      const filtered = (idleWarnRows as ConnectionRow[]).filter((c) => {
+        if (isMutuallyKept(c.should_continue)) return false;
+        return !c.archive_warning_idle_sent_at;
+      });
+      idleWarnings = await sendArchiveWarningPushes(supabase, filtered, "idle");
+    }
+
+    // -------------------------------------------------------------------------
+    // 3) Active: 7d idle → archive OR mutually kept → kept
+    // -------------------------------------------------------------------------
     const { data: activeExpired, error: activeError } = await supabase
       .from("connections")
       .select("id, last_message_at, should_continue, user_ids")
-      .eq("expiry_state", "active")
-      .lt("last_message_at", activeCutoff);
+      .eq("status", "active")
+      .lt("last_message_at", activeIdleCutoff);
 
     if (activeError) {
       console.error("Error querying active connections:", activeError.message);
     } else if (activeExpired && activeExpired.length > 0) {
-      // Filter out mutually kept connections (both should_continue = true)
-      const toDelete = activeExpired.filter((c: ConnectionRow) => {
-        const sc = c.should_continue;
-        if (!sc || sc.length < 2) return true;
-        // If both users said keep, don't delete — upgrade to 'kept' instead
-        return !(sc[0] === true && sc[1] === true);
-      });
+      const rows = activeExpired as ConnectionRow[];
+      const toUpgrade = rows.filter((c) => isMutuallyKept(c.should_continue));
+      const toArchive = rows.filter((c) => !isMutuallyKept(c.should_continue));
 
-      const toUpgrade = activeExpired.filter((c: ConnectionRow) => {
-        const sc = c.should_continue;
-        return sc && sc.length >= 2 && sc[0] === true && sc[1] === true;
-      });
-
-      // Upgrade mutually-kept connections to 'kept' state
       if (toUpgrade.length > 0) {
-        const upgradeIds = toUpgrade.map((c: ConnectionRow) => c.id);
+        const upgradeIds = toUpgrade.map((c) => c.id);
         const { error: upgradeError } = await supabase
           .from("connections")
-          .update({ expiry_state: "kept" })
+          .update({ status: "kept" })
           .in("id", upgradeIds);
-
         if (upgradeError) {
-          console.error("Error upgrading connections to kept:", upgradeError.message);
+          console.error("Error upgrading to kept:", upgradeError.message);
         } else {
-          console.log(`Upgraded ${upgradeIds.length} connections to 'kept'`);
+          upgradedKept = upgradeIds.length;
+          console.log(`Set ${upgradedKept} connections to kept`);
         }
       }
 
-      // Delete non-kept expired active connections
-      if (toDelete.length > 0) {
-        // Mark as expired first for audit trail, then delete
-        const deleteIds = toDelete.map((c: ConnectionRow) => c.id);
-        const { error: deleteError } = await supabase
+      if (toArchive.length > 0) {
+        const archiveIds = toArchive.map((c) => c.id);
+        const { error: archErr } = await supabase
           .from("connections")
-          .delete()
-          .in("id", deleteIds);
-
-        if (deleteError) {
-          console.error("Error deleting active connections:", deleteError.message);
+          .update({ status: "archived" })
+          .in("id", archiveIds);
+        if (archErr) {
+          console.error("Error archiving idle active:", archErr.message);
         } else {
-          activeDeleted = deleteIds.length;
-          console.log(`Deleted ${activeDeleted} expired active connections`);
+          activeArchived = archiveIds.length;
+          console.log(`Archived ${activeArchived} idle active connections`);
         }
       }
     }
 
-    // =========================================================================
-    // 3. Pre-expiry warning: active connections approaching 7-day cutoff
-    //    Log for now — push notification can be wired up later
-    // =========================================================================
-    const warningCutoff = now - SEVEN_DAYS_MS + FORTY_EIGHT_HOURS_MS; // 5 days
-
-    const { data: warningConnections, error: warningError } = await supabase
-      .from("connections")
-      .select("id, user_ids, last_message_at")
-      .eq("expiry_state", "active")
-      .lt("last_message_at", warningCutoff)
-      .gte("last_message_at", activeCutoff);
-
-    if (warningError) {
-      console.error("Error querying warning connections:", warningError.message);
-    } else if (warningConnections && warningConnections.length > 0) {
-      warningCount = warningConnections.length;
-      console.log(
-        `[PUSH STUB] ${warningCount} connections approaching expiry — ` +
-        `would send push notifications to users: ${warningConnections
-          .map((c: { user_ids: string[] }) => c.user_ids.join(","))
-          .join(" | ")}`
-      );
-    }
-
-    // =========================================================================
-    // Response
-    // =========================================================================
     const result = {
       success: true,
       timestamp: new Date().toISOString(),
-      pending_deleted: pendingDeleted,
-      active_deleted: activeDeleted,
-      warning_notifications: warningCount,
+      pending_archived: pendingArchived,
+      active_archived: activeArchived,
+      upgraded_kept: upgradedKept,
+      pending_warning_pushes: pendingWarnings,
+      idle_warning_pushes: idleWarnings,
     };
 
-    console.log("Expire-connections run complete:", JSON.stringify(result));
+    console.log("expire-connections complete:", JSON.stringify(result));
 
     return new Response(JSON.stringify(result), {
       headers: { "Content-Type": "application/json" },
@@ -169,7 +253,7 @@ Deno.serve(async (req: Request) => {
     console.error("Fatal error in expire-connections:", error);
     return new Response(
       JSON.stringify({ success: false, error: String(error) }),
-      { headers: { "Content-Type": "application/json" }, status: 500 }
+      { headers: { "Content-Type": "application/json" }, status: 500 },
     );
   }
 });
