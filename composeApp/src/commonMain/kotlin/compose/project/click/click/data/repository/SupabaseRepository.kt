@@ -144,6 +144,21 @@ class SupabaseRepository {
         pageSize: Int = 20
     ): List<Connection> {
         return try {
+            // Try server-side status filter first; fall back to client-side for legacy schemas
+            val withServerFilter = runCatching {
+                supabase.from("connections")
+                    .select {
+                        filter {
+                            contains("user_ids", listOf(userId))
+                            not("status", io.github.jan.supabase.postgrest.query.filter.FilterOperator.IN, "(archived,removed)")
+                        }
+                        order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
+                    }
+                    .decodeList<Connection>()
+            }
+            if (withServerFilter.isSuccess) return withServerFilter.getOrThrow()
+
             supabase.from("connections")
                 .select {
                     filter {
