@@ -150,7 +150,11 @@ class SupabaseRepository {
                     .select {
                         filter {
                             contains("user_ids", listOf(userId))
-                            not("status", io.github.jan.supabase.postgrest.query.filter.FilterOperator.IN, "(archived,removed)")
+                            filterNot(
+                                "status",
+                                io.github.jan.supabase.postgrest.query.filter.FilterOperator.IN,
+                                "('archived','removed')",
+                            )
                         }
                         order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
                         range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
