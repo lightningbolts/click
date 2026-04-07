@@ -167,17 +167,6 @@ fun App() {
         }
     }
 
-    suspend fun requestMicrophonePermissionIfNeeded(shouldRequest: Boolean) {
-        if (!shouldRequest) return
-        suspendCancellableCoroutine<Unit> { continuation ->
-            requestMicrophonePermissionThen {
-                if (continuation.isActive) {
-                    continuation.resume(Unit)
-                }
-            }
-        }
-    }
-
     LaunchedEffect(authViewModel.isAuthenticated, currentUser.id) {
         if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
             onboardingState = null
@@ -320,6 +309,13 @@ fun App() {
         skipLocation: Boolean
     ) {
         connectionScope.launch {
+            connectionViewModel.markConnecting()
+            pendingQrConnection = null
+            connectionRevealState = ConnectionRevealUiState(
+                methodLabel = "QR",
+                phase = ConnectionRevealPhase.Connecting
+            )
+
             ambientNoiseOptIn = noiseOptIn
             tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
 
@@ -340,12 +336,6 @@ fun App() {
             val noiseSample = noiseSampleDeferred.await()
             val barometricSample = barometricSampleDeferred.await()
             val capturedLocation = locationDeferred.await()
-
-            pendingQrConnection = null
-            connectionRevealState = ConnectionRevealUiState(
-                methodLabel = "QR",
-                phase = ConnectionRevealPhase.Connecting
-            )
 
             connectWithUser(
                 userId = pending.userId,
@@ -513,6 +503,10 @@ fun App() {
                                 initialNotificationsEnabled = notificationPreferences.messagePushEnabled || notificationPreferences.callPushEnabled,
                                 initialAmbientNoiseEnabled = ambientNoiseOptIn,
                                 initialBarometricContextEnabled = barometricContextOptIn,
+                                locationService = locationService,
+                                ambientNoiseMonitor = ambientNoiseMonitor,
+                                requestLocationPermissionThen = requestLocationPermissionThen,
+                                requestMicrophonePermissionThen = requestMicrophonePermissionThen,
                                 isLoading = isCompletingPermissions,
                                 onContinue = { selection ->
                                     onboardingScope.launch {
@@ -533,13 +527,6 @@ fun App() {
                                             )
                                             AppDataManager.setMessageNotificationsEnabled(selection.notificationsEnabled)
                                             AppDataManager.setCallNotificationsEnabled(selection.notificationsEnabled)
-
-                                            requestLocationPermissionIfNeeded(
-                                                shouldRequest = selection.connectionSnapEnabled && !locationService.hasLocationPermission()
-                                            )
-                                            requestMicrophonePermissionIfNeeded(
-                                                shouldRequest = selection.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission
-                                            )
 
                                             val updatedState = (onboardingState ?: OnboardingState()).copy(
                                                 permissionsCompleted = true,

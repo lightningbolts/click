@@ -5,6 +5,7 @@ import ComposeApp
 
 private let clickNotificationPrefsSuite = "click_auth_prefs"
 private let clickRequestPushPermissionNotification = Notification.Name("ClickRequestNotificationPermission")
+private let clickRegisterRemoteNotificationsNotification = Notification.Name("ClickRegisterForRemoteNotifications")
 private let clickRuntimeMessageNotificationsKey = "runtime_message_notifications_enabled"
 private let clickRuntimeCallNotificationsKey = "runtime_call_notifications_enabled"
 private let clickRuntimeActiveChatIdKey = "runtime_active_chat_id"
@@ -60,6 +61,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
 
+        NotificationCenter.default.addObserver(
+            forName: clickRegisterRemoteNotificationsNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+
         notificationCenter.getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
@@ -103,7 +112,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return nil
     }
 
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        // Re-register early when returning from background so APNs can refresh the device token if needed.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                DispatchQueue.main.async {
+                    application.registerForRemoteNotifications()
+                }
+            default:
+                break
+            }
+        }
+    }
+
     func applicationDidBecomeActive(_ application: UIApplication) {
+        ClickKt.onApplicationDidBecomeActive()
+
         // FORCE SYNC: Kotlin is definitely awake now. Push the cached VoIP token!
         if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
             ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")

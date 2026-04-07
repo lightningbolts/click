@@ -18,6 +18,7 @@ import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
+import compose.project.click.click.ui.utils.initAppSystemSettings
 import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
 
 class MainActivity : ComponentActivity() {
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
 
         // Initialize location service with application context
         initLocationService(applicationContext)
+        initAppSystemSettings(applicationContext)
 
         initCallManager(applicationContext, this)
 

@@ -11,10 +11,12 @@ import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isPendingSync
 import compose.project.click.click.data.repository.ConnectionRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed class ConnectionState {
     object Idle : ConnectionState()
@@ -38,6 +40,11 @@ class ConnectionViewModel : ViewModel() {
 
     /** Alias for callers that expect a `connections` name (same backing flow as [userConnections]). */
     val connections: StateFlow<List<Connection>> = userConnections
+
+    /** Call when starting a connection so UI can show loading before network work begins. */
+    fun markConnecting() {
+        _connectionState.value = ConnectionState.Loading
+    }
 
     /**
      * Connect with a user via QR code scan.
@@ -99,13 +106,17 @@ class ConnectionViewModel : ViewModel() {
                     exactNoiseLevelDb = exactNoiseLevelDb
                 )
 
-                // Create the connection
-                val result = repository.createConnection(request)
+                // Create the connection (off main thread so the UI frame isn’t blocked)
+                val result = withContext(Dispatchers.Default) {
+                    repository.createConnection(request)
+                }
 
                 if (result.isSuccess) {
                     val connection = result.getOrNull()!!
                     val connectedUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: scannedUserId
-                    val connectedUser = repository.getUserById(connectedUserId).getOrElse {
+                    val connectedUser = withContext(Dispatchers.Default) {
+                        repository.getUserById(connectedUserId)
+                    }.getOrElse {
                         User(id = connectedUserId, name = "Connection", createdAt = 0L)
                     }
                     _connectionState.value = ConnectionState.Success(connection, connectedUser)

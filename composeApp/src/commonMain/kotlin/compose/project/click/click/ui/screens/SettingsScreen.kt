@@ -28,6 +28,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import compose.project.click.click.platformForegroundTickFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +51,9 @@ import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
+import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.launch
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.models.LocationPreferences
@@ -79,12 +82,20 @@ fun SettingsScreen(
 
     val tokenStorage = remember { createTokenStorage() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
+    val locationService = remember { LocationService() }
     val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
+    val requestLocationPermissionThen = rememberLocationPermissionRequester()
     val settingsScope = rememberCoroutineScope()
+
+    val foregroundSyncTick by platformForegroundTickFlow().collectAsState()
 
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     var micPermissionBump by remember { mutableIntStateOf(0) }
-    val microphoneGranted = remember(micPermissionBump) { ambientNoiseMonitor.hasPermission }
+    var locationPermissionBump by remember { mutableIntStateOf(0) }
+    val microphoneGranted = remember(micPermissionBump, foregroundSyncTick) { ambientNoiseMonitor.hasPermission }
+    val locationSnapGranted = remember(locationPermissionBump, foregroundSyncTick) {
+        locationService.hasLocationPermission()
+    }
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
@@ -286,7 +297,16 @@ fun SettingsScreen(
                 item {
                     YourDataLocationCard(
                         locationPreferences = locationPreferences,
-                        ghostModeEnabled = ghostModeEnabled
+                        ghostModeEnabled = ghostModeEnabled,
+                        locationSnapGranted = locationSnapGranted,
+                        onConnectionSnapCheckedChange = { enabled ->
+                            settingsScope.launch {
+                                AppDataManager.setConnectionSnapEnabled(enabled)
+                                if (enabled && !locationService.hasLocationPermission()) {
+                                    requestLocationPermissionThen { locationPermissionBump++ }
+                                }
+                            }
+                        },
                     )
                 }
 
@@ -520,7 +540,9 @@ private fun SettingsSectionHeader(title: String) {
 @Composable
 private fun YourDataLocationCard(
     locationPreferences: LocationPreferences,
-    ghostModeEnabled: Boolean
+    ghostModeEnabled: Boolean,
+    locationSnapGranted: Boolean,
+    onConnectionSnapCheckedChange: (Boolean) -> Unit,
 ) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -538,8 +560,16 @@ private fun YourDataLocationCard(
                 title = "Location snap",
                 subtitle = "GPS recorded at moment of tap",
                 checked = locationPreferences.connectionSnapEnabled,
-                onCheckedChange = { AppDataManager.setConnectionSnapEnabled(it) }
+                onCheckedChange = onConnectionSnapCheckedChange
             )
+            if (locationPreferences.connectionSnapEnabled && !locationSnapGranted) {
+                Text(
+                    text = "Location access is off — enable it in system settings to capture connection snaps.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp)
+                )
+            }
 
             SettingsDivider()
 

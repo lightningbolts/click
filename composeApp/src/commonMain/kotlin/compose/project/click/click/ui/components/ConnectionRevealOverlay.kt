@@ -143,7 +143,7 @@ fun ConnectionRevealOverlay(
                     text = if (state.phase == ConnectionRevealPhase.Success) {
                         state.connectedName?.let { "You and $it are connected" } ?: "Connection created"
                     } else {
-                        "Making the ${state.methodLabel.lowercase()} intro feel intentional"
+                        "Sparking a new connection…"
                     },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,

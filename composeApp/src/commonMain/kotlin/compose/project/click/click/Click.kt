@@ -15,6 +15,14 @@ import kotlinx.coroutines.launch
 private val pushTokenScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 private val pushTokenRepository = PushTokenRepository()
 
+/**
+ * Called from iOS `AppDelegate.applicationDidBecomeActive` so Compose re-reads
+ * `CLLocationManager.authorizationStatus()` and notification settings after returning from the system UI.
+ */
+fun onApplicationDidBecomeActive() {
+    notifyPlatformApplicationForeground()
+}
+
 fun savePushToken(token: String, platform: String) {
     savePushToken(token, platform, "standard")
 }
