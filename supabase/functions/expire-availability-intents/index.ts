@@ -4,7 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.83.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_KEY")!;
+const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
@@ -34,13 +34,15 @@ Deno.serve(async (req: Request) => {
     let cleared = 0;
 
     for (const id of ids) {
+      // Guard: only clear if last_intent_update_at hasn't been refreshed since our SELECT.
       const { error: updErr } = await supabase
         .from("users")
         .update({
           availability_intents: [],
           last_intent_update_at: null,
         })
-        .eq("id", id);
+        .eq("id", id)
+        .lt("last_intent_update_at", cutoffIso);
 
       if (updErr) {
         console.error("expire-availability-intents update", id, updErr.message);
@@ -48,7 +50,8 @@ Deno.serve(async (req: Request) => {
         cleared += 1;
       }
 
-      await supabase.from("availability_intents").delete().eq("user_id", id);
+      // Only delete intents created before the cutoff to avoid racing with concurrent inserts.
+      await supabase.from("availability_intents").delete().eq("user_id", id).lt("created_at", cutoffIso);
     }
 
     const body = {

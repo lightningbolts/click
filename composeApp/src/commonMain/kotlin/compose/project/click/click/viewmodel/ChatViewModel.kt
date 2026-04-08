@@ -1977,11 +1977,16 @@ class ChatViewModel(
     }
 
     /**
-     * Soft-remove a specific connection by ID (server `status = removed`; row retained).
+     * Hide a connection for the current user via [connection_hidden].
+     * Saves the connection object before the optimistic hide so it can be
+     * restored on failure — even when Ghost Mode blocks [AppDataManager.refresh].
      */
     fun deleteConnectionPermanentlyById(connectionId: String, onComplete: (Boolean) -> Unit = {}) {
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
+            // Save the connection before optimistic hide so we can restore it on failure
+            // (AppDataManager.refresh no-ops when Ghost Mode is active).
+            val savedConnection = AppDataManager.getConnection(connectionId)
             AppDataManager.hideConnectionLocally(connectionId)
             reapplyChatListVisibility()
             val success = supabaseRepository.hideConnectionForUser(userId, connectionId)
@@ -1993,7 +1998,14 @@ class ChatViewModel(
                 _nudgeResult.value = "Connection removed"
                 onComplete(true)
             } else {
-                AppDataManager.refresh(force = true)
+                // Explicitly revert the optimistic hide instead of relying on refresh()
+                // which no-ops when Ghost Mode is active.
+                if (savedConnection != null) {
+                    AppDataManager.revertHideConnectionLocally(connectionId, savedConnection)
+                } else {
+                    AppDataManager.unhideConnectionLocally(connectionId)
+                }
+                reapplyChatListVisibility()
                 loadChats(isForced = true)
                 _nudgeResult.value = "Failed to remove connection"
                 onComplete(false)

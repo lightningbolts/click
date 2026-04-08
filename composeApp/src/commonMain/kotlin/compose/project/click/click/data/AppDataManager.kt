@@ -455,6 +455,17 @@ object AppDataManager {
         scope.launch { persistSnapshot() }
     }
 
+    /**
+     * Revert an optimistic [hideConnectionLocally]: removes the ID from hidden set and
+     * restores the [Connection] back into the connections list. Used when the server call
+     * to [connection_hidden] fails and we need to undo the local hide.
+     */
+    fun revertHideConnectionLocally(connectionId: String, connection: Connection) {
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
+        _connections.value = (_connections.value + connection).distinctBy { it.id }
+        scope.launch { persistSnapshot() }
+    }
+
     fun markConnectionArchivedLocally(connectionId: String) {
         _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
         scope.launch { persistSnapshot() }

@@ -499,17 +499,12 @@ class SupabaseRepository {
         if (connectionHiddenTableMissing) return false
         return try {
             supabase.from("connection_hidden")
-                .delete {
-                    filter {
-                        eq("user_id", userId)
-                        eq("connection_id", connectionId)
-                    }
-                }
-            supabase.from("connection_hidden")
-                .insert(buildJsonObject {
+                .upsert(buildJsonObject {
                     put("user_id", userId)
                     put("connection_id", connectionId)
-                })
+                }) {
+                    onConflict = "user_id,connection_id"
+                }
             true
         } catch (e: Exception) {
             if (isConnectionHiddenUnavailableError(e)) {
