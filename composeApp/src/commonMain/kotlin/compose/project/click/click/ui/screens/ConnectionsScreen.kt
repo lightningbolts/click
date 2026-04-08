@@ -2071,6 +2071,10 @@ fun ChatView(
                     if (success) onBackPressed()
                 }
             },
+            onUnarchive = {
+                val connId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.connection?.id
+                if (connId != null) viewModel.unarchiveConnection(connId)
+            },
             onDelete = {
                 viewModel.deleteConnectionPermanently { success ->
                     if (success) onBackPressed()
