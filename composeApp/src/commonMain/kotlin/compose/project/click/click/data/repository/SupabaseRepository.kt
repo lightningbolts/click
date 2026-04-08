@@ -216,18 +216,30 @@ class SupabaseRepository {
     ): List<Connection> {
         return try {
             val hidden = getHiddenConnectionIds(userId)
-            supabase.from("connections")
-                .select {
-                    filter {
-                        contains("user_ids", listOf(userId))
+            val result = mutableListOf<Connection>()
+            var currentPage = page
+            val maxExtraPages = 3 // safety cap to avoid unbounded fetches
+            var pagesScanned = 0
+            while (result.size < pageSize && pagesScanned <= maxExtraPages) {
+                val batch = supabase.from("connections")
+                    .select {
+                        filter {
+                            contains("user_ids", listOf(userId))
+                        }
+                        order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        range(currentPage * pageSize.toLong(), (currentPage + 1) * pageSize.toLong() - 1)
                     }
-                    order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                    range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
-                }
-                .decodeList<Connection>()
-                .filter { conn ->
+                    .decodeList<Connection>()
+                val filtered = batch.filter { conn ->
                     conn.normalizedConnectionStatus() != "removed" && conn.id !in hidden
                 }
+                result.addAll(filtered)
+                // If the server returned fewer rows than pageSize, we've exhausted all data.
+                if (batch.size < pageSize) break
+                currentPage++
+                pagesScanned++
+            }
+            result.take(pageSize)
         } catch (e: Exception) {
             println("Error fetching connections (redacted): ${e.redactedRestMessage()}")
             emptyList()

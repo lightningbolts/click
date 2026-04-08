@@ -2044,6 +2044,8 @@ class ChatViewModel(
         viewModelScope.launch {
             val success = supabaseRepository.blockUser(userId, otherUserId)
             if (success) {
+                // Persist hide to connection_hidden so it survives app restart.
+                supabaseRepository.hideConnectionForUser(userId, connectionId)
                 AppDataManager.hideConnectionLocally(connectionId)
                 reapplyChatListVisibility()
                 if (currentConnectionId == connectionId) {
