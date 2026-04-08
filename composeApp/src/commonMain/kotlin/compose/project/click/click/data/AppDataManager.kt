@@ -852,6 +852,8 @@ object AppDataManager {
             _connections.value = snapshot.connections
             _connectedUsers.value = snapshot.connectedUsers.associateBy { it.id }
             _locationPreferences.value = snapshot.locationPreferences
+            _archivedConnectionIds.value = snapshot.archivedConnectionIds
+            _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
             _isDataLoaded.value = snapshot.currentUser != null || snapshot.connections.isNotEmpty()
             _usingCachedData.value = _isDataLoaded.value
             snapshot
@@ -865,7 +867,9 @@ object AppDataManager {
             currentUser = _currentUser.value,
             connections = _connections.value,
             connectedUsers = _connectedUsers.value.values.toList(),
-            locationPreferences = _locationPreferences.value
+            locationPreferences = _locationPreferences.value,
+            archivedConnectionIds = _archivedConnectionIds.value,
+            hiddenConnectionIds = _hiddenConnectionIds.value,
         )
         runCatching {
             tokenStorage.saveCachedAppSnapshot(json.encodeToString(snapshot))

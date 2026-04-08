@@ -220,7 +220,7 @@ class SupabaseRepository {
             var currentPage = page
             val maxExtraPages = 3 // safety cap to avoid unbounded fetches
             var pagesScanned = 0
-            while (result.size < pageSize && pagesScanned <= maxExtraPages) {
+            while (result.size < pageSize && pagesScanned < maxExtraPages) {
                 val batch = supabase.from("connections")
                     .select {
                         filter {
