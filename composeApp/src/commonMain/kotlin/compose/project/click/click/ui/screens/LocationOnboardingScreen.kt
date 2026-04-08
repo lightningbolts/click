@@ -183,8 +183,10 @@ fun LocationOnboardingMapPreview() {
     val connections by AppDataManager.connections.collectAsState()
     val validPins = connections
         .filter { conn ->
-            val g = conn.geo_location
-            g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
+            conn.isInActiveConnectionsChannel() &&
+                conn.geo_location.let { g ->
+                    g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
+                }
         }
         .take(12)
         .map { c -> c.geo_location }

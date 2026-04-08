@@ -109,7 +109,9 @@ fun HomeScreen(
         connectedUsers,
     ) {
         val success = homeState as? HomeState.Success ?: return@remember null
-        connectionsForArchiveBanner.mostUrgentArchiveNotice(archiveBannerNow) { conn ->
+        connectionsForArchiveBanner
+            .filter { it.isInActiveConnectionsChannel() }
+            .mostUrgentArchiveNotice(archiveBannerNow) { conn ->
             val otherId = conn.user_ids.firstOrNull { it != success.user.id }
             otherId?.let { connectedUsers[it]?.name?.trim() }?.takeIf { it.isNotBlank() }
                 ?: conn.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }

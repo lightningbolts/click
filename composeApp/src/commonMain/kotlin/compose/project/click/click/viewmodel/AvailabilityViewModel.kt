@@ -244,7 +244,7 @@ class AvailabilityViewModel(
         viewModelScope.launch {
             try {
                 val currentUser = AppDataManager.currentUser.value ?: return@launch
-                val connections = AppDataManager.connections.value
+                val connections = AppDataManager.connections.value.filter { it.isInActiveConnectionsChannel() }
                 val myAvailability = currentAvailability.value
                 
                 // Get other user IDs

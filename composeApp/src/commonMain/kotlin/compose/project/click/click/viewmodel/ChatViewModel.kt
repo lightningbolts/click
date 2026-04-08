@@ -239,22 +239,19 @@ class ChatViewModel(
                 if (currentListState != null && currentUserId != null) {
                     val cachedChatsByConnectionId = buildCachedChats(connections, connectedUsers, currentUserId)
                         .associateBy { it.connection.id }
-                    val visibleConnectionIds = connections.map { it.id }.toSet()
 
-                    val mergedChats = currentListState.chats
-                        .filter { it.connection.id in visibleConnectionIds }
-                        .map { chat ->
-                            val cachedChat = cachedChatsByConnectionId[chat.connection.id]
-                            val freshUser = cachedChat?.otherUser ?: connectedUsers[chat.otherUser.id]
-                            mergeChatRowWithCache(chat, cachedChat, freshUser)
-                        }
+                    val mergedChats = currentListState.chats.map { chat ->
+                        val cachedChat = cachedChatsByConnectionId[chat.connection.id]
+                        val freshUser = cachedChat?.otherUser ?: connectedUsers[chat.otherUser.id]
+                        mergeChatRowWithCache(chat, cachedChat, freshUser)
+                    }
 
                     val currentConnectionIds = mergedChats.map { it.connection.id }.toSet()
                     val missingChats = cachedChatsByConnectionId.values
                         .filter { it.connection.id !in currentConnectionIds }
                         .sortedByDescending { chatListActivityTimestamp(it) }
 
-                    val reconciledChats = applyConnectionVisibilityFilters(
+                    val reconciledChats = applyChatListVisibility(
                         (missingChats + mergedChats)
                             .distinctBy { it.connection.id }
                             .sortedByDescending { chatListActivityTimestamp(it) }
@@ -422,14 +419,14 @@ class ChatViewModel(
                 val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
                 val readyChats = cachedChats.filter { isResolvedDisplayName(it.otherUser.name) }
                 if (readyChats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(readyChats))
+                    _chatListState.value = ChatListState.Success(applyChatListVisibility(readyChats))
                 }
             } else if (!alreadyHasRealData && cachedConnections.isNotEmpty()) {
                 // Even with unresolved names, prefer showing cached rows over a
                 // blank loading spinner – the API response will patch names shortly.
                 val fallbackChats = buildCachedChats(cachedConnections, cachedUsers, userId)
                 if (fallbackChats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(fallbackChats))
+                    _chatListState.value = ChatListState.Success(applyChatListVisibility(fallbackChats))
                 } else {
                     _chatListState.value = ChatListState.Loading
                 }
@@ -439,7 +436,9 @@ class ChatViewModel(
             
             // Fetch fresh data from API in background
             try {
-                val chats = chatRepository.fetchUserChatsWithDetails(userId)
+                val activeChats = chatRepository.fetchUserChatsWithDetails(userId)
+                val archivedChats = chatRepository.fetchArchivedUserChatsWithDetails(userId)
+                val chats = activeChats + archivedChats
 
                 if (chats.isNotEmpty()) {
                     // Prefer any already-resolved names from AppDataManager's cache over
@@ -464,7 +463,7 @@ class ChatViewModel(
                         mergeChatRowWithCache(apiChat, cachedRow, freshUser)
                     }
                     _chatListState.value =
-                        ChatListState.Success(applyConnectionVisibilityFilters(mergedWithLocalPreview))
+                        ChatListState.Success(applyChatListVisibility(mergedWithLocalPreview))
                     prefetchChatPayloads(userId, enriched)
                 } else if (cachedConnections.isNotEmpty() && canRenderCachedChats) {
                     // Keep hydrated/cached connections visible when API is empty
@@ -474,7 +473,7 @@ class ChatViewModel(
                             .filter { isResolvedDisplayName(it.otherUser.name) }
                         if (readyChats.isNotEmpty()) {
                             _chatListState.value = ChatListState.Success(
-                                applyConnectionVisibilityFilters(readyChats)
+                                applyChatListVisibility(readyChats)
                             )
                         }
                     }
@@ -509,16 +508,26 @@ class ChatViewModel(
         }.sortedByDescending { chatListActivityTimestamp(it) }
     }
 
-    private fun applyConnectionVisibilityFilters(chats: List<ChatWithDetails>): List<ChatWithDetails> {
+    /**
+     * Full Clicks list: active-channel rows (pending/active/kept), server-archived rows, minus
+     * soft-removed and time-expired active rows. [ChatListState.Success.chats] is this superset;
+     * the UI splits Active vs Archived tabs.
+     */
+    private fun applyChatListVisibility(chats: List<ChatWithDetails>): List<ChatWithDetails> {
         val hiddenIds = _hiddenConnectionIds.value
         val now = Clock.System.now().toEpochMilliseconds()
         return chats.filter { chat ->
-            chat.connection.id !in hiddenIds && !isExpiredConnection(chat.connection, now)
+            val c = chat.connection
+            when {
+                c.id in hiddenIds -> false
+                c.normalizedConnectionStatus() == "removed" -> false
+                c.isServerLifecycleArchived() -> true
+                else -> c.isInActiveConnectionsChannel() && !isTimeExpiredForActiveList(c, now)
+            }
         }
     }
 
-    private fun isExpiredConnection(connection: Connection, now: Long): Boolean {
-        if (!connection.isVisibleInActiveUi()) return true
+    private fun isTimeExpiredForActiveList(connection: Connection, now: Long): Boolean {
         return connection.expiry_state == "expired" && connection.expiry < now
     }
 
@@ -1100,7 +1109,7 @@ class ChatViewModel(
             }
         }
         val sorted = updated.sortedByDescending { chatListActivityTimestamp(it) }
-        _chatListState.value = ChatListState.Success(applyConnectionVisibilityFilters(sorted))
+        _chatListState.value = ChatListState.Success(applyChatListVisibility(sorted))
     }
 
     private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {

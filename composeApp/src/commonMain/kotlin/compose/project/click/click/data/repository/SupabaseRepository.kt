@@ -164,25 +164,8 @@ class SupabaseRepository {
         pageSize: Int = 20
     ): List<Connection> {
         return try {
-            // Try server-side status filter first; fall back to client-side for legacy schemas
-            val withServerFilter = runCatching {
-                supabase.from("connections")
-                    .select {
-                        filter {
-                            contains("user_ids", listOf(userId))
-                            filterNot(
-                                "status",
-                                io.github.jan.supabase.postgrest.query.filter.FilterOperator.IN,
-                                "('archived','removed')",
-                            )
-                        }
-                        order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                        range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
-                    }
-                    .decodeList<Connection>()
-            }
-            if (withServerFilter.isSuccess) return withServerFilter.getOrThrow()
-
+            // Client-side filter: include archived for Clicks "Archived" tab; drop soft-removed only.
+            // (SQL `neq` on nullable `status` can exclude null-status legacy rows.)
             supabase.from("connections")
                 .select {
                     filter {
@@ -192,7 +175,7 @@ class SupabaseRepository {
                     range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
                 }
                 .decodeList<Connection>()
-                .filter { it.isVisibleInActiveUi() }
+                .filter { it.normalizedConnectionStatus() != "removed" }
         } catch (e: Exception) {
             println("Error fetching connections (redacted): ${e.redactedRestMessage()}")
             emptyList()

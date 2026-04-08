@@ -36,6 +36,8 @@ interface ChatRepository {
 
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
+    suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails>
+
     suspend fun fetchMessagesForChat(chatId: String): List<Message>
 
     suspend fun sendMessage(
