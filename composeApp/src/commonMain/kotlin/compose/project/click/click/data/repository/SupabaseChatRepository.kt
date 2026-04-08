@@ -531,9 +531,12 @@ class SupabaseChatRepository(
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
-                .filter { it.isInActiveConnectionsChannel() }
+                .filter { it.normalizedConnectionStatus() != "removed" }
+            val archivedIds = supabaseRepository.getArchivedConnectionIds(userId)
+            val hiddenIds = supabaseRepository.getHiddenConnectionIds(userId)
+            val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
 
-            buildChatsWithDetailsForConnections(userId, connections)
+            buildChatsWithDetailsForConnections(userId, activeRows)
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.message}")
             emptyList()
@@ -550,9 +553,14 @@ class SupabaseChatRepository(
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
-                .filter { it.isServerLifecycleArchived() }
+                .filter { it.normalizedConnectionStatus() != "removed" }
+            val archivedIds = supabaseRepository.getArchivedConnectionIds(userId)
+            val hiddenIds = supabaseRepository.getHiddenConnectionIds(userId)
+            val archivedRows = connections.filter {
+                it.isArchivedChannelForUser(archivedIds, hiddenIds)
+            }
 
-            buildChatsWithDetailsForConnections(userId, connections)
+            buildChatsWithDetailsForConnections(userId, archivedRows)
         } catch (e: Exception) {
             println("Error fetching archived user chats: ${e.message}")
             emptyList()

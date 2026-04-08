@@ -63,6 +63,14 @@ object AppDataManager {
     // User's connections
     private val _connections = MutableStateFlow<List<Connection>>(emptyList())
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
+
+    /** Per-user archive rows ([connection_archives]); excludes these from Active surfaces. */
+    private val _archivedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val archivedConnectionIds: StateFlow<Set<String>> = _archivedConnectionIds.asStateFlow()
+
+    /** Per-user hidden rows ([connection_hidden]); excluded everywhere. */
+    private val _hiddenConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenConnectionIds: StateFlow<Set<String>> = _hiddenConnectionIds.asStateFlow()
     
     // Connected users info
     private val _connectedUsers = MutableStateFlow<Map<String, User>>(emptyMap())
@@ -297,6 +305,8 @@ object AppDataManager {
                     // screens are ready before slower auxiliary startup work completes.
                     val userConnections = supabaseRepository.fetchUserConnections(user.id)
                     _connections.value = userConnections
+                    _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(user.id)
+                    _hiddenConnectionIds.value = supabaseRepository.getHiddenConnectionIds(user.id)
                     refreshConnectedUsers(userConnections, user.id)
 
                     _isDataLoaded.value = true
@@ -360,6 +370,8 @@ object AppDataManager {
         presenceHeartbeatJob = null
         _currentUser.value = null
         _connections.value = emptyList()
+        _archivedConnectionIds.value = emptySet()
+        _hiddenConnectionIds.value = emptySet()
         _connectedUsers.value = emptyMap()
         _userAvailability.value = null
         _isDataLoaded.value = false
@@ -430,6 +442,27 @@ object AppDataManager {
         scope.launch {
             persistSnapshot()
         }
+    }
+
+    /** Optimistic hide: used after [connection_hidden] insert or when blocking. */
+    fun hideConnectionLocally(connectionId: String) {
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value + connectionId
+        removeConnection(connectionId)
+    }
+
+    fun unhideConnectionLocally(connectionId: String) {
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    fun markConnectionArchivedLocally(connectionId: String) {
+        _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    fun markConnectionUnarchivedLocally(connectionId: String) {
+        _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
+        scope.launch { persistSnapshot() }
     }
 
     fun replaceLocalConnection(localId: String, syncedConnection: Connection, otherUser: User? = null) {

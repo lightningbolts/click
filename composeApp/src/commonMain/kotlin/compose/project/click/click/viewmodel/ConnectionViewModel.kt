@@ -2,21 +2,23 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.ConnectionRequest
-import compose.project.click.click.data.models.ContextTag
-import compose.project.click.click.data.models.HeightCategory
-import compose.project.click.click.data.models.NoiseLevelCategory
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.isPendingSync
-import compose.project.click.click.data.repository.ConnectionRepository
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionRequest // pragma: allowlist secret
+import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
+import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,8 +42,14 @@ class ConnectionViewModel : ViewModel() {
      * for chat previews; use this flow when you only need raw [Connection] rows.
      * Excludes server-archived and removed rows so counts match the active map/home surfaces.
      */
-    val userConnections: StateFlow<List<Connection>> = AppDataManager.connections
-        .map { list -> list.filter { it.isInActiveConnectionsChannel() } }
+    val userConnections: StateFlow<List<Connection>> = combine(
+        AppDataManager.connections,
+        AppDataManager.archivedConnectionIds,
+        AppDataManager.hiddenConnectionIds,
+    ) { connections, archived, hidden ->
+        connections.filter { it.isActiveForUser(archived, hidden) }
+    }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** Alias for callers that expect a `connections` name (same backing flow as [userConnections]). */

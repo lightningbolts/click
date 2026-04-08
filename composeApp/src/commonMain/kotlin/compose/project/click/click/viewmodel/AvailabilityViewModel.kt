@@ -2,16 +2,17 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.AvailabilityHelper
-import compose.project.click.click.data.models.AvailabilityStatus
-import compose.project.click.click.data.models.DayOfWeek
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityHelper // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityStatus // pragma: allowlist secret
+import compose.project.click.click.data.models.DayOfWeek // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.MutualAvailability
-import compose.project.click.click.data.models.UserAvailability
-import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.data.models.MutualAvailability // pragma: allowlist secret
+import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -142,6 +143,10 @@ class AvailabilityViewModel(
         viewModelScope.launch {
             val result = supabaseRepository.deleteAvailabilityIntent(intentId)
             refreshActiveAvailabilityIntentsInternal()
+            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+            if (uid != null) {
+                supabaseRepository.syncUserAvailabilityProfileMirror(uid)
+            }
             if (!result.success) {
                 _intentListFeedback.value = formatAvailabilityIntentSaveError(result.errorMessage)
             }
@@ -244,7 +249,11 @@ class AvailabilityViewModel(
         viewModelScope.launch {
             try {
                 val currentUser = AppDataManager.currentUser.value ?: return@launch
-                val connections = AppDataManager.connections.value.filter { it.isInActiveConnectionsChannel() }
+                val archived = AppDataManager.archivedConnectionIds.value
+                val hidden = AppDataManager.hiddenConnectionIds.value
+                val connections = AppDataManager.connections.value.filter {
+                    it.isActiveForUser(archived, hidden)
+                }
                 val myAvailability = currentAvailability.value
                 
                 // Get other user IDs
@@ -373,6 +382,7 @@ class AvailabilityViewModel(
             if (result.success) {
                 resetAvailabilityIntentSheet()
                 refreshActiveAvailabilityIntentsInternal()
+                supabaseRepository.syncUserAvailabilityProfileMirror(userId)
                 onSuccess()
             } else {
                 _intentSubmitError.value = formatAvailabilityIntentSaveError(result.errorMessage)

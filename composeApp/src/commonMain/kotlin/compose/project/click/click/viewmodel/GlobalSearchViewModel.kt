@@ -2,14 +2,15 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.SupabaseChatRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -87,7 +88,11 @@ class GlobalSearchViewModel(
             _isSearching.value = true
             try {
                 val lowerQuery = query.lowercase().trim()
-                val connections = appDataManager.connections.value.filter { it.isInActiveConnectionsChannel() }
+                val archived = appDataManager.archivedConnectionIds.value
+                val hidden = appDataManager.hiddenConnectionIds.value
+                val connections = appDataManager.connections.value.filter {
+                    it.isActiveForUser(archived, hidden)
+                }
                 val connectedUsers = appDataManager.connectedUsers.value
                 val currentUserId = appDataManager.currentUser.value?.id
 
