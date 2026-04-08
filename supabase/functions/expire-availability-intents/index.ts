@@ -51,7 +51,10 @@ Deno.serve(async (req: Request) => {
       }
 
       // Only delete intents created before the cutoff to avoid racing with concurrent inserts.
-      await supabase.from("availability_intents").delete().eq("user_id", id).lt("created_at", cutoffIso);
+      const { error: delErr } = await supabase.from("availability_intents").delete().eq("user_id", id).lt("created_at", cutoffIso);
+      if (delErr) {
+        console.error("expire-availability-intents delete", id, delErr.message);
+      }
     }
 
     const body = {
