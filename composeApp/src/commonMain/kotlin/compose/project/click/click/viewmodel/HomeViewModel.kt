@@ -2,20 +2,23 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
-import compose.project.click.click.data.models.ConnectionInsights
-import compose.project.click.click.data.models.IcebreakerRepository
-import compose.project.click.click.data.models.PollPairSuggestion
-import compose.project.click.click.data.models.ReconnectHelper
-import compose.project.click.click.data.models.ReconnectReminder
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.SupabaseChatRepository
-import compose.project.click.click.data.repository.ConnectionRepository
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
+import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
+import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
+import compose.project.click.click.data.models.ReconnectHelper // pragma: allowlist secret
+import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -27,7 +30,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 data class UserStats(
     val totalConnections: Int,
@@ -43,7 +49,8 @@ sealed class HomeState {
 
 class HomeViewModel(
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
-    private val connectionRepository: ConnectionRepository = ConnectionRepository()
+    private val connectionRepository: ConnectionRepository = ConnectionRepository(),
+    private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
 ) : ViewModel() {
 
     private val _homeState = MutableStateFlow<HomeState>(HomeState.Loading)
@@ -80,16 +87,33 @@ class HomeViewModel(
     /** Single highlighted “Poll-Pair” reconnect suggestion (oldest stale chat). */
     private val _pollPairSuggestion = MutableStateFlow<PollPairSuggestion?>(null)
     val pollPairSuggestion: StateFlow<PollPairSuggestion?> = _pollPairSuggestion.asStateFlow()
+
+    /** Active availability intent rows for the signed-in user (home “I’m down for…” strip). */
+    private val _homeAvailabilityIntents = MutableStateFlow<List<AvailabilityIntentRow>>(emptyList())
+    val homeAvailabilityIntents: StateFlow<List<AvailabilityIntentRow>> = _homeAvailabilityIntents.asStateFlow()
     
     // Track if data has been loaded already
     private var dataLoaded = false
     
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
+    private var availabilityIntentRefreshJob: Job? = null
 
     init {
         observeAppData()
         subscribeToConnectionChanges()
+    }
+
+    /**
+     * Reload intent posts from Supabase (e.g. after backend 24h expiry clears rows).
+     */
+    fun refreshHomeAvailabilityIntents() {
+        val uid = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch {
+            runCatching {
+                _homeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+            }
+        }
     }
     
     /**
@@ -100,14 +124,22 @@ class HomeViewModel(
             var lastUserId: String? = null
 
             combine(
-                AppDataManager.currentUser,
-                AppDataManager.connections,
-                AppDataManager.connectedUsers,
+                combine(
+                    AppDataManager.currentUser,
+                    AppDataManager.connections,
+                    AppDataManager.connectedUsers,
+                ) { u, c, cu -> Triple(u, c, cu) },
+                combine(
+                    AppDataManager.archivedConnectionIds,
+                    AppDataManager.hiddenConnectionIds,
+                ) { a, h -> a to h },
                 AppDataManager.isLoading,
-                AppDataManager.isDataLoaded
-            ) { user, connections, connectedUsers, isLoading, isDataLoaded ->
-                HomeSnapshot(user, connections, connectedUsers, isLoading, isDataLoaded)
-            }.collectLatest { (user, connections, connectedUsers, isLoading, isDataLoaded) ->
+                AppDataManager.isDataLoaded,
+            ) { triple, archHidden, isLoading, isDataLoaded ->
+                val (user, connections, connectedUsers) = triple
+                val (archivedIds, hiddenIds) = archHidden
+                HomeSnapshot(user, connections, connectedUsers, archivedIds, hiddenIds, isLoading, isDataLoaded)
+            }.collectLatest { (user, connections, connectedUsers, archivedIds, hiddenIds, isLoading, isDataLoaded) ->
 
                 if (user?.id != lastUserId) {
                     lastUserId = user?.id
@@ -117,11 +149,27 @@ class HomeViewModel(
                     _pollPairSuggestion.value = null
                     _locationGroupedConnections.value = emptyMap()
                     _connectedUsers.value = emptyMap()
+                    _homeAvailabilityIntents.value = emptyList()
+                    availabilityIntentRefreshJob?.cancel()
+                    availabilityIntentRefreshJob = null
                 }
 
                 when {
                     user != null && isDataLoaded -> {
-                        val activeConnections = connections.filter { it.isInActiveConnectionsChannel() }
+                        if (availabilityIntentRefreshJob == null) {
+                            availabilityIntentRefreshJob = viewModelScope.launch {
+                                while (isActive) {
+                                    runCatching {
+                                        _homeAvailabilityIntents.value =
+                                            supabaseRepository.fetchActiveAvailabilityIntentsForUser(user.id)
+                                    }
+                                    delay(120_000L)
+                                }
+                            }
+                        }
+                        val activeConnections = connections.filter {
+                            it.isActiveForUser(archivedIds, hiddenIds)
+                        }
                         val recentConnections = activeConnections
                             .sortedByDescending { it.created }
                             .take(3)
@@ -411,13 +459,17 @@ class HomeViewModel(
             }
         }
         connectionsChannel = null
+        availabilityIntentRefreshJob?.cancel()
+        availabilityIntentRefreshJob = null
     }
 }
 
-private data class HomeSnapshot<A, B, C, D, E>(
+private data class HomeSnapshot<A, B, C, D, E, F, G>(
     val first: A,
     val second: B,
     val third: C,
     val fourth: D,
-    val fifth: E
+    val fifth: E,
+    val sixth: F,
+    val seventh: G,
 )

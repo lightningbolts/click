@@ -35,6 +35,8 @@ data class CachedAppSnapshot(
     val connections: List<Connection> = emptyList(),
     val connectedUsers: List<User> = emptyList(),
     val locationPreferences: LocationPreferences = LocationPreferences(),
+    val archivedConnectionIds: Set<String> = emptySet(),
+    val hiddenConnectionIds: Set<String> = emptySet(),
 )
 
 @Serializable

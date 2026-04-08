@@ -16,9 +16,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -34,8 +34,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,17 +56,55 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.data.models.UserPublicProfile
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.plus
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+
+private fun sharedInterestTags(viewer: List<String>, other: List<String>): List<String> {
+    if (viewer.isEmpty() || other.isEmpty()) return emptyList()
+    val viewerNorm = viewer.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+    return other.map { it.trim() }.filter { it.isNotEmpty() && it.lowercase() in viewerNorm }.distinct()
+}
+
+private fun ProfileAvailabilityIntentBubble.displayLabel(): String {
+    val tag = intentTag?.trim().orEmpty()
+    val tf = timeframe?.trim().orEmpty()
+    return when {
+        tag.isNotEmpty() && tf.isNotEmpty() -> "$tag · $tf"
+        tag.isNotEmpty() -> tag
+        tf.isNotEmpty() -> tf
+        else -> ""
+    }.trim()
+}
+
+private fun ProfileAvailabilityIntentBubble.activeUntilShort(): String {
+    val iso = expiresAt ?: return ""
+    val instant = runCatching { kotlinx.datetime.Instant.parse(iso) }.getOrNull() ?: return ""
+    val tz = TimeZone.currentSystemDefault()
+    val local = instant.toLocalDateTime(tz)
+    val today = Clock.System.todayIn(tz)
+    val d = local.date
+    fun pad(n: Int) = n.toString().padStart(2, '0')
+    val timePart = "${pad(local.hour)}:${pad(local.minute)}"
+    val tomorrow = today.plus(1, DateTimeUnit.DAY)
+    return when {
+        d == today -> "Today · $timePart"
+        d == tomorrow -> "Tomorrow · $timePart"
+        else -> "${d.monthNumber}/${d.dayOfMonth} · $timePart"
+    }
+}
 
 private fun ageFromBirthdayIso(birthday: String?): Int? {
     if (birthday.isNullOrBlank()) return null
@@ -378,54 +414,83 @@ fun UserProfileBottomSheet(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    val sharedTags = sharedInterestTags(p.viewerInterestTags, p.interestTags)
+
                     Text(
-                        text = "Availability",
+                        text = "Shared interests",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-
-                    val av = p.availability
-                    if (av == null) {
+                    if (sharedTags.isEmpty()) {
                         Text(
-                            text = "No availability shared",
+                            text = "No overlap with your interests yet",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        ListItem(
-                            headlineContent = {
-                                Text(
-                                    if (av.isFreeThisWeek) "Free this week" else "Not marked free this week",
-                                    color = MaterialTheme.colorScheme.onSurface
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            sharedTags.forEach { tag ->
+                                FilterChip(
+                                    selected = true,
+                                    onClick = { },
+                                    label = { Text(tag, style = MaterialTheme.typography.labelMedium) }
                                 )
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Availability intents",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val intentBubbles = p.profileAvailabilityIntents.filter { it.displayLabel().isNotEmpty() }
+                    if (intentBubbles.isEmpty()) {
+                        Text(
+                            text = "No active availability intents",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (av.availableDays.isNotEmpty()) {
-                            Text(
-                                text = "Days: ${av.availableDays.joinToString { d -> d.replaceFirstChar { ch -> ch.titlecase() } }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
-                            )
-                        }
-                        if (av.preferredActivities.isNotEmpty()) {
-                            Text(
-                                text = "Activities: ${av.preferredActivities.joinToString()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
-                            )
-                        }
-                        if (!av.customStatus.isNullOrBlank()) {
-                            Text(
-                                text = av.customStatus ?: "",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-                            )
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            intentBubbles.forEach { bubble ->
+                                val until = bubble.activeUntilShort()
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { },
+                                    label = {
+                                        Column {
+                                            Text(
+                                                bubble.displayLabel(),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            if (until.isNotEmpty()) {
+                                                Text(
+                                                    until,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }

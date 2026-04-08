@@ -520,20 +520,23 @@ class SupabaseChatRepository(
         }
     }
 
+    /**
+     * Short-lived cache so that back-to-back calls to [fetchUserChatsWithDetails] and
+     * [fetchArchivedUserChatsWithDetails] (e.g. from [ChatViewModel.loadChats]) share a
+     * single set of connection + junction queries instead of doubling network round-trips.
+     */
+    private var cachedJunctionData: Triple<List<Connection>, Set<String>, Set<String>>? = null
+    private var cachedJunctionUserId: String? = null
+    private var cachedJunctionTimestamp: Long = 0L
+    private val junctionCacheTtlMs = 5_000L // 5 seconds
+
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
-            val connections = supabase.from("connections")
-                .select {
-                    filter {
-                        contains("user_ids", listOf(userId))
-                    }
-                    order("created", Order.DESCENDING)
-                }
-                .decodeList<Connection>()
-                .filter { it.isInActiveConnectionsChannel() }
+            val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
+            val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
 
-            buildChatsWithDetailsForConnections(userId, connections)
+            buildChatsWithDetailsForConnections(userId, activeRows)
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.message}")
             emptyList()
@@ -542,7 +545,45 @@ class SupabaseChatRepository(
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
-            val connections = supabase.from("connections")
+            val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
+            val archivedRows = connections.filter {
+                it.isArchivedChannelForUser(archivedIds, hiddenIds)
+            }
+
+            buildChatsWithDetailsForConnections(userId, archivedRows)
+        } catch (e: Exception) {
+            println("Error fetching archived user chats: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Returns cached junction data if still valid for [userId], otherwise fetches
+     * connections, archived IDs, and hidden IDs in parallel and caches the result.
+     */
+    private suspend fun getOrFetchJunctionData(
+        userId: String,
+    ): Triple<List<Connection>, Set<String>, Set<String>> {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val cached = cachedJunctionData
+        if (cached != null && cachedJunctionUserId == userId && now - cachedJunctionTimestamp < junctionCacheTtlMs) {
+            return cached
+        }
+        val result = fetchConnectionsWithJunctionIds(userId)
+        cachedJunctionData = result
+        cachedJunctionUserId = userId
+        cachedJunctionTimestamp = now
+        return result
+    }
+
+    /**
+     * Fetches connections, archived IDs, and hidden IDs for [userId] in parallel.
+     */
+    private suspend fun fetchConnectionsWithJunctionIds(
+        userId: String,
+    ): Triple<List<Connection>, Set<String>, Set<String>> = coroutineScope {
+        val connectionsDeferred = async {
+            supabase.from("connections")
                 .select {
                     filter {
                         contains("user_ids", listOf(userId))
@@ -550,13 +591,11 @@ class SupabaseChatRepository(
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
-                .filter { it.isServerLifecycleArchived() }
-
-            buildChatsWithDetailsForConnections(userId, connections)
-        } catch (e: Exception) {
-            println("Error fetching archived user chats: ${e.message}")
-            emptyList()
+                .filter { it.normalizedConnectionStatus() != "removed" }
         }
+        val archivedDeferred = async { supabaseRepository.getArchivedConnectionIds(userId) }
+        val hiddenDeferred = async { supabaseRepository.getHiddenConnectionIds(userId) }
+        Triple(connectionsDeferred.await(), archivedDeferred.await(), hiddenDeferred.await())
     }
 
     override suspend fun fetchMessagesForChat(chatId: String): List<Message> {

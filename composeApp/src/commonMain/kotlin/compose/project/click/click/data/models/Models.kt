@@ -92,6 +92,18 @@ data class UserInsertMinimal(
  * Core user data for fetching from database
  * Only includes columns guaranteed to exist in the users table
  */
+/**
+ * Denormalized availability intent bubble on [public.users.availability_intents] (JSON array).
+ */
+@Serializable
+data class ProfileAvailabilityIntentBubble(
+    @SerialName("intent_tag")
+    val intentTag: String? = null,
+    val timeframe: String? = null,
+    @SerialName("expires_at")
+    val expiresAt: String? = null,
+)
+
 @Serializable
 data class UserCore(
     val id: String,
@@ -105,7 +117,7 @@ data class UserCore(
     val email: String? = null,
     val image: String? = null,
     @SerialName("last_polled")
-    val lastPolled: Long? = null
+    val lastPolled: Long? = null,
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
@@ -198,6 +210,10 @@ data class UserPublicProfile(
     val user: User,
     val interestTags: List<String>,
     val availability: UserAvailability?,
+    /** From [public.users.availability_intents]; may be empty when unset or expired server-side. */
+    val profileAvailabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
+    /** Logged-in viewer's interest tags (for shared-interest intersection in profile sheet). */
+    val viewerInterestTags: List<String> = emptyList(),
     /** Mutual `connections` row (most recently active), when viewer is known. */
     val sharedConnection: Connection? = null,
 )
@@ -437,6 +453,19 @@ data class Connection(
         return user_ids.indexOf(userId).takeIf { it >= 0 }
     }
 }
+
+/**
+ * Clicks "Active" tab / home active map: exclude [connection_hidden] and [connection_archives]
+ * for this user, and only pending/active/kept lifecycle rows.
+ */
+fun Connection.isActiveForUser(archivedIds: Set<String>, hiddenIds: Set<String>): Boolean =
+    id !in hiddenIds && id !in archivedIds && isInActiveConnectionsChannel()
+
+/**
+ * Clicks "Archived" tab: server-archived lifecycle or user junction archive, never hidden.
+ */
+fun Connection.isArchivedChannelForUser(archivedIds: Set<String>, hiddenIds: Set<String>): Boolean =
+    id !in hiddenIds && (isServerLifecycleArchived() || id in archivedIds)
 
 // UI models for chat functionality
 data class ChatWithDetails(

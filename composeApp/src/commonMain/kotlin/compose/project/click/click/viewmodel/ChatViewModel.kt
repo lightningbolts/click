@@ -2,24 +2,26 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.IcebreakerPrompt
-import compose.project.click.click.data.models.IcebreakerRepository
-import compose.project.click.click.data.models.ChatMessageType
-import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.replySnippetForMessage
-import compose.project.click.click.data.models.replySnippetForMetadata
-import compose.project.click.click.data.models.MessageReaction
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.isResolvedDisplayName
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.SupabaseChatRepository
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
+import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
+import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -32,12 +34,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.repository.ChatMessageSubscription
-import compose.project.click.click.data.repository.ChatReactionSubscription
-import compose.project.click.click.data.repository.MessageChangeEvent
-import compose.project.click.click.data.repository.ReactionChangeEvent
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatReactionSubscription // pragma: allowlist secret
+import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
+import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -180,11 +182,9 @@ class ChatViewModel(
     private val _editingMessageId = MutableStateFlow<String?>(null)
     val editingMessageId: StateFlow<String?> = _editingMessageId.asStateFlow()
 
-    // ── Archived connection IDs (in-memory; persisted per-session) ─────────────
-    private val _archivedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
-    val archivedConnectionIds: StateFlow<Set<String>> = _archivedConnectionIds.asStateFlow()
-    private val _hiddenConnectionIds = MutableStateFlow<Set<String>>(emptySet())
-    val hiddenConnectionIds: StateFlow<Set<String>> = _hiddenConnectionIds.asStateFlow()
+    /** Relational archive/hide junction state (shared with Home / Map / ConnectionViewModel). */
+    val archivedConnectionIds: StateFlow<Set<String>> = AppDataManager.archivedConnectionIds
+    val hiddenConnectionIds: StateFlow<Set<String>> = AppDataManager.hiddenConnectionIds
 
     // ── Reactions state: messageId → list of reactions ─────────────────────────
     private val _messageReactions = MutableStateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>>(emptyMap())
@@ -300,9 +300,6 @@ class ChatViewModel(
         _currentUserId.value = userId
         startGlobalConnectionsRealtime(userId)
         startGlobalMessageListRealtime()
-        viewModelScope.launch {
-            _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(userId)
-        }
         if (userUnchanged && _chatListState.value is ChatListState.Success) return
         loadChats()
     }
@@ -514,15 +511,17 @@ class ChatViewModel(
      * the UI splits Active vs Archived tabs.
      */
     private fun applyChatListVisibility(chats: List<ChatWithDetails>): List<ChatWithDetails> {
-        val hiddenIds = _hiddenConnectionIds.value
+        val hiddenIds = AppDataManager.hiddenConnectionIds.value
+        val archivedIds = AppDataManager.archivedConnectionIds.value
         val now = Clock.System.now().toEpochMilliseconds()
         return chats.filter { chat ->
             val c = chat.connection
             when {
                 c.id in hiddenIds -> false
                 c.normalizedConnectionStatus() == "removed" -> false
-                c.isServerLifecycleArchived() -> true
-                else -> c.isInActiveConnectionsChannel() && !isTimeExpiredForActiveList(c, now)
+                c.isArchivedChannelForUser(archivedIds, hiddenIds) -> true
+                c.isActiveForUser(archivedIds, hiddenIds) && !isTimeExpiredForActiveList(c, now) -> true
+                else -> false
             }
         }
     }
@@ -630,6 +629,13 @@ class ChatViewModel(
             _chatListState.value = state.copy(
                 chats = state.chats.filter { it.connection.id != connectionId }
             )
+        }
+    }
+
+    private fun reapplyChatListVisibility() {
+        val state = _chatListState.value
+        if (state is ChatListState.Success) {
+            _chatListState.value = ChatListState.Success(applyChatListVisibility(state.chats))
         }
     }
 
@@ -1936,9 +1942,9 @@ class ChatViewModel(
     fun archiveConnectionById(connectionId: String, onComplete: (Boolean) -> Unit = {}) {
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
-            _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
-            removeConnectionFromCurrentList(connectionId)
+            AppDataManager.markConnectionArchivedLocally(connectionId)
             supabaseRepository.archiveConnection(userId, connectionId) // non-fatal if table missing
+            reapplyChatListVisibility()
             if (currentConnectionId == connectionId) {
                 leaveChatRoom()
             }
@@ -1954,8 +1960,9 @@ class ChatViewModel(
     fun unarchiveConnection(connectionId: String) {
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
-            _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
+            AppDataManager.markConnectionUnarchivedLocally(connectionId)
             supabaseRepository.unarchiveConnection(userId, connectionId)
+            reapplyChatListVisibility()
             loadChats(isForced = true)
             _nudgeResult.value = "Connection unarchived"
         }
@@ -1970,13 +1977,19 @@ class ChatViewModel(
     }
 
     /**
-     * Soft-remove a specific connection by ID (server `status = removed`; row retained).
+     * Hide a connection for the current user via [connection_hidden].
+     * Saves the connection object before the optimistic hide so it can be
+     * restored on failure — even when Ghost Mode blocks [AppDataManager.refresh].
      */
     fun deleteConnectionPermanentlyById(connectionId: String, onComplete: (Boolean) -> Unit = {}) {
+        val userId = _currentUserId.value ?: return
         viewModelScope.launch {
-            _hiddenConnectionIds.value = _hiddenConnectionIds.value + connectionId
-            removeConnectionFromCurrentList(connectionId)
-            val success = supabaseRepository.deleteConnection(connectionId)
+            // Save the connection before optimistic hide so we can restore it on failure
+            // (AppDataManager.refresh no-ops when Ghost Mode is active).
+            val savedConnection = AppDataManager.getConnection(connectionId)
+            AppDataManager.hideConnectionLocally(connectionId)
+            reapplyChatListVisibility()
+            val success = supabaseRepository.hideConnectionForUser(userId, connectionId)
             if (success) {
                 if (currentConnectionId == connectionId) {
                     leaveChatRoom()
@@ -1985,7 +1998,14 @@ class ChatViewModel(
                 _nudgeResult.value = "Connection removed"
                 onComplete(true)
             } else {
-                _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
+                // Explicitly revert the optimistic hide instead of relying on refresh()
+                // which no-ops when Ghost Mode is active.
+                if (savedConnection != null) {
+                    AppDataManager.revertHideConnectionLocally(connectionId, savedConnection)
+                } else {
+                    AppDataManager.unhideConnectionLocally(connectionId)
+                }
+                reapplyChatListVisibility()
                 loadChats(isForced = true)
                 _nudgeResult.value = "Failed to remove connection"
                 onComplete(false)
@@ -2024,8 +2044,10 @@ class ChatViewModel(
         viewModelScope.launch {
             val success = supabaseRepository.blockUser(userId, otherUserId)
             if (success) {
-                _hiddenConnectionIds.value = _hiddenConnectionIds.value + connectionId
-                removeConnectionFromCurrentList(connectionId)
+                // Persist hide to connection_hidden so it survives app restart.
+                supabaseRepository.hideConnectionForUser(userId, connectionId)
+                AppDataManager.hideConnectionLocally(connectionId)
+                reapplyChatListVisibility()
                 if (currentConnectionId == connectionId) {
                     leaveChatRoom()
                 }

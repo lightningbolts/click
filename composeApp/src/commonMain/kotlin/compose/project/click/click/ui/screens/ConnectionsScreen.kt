@@ -96,49 +96,51 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.AnnotatedString
-import compose.project.click.click.getPlatform
-import compose.project.click.click.calls.CallSessionManager
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.notifications.NotificationRuntimeState
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
-import compose.project.click.click.ui.components.PlatformBackHandler
-import compose.project.click.click.ui.components.AdaptiveSurface
-import compose.project.click.click.ui.components.GlassCard
+import compose.project.click.click.getPlatform // pragma: allowlist secret
+import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material3.ripple
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.EmojiCatalog
-import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.components.UserProfileBottomSheet
-import compose.project.click.click.data.models.replyRef
-import compose.project.click.click.data.models.replySnippetForMetadata
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
+import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
+import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
+import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.IcebreakerPrompt
-import compose.project.click.click.data.models.ChatMessageType
-import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.copyableText
-import compose.project.click.click.data.models.mediaUrlOrNull
-import compose.project.click.click.data.models.previewLabel
-import compose.project.click.click.data.models.parsedMediaMetadata
-import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
+import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
+import compose.project.click.click.data.models.parsedMediaMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatViewModel
-import compose.project.click.click.viewmodel.ChatListState
-import compose.project.click.click.viewmodel.ChatMessagesState
-import compose.project.click.click.ui.chat.saveChatImageToGallery
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
+import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -155,9 +157,9 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import coil3.compose.AsyncImage
-import compose.project.click.click.media.rememberChatAudioPlayer
-import compose.project.click.click.ui.chat.ChatLinkifyText
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
+import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 
 @Composable
 fun ConnectionsScreen(
@@ -377,9 +379,6 @@ private fun connectionListActivityTs(chat: ChatWithDetails): Long =
         ?: chat.lastMessage?.timeCreated
         ?: chat.connection.created
 
-private fun Connection.isInArchivedClicksTab(archivedConnectionIds: Set<String>): Boolean =
-    isServerLifecycleArchived() || id in archivedConnectionIds
-
 @Composable
 fun ConnectionsListView(
     viewModel: ChatViewModel,
@@ -390,6 +389,7 @@ fun ConnectionsListView(
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
+    val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
     val cachedConnections by AppDataManager.connections.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
@@ -454,11 +454,10 @@ fun ConnectionsListView(
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 if (effectiveChats.isNotEmpty()) {
                     val activeChats = effectiveChats.filter {
-                        it.connection.isInActiveConnectionsChannel() &&
-                            it.connection.id !in archivedConnectionIds
+                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
                     }
                     val archivedChats = effectiveChats.filter {
-                        it.connection.isInArchivedClicksTab(archivedConnectionIds)
+                        it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
                     }
                     val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
                     val filteredCount = if (searchQuery.isBlank()) {
@@ -486,11 +485,10 @@ fun ConnectionsListView(
 
             if (effectiveChats.isNotEmpty()) {
                 val activeCount = effectiveChats.count {
-                    it.connection.isInActiveConnectionsChannel() &&
-                        it.connection.id !in archivedConnectionIds
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
                 }
                 val archivedCount = effectiveChats.count {
-                    it.connection.isInArchivedClicksTab(archivedConnectionIds)
+                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
                 }
 
                 val segStyle = LocalPlatformStyle.current
@@ -591,11 +589,10 @@ fun ConnectionsListView(
                 }
             } else {
                 val activeChats = effectiveChats.filter {
-                    it.connection.isInActiveConnectionsChannel() &&
-                        it.connection.id !in archivedConnectionIds
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
                 }
                 val archivedChats = effectiveChats.filter {
-                    it.connection.isInArchivedClicksTab(archivedConnectionIds)
+                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
                 }
                 val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
 
@@ -1082,6 +1079,7 @@ fun ChatView(
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
+    val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -1626,6 +1624,8 @@ fun ChatView(
                         ForwardDialog(
                             chatListState = chatListState,
                             currentChatId = chatId,
+                            archivedConnectionIds = archivedConnectionIds,
+                            hiddenConnectionIds = hiddenConnectionIds,
                             onSelect = { targetChatId ->
                                 val msgId = forwardMessageId
                                 if (msgId != null) {
@@ -2362,6 +2362,8 @@ private fun ChatChannelLoadingView(
 private fun ForwardDialog(
     chatListState: ChatListState,
     currentChatId: String,
+    archivedConnectionIds: Set<String>,
+    hiddenConnectionIds: Set<String>,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2380,7 +2382,7 @@ private fun ForwardDialog(
                         val options = chatListState.chats
                             .filter {
                                 it.connection.id != currentChatId &&
-                                    it.connection.isInActiveConnectionsChannel()
+                                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
                             }
                             .sortedByDescending { connectionListActivityTs(it) }
                         if (options.isEmpty()) Text("No other chats available")

@@ -1,18 +1,19 @@
 package compose.project.click.click.data.repository
 
-import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import io.github.jan.supabase.exceptions.RestException
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.LocationPreferences
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.UserCore
-import compose.project.click.click.data.models.UserPublicProfile
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.UserInterests
-import compose.project.click.click.data.models.isResolvedDisplayName
-import compose.project.click.click.data.models.resolveDisplayName
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
+import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -21,6 +22,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -49,10 +53,21 @@ class SupabaseRepository {
      * (apply [database/add_connection_archives.sql] to enable user-level archives).
      */
     private var connectionArchivesTableMissing: Boolean = false
+    private var connectionHiddenTableMissing: Boolean = false
 
     private fun isConnectionArchivesUnavailableError(e: Throwable): Boolean {
         val msg = e.redactedRestMessage()
         return msg.contains("connection_archives", ignoreCase = true) &&
+            (
+                msg.contains("schema cache", ignoreCase = true) ||
+                    msg.contains("Could not find the table", ignoreCase = true) ||
+                    msg.contains("does not exist", ignoreCase = true)
+                )
+    }
+
+    private fun isConnectionHiddenUnavailableError(e: Throwable): Boolean {
+        val msg = e.redactedRestMessage()
+        return msg.contains("connection_hidden", ignoreCase = true) &&
             (
                 msg.contains("schema cache", ignoreCase = true) ||
                     msg.contains("Could not find the table", ignoreCase = true) ||
@@ -120,24 +135,60 @@ class SupabaseRepository {
         val user = fetchUserById(targetUserId) ?: return null
         val tags = fetchUserInterests(targetUserId).getOrNull()?.tags.orEmpty()
         val availability = fetchUserAvailability(targetUserId)
+        val profileIntents = fetchProfileAvailabilityIntentBubbles(targetUserId)
         val shared = viewerUserId?.takeIf { it.isNotBlank() && it != targetUserId }?.let { v ->
             fetchSharedConnectionBetween(v, targetUserId)
         }
+        val viewerTags = viewerUserId?.takeIf { it.isNotBlank() && it != targetUserId }?.let { v ->
+            fetchUserInterests(v).getOrNull()?.tags.orEmpty()
+        }.orEmpty()
         return UserPublicProfile(
             user = user,
             interestTags = tags,
             availability = availability,
+            profileAvailabilityIntents = profileIntents,
+            viewerInterestTags = viewerTags,
             sharedConnection = shared,
         )
     }
 
     /**
+     * Reads [public.users.availability_intents] when the column exists (migration optional).
+     */
+    private suspend fun fetchProfileAvailabilityIntentBubbles(userId: String): List<ProfileAvailabilityIntentBubble> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            @Serializable
+            data class Row(
+                @SerialName("availability_intents")
+                val availabilityIntents: List<ProfileAvailabilityIntentBubble>? = null,
+            )
+            val row = supabase.from("users")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("availability_intents")) {
+                    filter { eq("id", userId) }
+                }
+                .decodeList<Row>()
+                .firstOrNull()
+            val now = Clock.System.now()
+            row?.availabilityIntents.orEmpty().filter { bubble ->
+                val exp = bubble.expiresAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return@filter true
+                exp > now
+            }
+        } catch (e: Exception) {
+            println("fetchProfileAvailabilityIntentBubbles (redacted): ${e.redactedRestMessage()}")
+            emptyList()
+        }
+    }
+
+    /**
      * Mutual connection between two users (same `user_ids` pair). If multiple rows exist,
      * picks the one with the latest activity (`last_message_at` or `created`).
+     * Excludes connections the viewer has hidden via [connection_hidden].
      */
     suspend fun fetchSharedConnectionBetween(viewerUserId: String, peerUserId: String): Connection? {
         if (viewerUserId.isBlank() || peerUserId.isBlank()) return null
         return try {
+            val hidden = getHiddenConnectionIds(viewerUserId)
             val rows = supabase.from("connections")
                 .select {
                     filter {
@@ -145,7 +196,7 @@ class SupabaseRepository {
                     }
                 }
                 .decodeList<Connection>()
-                .filter { it.isVisibleInActiveUi() }
+                .filter { it.isVisibleInActiveUi() && it.id !in hidden }
             rows.maxByOrNull { conn ->
                 (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
             }
@@ -164,18 +215,31 @@ class SupabaseRepository {
         pageSize: Int = 20
     ): List<Connection> {
         return try {
-            // Client-side filter: include archived for Clicks "Archived" tab; drop soft-removed only.
-            // (SQL `neq` on nullable `status` can exclude null-status legacy rows.)
-            supabase.from("connections")
-                .select {
-                    filter {
-                        contains("user_ids", listOf(userId))
+            val hidden = getHiddenConnectionIds(userId)
+            val result = mutableListOf<Connection>()
+            var currentPage = page
+            val maxExtraPages = 3 // safety cap to avoid unbounded fetches
+            var pagesScanned = 0
+            while (result.size < pageSize && pagesScanned < maxExtraPages) {
+                val batch = supabase.from("connections")
+                    .select {
+                        filter {
+                            contains("user_ids", listOf(userId))
+                        }
+                        order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                        range(currentPage * pageSize.toLong(), (currentPage + 1) * pageSize.toLong() - 1)
                     }
-                    order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                    range(page * pageSize.toLong(), (page + 1) * pageSize.toLong() - 1)
+                    .decodeList<Connection>()
+                val filtered = batch.filter { conn ->
+                    conn.normalizedConnectionStatus() != "removed" && conn.id !in hidden
                 }
-                .decodeList<Connection>()
-                .filter { it.normalizedConnectionStatus() != "removed" }
+                result.addAll(filtered)
+                // If the server returned fewer rows than pageSize, we've exhausted all data.
+                if (batch.size < pageSize) break
+                currentPage++
+                pagesScanned++
+            }
+            result.take(pageSize)
         } catch (e: Exception) {
             println("Error fetching connections (redacted): ${e.redactedRestMessage()}")
             emptyList()
@@ -439,31 +503,27 @@ class SupabaseRepository {
     }
     
     /**
-     * Soft-remove a connection (user-initiated "Remove Connection").
-     * Row stays in the database for possible future reconnection tracking.
+     * Hide a connection for [userId] via [connection_hidden] (user "Remove Connection").
+     * Does not mutate [connections.status] or delete the connection row.
      */
-    suspend fun deleteConnection(connectionId: String): Boolean {
+    suspend fun hideConnectionForUser(userId: String, connectionId: String): Boolean {
+        if (userId.isBlank() || connectionId.isBlank()) return false
+        if (connectionHiddenTableMissing) return false
         return try {
-            val withStatus = runCatching {
-                supabase.from("connections")
-                    .update({
-                        set("status", "removed")
-                        set("expiry_state", "expired")
-                    }) {
-                        filter { eq("id", connectionId) }
-                    }
-            }
-            if (withStatus.isSuccess) return true
-            println("deleteConnection soft-remove (retry without status): ${withStatus.exceptionOrNull()?.redactedRestMessage()}")
-            supabase.from("connections")
-                .update({
-                    set("expiry_state", "expired")
+            supabase.from("connection_hidden")
+                .upsert(buildJsonObject {
+                    put("user_id", userId)
+                    put("connection_id", connectionId)
                 }) {
-                    filter { eq("id", connectionId) }
+                    onConflict = "user_id,connection_id"
                 }
             true
         } catch (e: Exception) {
-            println("Error soft-removing connection (redacted): ${e.redactedRestMessage()}")
+            if (isConnectionHiddenUnavailableError(e)) {
+                connectionHiddenTableMissing = true
+            } else {
+                println("hideConnectionForUser (redacted): ${e.redactedRestMessage()}")
+            }
             false
         }
     }
@@ -1047,6 +1107,69 @@ class SupabaseRepository {
                 println("getArchivedConnectionIds (non-fatal, redacted): ${e.redactedRestMessage()}")
             }
             emptySet()
+        }
+    }
+
+    /**
+     * Connection IDs the user has explicitly hidden ([connection_hidden]).
+     */
+    suspend fun getHiddenConnectionIds(userId: String): Set<String> {
+        if (userId.isBlank() || connectionHiddenTableMissing) return emptySet()
+        return try {
+            @Serializable
+            data class HiddenRow(
+                @SerialName("connection_id") val connectionId: String,
+            )
+            val rows = supabase.from("connection_hidden")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
+                    filter { eq("user_id", userId) }
+                }
+                .decodeList<HiddenRow>()
+            rows.map { it.connectionId }.toSet()
+        } catch (e: Exception) {
+            if (isConnectionHiddenUnavailableError(e)) {
+                connectionHiddenTableMissing = true
+            } else {
+                println("getHiddenConnectionIds (non-fatal, redacted): ${e.redactedRestMessage()}")
+            }
+            emptySet()
+        }
+    }
+
+    /**
+     * Mirrors non-expired [availability_intents] rows onto [public.users] for profile discovery
+     * and sets [last_intent_update_at]. No-ops if the profile columns are missing.
+     */
+    suspend fun syncUserAvailabilityProfileMirror(userId: String): Boolean {
+        if (userId.isBlank()) return false
+        return try {
+            val rows = fetchActiveAvailabilityIntentsForUser(userId)
+            val bubbles = buildJsonArray {
+                rows.forEach { row ->
+                    val exp = row.expiresAt ?: row.endsAt
+                    if (!row.intentTag.isNullOrBlank() && !exp.isNullOrBlank()) {
+                        add(
+                            buildJsonObject {
+                                put("intent_tag", row.intentTag!!)
+                                put("timeframe", row.timeframe ?: "")
+                                put("expires_at", exp)
+                            },
+                        )
+                    }
+                }
+            }
+            val nowIso = Clock.System.now().toString()
+            supabase.from("users")
+                .update({
+                    set("availability_intents", bubbles)
+                    set("last_intent_update_at", nowIso)
+                }) {
+                    filter { eq("id", userId) }
+                }
+            true
+        } catch (e: Exception) {
+            println("syncUserAvailabilityProfileMirror (redacted): ${e.redactedRestMessage()}")
+            false
         }
     }
 

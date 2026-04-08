@@ -21,6 +21,7 @@ import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -707,27 +708,14 @@ class ConnectionRepository(
     }
 
     /**
-     * Delete a connection
+     * Hide a connection for the signed-in user ([connection_hidden]); does not alter [connections] rows.
      */
     suspend fun deleteConnection(connectionId: String): Result<Unit> {
         return try {
-            val withStatus = runCatching {
-                supabase.from("connections")
-                    .update({
-                        set("status", "removed")
-                        set("expiry_state", "expired")
-                    }) {
-                        filter { eq("id", connectionId) }
-                    }
-            }
-            if (withStatus.isFailure) {
-                println("ConnectionRepository.deleteConnection (retry without status): ${withStatus.exceptionOrNull()?.message}")
-                supabase.from("connections")
-                    .update({ set("expiry_state", "expired") }) {
-                        filter { eq("id", connectionId) }
-                    }
-            }
-            Result.success(Unit)
+            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+                ?: return Result.failure(Exception("Not signed in"))
+            val ok = supabaseRepository.hideConnectionForUser(uid, connectionId)
+            if (ok) Result.success(Unit) else Result.failure(Exception("Could not hide connection"))
         } catch (e: Exception) {
             Result.failure(e)
         }

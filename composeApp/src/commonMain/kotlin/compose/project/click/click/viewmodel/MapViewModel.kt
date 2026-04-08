@@ -2,15 +2,17 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.SupabaseChatRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.ui.utils.*
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -124,26 +126,31 @@ class MapViewModel : ViewModel() {
             combine(
                 AppDataManager.connections,
                 AppDataManager.connectedUsers,
+                AppDataManager.archivedConnectionIds,
+                AppDataManager.hiddenConnectionIds,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
                 AppDataManager.locationPreferences,
                 _zoomLevel,
                 _selectedFilter
             ) { values ->
-                // Using array-based combine for 5+ flows
                 @Suppress("UNCHECKED_CAST")
                 val connections = values[0] as List<Connection>
                 val connectedUsers = values[1] as Map<String, User>
-                val isDataLoaded = values[2] as Boolean
-                val isLoading = values[3] as Boolean
-                val locationPrefs = values[4] as compose.project.click.click.data.models.LocationPreferences
-                val zoom = values[5] as Double
-                val filter = values[6] as String
-                Septuple(connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter)
-            }.collectLatest { (connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
+                val archivedIds = values[2] as Set<String>
+                val hiddenIds = values[3] as Set<String>
+                val isDataLoaded = values[4] as Boolean
+                val isLoading = values[5] as Boolean
+                val locationPrefs = values[6] as LocationPreferences
+                val zoom = values[7] as Double
+                val filter = values[8] as String
+                Nonuple(connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter)
+            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
                 when {
                     isDataLoaded -> {
-                        val mapConnections = connections.filter { it.isInActiveConnectionsChannel() }
+                        val mapConnections = connections.filter {
+                            it.isActiveForUser(archivedIds, hiddenIds)
+                        }
                         _mapState.value = MapState.Success(mapConnections)
                         val mapVisibleConnections =
                             if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
@@ -593,4 +600,16 @@ private data class Septuple<A, B, C, D, E, F, G>(
     val fifth: E,
     val sixth: F,
     val seventh: G
+)
+
+private data class Nonuple<A, B, C, D, E, F, G, H, I>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+    val sixth: F,
+    val seventh: G,
+    val eighth: H,
+    val ninth: I,
 )
