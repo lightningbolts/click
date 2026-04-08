@@ -121,22 +121,23 @@ class HomeViewModel(
 
                 when {
                     user != null && isDataLoaded -> {
-                        val recentConnections = connections
+                        val activeConnections = connections.filter { it.isInActiveConnectionsChannel() }
+                        val recentConnections = activeConnections
                             .sortedByDescending { it.created }
                             .take(3)
                         
-                        val uniqueLocations = connections
+                        val uniqueLocations = activeConnections
                             .mapNotNull { it.semantic_location }
                             .distinct()
                             .size
                         
                         val stats = UserStats(
-                            totalConnections = connections.size,
+                            totalConnections = activeConnections.size,
                             recentConnections = recentConnections,
                             uniqueLocations = uniqueLocations
                         )
 
-                        val grouped = connections
+                        val grouped = activeConnections
                             .sortedByDescending { it.created }
                             .groupBy { it.semantic_location ?: "Somewhere New" }
                         _locationGroupedConnections.value = grouped
@@ -146,7 +147,7 @@ class HomeViewModel(
                         _pollPairSuggestion.value = try {
                             connectionRepository.getPollPairSuggestion(
                                 userId = user.id,
-                                connections = connections,
+                                connections = activeConnections,
                                 connectedUsers = connectedUsers
                             )
                         } catch (e: Exception) {
@@ -159,7 +160,7 @@ class HomeViewModel(
                         if (!dataLoaded) {
                             dataLoaded = true
                             viewModelScope.launch {
-                                preloadDerivedHomeData(user.id, connections)
+                                preloadDerivedHomeData(user.id, activeConnections)
                             }
                         }
                     }

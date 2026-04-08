@@ -374,6 +374,17 @@ data class Connection(
         return s == "archived" || s == "removed"
     }
 
+    /** Server/cron `status = archived` (distinct from per-user hide via `connection_archives`). */
+    fun isServerLifecycleArchived(): Boolean = normalizedConnectionStatus() == "archived"
+
+    /**
+     * Connections that belong in the Clicks "Active" channel: pending, active, or kept only.
+     */
+    fun isInActiveConnectionsChannel(): Boolean {
+        val s = normalizedConnectionStatus()
+        return s == "pending" || s == "active" || s == "kept"
+    }
+
     /** Visible in main UI (not soft-deleted / auto-archived). */
     fun isVisibleInActiveUi(): Boolean = !isArchivedOrRemoved()
 

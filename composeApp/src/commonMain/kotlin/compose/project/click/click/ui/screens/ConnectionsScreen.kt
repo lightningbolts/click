@@ -377,6 +377,9 @@ private fun connectionListActivityTs(chat: ChatWithDetails): Long =
         ?: chat.lastMessage?.timeCreated
         ?: chat.connection.created
 
+private fun Connection.isInArchivedClicksTab(archivedConnectionIds: Set<String>): Boolean =
+    isServerLifecycleArchived() || id in archivedConnectionIds
+
 @Composable
 fun ConnectionsListView(
     viewModel: ChatViewModel,
@@ -419,6 +422,7 @@ fun ConnectionsListView(
             val uid = currentUserId
             if (cachedConnections.isNotEmpty() && uid != null) {
                 cachedConnections.mapNotNull { connection ->
+                    if (connection.normalizedConnectionStatus() == "removed") return@mapNotNull null
                     val otherUserId = connection.user_ids.firstOrNull { it != uid }
                         ?: return@mapNotNull null
                     val otherUser = connectedUsers[otherUserId]
@@ -449,8 +453,13 @@ fun ConnectionsListView(
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 if (effectiveChats.isNotEmpty()) {
-                    val activeChats = effectiveChats.filter { it.connection.id !in archivedConnectionIds }
-                    val archivedChats = effectiveChats.filter { it.connection.id in archivedConnectionIds }
+                    val activeChats = effectiveChats.filter {
+                        it.connection.isInActiveConnectionsChannel() &&
+                            it.connection.id !in archivedConnectionIds
+                    }
+                    val archivedChats = effectiveChats.filter {
+                        it.connection.isInArchivedClicksTab(archivedConnectionIds)
+                    }
                     val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
                     val filteredCount = if (searchQuery.isBlank()) {
                         tabChats.size
@@ -476,8 +485,13 @@ fun ConnectionsListView(
             Spacer(modifier = Modifier.height(6.dp))
 
             if (effectiveChats.isNotEmpty()) {
-                val activeCount = effectiveChats.count { it.connection.id !in archivedConnectionIds }
-                val archivedCount = effectiveChats.count { it.connection.id in archivedConnectionIds }
+                val activeCount = effectiveChats.count {
+                    it.connection.isInActiveConnectionsChannel() &&
+                        it.connection.id !in archivedConnectionIds
+                }
+                val archivedCount = effectiveChats.count {
+                    it.connection.isInArchivedClicksTab(archivedConnectionIds)
+                }
 
                 val segStyle = LocalPlatformStyle.current
                 val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
@@ -576,8 +590,13 @@ fun ConnectionsListView(
                     }
                 }
             } else {
-                val activeChats = effectiveChats.filter { it.connection.id !in archivedConnectionIds }
-                val archivedChats = effectiveChats.filter { it.connection.id in archivedConnectionIds }
+                val activeChats = effectiveChats.filter {
+                    it.connection.isInActiveConnectionsChannel() &&
+                        it.connection.id !in archivedConnectionIds
+                }
+                val archivedChats = effectiveChats.filter {
+                    it.connection.isInArchivedClicksTab(archivedConnectionIds)
+                }
                 val tabChats = if (selectedTabIndex == 0) activeChats else archivedChats
 
                 val sortedTabChats = tabChats.sortedByDescending { connectionListActivityTs(it) }
@@ -598,6 +617,7 @@ fun ConnectionsListView(
                 val archiveBannerNotice =
                     if (effectiveChats.isNotEmpty() && selectedTabIndex == 0) {
                         activeChats
+                            .filter { !it.connection.isServerLifecycleArchived() }
                             .map { it.connection }
                             .mostUrgentArchiveNotice(listBannerNow) { conn ->
                                 chatLabelByConnectionId[conn.id] ?: "this connection"
@@ -758,10 +778,12 @@ fun ConnectionsListView(
     // Connection action sheet
     if (pendingMenuChat != null) {
         val selected = pendingMenuChat!!
-        val isArchived = selected.connection.id in archivedConnectionIds
+        val isUserArchived = selected.connection.id in archivedConnectionIds
+        val isServerArchived = selected.connection.isServerLifecycleArchived()
         ConnectionActionSheet(
             chatDetails = selected,
-            isArchived = isArchived,
+            isArchived = isUserArchived,
+            isServerLifecycleArchived = isServerArchived,
             onDismiss = { pendingMenuChat = null },
             onNudge = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
@@ -1059,6 +1081,7 @@ fun ChatView(
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
+    val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -2033,8 +2056,11 @@ fun ChatView(
     // Connection action sheet
     if (showConnectionSheet) {
         val successState = chatMessagesState as? ChatMessagesState.Success
+        val sheetConn = successState?.chatDetails?.connection
         ConnectionActionSheet(
             chatDetails = successState?.chatDetails,
+            isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
+            isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
             onDismiss = { showConnectionSheet = false },
             onNudge = {
                 viewModel.sendNudge()
@@ -2044,6 +2070,10 @@ fun ChatView(
                 viewModel.archiveConnection { success ->
                     if (success) onBackPressed()
                 }
+            },
+            onUnarchive = {
+                val connId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.connection?.id
+                if (connId != null) viewModel.unarchiveConnection(connId)
             },
             onDelete = {
                 viewModel.deleteConnectionPermanently { success ->
@@ -2348,7 +2378,10 @@ private fun ForwardDialog(
                 when (chatListState) {
                     is ChatListState.Success -> {
                         val options = chatListState.chats
-                            .filter { it.connection.id != currentChatId }
+                            .filter {
+                                it.connection.id != currentChatId &&
+                                    it.connection.isInActiveConnectionsChannel()
+                            }
                             .sortedByDescending { connectionListActivityTs(it) }
                         if (options.isEmpty()) Text("No other chats available")
                         else LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
@@ -3598,6 +3631,7 @@ private fun MessageActionSheet(
 private fun ConnectionActionSheet(
     chatDetails: ChatWithDetails?,
     isArchived: Boolean = false,
+    isServerLifecycleArchived: Boolean = false,
     onDismiss: () -> Unit,
     onNudge: () -> Unit = {},
     onOpenChat: () -> Unit = {},
@@ -3697,8 +3731,15 @@ private fun ConnectionActionSheet(
                         Text("Unarchive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                     },
                     supportingContent = {
-                        Text("Move this connection back to Active", color = onVariant,
-                            style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            if (isServerLifecycleArchived) {
+                                "Remove from your Archived tab (server-archived connections stay read-only)"
+                            } else {
+                                "Move this connection back to Active"
+                            },
+                            color = onVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     },
                     leadingContent = {
                         Icon(Icons.Default.Unarchive, contentDescription = null,
@@ -3709,7 +3750,7 @@ private fun ConnectionActionSheet(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
-            } else {
+            } else if (!isServerLifecycleArchived) {
                 // ── Archive ────────────────────────────────────────────────────
                 ListItem(
                     headlineContent = {

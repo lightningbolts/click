@@ -143,8 +143,10 @@ class MapViewModel : ViewModel() {
             }.collectLatest { (connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
                 when {
                     isDataLoaded -> {
-                        _mapState.value = MapState.Success(connections)
-                        val mapVisibleConnections = if (locationPrefs.showOnMapEnabled) connections else emptyList()
+                        val mapConnections = connections.filter { it.isInActiveConnectionsChannel() }
+                        _mapState.value = MapState.Success(mapConnections)
+                        val mapVisibleConnections =
+                            if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
                         ensureDefaultCameraTarget(mapVisibleConnections)
                         updateRenderData(mapVisibleConnections, zoom, filter)
                         refreshSelectedConnectionUser(connectedUsers)

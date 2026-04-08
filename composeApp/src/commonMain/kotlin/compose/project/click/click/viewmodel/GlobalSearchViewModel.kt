@@ -87,7 +87,7 @@ class GlobalSearchViewModel(
             _isSearching.value = true
             try {
                 val lowerQuery = query.lowercase().trim()
-                val connections = appDataManager.connections.value
+                val connections = appDataManager.connections.value.filter { it.isInActiveConnectionsChannel() }
                 val connectedUsers = appDataManager.connectedUsers.value
                 val currentUserId = appDataManager.currentUser.value?.id
 

@@ -420,6 +420,106 @@ class SupabaseChatRepository(
         }
     }
 
+    private suspend fun buildChatsWithDetailsForConnections(
+        userId: String,
+        connections: List<Connection>,
+    ): List<ChatWithDetails> {
+        if (connections.isEmpty()) return emptyList()
+
+        val connectionIds = connections.map { it.id }
+        val otherUserIds = connections
+            .flatMap { it.user_ids }
+            .filter { it != userId }
+            .distinct()
+
+        val (usersById, chats) = coroutineScope {
+            val usersDeferred = async { fetchUsersByIdsSafe(otherUserIds).associateBy { it.id } }
+            val chatsDeferred = async {
+                supabase.from("chats")
+                    .select {
+                        filter {
+                            isIn("connection_id", connectionIds)
+                        }
+                    }
+                    .decodeList<ChatRow>()
+            }
+
+            usersDeferred.await() to chatsDeferred.await()
+        }
+
+        val chatByConnectionId = chats.associateBy { it.connectionId }
+
+        chats.forEach { chatRow ->
+            rememberChatConnectionRouting(chatRow.id, chatRow.connectionId)
+        }
+
+        val chatIds = chats.map { it.id }
+        val perChatLatest = runCatching { fetchLatestMessageRowPerChat(chatIds) }
+            .getOrElse {
+                println("ChatRepository: per-chat latest messages failed: ${it.message}")
+                emptyMap()
+            }
+        val bulkLatest = if (perChatLatest.size < chatIds.size) {
+            fetchLatestMessageRowsBulkFallback(chatIds)
+        } else {
+            emptyMap()
+        }
+        val latestByChatId = bulkLatest.toMutableMap().apply { putAll(perChatLatest) }
+
+        val unreadRows = if (chatIds.isNotEmpty()) {
+            supabase.from("messages")
+                .select {
+                    filter {
+                        isIn("chat_id", chatIds)
+                        eq("is_read", false)
+                        neq("user_id", userId)
+                    }
+                    limit(10_000)
+                }
+                .decodeList<MessageRow>()
+        } else {
+            emptyList()
+        }
+        val unreadByChatId = unreadRows.groupingBy { it.chatId }.eachCount()
+
+        return connections.mapNotNull { connection ->
+            val chatRow = chatByConnectionId[connection.id]
+            val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+            val otherUser = usersById[otherUserId] ?: User(
+                id = otherUserId,
+                name = "Connection",
+                email = null,
+                image = null,
+                createdAt = 0L
+            )
+
+            val rawLastMessage = chatRow?.let { latestByChatId[it.id]?.toMessage() }
+            val keys = if (chatRow != null) {
+                val k = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
+                encryptionKeyCache[chatRow.id] = k
+                k
+            } else null
+            val lastMessage = rawLastMessage?.let { decryptMessage(it, keys) }
+            val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
+
+            ChatWithDetails(
+                chat = Chat(
+                    id = chatRow?.id,
+                    connectionId = connection.id,
+                    messages = emptyList()
+                ),
+                connection = connection,
+                otherUser = otherUser,
+                lastMessage = lastMessage,
+                unreadCount = unreadCount
+            )
+        }.sortedByDescending { chatDetails ->
+            chatDetails.lastMessage?.timeCreated
+                ?: chatDetails.connection.last_message_at
+                ?: chatDetails.connection.created
+        }
+    }
+
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
@@ -431,104 +531,30 @@ class SupabaseChatRepository(
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
-                .filter { it.isVisibleInActiveUi() }
+                .filter { it.isInActiveConnectionsChannel() }
 
-            if (connections.isEmpty()) return emptyList()
-
-            val connectionIds = connections.map { it.id }
-            val otherUserIds = connections
-                .flatMap { it.user_ids }
-                .filter { it != userId }
-                .distinct()
-
-            val (usersById, chats) = coroutineScope {
-                val usersDeferred = async { fetchUsersByIdsSafe(otherUserIds).associateBy { it.id } }
-                val chatsDeferred = async {
-                    supabase.from("chats")
-                        .select {
-                            filter {
-                                isIn("connection_id", connectionIds)
-                            }
-                        }
-                        .decodeList<ChatRow>()
-                }
-
-                usersDeferred.await() to chatsDeferred.await()
-            }
-
-            val chatByConnectionId = chats.associateBy { it.connectionId }
-
-            chats.forEach { chatRow ->
-                rememberChatConnectionRouting(chatRow.id, chatRow.connectionId)
-            }
-
-            val chatIds = chats.map { it.id }
-            val perChatLatest = runCatching { fetchLatestMessageRowPerChat(chatIds) }
-                .getOrElse {
-                    println("ChatRepository: per-chat latest messages failed: ${it.message}")
-                    emptyMap()
-                }
-            val bulkLatest = if (perChatLatest.size < chatIds.size) {
-                fetchLatestMessageRowsBulkFallback(chatIds)
-            } else {
-                emptyMap()
-            }
-            val latestByChatId = bulkLatest.toMutableMap().apply { putAll(perChatLatest) }
-
-            val unreadRows = if (chatIds.isNotEmpty()) {
-                supabase.from("messages")
-                    .select {
-                        filter {
-                            isIn("chat_id", chatIds)
-                            eq("is_read", false)
-                            neq("user_id", userId)
-                        }
-                        limit(10_000)
-                    }
-                    .decodeList<MessageRow>()
-            } else {
-                emptyList()
-            }
-            val unreadByChatId = unreadRows.groupingBy { it.chatId }.eachCount()
-
-            connections.mapNotNull { connection ->
-                val chatRow = chatByConnectionId[connection.id]
-                val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
-                val otherUser = usersById[otherUserId] ?: User(
-                    id = otherUserId,
-                    name = "Connection",
-                    email = null,
-                    image = null,
-                    createdAt = 0L
-                )
-
-                val rawLastMessage = chatRow?.let { latestByChatId[it.id]?.toMessage() }
-                val keys = if (chatRow != null) {
-                    val k = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
-                    encryptionKeyCache[chatRow.id] = k
-                    k
-                } else null
-                val lastMessage = rawLastMessage?.let { decryptMessage(it, keys) }
-                val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
-
-                ChatWithDetails(
-                    chat = Chat(
-                        id = chatRow?.id,
-                        connectionId = connection.id,
-                        messages = emptyList()
-                    ),
-                    connection = connection,
-                    otherUser = otherUser,
-                    lastMessage = lastMessage,
-                    unreadCount = unreadCount
-                )
-            }.sortedByDescending { chatDetails ->
-                chatDetails.lastMessage?.timeCreated
-                    ?: chatDetails.connection.last_message_at
-                    ?: chatDetails.connection.created
-            }
+            buildChatsWithDetailsForConnections(userId, connections)
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.message}")
+            emptyList()
+        }
+    }
+
+    override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> {
+        return try {
+            val connections = supabase.from("connections")
+                .select {
+                    filter {
+                        contains("user_ids", listOf(userId))
+                    }
+                    order("created", Order.DESCENDING)
+                }
+                .decodeList<Connection>()
+                .filter { it.isServerLifecycleArchived() }
+
+            buildChatsWithDetailsForConnections(userId, connections)
+        } catch (e: Exception) {
+            println("Error fetching archived user chats: ${e.message}")
             emptyList()
         }
     }
