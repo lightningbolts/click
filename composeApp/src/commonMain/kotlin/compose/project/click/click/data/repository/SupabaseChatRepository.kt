@@ -581,21 +581,9 @@ class SupabaseChatRepository(
      */
     private suspend fun fetchConnectionsWithJunctionIds(
         userId: String,
-    ): Triple<List<Connection>, Set<String>, Set<String>> = coroutineScope {
-        val connectionsDeferred = async {
-            supabase.from("connections")
-                .select {
-                    filter {
-                        contains("user_ids", listOf(userId))
-                    }
-                    order("created", Order.DESCENDING)
-                }
-                .decodeList<Connection>()
-                .filter { it.normalizedConnectionStatus() != "removed" }
-        }
-        val archivedDeferred = async { supabaseRepository.getArchivedConnectionIds(userId) }
-        val hiddenDeferred = async { supabaseRepository.getHiddenConnectionIds(userId) }
-        Triple(connectionsDeferred.await(), archivedDeferred.await(), hiddenDeferred.await())
+    ): Triple<List<Connection>, Set<String>, Set<String>> {
+        val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
+        return Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
     }
 
     override suspend fun fetchMessagesForChat(chatId: String): List<Message> {

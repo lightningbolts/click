@@ -16,6 +16,8 @@ import compose.project.click.click.data.models.resolveDisplayName // pragma: all
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -32,6 +34,13 @@ import kotlinx.serialization.json.put
 data class AvailabilityIntentInsertResult(
     val success: Boolean,
     val errorMessage: String? = null,
+)
+
+/** Connections and junction IDs after lazy sweep + two-step fetch (aligned with `GET /api/connections`). */
+data class UserConnectionsSnapshot(
+    val connections: List<Connection>,
+    val archivedConnectionIds: Set<String>,
+    val hiddenConnectionIds: Set<String>,
 )
 
 /**
@@ -207,43 +216,96 @@ class SupabaseRepository {
     }
 
     /**
-     * Fetch connections for a user with pagination
+     * Lazy-sweep then two-step fetch (active channel + archived channel), matching web API semantics.
      */
-    suspend fun fetchUserConnections(
-        userId: String, 
-        page: Int = 0, 
-        pageSize: Int = 20
+    suspend fun fetchUserConnectionsSnapshot(userId: String): UserConnectionsSnapshot {
+        if (userId.isBlank()) {
+            return UserConnectionsSnapshot(emptyList(), emptySet(), emptySet())
+        }
+        sweepStaleConnectionsForUser(userId)
+        val archivedIds = getArchivedConnectionIds(userId)
+        val hiddenIds = getHiddenConnectionIds(userId)
+        val excludedForActive = archivedIds + hiddenIds
+        val activeRows = fetchActiveChannelConnections(userId, excludedForActive)
+        val validArchiveIds = archivedIds - hiddenIds
+        val archivedRows = fetchArchivedChannelConnections(userId, validArchiveIds)
+        val merged = (activeRows + archivedRows)
+            .distinctBy { it.id }
+            .filter { it.normalizedConnectionStatus() != "removed" }
+            .sortedByDescending { it.created }
+        return UserConnectionsSnapshot(merged, archivedIds, hiddenIds)
+    }
+
+    private suspend fun sweepStaleConnectionsForUser(userId: String) {
+        supabase.postgrest.rpc(
+            "sweep_stale_connections_for_user",
+            buildJsonObject { put("target_user_id", userId) },
+        )
+    }
+
+    /** Active tab: user is a participant, lifecycle in pending/active/kept (or null status), exclude archived ∪ hidden. */
+    private suspend fun fetchActiveChannelConnections(
+        userId: String,
+        excludedIds: Set<String>,
     ): List<Connection> {
         return try {
-            val hidden = getHiddenConnectionIds(userId)
-            val result = mutableListOf<Connection>()
-            var currentPage = page
-            val maxExtraPages = 3 // safety cap to avoid unbounded fetches
-            var pagesScanned = 0
-            while (result.size < pageSize && pagesScanned < maxExtraPages) {
-                val batch = supabase.from("connections")
-                    .select {
-                        filter {
-                            contains("user_ids", listOf(userId))
+            supabase.from("connections")
+                .select {
+                    filter {
+                        contains("user_ids", listOf(userId))
+                        or {
+                            filter("status", FilterOperator.IS, "null")
+                            eq("status", "pending")
+                            eq("status", "active")
+                            eq("status", "kept")
                         }
-                        order("created", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
-                        range(currentPage * pageSize.toLong(), (currentPage + 1) * pageSize.toLong() - 1)
+                        if (excludedIds.isNotEmpty()) {
+                            filterNot("id", FilterOperator.IN, "(${excludedIds.joinToString(",")})")
+                        }
                     }
-                    .decodeList<Connection>()
-                val filtered = batch.filter { conn ->
-                    conn.normalizedConnectionStatus() != "removed" && conn.id !in hidden
+                    order("created", Order.DESCENDING)
                 }
-                result.addAll(filtered)
-                // If the server returned fewer rows than pageSize, we've exhausted all data.
-                if (batch.size < pageSize) break
-                currentPage++
-                pagesScanned++
-            }
-            result.take(pageSize)
+                .decodeList<Connection>()
         } catch (e: Exception) {
-            println("Error fetching connections (redacted): ${e.redactedRestMessage()}")
+            println("fetchActiveChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
+    }
+
+    /** Archived tab: rows in `connection_archives` minus `connection_hidden`, restricted to participant. */
+    private suspend fun fetchArchivedChannelConnections(
+        userId: String,
+        validArchiveIds: Set<String>,
+    ): List<Connection> {
+        if (validArchiveIds.isEmpty()) return emptyList()
+        return try {
+            val ids = validArchiveIds.toList()
+            supabase.from("connections")
+                .select {
+                    filter {
+                        contains("user_ids", listOf(userId))
+                        isIn("id", ids)
+                    }
+                    order("created", Order.DESCENDING)
+                }
+                .decodeList<Connection>()
+        } catch (e: Exception) {
+            println("fetchArchivedChannelConnections (redacted): ${e.redactedRestMessage()}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Fetch connections for a user (paginated slice of the merged active + archived two-step result).
+     */
+    suspend fun fetchUserConnections(
+        userId: String,
+        page: Int = 0,
+        pageSize: Int = 20,
+    ): List<Connection> {
+        val all = fetchUserConnectionsSnapshot(userId).connections
+        val start = page * pageSize
+        return all.drop(start).take(pageSize)
     }
 
     /**

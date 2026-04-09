@@ -763,16 +763,9 @@ class ConnectionRepository(
      */
     suspend fun getUserConnections(userId: String): Result<List<Connection>> {
         return try {
-            val result = supabase.from("connections")
-                .select {
-                    filter {
-                        filter("user_ids", io.github.jan.supabase.postgrest.query.filter.FilterOperator.CS, "{${userId}}")
-                    }
-                }
-                .decodeList<Connection>()
-                .filter { it.isVisibleInActiveUi() }
-            
-            Result.success(result)
+            val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
+            val visible = snapshot.connections.filter { it.isVisibleInActiveUi() }
+            Result.success(visible)
         } catch (e: Exception) {
             Result.failure(e)
         }

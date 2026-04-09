@@ -18,6 +18,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -303,11 +304,11 @@ object AppDataManager {
 
                     // Prioritize connections and connected-user hydration so the Home/Map/Chats
                     // screens are ready before slower auxiliary startup work completes.
-                    val userConnections = supabaseRepository.fetchUserConnections(user.id)
-                    _connections.value = userConnections
-                    _archivedConnectionIds.value = supabaseRepository.getArchivedConnectionIds(user.id)
-                    _hiddenConnectionIds.value = supabaseRepository.getHiddenConnectionIds(user.id)
-                    refreshConnectedUsers(userConnections, user.id)
+                    val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(user.id)
+                    _connections.value = snapshot.connections
+                    _archivedConnectionIds.value = snapshot.archivedConnectionIds
+                    _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+                    refreshConnectedUsers(snapshot.connections, user.id)
 
                     _isDataLoaded.value = true
                     _usingCachedData.value = false
@@ -327,9 +328,9 @@ object AppDataManager {
             }
             
         } catch (e: Exception) {
-            println("Error loading app data: ${e.message}")
-            e.printStackTrace()
-            _error.value = e.message ?: "No internet connection"
+            println("Error loading app data: ${e.redactedRestMessage()}")
+            // Do not printStackTrace() — RestException.message embeds Authorization/apikey headers.
+            _error.value = e.redactedRestMessage().ifBlank { "No internet connection" }
             _isDataLoaded.value = true
             if (restoredFromCache) {
                 _usingCachedData.value = true
