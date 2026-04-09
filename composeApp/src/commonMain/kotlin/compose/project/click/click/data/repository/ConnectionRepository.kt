@@ -32,10 +32,13 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -104,6 +107,39 @@ class ConnectionRepository(
         @SerialName("token_age_ms") val tokenAgeMs: Long? = null,
         @SerialName("distance_meters") val distanceMeters: Int? = null,
     )
+
+    /**
+     * `redeem_qr_token` returns a JSON **object** (`RETURNS JSONB`). supabase-kt's [decodeSingle] decodes the
+     * HTTP body as `List<T>` then `.first()`, which throws "Expected start of the array '['…" on `{…}` payloads.
+     */
+    private fun decodeRedeemQrTokenPayload(body: String): RedeemQrTokenResponse {
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) {
+            throw SerializationException("Empty redeem_qr_token response")
+        }
+        return try {
+            json.decodeFromString(RedeemQrTokenResponse.serializer(), trimmed)
+        } catch (e: SerializationException) {
+            val root: JsonElement = try {
+                json.parseToJsonElement(trimmed)
+            } catch (_: Exception) {
+                throw e
+            }
+            when (root) {
+                is JsonArray -> {
+                    val sole = root.firstOrNull() as? JsonObject
+                        ?: throw SerializationException("redeem_qr_token array payload missing object row")
+                    json.decodeFromJsonElement(RedeemQrTokenResponse.serializer(), sole)
+                }
+                is JsonObject -> json.decodeFromJsonElement(RedeemQrTokenResponse.serializer(), root)
+                is JsonPrimitive -> {
+                    if (!root.isString) throw e
+                    json.decodeFromString(RedeemQrTokenResponse.serializer(), root.content)
+                }
+                else -> throw e
+            }
+        }
+    }
 
     /**
      * Create a connection between two users with proximity verification.
@@ -860,7 +896,7 @@ class ConnectionRepository(
         scannerLon: Double? = null
     ): Result<RedeemQrTokenResponse> {
         return try {
-            val response = supabase.postgrest.rpc(
+            val rpcResult = supabase.postgrest.rpc(
                 "redeem_qr_token",
                 buildJsonObject {
                     put("p_token", token)
@@ -871,7 +907,12 @@ class ConnectionRepository(
                         put("p_scanner_lon", scannerLon)
                     }
                 }
-            ).decodeSingle<RedeemQrTokenResponse>()
+            )
+            val response = try {
+                decodeRedeemQrTokenPayload(rpcResult.data)
+            } catch (e: Exception) {
+                return Result.failure(e)
+            }
 
             if (!response.success) {
                 val message = when (response.error) {
