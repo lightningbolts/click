@@ -420,12 +420,6 @@ class ConnectionRepository(
                 else -> null
             }
 
-            val newStatus = when {
-                existing.isKept() -> "kept"
-                existing.last_message_at != null -> "active"
-                else -> "pending"
-            }
-
             var semanticLocationName: String? = null
             var fullLocationMap: Map<String, String>? = null
             if (loc1Valid) {
@@ -477,7 +471,9 @@ class ConnectionRepository(
 
             val result = supabase.from("connections")
                 .update(buildJsonObject {
-                    put("status", newStatus)
+                    put("status", "active")
+                    put("expiry_state", "active")
+                    put("last_message_at", now)
                     put("created", now)
                     put("expiry", expiry)
                     put("created_utc", createdUtc)
@@ -680,11 +676,13 @@ class ConnectionRepository(
             supabase.from("connections")
                 .select {
                     filter {
-                        filter("user_ids", io.github.jan.supabase.postgrest.query.filter.FilterOperator.CS, "{${userId1},${userId2}}")
+                        contains("user_ids", listOf(userId1, userId2))
                     }
                 }
                 .decodeList<Connection>()
-                .firstOrNull()
+                .firstOrNull { conn ->
+                    userId1 in conn.user_ids && userId2 in conn.user_ids
+                }
         } catch (e: Exception) {
             println("Error checking connection: ${e.message}")
             null

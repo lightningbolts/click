@@ -1214,6 +1214,15 @@ class SupabaseRepository {
                         eq("connection_id", connectionId)
                     }
                 }
+            // `kept` is excluded from sweep_stale_connections_for_user (only pending/active are swept).
+            supabase.from("connections")
+                .update({
+                    set("status", "kept")
+                }) {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
             true
         } catch (e: Exception) {
             if (isConnectionArchivesUnavailableError(e)) {

@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
@@ -148,10 +147,10 @@ class MapViewModel : ViewModel() {
                 Nonuple(connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter)
             }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
                 when {
-                    isDataLoaded -> {
-                        val mapConnections = connections.filter {
-                            it.isActiveForUser(archivedIds, hiddenIds)
-                        }
+                    // `archivedIds` is read so archive/unarchive recomputes the map when the connections list is unchanged.
+                    isDataLoaded && (archivedIds.isNotEmpty() || archivedIds.isEmpty()) -> {
+                        // Memory map: show full history (incl. per-user archived) but never removed/hidden rows.
+                        val mapConnections = connections.filter { it.id !in hiddenIds }
                         _mapState.value = MapState.Success(mapConnections)
                         val mapVisibleConnections =
                             if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
