@@ -3,17 +3,15 @@ package compose.project.click.click.ui.components
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,9 +22,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
@@ -36,16 +35,21 @@ import kotlin.math.roundToInt
 
 /**
  * iOS-style interactive back container:
- * - drag starts only from the edge zone to avoid stealing in-screen gestures
- * - current screen follows the finger in real time via layout offset
- * - previous screen uses a small parallax offset for depth
- * - release settles using spring + release velocity
+ * - Uses [Modifier.graphicsLayer] for the slide transform by default (draw phase; avoids layout
+ *   thrash). Use [useLayoutOffsetForSwipeReveal] on screens with UIKit camera/map previews that
+ *   can render black when flattened through a graphics layer.
+ * - Full-width drag is applied on the **same** [Box] that wraps [currentContent] so nested
+ *   composables (e.g. message bubbles) receive pointer input first and can own horizontal gestures.
+ * - When [useFullWidthHorizontalDrag] is false, a start-edge strip handles drag (drawn above
+ *   content so it intentionally captures that band).
  */
 @Composable
 fun InteractiveSwipeBackContainer(
     modifier: Modifier = Modifier,
     enabled: Boolean,
     edgeSwipeWidth: Dp = 24.dp,
+    useFullWidthHorizontalDrag: Boolean = true,
+    useLayoutOffsetForSwipeReveal: Boolean = false,
     onBack: () -> Unit,
     /**
      * When false, the layer behind the sliding [currentContent] does not paint a solid
@@ -63,11 +67,10 @@ fun InteractiveSwipeBackContainer(
     var settleJob by remember { mutableStateOf<Job?>(null) }
     val settleScope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val edgeTapInteraction = remember { MutableInteractionSource() }
+    val dragJitterThresholdPx = remember(density) { with(density) { 0.75.dp.toPx() } }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
-        val dragJitterThresholdPx = with(density) { 0.75.dp.toPx() }
         val showPreviousLayer = isGestureActive || isSettling
 
         fun snapDragOffset(nextOffset: Float) {
@@ -109,9 +112,6 @@ fun InteractiveSwipeBackContainer(
 
                 if (shouldComplete) {
                     onBack()
-                    // Keep the previous layer rendered for two extra frames so the
-                    // parent composable has time to recompose and draw the
-                    // destination surface before this overlay is torn down.
                     kotlinx.coroutines.delay(34)
                 } else {
                     dragOffset.floatValue = 0f
@@ -126,6 +126,43 @@ fun InteractiveSwipeBackContainer(
             if (!isGestureActive || isSettling) return@rememberDraggableState
             snapDragOffset(dragOffset.floatValue + delta)
         }
+
+        val dragModifier = if (enabled) {
+            Modifier.draggable(
+                state = dragState,
+                orientation = Orientation.Horizontal,
+                enabled = !isSettling,
+                startDragImmediately = isGestureActive,
+                onDragStarted = {
+                    settleJob?.cancel()
+                    settleJob = null
+                    isSettling = false
+                    isGestureActive = true
+                },
+                onDragStopped = { velocity ->
+                    finishGesture(velocity)
+                }
+            )
+        } else {
+            Modifier
+        }
+
+        val slideTransform = if (useLayoutOffsetForSwipeReveal) {
+            Modifier.offset {
+                IntOffset(dragOffset.floatValue.roundToInt(), 0)
+            }
+        } else {
+            Modifier.graphicsLayer {
+                translationX = dragOffset.floatValue
+            }
+        }
+
+        val contentChrome = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .then(
+                if (enabled && useFullWidthHorizontalDrag) dragModifier else Modifier
+            )
 
         if (showPreviousLayer) {
             Box(
@@ -146,50 +183,21 @@ fun InteractiveSwipeBackContainer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset {
-                    // Native UIKit-backed views such as MKMapView and AVCapture previews can render
-                    // black when forced through offscreen compositing layers on iOS. Layout offset keeps
-                    // the interactive swipe motion without flattening the hosted native view tree.
-                    IntOffset(dragOffset.floatValue.roundToInt(), 0)
-                }
+                .then(slideTransform)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+            Box(modifier = contentChrome) {
                 currentContent()
             }
-        }
 
-        if (enabled) {
-            // Consume taps in the margin: draggable alone does not block clicks to content underneath
-            // (e.g. ConnectionsListView) when opaquePreviousBackground is false.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxHeight()
-                    .width(edgeSwipeWidth)
-                    .clickable(
-                        indication = null,
-                        interactionSource = edgeTapInteraction,
-                    ) { }
-                    .draggable(
-                        state = dragState,
-                        orientation = Orientation.Horizontal,
-                        enabled = !isSettling,
-                        startDragImmediately = isGestureActive,
-                        onDragStarted = {
-                            settleJob?.cancel()
-                            settleJob = null
-                            isSettling = false
-                            isGestureActive = true
-                        },
-                        onDragStopped = { velocity ->
-                            finishGesture(velocity)
-                        }
-                    )
-            )
+            if (enabled && !useFullWidthHorizontalDrag) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .width(edgeSwipeWidth)
+                        .then(dragModifier)
+                )
+            }
         }
     }
 }

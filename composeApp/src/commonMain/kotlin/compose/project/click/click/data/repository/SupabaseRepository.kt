@@ -527,6 +527,85 @@ class SupabaseRepository {
             false
         }
     }
+
+    /**
+     * Per-user hide for every participant in [userIds] (symmetric "Remove Connection").
+     */
+    suspend fun hideConnectionForUsers(userIds: List<String>, connectionId: String): Boolean {
+        if (connectionId.isBlank() || userIds.isEmpty()) return false
+        if (connectionHiddenTableMissing) return false
+        val distinct = userIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (distinct.isEmpty()) return false
+        return try {
+            distinct.forEach { uid ->
+                supabase.from("connection_hidden")
+                    .upsert(buildJsonObject {
+                        put("user_id", uid)
+                        put("connection_id", connectionId)
+                    }) {
+                        onConflict = "user_id,connection_id"
+                    }
+            }
+            true
+        } catch (e: Exception) {
+            if (isConnectionHiddenUnavailableError(e)) {
+                connectionHiddenTableMissing = true
+            } else {
+                println("hideConnectionForUsers (redacted): ${e.redactedRestMessage()}")
+            }
+            false
+        }
+    }
+
+    /**
+     * Clears [connection_archives] and [connection_hidden] for [connectionId] for both users in [userIds].
+     * Used when restoring a connection after QR/NFC reconnect.
+     */
+    suspend fun clearConnectionJunctionForPair(connectionId: String, userIds: List<String>): Boolean {
+        if (connectionId.isBlank() || userIds.size < 2) return false
+        val pair = userIds.take(2).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (pair.size < 2) return false
+        return try {
+            if (!connectionHiddenTableMissing) {
+                try {
+                    supabase.from("connection_hidden")
+                        .delete {
+                            filter {
+                                eq("connection_id", connectionId)
+                                isIn("user_id", pair)
+                            }
+                        }
+                } catch (e: Exception) {
+                    if (isConnectionHiddenUnavailableError(e)) {
+                        connectionHiddenTableMissing = true
+                    } else {
+                        throw e
+                    }
+                }
+            }
+            if (!connectionArchivesTableMissing) {
+                try {
+                    supabase.from("connection_archives")
+                        .delete {
+                            filter {
+                                eq("connection_id", connectionId)
+                                isIn("user_id", pair)
+                            }
+                        }
+                } catch (e: Exception) {
+                    if (isConnectionArchivesUnavailableError(e)) {
+                        connectionArchivesTableMissing = true
+                    } else {
+                        throw e
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            println("clearConnectionJunctionForPair (redacted): ${e.redactedRestMessage()}")
+            false
+        }
+    }
     
     // ==================== Availability Methods ====================
     

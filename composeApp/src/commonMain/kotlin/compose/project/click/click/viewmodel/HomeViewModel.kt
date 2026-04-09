@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -436,14 +437,21 @@ class HomeViewModel(
             try {
                 val channel = SupabaseConfig.client.channel("home:connections")
                 connectionsChannel = channel
-                
-                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "connections"
-                }.onEach {
-                    // Any change to connections → refresh data
+
+                merge(
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connections"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_archives"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_hidden"
+                    },
+                ).onEach {
                     AppDataManager.refresh(force = true)
                 }.launchIn(this)
-                
+
                 channel.subscribe()
             } catch (e: Exception) {
                 println("HomeViewModel: Error subscribing to connections: ${e.message}")

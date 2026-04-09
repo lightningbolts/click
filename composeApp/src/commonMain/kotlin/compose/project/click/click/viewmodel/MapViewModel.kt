@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -489,13 +490,21 @@ class MapViewModel : ViewModel() {
             try {
                 val channel = SupabaseConfig.client.channel("map:connections")
                 connectionsChannel = channel
-                
-                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "connections"
-                }.onEach {
+
+                merge(
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connections"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_archives"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_hidden"
+                    },
+                ).onEach {
                     AppDataManager.refresh(force = true)
                 }.launchIn(this)
-                
+
                 channel.subscribe()
             } catch (e: Exception) {
                 println("MapViewModel: Error subscribing to connections: ${e.message}")

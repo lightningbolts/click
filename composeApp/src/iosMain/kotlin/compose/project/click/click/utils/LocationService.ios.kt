@@ -9,8 +9,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import platform.CoreLocation.CLLocation
 import platform.CoreLocation.CLLocationManager
 import platform.CoreLocation.CLLocationManagerDelegateProtocol
-import platform.CoreLocation.kCLAuthorizationStatusAuthorizedAlways
-import platform.CoreLocation.kCLAuthorizationStatusAuthorizedWhenInUse
 import platform.CoreLocation.kCLLocationAccuracyBest
 import platform.Foundation.NSError
 import platform.darwin.NSObject
@@ -19,7 +17,8 @@ import platform.darwin.dispatch_get_main_queue
 import kotlin.coroutines.resume
 
 /**
- * iOS [LocationService]: reads [CLLocationManager.authorizationStatus] on every permission check (no cached flag).
+ * iOS [LocationService]: permission state comes from [IosLocationAuthorizationTracker] (delegate +
+ * background bootstrap), not synchronous [CLLocationManager.authorizationStatus] on the main thread.
  * [getCurrentLocation] uses a single global mutex so concurrent callers cannot clobber the shared [CLLocationManager] delegate.
  * Completion always runs on the main queue for thread safety with Compose.
  */
@@ -122,12 +121,12 @@ actual class LocationService {
         if (!CLLocationManager.locationServicesEnabled()) {
             return false
         }
-        val status = CLLocationManager.authorizationStatus()
-        return status == kCLAuthorizationStatusAuthorizedWhenInUse ||
-            status == kCLAuthorizationStatusAuthorizedAlways
+        IosLocationAuthorizationTracker.ensureStarted()
+        return IosLocationAuthorizationTracker.hasWhenInUseOrAlways()
     }
 
     actual fun requestLocationPermission() {
+        IosLocationAuthorizationTracker.ensureStarted()
         dispatch_async(dispatch_get_main_queue()) {
             locationManager.requestWhenInUseAuthorization()
         }

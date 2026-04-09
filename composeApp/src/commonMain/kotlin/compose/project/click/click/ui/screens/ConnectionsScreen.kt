@@ -301,8 +301,6 @@ fun ConnectionsScreen(
                 if (activeChatId != null) {
                     InteractiveSwipeBackContainer(
                         enabled = true,
-                        // Narrow strip: full-width edge felt heavy and pushed composer inset off-balance.
-                        edgeSwipeWidth = 12.dp,
                         onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
                         // Persistent ConnectionsListView is composed below AnimatedContent; do not
                         // duplicate the list here (a second rememberLazyListState starts at index 0).
@@ -2897,7 +2895,6 @@ fun ChatMessageBubble(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 6.dp)
-                .then(swipeDragModifier)
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 if (!isSent) {
@@ -2918,7 +2915,9 @@ fun ChatMessageBubble(
                 ) {
                     Column(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
-                        modifier = Modifier.graphicsLayer { translationX = displayVisualPx },
+                        modifier = Modifier
+                            .graphicsLayer { translationX = displayVisualPx }
+                            .then(swipeDragModifier),
                     ) {
                 if (isSent) {
                     if (isImageMessage) {

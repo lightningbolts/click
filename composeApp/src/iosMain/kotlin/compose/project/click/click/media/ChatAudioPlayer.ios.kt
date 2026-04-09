@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import platform.AVFoundation.AVPlayer
 import platform.AVFoundation.AVPlayerItem
+import platform.AVFoundation.AVPlayerItemDidPlayToEndTimeNotification
 import platform.AVFoundation.addPeriodicTimeObserverForInterval
 import platform.AVFoundation.currentItem
 import platform.AVFoundation.currentTime
@@ -19,6 +20,8 @@ import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
+import platform.Foundation.NSNotificationCenter
+import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
 import platform.darwin.dispatch_get_main_queue
 
@@ -42,6 +45,7 @@ private class IosChatAudioPlayer(
         durationHintMs.coerceAtLeast(0L).toFloat().takeIf { it > 0f } ?: 0f
     )
     private var timeObserver: Any? = null
+    private var playbackEndObserver: Any? = null
 
     override val isPlaying: Boolean get() = isPlayingState.value
 
@@ -54,6 +58,16 @@ private class IosChatAudioPlayer(
         if (nsUrl != null) {
             val item = AVPlayerItem(uRL = nsUrl)
             avPlayer.replaceCurrentItemWithPlayerItem(item)
+            playbackEndObserver = NSNotificationCenter.defaultCenter.addObserverForName(
+                name = AVPlayerItemDidPlayToEndTimeNotification,
+                `object` = item,
+                queue = NSOperationQueue.mainQueue,
+            ) { _ ->
+                isPlayingState.value = false
+                avPlayer.seekToTime(CMTimeMakeWithSeconds(0.0, 1000)) { _ ->
+                    refreshProgressFromPlayer()
+                }
+            }
         }
         val interval = CMTimeMakeWithSeconds(0.12, 600)
         timeObserver = avPlayer.addPeriodicTimeObserverForInterval(
@@ -97,6 +111,8 @@ private class IosChatAudioPlayer(
     }
 
     override fun dispose() {
+        playbackEndObserver?.let { NSNotificationCenter.defaultCenter.removeObserver(it) }
+        playbackEndObserver = null
         timeObserver?.let { avPlayer.removeTimeObserver(it) }
         timeObserver = null
         avPlayer.pause()

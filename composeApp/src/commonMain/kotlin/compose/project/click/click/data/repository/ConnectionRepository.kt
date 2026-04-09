@@ -159,14 +159,18 @@ class ConnectionRepository(
 
             val resolvedTokenAgeMs = redeemedToken?.tokenAgeMs ?: request.tokenAgeMs
 
-            // Check if connection already exists
-            val existingConnection = checkExistingConnection(
+            val existingConnection = findConnectionRowForUserPair(
                 request.userId1,
                 scannedUserId
             )
 
             if (existingConnection != null) {
-                return Result.failure(Exception("Connection already exists"))
+                return restoreExistingConnection(
+                    request = request,
+                    scannedUserId = scannedUserId,
+                    existing = existingConnection,
+                    resolvedTokenAgeMs = resolvedTokenAgeMs,
+                )
             }
 
             val nowInstant = Clock.System.now()
@@ -354,6 +358,178 @@ class ConnectionRepository(
         }
     }
 
+    /**
+     * Reconnect: clear per-user junction rows for both participants, reset lifecycle fields, refresh metadata.
+     */
+    private suspend fun restoreExistingConnection(
+        request: ConnectionRequest,
+        scannedUserId: String,
+        existing: Connection,
+        resolvedTokenAgeMs: Long?,
+    ): Result<Connection> {
+        return try {
+            supabaseRepository.clearConnectionJunctionForPair(existing.id, existing.user_ids)
+
+            val nowInstant = Clock.System.now()
+            val now = nowInstant.toEpochMilliseconds()
+            val expiry = now + (30L * 24 * 60 * 60 * 1000)
+            val createdUtc = nowInstant.toString()
+            val timeOfDayUtc = buildUtcTimeOfDayLabel(now)
+
+            val loc1Valid = request.locationLat != null && request.locationLng != null &&
+                request.locationLat.isFinite() && request.locationLng.isFinite() &&
+                !(request.locationLat == 0.0 && request.locationLng == 0.0)
+            val gpsAvailable = loc1Valid
+
+            val geoLocation = if (loc1Valid) {
+                GeoLocationInsert(lat = request.locationLat!!, lon = request.locationLng!!)
+            } else {
+                GeoLocationInsert(lat = 0.0, lon = 0.0)
+            }
+
+            val proximityScore = computeProximityScore(
+                connectionMethod = request.connectionMethod,
+                gpsAvailable = gpsAvailable,
+                tokenAgeMs = resolvedTokenAgeMs,
+            )
+            val proximitySignals = buildJsonObject {
+                put("connection_method", request.connectionMethod)
+                put("gps_available", gpsAvailable)
+                if (resolvedTokenAgeMs != null) {
+                    put("token_age_seconds", resolvedTokenAgeMs / 1000.0)
+                }
+                if (loc1Valid) {
+                    put("initiator_lat", request.locationLat!!)
+                    put("initiator_lon", request.locationLng!!)
+                }
+            }
+
+            val normalizedContextTag = normalizeContextTag(
+                contextTagObject = request.contextTagObject,
+                contextTag = request.contextTag,
+            )
+            val contextTagId = resolveContextTagId(normalizedContextTag)
+            val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
+                "qr" -> scannedUserId
+                "nfc" -> if (request.userId1 == scannedUserId) request.userId2 else scannedUserId
+                else -> null
+            }
+            val responderId = request.responderId ?: when (request.connectionMethod) {
+                "qr" -> request.userId1
+                "nfc" -> if (initiatorId == request.userId1) scannedUserId else request.userId1
+                else -> null
+            }
+
+            val newStatus = when {
+                existing.isKept() -> "kept"
+                existing.last_message_at != null -> "active"
+                else -> "pending"
+            }
+
+            var semanticLocationName: String? = null
+            var fullLocationMap: Map<String, String>? = null
+            if (loc1Valid) {
+                try {
+                    val semanticResult = resolveSemanticLocation(
+                        lat = request.locationLat!!,
+                        lon = request.locationLng!!,
+                    )
+                    if (semanticResult != null) {
+                        semanticLocationName = semanticResult.first
+                        fullLocationMap = semanticResult.second
+                    }
+                } catch (e: Exception) {
+                    println("ConnectionRepository: Failed to resolve semantic location: ${e.message}")
+                }
+            }
+
+            val weatherSnapshot = if (loc1Valid) {
+                weatherService.fetchWeather(request.locationLat!!, request.locationLng!!)
+            } else {
+                null
+            }
+
+            val exactBarometricElevationMeters = calibrateBarometricElevationMeters(
+                stationPressureHpa = request.exactBarometricPressureHpa,
+                seaLevelPressureHpa = weatherSnapshot?.pressureMslHpa,
+            ) ?: request.altitudeMeters?.takeIf { request.exactBarometricPressureHpa != null }
+                ?: request.exactBarometricElevationMeters
+
+            val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
+                ?: request.heightCategory
+
+            val memoryCapsule = MemoryCapsule(
+                connectionId = existing.id,
+                locationName = semanticLocationName,
+                geoLocation = if (loc1Valid) {
+                    GeoLocation(lat = request.locationLat!!, lon = request.locationLng!!)
+                } else {
+                    null
+                },
+                connectedAtMs = now,
+                weatherSnapshot = weatherSnapshot,
+                contextTag = normalizedContextTag,
+                noiseLevelCategory = request.noiseLevelCategory,
+                exactNoiseLevelDb = request.exactNoiseLevelDb,
+                heightCategory = heightCategory,
+                exactBarometricElevationMeters = exactBarometricElevationMeters,
+            )
+
+            val result = supabase.from("connections")
+                .update(buildJsonObject {
+                    put("status", newStatus)
+                    put("created", now)
+                    put("expiry", expiry)
+                    put("created_utc", createdUtc)
+                    put("time_of_day_utc", timeOfDayUtc)
+                    put("geo_location", json.encodeToJsonElement(geoLocation))
+                    put("proximity_confidence", proximityScore)
+                    put("proximity_signals", proximitySignals)
+                    put("connection_method", request.connectionMethod)
+                    put("flagged", proximityScore < 20)
+                    put("include_in_business_insights", AppDataManager.locationPreferences.value.includeInInsightsEnabled)
+                    contextTagId?.let { put("context_tag_id", it) }
+                    initiatorId?.let { put("initiator_id", it) }
+                    responderId?.let { put("responder_id", it) }
+                    put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
+                    request.noiseLevelCategory?.name?.let { put("noise_level", it) }
+                    request.exactNoiseLevelDb?.let { put("exact_noise_level_db", it) }
+                    heightCategory?.name?.let { put("height_category", it) }
+                    exactBarometricElevationMeters?.let { put("exact_barometric_elevation_m", it) }
+                    weatherSnapshot?.condition?.let { put("weather_condition", it) }
+                    semanticLocationName?.let { put("semantic_location", it) }
+                    fullLocationMap?.let { addressMap ->
+                        put(
+                            "full_location",
+                            JsonObject(addressMap.mapValues { (_, value) -> JsonPrimitive(value) }),
+                        )
+                    }
+                }) {
+                    filter {
+                        eq("id", existing.id)
+                    }
+                    select()
+                }
+                .decodeSingle<Connection>()
+
+            try {
+                supabase.from("chats")
+                    .insert(buildJsonObject {
+                        put("connection_id", result.id)
+                        put("created_at", now)
+                        put("updated_at", now)
+                    })
+            } catch (e: Exception) {
+                println("ConnectionRepository: Failed to create chat on restore: ${e.message}")
+            }
+
+            AppDataManager.applyRestoredConnection(result)
+            Result.success(result)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun syncPendingConnections(): Int {
         val queue = loadPendingConnectionQueue()
         if (queue.isEmpty()) {
@@ -494,9 +670,9 @@ class ConnectionRepository(
 
 
     /**
-     * Check if a connection already exists between two users
+     * Any connection row for the unordered user pair (including removed/archived lifecycle).
      */
-    private suspend fun checkExistingConnection(
+    private suspend fun findConnectionRowForUserPair(
         userId1: String,
         userId2: String
     ): Connection? {
@@ -508,9 +684,27 @@ class ConnectionRepository(
                     }
                 }
                 .decodeList<Connection>()
-                .firstOrNull { it.isVisibleInActiveUi() }
+                .firstOrNull()
         } catch (e: Exception) {
             println("Error checking connection: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun fetchConnectionById(connectionId: String): Connection? {
+        if (connectionId.isBlank()) return null
+        return try {
+            supabase.from("connections")
+                .select {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                    limit(1)
+                }
+                .decodeList<Connection>()
+                .firstOrNull()
+        } catch (e: Exception) {
+            println("ConnectionRepository: fetchConnectionById failed: ${e.message}")
             null
         }
     }
@@ -714,7 +908,14 @@ class ConnectionRepository(
         return try {
             val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
                 ?: return Result.failure(Exception("Not signed in"))
-            val ok = supabaseRepository.hideConnectionForUser(uid, connectionId)
+            val row = AppDataManager.connections.value.firstOrNull { it.id == connectionId }
+                ?: fetchConnectionById(connectionId)
+            val pair = row?.user_ids?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.size >= 2 }
+                ?: return Result.failure(Exception("Connection not found"))
+            if (uid !in pair) {
+                return Result.failure(Exception("Connection not found"))
+            }
+            val ok = supabaseRepository.hideConnectionForUsers(pair, connectionId)
             if (ok) Result.success(Unit) else Result.failure(Exception("Could not hide connection"))
         } catch (e: Exception) {
             Result.failure(e)

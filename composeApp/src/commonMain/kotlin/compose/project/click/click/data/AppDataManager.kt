@@ -476,6 +476,16 @@ object AppDataManager {
         scope.launch { persistSnapshot() }
     }
 
+    /**
+     * After QR/NFC reconnect: clear local junction bookkeeping and replace the in-memory row.
+     */
+    fun applyRestoredConnection(connection: Connection) {
+        _archivedConnectionIds.value = _archivedConnectionIds.value - connection.id
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value - connection.id
+        _connections.value = (_connections.value.filter { it.id != connection.id } + connection).distinctBy { it.id }
+        scope.launch { persistSnapshot() }
+    }
+
     fun replaceLocalConnection(localId: String, syncedConnection: Connection, otherUser: User? = null) {
         _connections.value = _connections.value
             .filterNot { it.id == localId }

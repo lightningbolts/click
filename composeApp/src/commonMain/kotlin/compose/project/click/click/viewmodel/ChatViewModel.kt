@@ -67,6 +67,12 @@ private fun JsonObject.stringField(key: String): String? =
  * Realtime payloads for [PostgresAction.Update] are often partial; [decodeRecordOrNull] plus raw
  * [JsonObject] fields avoid missing refreshes when only [Connection.last_message_at] changes.
  */
+@Serializable
+private data class ConnectionJunctionRealtimeRow(
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("connection_id") val connectionId: String? = null,
+)
+
 private fun connectionRowRelevantToUser(action: PostgresAction, userId: String): Boolean {
     val knownIds = AppDataManager.connections.value.map { it.id }.toSet()
     return when (action) {
@@ -85,6 +91,12 @@ private fun connectionRowRelevantToUser(action: PostgresAction, userId: String):
         }
         else -> false
     }
+}
+
+private sealed class ConnectionsRealtimeEvent {
+    data class MainTable(val action: PostgresAction) : ConnectionsRealtimeEvent()
+    data class ArchiveJunction(val action: PostgresAction) : ConnectionsRealtimeEvent()
+    data class HiddenJunction(val action: PostgresAction) : ConnectionsRealtimeEvent()
 }
 
 sealed class ChatListState {
@@ -334,13 +346,30 @@ class ChatViewModel(
                 val channel = SupabaseConfig.client.channel("chatvm:connections:$userId")
                 connectionsRealtimeChannel = channel
                 try {
-                    val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    val connectionsFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                         table = "connections"
-                    }
+                    }.map { ConnectionsRealtimeEvent.MainTable(it) }
+                    val archivesFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_archives"
+                    }.map { ConnectionsRealtimeEvent.ArchiveJunction(it) }
+                    val hiddenFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_hidden"
+                    }.map { ConnectionsRealtimeEvent.HiddenJunction(it) }
                     channel.subscribe(blockUntilSubscribed = true)
-                    changes.collect { action ->
-                        if (connectionRowRelevantToUser(action, userId)) {
-                            scheduleDebouncedChatListRefresh()
+                    merge(connectionsFlow, archivesFlow, hiddenFlow).collect { event ->
+                        when (event) {
+                            is ConnectionsRealtimeEvent.MainTable -> {
+                                if (connectionRowRelevantToUser(event.action, userId)) {
+                                    scheduleDebouncedChatListRefresh()
+                                    reapplyChatListVisibilityFromAppData()
+                                }
+                            }
+                            is ConnectionsRealtimeEvent.ArchiveJunction -> {
+                                handleConnectionArchivesRealtime(event.action, userId)
+                            }
+                            is ConnectionsRealtimeEvent.HiddenJunction -> {
+                                handleConnectionHiddenRealtime(event.action, userId)
+                            }
                         }
                     }
                 } finally {
@@ -358,6 +387,49 @@ class ChatViewModel(
                 connectionsRealtimeChannel = null
             }
         }
+    }
+
+    private fun handleConnectionArchivesRealtime(action: PostgresAction, userId: String) {
+        when (action) {
+            is PostgresAction.Insert -> {
+                val row = action.decodeRecordOrNull<ConnectionJunctionRealtimeRow>() ?: return
+                if (row.userId != userId || row.connectionId.isNullOrBlank()) return
+                AppDataManager.markConnectionArchivedLocally(row.connectionId)
+                scheduleDebouncedChatListRefresh()
+                reapplyChatListVisibilityFromAppData()
+            }
+            is PostgresAction.Delete -> {
+                val cid = action.oldRecord.stringField("connection_id") ?: return
+                AppDataManager.markConnectionUnarchivedLocally(cid)
+                scheduleDebouncedChatListRefresh()
+                reapplyChatListVisibilityFromAppData()
+            }
+            else -> Unit
+        }
+    }
+
+    private fun handleConnectionHiddenRealtime(action: PostgresAction, userId: String) {
+        when (action) {
+            is PostgresAction.Insert -> {
+                val row = action.decodeRecordOrNull<ConnectionJunctionRealtimeRow>() ?: return
+                if (row.userId != userId || row.connectionId.isNullOrBlank()) return
+                AppDataManager.hideConnectionLocally(row.connectionId)
+                scheduleDebouncedChatListRefresh()
+                reapplyChatListVisibilityFromAppData()
+            }
+            is PostgresAction.Delete -> {
+                val cid = action.oldRecord.stringField("connection_id") ?: return
+                AppDataManager.unhideConnectionLocally(cid)
+                scheduleDebouncedChatListRefresh()
+            }
+            else -> Unit
+        }
+    }
+
+    private fun reapplyChatListVisibilityFromAppData() {
+        val cur = _chatListState.value
+        if (cur !is ChatListState.Success) return
+        _chatListState.value = ChatListState.Success(applyChatListVisibility(cur.chats))
     }
 
     /**
@@ -1987,9 +2059,19 @@ class ChatViewModel(
             // Save the connection before optimistic hide so we can restore it on failure
             // (AppDataManager.refresh no-ops when Ghost Mode is active).
             val savedConnection = AppDataManager.getConnection(connectionId)
+            val pair = savedConnection?.user_ids
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.distinct()
+                ?.takeIf { it.size >= 2 }
+            if (pair == null || userId !in pair) {
+                _nudgeResult.value = "Failed to remove connection"
+                onComplete(false)
+                return@launch
+            }
             AppDataManager.hideConnectionLocally(connectionId)
             reapplyChatListVisibility()
-            val success = supabaseRepository.hideConnectionForUser(userId, connectionId)
+            val success = supabaseRepository.hideConnectionForUsers(pair, connectionId)
             if (success) {
                 if (currentConnectionId == connectionId) {
                     leaveChatRoom()
@@ -2044,8 +2126,17 @@ class ChatViewModel(
         viewModelScope.launch {
             val success = supabaseRepository.blockUser(userId, otherUserId)
             if (success) {
-                // Persist hide to connection_hidden so it survives app restart.
-                supabaseRepository.hideConnectionForUser(userId, connectionId)
+                val conn = AppDataManager.getConnection(connectionId)
+                val pair = conn?.user_ids
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?.distinct()
+                    ?.takeIf { it.size >= 2 && userId in it }
+                if (pair != null) {
+                    supabaseRepository.hideConnectionForUsers(pair, connectionId)
+                } else {
+                    supabaseRepository.hideConnectionForUser(userId, connectionId)
+                }
                 AppDataManager.hideConnectionLocally(connectionId)
                 reapplyChatListVisibility()
                 if (currentConnectionId == connectionId) {
