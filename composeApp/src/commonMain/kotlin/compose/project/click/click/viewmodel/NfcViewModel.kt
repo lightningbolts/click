@@ -112,7 +112,7 @@ class NfcViewModel(
                     kotlinx.coroutines.delay(1000)
                 }
 
-                val location = locationService.getCurrentLocation()
+                val location = locationService.getHighAccuracyLocation(4000L)
                 _currentLocation.value = location
 
                 if (location == null) {

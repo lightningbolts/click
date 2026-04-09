@@ -255,6 +255,8 @@ data class ConnectionRequest(
     val userId2: String,
     val locationLat: Double? = null,
     val locationLng: Double? = null,
+    /** When set (e.g. from token QR), device GPS is not sent; backend resolves location for the venue. */
+    val venueId: String? = null,
     val altitudeMeters: Double? = null,
     val heightCategory: HeightCategory? = null,
     val exactBarometricElevationMeters: Double? = null,

@@ -32,6 +32,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -84,7 +85,11 @@ fun UserQrCode(
             val token = session?.accessToken
 
             // Capture initiator's GPS to store alongside the token for proximity verification
-            val location = try { locationService?.getCurrentLocation() } catch (_: Exception) { null }
+            val location = try {
+                locationService?.getHighAccuracyLocation(4000L)
+            } catch (_: Exception) {
+                null
+            }
 
             var url = QR_API_URL
             if (location != null && location.latitude.isFinite() && location.longitude.isFinite()
@@ -128,6 +133,11 @@ fun UserQrCode(
 
     // Initial fetch + auto-refresh loop
     LaunchedEffect(user.id) {
+        // Warm up GPS while the "show my QR" surface is visible (non-blocking).
+        launch(Dispatchers.Default) {
+            runCatching { locationService?.getHighAccuracyLocation(4000L) }
+        }
+
         fetchToken()
 
         // Countdown and auto-refresh

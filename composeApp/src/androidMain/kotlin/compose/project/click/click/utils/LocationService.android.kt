@@ -5,12 +5,19 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult as GmsLocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
@@ -37,6 +44,80 @@ actual class LocationService {
 
     private val fusedClient: FusedLocationProviderClient
         get() = LocationServices.getFusedLocationProviderClient(context)
+
+    @SuppressLint("MissingPermission")
+    actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? {
+        if (!hasLocationPermission()) {
+            println("LocationService.android: No location permission (high accuracy)")
+            return null
+        }
+        if (!isLocationEnabled()) {
+            println("LocationService.android: Location services disabled (high accuracy)")
+            return null
+        }
+        if (timeoutMs <= 0L) return null
+
+        return withContext(Dispatchers.Main.immediate) {
+            try {
+                val session = ProgressiveLocationSession.start()
+                val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 100L)
+                    .setMinUpdateIntervalMillis(100L)
+                    .setMaxUpdateDelayMillis(250L)
+                    .build()
+
+                suspendCancellableCoroutine { continuation ->
+                    var finished = false
+                    val handler = Handler(Looper.getMainLooper())
+                    val fused = fusedClient
+                    val callbackSlot = arrayOfNulls<LocationCallback>(1)
+
+                    fun complete(value: LocationResult?) {
+                        if (finished) return
+                        finished = true
+                        handler.removeCallbacksAndMessages(null)
+                        callbackSlot[0]?.let { fused.removeLocationUpdates(it) }
+                        if (continuation.isActive) {
+                            continuation.resume(value)
+                        }
+                    }
+
+                    val timeoutRunnable = Runnable {
+                        complete(session.bestAtTimeout())
+                    }
+
+                    callbackSlot[0] = object : LocationCallback() {
+                        override fun onLocationResult(result: GmsLocationResult) {
+                            if (finished) return
+                            for (loc in result.locations) {
+                                if (!loc.hasAccuracy()) continue
+                                val acc = loc.accuracy.toDouble()
+                                val alt = if (loc.hasAltitude()) loc.altitude else null
+                                val picked = session.onReading(loc.latitude, loc.longitude, acc, alt)
+                                if (picked != null) {
+                                    complete(picked)
+                                    return
+                                }
+                            }
+                        }
+                    }
+
+                    handler.postDelayed(timeoutRunnable, timeoutMs)
+                    fused.requestLocationUpdates(request, callbackSlot[0]!!, Looper.getMainLooper())
+
+                    continuation.invokeOnCancellation {
+                        if (!finished) {
+                            finished = true
+                            handler.removeCallbacksAndMessages(null)
+                            callbackSlot[0]?.let { fused.removeLocationUpdates(it) }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                println("LocationService.android: getHighAccuracyLocation error: ${e.message}")
+                null
+            }
+        }
+    }
 
     @SuppressLint("MissingPermission")
     actual suspend fun getCurrentLocation(): LocationResult? {
@@ -154,7 +235,8 @@ actual class LocationService {
         return LocationResult(
             latitude = latitude,
             longitude = longitude,
-            altitudeMeters = if (hasAltitude()) altitude else null
+            altitudeMeters = if (hasAltitude()) altitude else null,
+            accuracyMeters = if (hasAccuracy()) accuracy.toDouble() else null,
         )
     }
 }

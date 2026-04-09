@@ -1,5 +1,6 @@
 package compose.project.click.click.qr
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -29,7 +30,10 @@ data class TokenQrPayload(
     val userId: String,
     val exp: Long,
     val name: String? = null,
-    val issuedAt: Long? = null
+    val issuedAt: Long? = null,
+    /** B2B / Community Hub venue — server maps coordinates; scanner GPS is ignored when set. */
+    @SerialName("venue_id")
+    val venueId: String? = null,
 )
 
 private val json = Json { ignoreUnknownKeys = true }

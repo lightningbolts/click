@@ -2,6 +2,10 @@ package compose.project.click.click.utils
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -35,6 +39,90 @@ actual class LocationService {
 
     private val locationManager = CLLocationManager()
     private var activeDelegate: NSObject? = null
+
+    actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? {
+        if (timeoutMs <= 0L) return null
+        return fetchMutex.withLock {
+            coroutineScope {
+                suspendCancellableCoroutine { continuation ->
+                    var finished = false
+                    var timeoutJob: Job? = null
+                    val session = ProgressiveLocationSession.start()
+
+                    fun cleanup() {
+                        locationManager.stopUpdatingLocation()
+                        locationManager.delegate = null
+                        activeDelegate = null
+                    }
+
+                    fun finishOnMain(result: LocationResult?) {
+                        dispatch_async(dispatch_get_main_queue()) {
+                            if (finished) return@dispatch_async
+                            finished = true
+                            timeoutJob?.cancel()
+                            cleanup()
+                            if (continuation.isActive) {
+                                continuation.resume(result)
+                            }
+                        }
+                    }
+
+                    if (!CLLocationManager.locationServicesEnabled()) {
+                        finishOnMain(null)
+                        return@suspendCancellableCoroutine
+                    }
+
+                    if (!hasLocationPermission()) {
+                        finishOnMain(null)
+                        return@suspendCancellableCoroutine
+                    }
+
+                    val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
+                        override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
+                            val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
+                            if (candidates.isEmpty()) return
+                            for (loc in candidates) {
+                                val acc = loc.horizontalAccuracy
+                                if (acc <= 0.0 || !acc.isFinite()) continue
+                                val (lat, lon) = loc.latLonOrNull() ?: continue
+                                val alt = loc.altitude.takeIf { loc.verticalAccuracy >= 0.0 }
+                                val accepted = session.onReading(lat, lon, acc, alt)
+                                if (accepted != null) {
+                                    finishOnMain(accepted)
+                                    return
+                                }
+                            }
+                        }
+
+                        override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
+                            finishOnMain(session.bestAtTimeout())
+                        }
+                    }
+
+                    activeDelegate = delegate
+                    locationManager.delegate = delegate
+                    locationManager.desiredAccuracy = kCLLocationAccuracyBest
+
+                    continuation.invokeOnCancellation {
+                        dispatch_async(dispatch_get_main_queue()) {
+                            if (!finished) {
+                                finished = true
+                                timeoutJob?.cancel()
+                                cleanup()
+                            }
+                        }
+                    }
+
+                    timeoutJob = launch {
+                        delay(timeoutMs)
+                        finishOnMain(session.bestAtTimeout())
+                    }
+
+                    locationManager.startUpdatingLocation()
+                }
+            }
+        }
+    }
 
     actual suspend fun getCurrentLocation(): LocationResult? {
         return fetchMutex.withLock {
@@ -153,11 +241,22 @@ actual class LocationService {
     }
 
     @OptIn(ExperimentalForeignApi::class)
-    private fun CLLocation.toLocationResult(): LocationResult = coordinate.useContents {
-        LocationResult(
-            latitude = latitude,
-            longitude = longitude,
-            altitudeMeters = this@toLocationResult.altitude.takeIf { this@toLocationResult.verticalAccuracy >= 0.0 }
-        )
+    private fun CLLocation.latLonOrNull(): Pair<Double, Double>? = coordinate.useContents {
+        if (!latitude.isFinite() || !longitude.isFinite()) return@useContents null
+        if (latitude == 0.0 && longitude == 0.0) return@useContents null
+        latitude to longitude
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    private fun CLLocation.toLocationResult(): LocationResult {
+        val acc = horizontalAccuracy.takeIf { it > 0.0 && it.isFinite() }
+        return coordinate.useContents {
+            LocationResult(
+                latitude = latitude,
+                longitude = longitude,
+                altitudeMeters = this@toLocationResult.altitude.takeIf { this@toLocationResult.verticalAccuracy >= 0.0 },
+                accuracyMeters = acc,
+            )
+        }
     }
 }

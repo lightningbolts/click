@@ -175,10 +175,11 @@ class ConnectionRepository(
     private suspend fun createConnectionOnline(request: ConnectionRequest): Result<Connection> {
         return try {
             val redeemedToken = if (!request.qrToken.isNullOrBlank()) {
+                val sendScannerGps = request.venueId.isNullOrBlank()
                 redeemQrToken(
                     token = request.qrToken,
-                    scannerLat = request.locationLat,
-                    scannerLon = request.locationLng
+                    scannerLat = if (sendScannerGps) request.locationLat else null,
+                    scannerLon = if (sendScannerGps) request.locationLng else null,
                 ).getOrElse { return Result.failure(it) }
             } else {
                 null
@@ -253,6 +254,9 @@ class ConnectionRepository(
                 if (loc1Valid) {
                     put("initiator_lat", request.locationLat!!)
                     put("initiator_lon", request.locationLng!!)
+                }
+                if (!request.venueId.isNullOrBlank()) {
+                    put("venue_id", request.venueId)
                 }
             }
 
@@ -437,6 +441,9 @@ class ConnectionRepository(
                 if (loc1Valid) {
                     put("initiator_lat", request.locationLat!!)
                     put("initiator_lon", request.locationLng!!)
+                }
+                if (!request.venueId.isNullOrBlank()) {
+                    put("venue_id", request.venueId)
                 }
             }
 

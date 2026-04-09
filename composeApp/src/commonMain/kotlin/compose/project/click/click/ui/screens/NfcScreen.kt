@@ -40,6 +40,7 @@ import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.viewmodel.NfcConnectionState
 import compose.project.click.click.viewmodel.NfcViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -65,6 +66,13 @@ fun NfcScreen(
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+    }
+
+    // GPS warm-up when the NFC sheet is visible (non-blocking).
+    LaunchedEffect(Unit) {
+        launch(Dispatchers.Default) {
+            runCatching { locationService.getHighAccuracyLocation(4000L) }
+        }
     }
 
     LaunchedEffect(userId) {

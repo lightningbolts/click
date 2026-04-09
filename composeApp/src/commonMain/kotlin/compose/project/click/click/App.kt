@@ -94,7 +94,8 @@ import compose.project.click.click.data.hub.HubVerifyResult
 fun App() {
     data class PendingQrConnection(
         val userId: String,
-        val qrToken: String?
+        val qrToken: String?,
+        val venueId: String? = null,
     )
 
     // Default to dark until persisted preference is loaded.
@@ -234,34 +235,23 @@ fun App() {
 
     suspend fun resolveConnectionLocation(
         initialLocation: compose.project.click.click.utils.LocationResult? = null,
-        maxAttempts: Int = 3
     ): compose.project.click.click.utils.LocationResult? {
         if (hasUsableLocation(initialLocation)) return initialLocation
 
-        repeat(maxAttempts) { attempt ->
-            val refreshedLocation = try {
-                locationService.getCurrentLocation()
-            } catch (e: Exception) {
-                println("App: Failed to get location on attempt ${attempt + 1}: ${e.message}")
-                null
-            }
-
-            if (hasUsableLocation(refreshedLocation)) {
-                return refreshedLocation
-            }
-
-            if (attempt < maxAttempts - 1) {
-                delay(450)
-            }
+        return try {
+            val refreshed = locationService.getHighAccuracyLocation(4000L)
+            if (hasUsableLocation(refreshed)) refreshed else initialLocation.takeIf(::hasUsableLocation)
+        } catch (e: Exception) {
+            println("App: Failed to get high-accuracy location: ${e.message}")
+            initialLocation.takeIf(::hasUsableLocation)
         }
-
-        return initialLocation.takeIf(::hasUsableLocation)
     }
 
     fun connectWithUser(
         userId: String,
         qrToken: String? = null,
         tokenAgeMs: Long? = null,
+        venueId: String? = null,
         contextTagObject: ContextTag? = null,
         capturedLocation: compose.project.click.click.utils.LocationResult? = null,
         heightCategory: HeightCategory? = null,
@@ -272,15 +262,20 @@ fun App() {
     ) {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
-                // Capture location only when user preference allows (ghost mode and connection-snap toggle respected)
-                val location = if (AppDataManager.shouldCaptureLocationAtTap()) {
+                // Venue-bound QR: never use device GPS; backend maps the venue.
+                val location = if (!venueId.isNullOrBlank()) {
+                    null
+                } else if (AppDataManager.shouldCaptureLocationAtTap()) {
                     resolveConnectionLocation(capturedLocation)
-                } else null
+                } else {
+                    null
+                }
                 connectionViewModel.connectWithUser(
                     scannedUserId = userId,
                     currentUserId = currentUser.id,
                     latitude = location?.latitude,
                     longitude = location?.longitude,
+                    venueId = venueId?.takeIf { it.isNotBlank() },
                     altitudeMeters = location?.altitudeMeters,
                     heightCategory = heightCategory,
                     exactBarometricElevationMeters = exactBarometricElevationMeters,
@@ -320,7 +315,10 @@ fun App() {
             tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
 
             val locationDeferred = async {
-                if (skipLocation || !AppDataManager.shouldCaptureLocationAtTap()) {
+                if (skipLocation ||
+                    !AppDataManager.shouldCaptureLocationAtTap() ||
+                    !pending.venueId.isNullOrBlank()
+                ) {
                     null
                 } else {
                     resolveConnectionLocation()
@@ -340,6 +338,7 @@ fun App() {
             connectWithUser(
                 userId = pending.userId,
                 qrToken = pending.qrToken,
+                venueId = pending.venueId,
                 contextTagObject = contextTagObject,
                 capturedLocation = capturedLocation,
                 heightCategory = barometricSample?.category,
@@ -953,12 +952,13 @@ fun App() {
                                                     )
                                                 }
                                             },
-                                            onQRCodeScannedWithToken = { userId, qrToken ->
+                                            onQRCodeScannedWithToken = { userId, qrToken, venueId ->
                                                 showQRScanner = false
                                                 if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
                                                     pendingQrConnection = PendingQrConnection(
                                                         userId = userId,
-                                                        qrToken = qrToken
+                                                        qrToken = qrToken,
+                                                        venueId = venueId?.takeIf { it.isNotBlank() },
                                                     )
                                                 }
                                             },
