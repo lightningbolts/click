@@ -69,6 +69,7 @@ import androidx.compose.runtime.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
@@ -434,6 +435,15 @@ fun ConnectionsListView(
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
     val cliqueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listScope = rememberCoroutineScope()
+
+    LaunchedEffect(cliqueSheetVisible) {
+        if (cliqueSheetVisible) {
+            try {
+                cliqueSheetState.show()
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState(0, 0)
@@ -906,10 +916,12 @@ fun ConnectionsListView(
         ModalBottomSheet(
             onDismissRequest = { cliqueSheetVisible = false },
             sheetState = cliqueSheetState,
+            modifier = Modifier.fillMaxHeight(),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .fillMaxHeight()
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 24.dp),
             ) {
@@ -925,14 +937,22 @@ fun ConnectionsListView(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                if (!cliqueSheetEligibilityReady && activeOneToOneChats.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 28.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    val checkingVisible =
+                        !cliqueSheetEligibilityReady && activeOneToOneChats.isNotEmpty()
                     Text(
                         text = "Checking who can join…",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.alpha(if (checkingVisible) 1f else 0f),
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
+                Spacer(modifier = Modifier.height(8.dp))
                 if (memberSetDuplicatesExistingClick) {
                     Text(
                         text = "You already have a verified click with this group.",
@@ -950,7 +970,7 @@ fun ConnectionsListView(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 360.dp),
+                            .weight(1f, fill = true),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         items(activeOneToOneChats, key = { it.connection.id }) { chatDetails ->
@@ -1032,11 +1052,23 @@ fun ConnectionsListView(
                     cliqueCreateGraphOk &&
                     !memberSetDuplicatesExistingClick
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding(),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = { cliqueSheetVisible = false }) {
+                    TextButton(
+                        onClick = {
+                            listScope.launch {
+                                try {
+                                    cliqueSheetState.hide()
+                                } catch (_: Exception) {
+                                }
+                                cliqueSheetVisible = false
+                            }
+                        },
+                    ) {
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1044,8 +1076,12 @@ fun ConnectionsListView(
                         onClick = {
                             viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
                                 result.onSuccess {
-                                    cliqueSheetVisible = false
                                     listScope.launch {
+                                        try {
+                                            cliqueSheetState.hide()
+                                        } catch (_: Exception) {
+                                        }
+                                        cliqueSheetVisible = false
                                         snackbarHostState.showSnackbar("Click created")
                                     }
                                 }

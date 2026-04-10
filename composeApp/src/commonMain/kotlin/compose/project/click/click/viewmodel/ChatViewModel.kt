@@ -488,24 +488,35 @@ class ChatViewModel(
             // visible while the background refresh runs. Only show Loading (or
             // cached placeholders) when no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
-            
-            if (!alreadyHasRealData && cachedConnections.isNotEmpty() && canRenderCachedChats) {
-                val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                val readyChats = cachedChats.filter { isResolvedDisplayName(it.otherUser.name) }
-                if (readyChats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(applyChatListVisibility(readyChats))
+
+            // Initial load: do not emit Success from AppDataManager cache alone — it only
+            // contains 1:1 rows, so group cliques would "pop in" after the slower group
+            // decrypt path.
+            //
+            // After the first Success, never replace the list with [buildCachedChats] alone:
+            // that snapshot is 1:1-only and would temporarily hide verified clicks (same bug
+            // as exiting a group chat → [finalizeChatClose] → [loadChats]).
+            if (!alreadyHasRealData) {
+                when {
+                    cachedConnections.isEmpty() -> {
+                        _chatListState.value = ChatListState.Loading
+                    }
+                    canRenderCachedChats -> {
+                        val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
+                        val readyChats = cachedChats.filter { isResolvedDisplayName(it.otherUser.name) }
+                        if (readyChats.isNotEmpty()) {
+                            _chatListState.value = ChatListState.Success(applyChatListVisibility(readyChats))
+                        }
+                    }
+                    else -> {
+                        val fallbackChats = buildCachedChats(cachedConnections, cachedUsers, userId)
+                        if (fallbackChats.isNotEmpty()) {
+                            _chatListState.value = ChatListState.Success(applyChatListVisibility(fallbackChats))
+                        } else {
+                            _chatListState.value = ChatListState.Loading
+                        }
+                    }
                 }
-            } else if (!alreadyHasRealData && cachedConnections.isNotEmpty()) {
-                // Even with unresolved names, prefer showing cached rows over a
-                // blank loading spinner – the API response will patch names shortly.
-                val fallbackChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                if (fallbackChats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(applyChatListVisibility(fallbackChats))
-                } else {
-                    _chatListState.value = ChatListState.Loading
-                }
-            } else if (!alreadyHasRealData) {
-                _chatListState.value = ChatListState.Loading
             }
             
             // Fetch fresh data from API in background

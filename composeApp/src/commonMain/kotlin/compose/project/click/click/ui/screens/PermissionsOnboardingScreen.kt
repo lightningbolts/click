@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import compose.project.click.click.utils.LocationService
 
 data class PermissionsOnboardingSelection(
@@ -305,6 +307,18 @@ private fun LocationPermissionExplainerContent(
         ) {
             Text("Allow Location", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }
+        Spacer(modifier = Modifier.height(10.dp))
+        TextButton(
+            onClick = { openApplicationSystemSettings() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "Open Settings",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onNext,
@@ -378,6 +392,18 @@ private fun MicrophonePermissionExplainerContent(
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
         ) {
             Text("Allow microphone", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        TextButton(
+            onClick = { openApplicationSystemSettings() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "Open Settings",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

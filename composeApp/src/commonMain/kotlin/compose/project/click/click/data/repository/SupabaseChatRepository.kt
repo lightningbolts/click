@@ -818,12 +818,14 @@ class SupabaseChatRepository(
             val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
             val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
 
-            val direct = buildChatsWithDetailsForConnections(userId, activeRows)
-            val groups = fetchGroupChatsWithDetails(userId)
-            (direct + groups).sortedByDescending { d ->
-                d.lastMessage?.timeCreated
-                    ?: d.connection.last_message_at
-                    ?: d.connection.created
+            coroutineScope {
+                val direct = async { buildChatsWithDetailsForConnections(userId, activeRows) }
+                val groups = async { fetchGroupChatsWithDetails(userId) }
+                (direct.await() + groups.await()).sortedByDescending { d ->
+                    d.lastMessage?.timeCreated
+                        ?: d.connection.last_message_at
+                        ?: d.connection.created
+                }
             }
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.redactedRestMessage()}")

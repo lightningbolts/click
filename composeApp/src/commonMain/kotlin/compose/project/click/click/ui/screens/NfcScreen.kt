@@ -40,6 +40,7 @@ import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.viewmodel.ConnectionState
@@ -132,6 +133,7 @@ fun NfcScreen(
                     when (val state = connectionState) {
                         is ConnectionState.Idle -> {
                             NfcIdleContent(
+                                onOpenAppSettings = { openApplicationSystemSettings() },
                                 onStartScanning = {
                                     if (!AppDataManager.shouldCaptureLocationAtTap()) {
                                         connectionViewModel.startTapProximityHandshake(
@@ -443,6 +445,7 @@ private fun ProximityAwaitingContextContent(targetUsers: List<UserProfile>) {
 
 @Composable
 private fun NfcIdleContent(
+    onOpenAppSettings: () -> Unit,
     onStartScanning: () -> Unit,
     supportsTap: Boolean,
     capabilityNote: String,
@@ -530,6 +533,14 @@ private fun NfcIdleContent(
                 Text(
                     "Connect",
                     fontSize = 18.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            TextButton(onClick = onOpenAppSettings) {
+                Text(
+                    "Open app settings",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
                 )
             }
         } else {

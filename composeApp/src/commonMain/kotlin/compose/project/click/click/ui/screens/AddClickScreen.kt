@@ -278,7 +278,8 @@ fun AddClickContent(
                     Icons.Filled.Groups,
                     contentDescription = "Community hub",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier.size(72.dp),
+                    // Match QR / NFC card icon geometry (those cards use 72.dp).
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
