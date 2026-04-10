@@ -3,7 +3,6 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import io.github.jan.supabase.exceptions.RestException
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
@@ -17,6 +16,7 @@ import compose.project.click.click.data.models.resolveDisplayName // pragma: all
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.postgrest.rpc
@@ -30,6 +30,14 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
+
+private fun Connection.withEncountersSortedNewestFirst(): Connection =
+    copy(connectionEncounters = connectionEncounters.sortedByDescending { it.encounteredAt })
+
+private fun List<Connection>.withEncountersSortedNewestFirst(): List<Connection> =
+    map { it.withEncountersSortedNewestFirst() }
 
 /** Result of inserting into [public.availability_intents]. */
 data class AvailabilityIntentInsertResult(
@@ -245,26 +253,6 @@ class SupabaseRepository {
         return if (t.isNotEmpty()) t else fetchAvailabilityIntentBubblesFromUsersColumn(peerUserId)
     }
 
-    private suspend fun attachConnectionEncounters(rows: List<Connection>): List<Connection> {
-        if (rows.isEmpty()) return rows
-        val ids = rows.map { it.id }.distinct()
-        return try {
-            val enc = supabase.from("connection_encounters")
-                .select {
-                    filter {
-                        isIn("connection_id", ids)
-                    }
-                    order("encountered_at", Order.ASCENDING)
-                }
-                .decodeList<ConnectionEncounter>()
-            val byConn = enc.groupBy { it.connectionId }
-            rows.map { c -> c.copy(connectionEncounters = byConn[c.id].orEmpty()) }
-        } catch (e: Exception) {
-            println("attachConnectionEncounters (redacted): ${e.redactedRestMessage()}")
-            rows
-        }
-    }
-
     /**
      * Mutual connection between two users (same `user_ids` pair). If multiple rows exist,
      * picks the one with the latest activity (`last_message_at` or `created`).
@@ -275,17 +263,18 @@ class SupabaseRepository {
         return try {
             val hidden = getHiddenConnectionIds(viewerUserId)
             val rows = supabase.from("connections")
-                .select {
+                .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(viewerUserId, peerUserId))
                     }
                 }
                 .decodeList<Connection>()
+                .withEncountersSortedNewestFirst()
                 .filter { it.isVisibleInActiveUi() && it.id !in hidden }
             val best = rows.maxByOrNull { conn ->
                 (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
             }
-            best?.let { attachConnectionEncounters(listOf(it)).firstOrNull() }
+            best
         } catch (e: Exception) {
             println("Error fetchSharedConnectionBetween (redacted): ${e.redactedRestMessage()}")
             null
@@ -327,7 +316,7 @@ class SupabaseRepository {
     ): List<Connection> {
         return try {
             supabase.from("connections")
-                .select {
+                .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(userId))
                         or {
@@ -343,7 +332,7 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
-                .let { attachConnectionEncounters(it) }
+                .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
             println("fetchActiveChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
@@ -359,7 +348,7 @@ class SupabaseRepository {
         return try {
             val ids = validArchiveIds.toList()
             supabase.from("connections")
-                .select {
+                .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(userId))
                         isIn("id", ids)
@@ -367,7 +356,7 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
-                .let { attachConnectionEncounters(it) }
+                .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
             println("fetchArchivedChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
@@ -393,13 +382,14 @@ class SupabaseRepository {
     suspend fun fetchConnectionById(connectionId: String): Connection? {
         return try {
             val connections = supabase.from("connections")
-                .select {
+                .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         eq("id", connectionId)
                     }
                 }
                 .decodeList<Connection>()
-            connections.firstOrNull()?.let { attachConnectionEncounters(listOf(it)).firstOrNull() }
+                .withEncountersSortedNewestFirst()
+            connections.firstOrNull()
         } catch (e: Exception) {
             println("Error fetching connection (redacted): ${e.redactedRestMessage()}")
             null

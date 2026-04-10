@@ -43,6 +43,12 @@ private fun formatNoiseCategory(cat: NoiseLevelCategory): String = when (cat) {
 
 /** Event / context line (emoji + label or legacy id). */
 fun Connection.profileContextLine(): String? {
+    latestMemoryCapsule()?.contextTag?.let { tag ->
+        val e = tag.emoji.trim()
+        val l = tag.label.trim()
+        if (l.isEmpty()) return@let null
+        return if (e.isNotEmpty()) "$e $l" else l
+    }
     memoryCapsule?.contextTag?.let { tag ->
         val e = tag.emoji.trim()
         val l = tag.label.trim()
@@ -66,6 +72,7 @@ private fun structuredAddressFromFull(m: Map<String, String>?): String? {
 
 fun Connection.profilePlaceLine(): String? {
     val sem = originEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
         ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
     val fromFull = structuredAddressFromFull(full_location)
     return when {
@@ -104,6 +111,13 @@ fun Connection.profileWhenLine(): String? {
 }
 
 fun Connection.profileWeatherLine(): String? {
+    latestMemoryCapsule()?.weatherSnapshot?.let { ws ->
+        val parts = mutableListOf<String>()
+        if (ws.condition.isNotBlank()) parts.add(ws.condition.trim())
+        val f = (ws.temperatureCelsius * 9f / 5f) + 32f
+        if (f.isFinite()) parts.add("${f.roundToInt()}°F")
+        if (parts.isNotEmpty()) return parts.joinToString(" · ")
+    }
     memoryCapsule?.weatherSnapshot?.let { ws ->
         val parts = mutableListOf<String>()
         if (ws.condition.isNotBlank()) parts.add(ws.condition.trim())
@@ -127,7 +141,7 @@ fun Connection.profileNoiseLine(): String? {
             else rawCat.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         )
     }
-    val db = resolvedExactNoiseLevelDb ?: exactNoiseLevelDb
+    val db = resolvedExactNoiseLevelDb
     if (db != null && db.isFinite()) parts.add("${db.roundToInt()} dB")
     if (parts.isEmpty()) return null
     return parts.joinToString(" · ")

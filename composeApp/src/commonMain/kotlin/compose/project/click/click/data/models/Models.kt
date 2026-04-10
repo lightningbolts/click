@@ -392,32 +392,48 @@ data class Connection(
         latestEncounter()?.toMemoryCapsule() ?: memoryCapsule
 
     val context_tag: String?
-        get() = originMemoryCapsule()?.contextTag?.label
+        get() = latestEncounter()?.contextTags?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originMemoryCapsule()?.contextTag?.label
             ?: contextTagId
             ?: originEncounter()?.contextTags?.firstOrNull()
 
+    /** Latest crossing place label (shim for removed `semantic_location` column). */
+    val semanticLocation: String?
+        get() = latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
+
     val resolvedNoiseLevel: String?
-        get() = originEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+        get() = latestEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
             ?: noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
 
     val resolvedExactNoiseLevelDb: Double?
-        get() = exactNoiseLevelDb ?: memoryCapsule?.exactNoiseLevelDb
+        get() = latestEncounter()?.exactNoiseLevelDb?.takeIf { it.isFinite() }
+            ?: exactNoiseLevelDb?.takeIf { it.isFinite() }
+            ?: memoryCapsule?.exactNoiseLevelDb
 
     val resolvedHeightCategory: String?
-        get() = originEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
+        get() = latestEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
             ?: heightCategory ?: memoryCapsule?.heightCategory?.name
 
     val resolvedExactBarometricElevationM: Double?
-        get() = exactBarometricElevationM ?: memoryCapsule?.exactBarometricElevationMeters
+        get() = latestEncounter()?.exactBarometricElevationM?.takeIf { it.isFinite() }
+            ?: exactBarometricElevationM?.takeIf { it.isFinite() }
+            ?: memoryCapsule?.exactBarometricElevationMeters
 
     val resolvedWeatherCondition: String?
-        get() = originEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
+        get() = latestEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
             ?: weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition
 
     val displayLocationLabel: String?
         get() = context_tag
             ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
             ?: semantic_location
+
+    /** Legacy [MemoryCapsule] built from the most recent encounter (UI compatibility). */
+    fun toLegacyMemoryCapsule(): MemoryCapsule? = latestMemoryCapsule()
 
     /** Resolved status when [status] column is missing (legacy rows). */
     fun normalizedConnectionStatus(): String {

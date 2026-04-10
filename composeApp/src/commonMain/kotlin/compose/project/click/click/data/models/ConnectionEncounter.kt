@@ -23,6 +23,10 @@ data class ConnectionEncounter(
     val noiseLevel: String? = null,
     @SerialName("elevation_category")
     val elevationCategory: String? = null,
+    @SerialName("exact_noise_level_db")
+    val exactNoiseLevelDb: Double? = null,
+    @SerialName("exact_barometric_elevation_m")
+    val exactBarometricElevationM: Double? = null,
     @SerialName("context_tags")
     val contextTags: List<String> = emptyList(),
 ) {
@@ -55,8 +59,8 @@ fun ConnectionEncounter.toMemoryCapsule(): MemoryCapsule {
         contextTag = tag,
         photoUri = null,
         noiseLevelCategory = noise,
-        exactNoiseLevelDb = null,
+        exactNoiseLevelDb = exactNoiseLevelDb?.takeIf { it.isFinite() },
         heightCategory = height,
-        exactBarometricElevationMeters = null,
+        exactBarometricElevationMeters = exactBarometricElevationM?.takeIf { it.isFinite() },
     )
 }

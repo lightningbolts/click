@@ -28,6 +28,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.HttpClient
@@ -106,9 +107,14 @@ class ConnectionRepository(
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
+    private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
+
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 15_000L
     }
+
+    private fun Connection.withEncountersSortedNewestFirst(): Connection =
+        copy(connectionEncounters = connectionEncounters.sortedByDescending { it.encounteredAt })
 
     private fun normalizeContextTag(
         contextTagObject: ContextTag?,
@@ -193,6 +199,8 @@ class ConnectionRepository(
         contextTags: List<String>,
         noiseLevel: String?,
         elevationCategory: String?,
+        exactNoiseLevelDb: Double? = null,
+        exactBarometricElevationM: Double? = null,
     ) {
         val payload = buildJsonObject {
             put("connection_id", connectionId)
@@ -207,6 +215,8 @@ class ConnectionRepository(
             }
             noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let { put("noise_level", it) }
             elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { put("elevation_category", it) }
+            exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
+            exactBarometricElevationM?.takeIf { it.isFinite() }?.let { put("exact_barometric_elevation_m", it) }
             put("context_tags", JsonArray(contextTags.map { JsonPrimitive(it) }))
         }
         try {
@@ -263,6 +273,9 @@ class ConnectionRepository(
                     put("context_tags", JsonArray(tags))
                     noiseLevelCategory?.name?.let { put("noise_level", it) }
                     heightCategory?.name?.let { put("elevation_category", it) }
+                    exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
+                    exactBarometricElevationMeters?.takeIf { it.isFinite() }
+                        ?.let { put("exact_barometric_elevation_m", it) }
                 }) {
                     filter { eq("id", latest.id) }
                 }
@@ -519,6 +532,8 @@ class ConnectionRepository(
                     contextTags = contextTags,
                     noiseLevel = request.noiseLevelCategory?.name,
                     elevationCategory = heightCategory?.name,
+                    exactNoiseLevelDb = request.exactNoiseLevelDb,
+                    exactBarometricElevationM = exactBarometricElevationMeters,
                 )
             }.onFailure { println("ConnectionRepository: encounter insert: ${it.message}") }
 
@@ -668,6 +683,8 @@ class ConnectionRepository(
                     contextTags = restoreTags,
                     noiseLevel = request.noiseLevelCategory?.name,
                     elevationCategory = heightCategory?.name,
+                    exactNoiseLevelDb = request.exactNoiseLevelDb,
+                    exactBarometricElevationM = exactBarometricElevationMeters,
                 )
             }.onFailure { println("ConnectionRepository: restore encounter insert: ${it.message}") }
 
@@ -837,12 +854,13 @@ class ConnectionRepository(
     ): Connection? {
         return try {
             supabase.from("connections")
-                .select {
+                .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(userId1, userId2))
                     }
                 }
                 .decodeList<Connection>()
+                .map { it.withEncountersSortedNewestFirst() }
                 .firstOrNull { conn ->
                     userId1 in conn.user_ids && userId2 in conn.user_ids
                 }
@@ -856,13 +874,14 @@ class ConnectionRepository(
         if (connectionId.isBlank()) return null
         return try {
             supabase.from("connections")
-                .select {
+                .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         eq("id", connectionId)
                     }
                     limit(1)
                 }
                 .decodeList<Connection>()
+                .map { it.withEncountersSortedNewestFirst() }
                 .firstOrNull()
         } catch (e: Exception) {
             println("ConnectionRepository: fetchConnectionById failed: ${e.message}")

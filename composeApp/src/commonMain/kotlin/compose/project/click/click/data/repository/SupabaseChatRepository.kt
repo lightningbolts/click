@@ -78,6 +78,10 @@ class SupabaseChatRepository(
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val chatPushNotifier = ChatPushNotifier(tokenStorage)
+    private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
+
+    private fun Connection.withEncountersSortedNewestFirst(): Connection =
+        copy(connectionEncounters = connectionEncounters.sortedByDescending { it.encounteredAt })
 
     private sealed class ResolvedChatCrypto {
         data class Pairwise(val keys: MessageCrypto.DerivedKeys) : ResolvedChatCrypto()
@@ -1191,8 +1195,12 @@ class SupabaseChatRepository(
             !row.connectionId.isNullOrBlank() -> {
                 rememberChatConnectionRouting(row.id, row.connectionId)
                 val conn = supabase.from("connections")
-                    .select { filter { eq("id", row.connectionId) }; limit(1) }
+                    .select(columns = connectionsSelectWithEncounters) {
+                        filter { eq("id", row.connectionId) }
+                        limit(1)
+                    }
                     .decodeList<Connection>()
+                    .map { it.withEncountersSortedNewestFirst() }
                     .firstOrNull() ?: return null
                 buildChatsWithDetailsForConnections(currentUserId, listOf(conn))
                     .firstOrNull { it.chat.id == row.id || it.connection.id == row.connectionId }
@@ -1226,13 +1234,14 @@ class SupabaseChatRepository(
                 }
                 !chat.connectionId.isNullOrBlank() -> {
                     val connection = supabase.from("connections")
-                        .select {
+                        .select(columns = connectionsSelectWithEncounters) {
                             filter {
                                 eq("id", chat.connectionId)
                             }
                             limit(1)
                         }
                         .decodeList<Connection>()
+                        .map { it.withEncountersSortedNewestFirst() }
                         .firstOrNull() ?: return emptyList()
                     connection.user_ids
                 }
