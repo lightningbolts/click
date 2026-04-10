@@ -68,7 +68,7 @@ class GlobalSearchViewModel(
      * Executes a global search across people, messages, and locations.
      * - People: in-memory filter on connected user names
      * - Messages: parallel per-chat search via [ChatRepository.searchMessages]
-     * - Locations: in-memory grouping of connections' semantic_location
+     * - Locations: in-memory grouping of connections' encounter-derived place labels
      *
      * Cancels any in-flight search before starting a new one.
      */
@@ -115,10 +115,10 @@ class GlobalSearchViewModel(
                 // ── Location search ───────────────────────────────────────────
                 val locationResults = connections
                     .filter {
-                        val loc = it.semantic_location ?: return@filter false
+                        val loc = it.semanticLocation ?: return@filter false
                         loc.lowercase().contains(lowerQuery)
                     }
-                    .groupBy { it.semantic_location ?: "Unknown" }
+                    .groupBy { it.semanticLocation ?: "Unknown" }
                     .map { (location, conns) ->
                         LocationSearchResult(
                             location = location,
@@ -135,7 +135,7 @@ class GlobalSearchViewModel(
                             val otherUserId = conn.user_ids.firstOrNull { it != currentUserId }
                             val chatName = otherUserId?.let { id ->
                                 connectedUsers[id]?.name
-                            } ?: conn.semantic_location ?: "Chat"
+                            } ?: conn.semanticLocation ?: "Chat"
 
                             val (resolvedChatId, remoteMatches) = chatRepository.searchMessagesByConnectionId(
                                 connectionId = conn.id,

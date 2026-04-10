@@ -893,7 +893,7 @@ private fun NfcSuccessContent(
         }
 
         // ---- Context Tag / Location Info ----
-        if (connection.semantic_location != null || connection.displayLocationLabel != null) {
+        if (connection.semanticLocation != null || connection.displayLocationLabel != null) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)

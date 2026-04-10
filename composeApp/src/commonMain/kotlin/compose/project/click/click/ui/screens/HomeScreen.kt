@@ -746,7 +746,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             // Content
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    connection.semantic_location ?: "Connection",
+                    connection.semanticLocation ?: "Connection",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface

@@ -238,7 +238,7 @@ class HomeViewModel(
                             .take(3)
                         
                         val uniqueLocations = activeConnections
-                            .mapNotNull { it.semantic_location }
+                            .mapNotNull { it.semanticLocation }
                             .distinct()
                             .size
                         
@@ -250,7 +250,7 @@ class HomeViewModel(
 
                         val grouped = activeConnections
                             .sortedByDescending { it.created }
-                            .groupBy { it.semantic_location ?: "Somewhere New" }
+                            .groupBy { it.semanticLocation ?: "Somewhere New" }
                         _locationGroupedConnections.value = grouped
 
                         _connectedUsers.value = connectedUsers

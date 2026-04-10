@@ -151,7 +151,7 @@ fun Connection.toMapPoint(): ConnectionMapPoint {
 
     val timeState = calculateTimeState(created)
     
-    val displayName = semantic_location
+    val displayName = semanticLocation
         ?: displayLocationLabel
         ?: "Connection"
     
@@ -227,7 +227,7 @@ fun clusterPoints(
         
         // Determine the dominant semantic icon for this cluster
         val iconCounts = nearbyPoints
-            .map { parseSemanticIcon(it.connection.semantic_location) }
+            .map { parseSemanticIcon(it.connection.semanticLocation) }
             .groupBy { it }
             .mapValues { it.value.size }
         val dominantIcon = iconCounts.maxByOrNull { it.value }?.key ?: SemanticIcon.DEFAULT

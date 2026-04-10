@@ -7,6 +7,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -146,6 +147,8 @@ class ChatApiClient(
         val geo_location: GeoLocationApi,
         val full_location: Map<String, String>? = null,
         val semantic_location: String? = null,
+        @SerialName("connection_encounters")
+        val connectionEncounters: List<ConnectionEncounter> = emptyList(),
         val created: Long,
         val expiry: Long,
         val should_continue: List<Boolean> = listOf(false, false),
@@ -555,6 +558,7 @@ class ChatApiClient(
                 geo_location = compose.project.click.click.data.models.GeoLocation(0.0, 0.0),
                 full_location = null,
                 semantic_location = null,
+                connectionEncounters = emptyList(),
                 created = created_at,
                 expiry = created_at + 86400000,
                 should_continue = listOf(false, false),
@@ -634,6 +638,7 @@ class ChatApiClient(
             ),
             full_location = full_location,
             semantic_location = semantic_location,
+            connectionEncounters = connectionEncounters,
             created = created,
             expiry = expiry,
             should_continue = should_continue,

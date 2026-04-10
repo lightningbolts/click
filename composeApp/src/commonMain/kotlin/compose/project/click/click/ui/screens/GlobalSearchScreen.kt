@@ -368,7 +368,7 @@ private fun PersonSearchRow(
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold
             )
-            chatDetails.connection.semantic_location?.let { location ->
+            chatDetails.connection.semanticLocation?.let { location ->
                 Text(
                     text = location,
                     style = MaterialTheme.typography.bodySmall,

@@ -84,7 +84,7 @@ fun Connection.profilePlaceLine(): String? {
 }
 
 fun Connection.profileAddressDetailLine(): String? {
-    val sem = semantic_location?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val sem = semanticLocation?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val fromFull = structuredAddressFromFull(full_location) ?: return null
     return fromFull.takeIf { it != sem }
 }

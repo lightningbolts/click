@@ -178,7 +178,7 @@ class MapViewModel : ViewModel() {
             connections
         } else {
             connections.filter { conn ->
-                val location = conn.semantic_location?.lowercase() ?: ""
+                val location = conn.semanticLocation?.lowercase() ?: ""
                 val tag = conn.displayLocationLabel?.lowercase() ?: ""
                 val searchTerm = filter.lowercase()
                 location.contains(searchTerm) || tag.contains(searchTerm)

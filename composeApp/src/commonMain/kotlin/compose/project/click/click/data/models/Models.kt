@@ -1,5 +1,6 @@
 package compose.project.click.click.data.models
 
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.JsonElement
@@ -378,10 +379,14 @@ data class Connection(
     }
 
     fun originEncounter(): ConnectionEncounter? =
-        connectionEncounters.minByOrNull { it.encounteredAt }
+        connectionEncounters.minWithOrNull(
+            compareBy { it.encounteredAtInstant() ?: Instant.DISTANT_FUTURE },
+        )
 
     fun latestEncounter(): ConnectionEncounter? =
-        connectionEncounters.maxByOrNull { it.encounteredAt }
+        connectionEncounters.maxWithOrNull(
+            compareBy { it.encounteredAtInstant() ?: Instant.DISTANT_PAST },
+        )
 
     /** Origin story (oldest crossing) for profile / first-meet copy. */
     fun originMemoryCapsule(): MemoryCapsule? =
@@ -431,7 +436,7 @@ data class Connection(
     val displayLocationLabel: String?
         get() = context_tag
             ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: semantic_location
+            ?: semanticLocation
 
     /** Legacy [MemoryCapsule] built from the most recent encounter (UI compatibility). */
     fun toLegacyMemoryCapsule(): MemoryCapsule? = latestMemoryCapsule()
