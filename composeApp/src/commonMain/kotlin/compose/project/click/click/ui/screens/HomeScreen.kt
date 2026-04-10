@@ -100,6 +100,7 @@ fun HomeScreen(
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by viewModel.pollPairSuggestion.collectAsState()
     val homeAvailabilityIntents by viewModel.homeAvailabilityIntents.collectAsState()
+    val homeAvailabilityOverlapMessages by viewModel.homeAvailabilityOverlapMessages.collectAsState()
     val archivedForHome by AppDataManager.archivedConnectionIds.collectAsState()
     val hiddenForHome by AppDataManager.hiddenConnectionIds.collectAsState()
     val connectionsForArchiveBanner by AppDataManager.connections.collectAsState()
@@ -252,7 +253,7 @@ fun HomeScreen(
                         item(key = "availability_intents_strip") {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
                                 HomeAvailabilityIntentsRow(
                                     intents = homeAvailabilityIntents,
@@ -261,7 +262,21 @@ fun HomeScreen(
                                         showAvailabilityIntentSheet = true
                                     },
                                 )
-                                HomeAvailabilityOverlapHint()
+                                if (homeAvailabilityOverlapMessages.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        homeAvailabilityOverlapMessages.forEach { line ->
+                                            Text(
+                                                text = line,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color(0xFFFFE8A8),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -1031,44 +1046,6 @@ private fun InsightRow(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
-    }
-}
-
-@Composable
-private fun HomeAvailabilityOverlapHint() {
-    GlassCardCompact(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = 0.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(
-                Icons.Filled.Bolt,
-                contentDescription = null,
-                tint = Color(0xFFFBBF24),
-                modifier = Modifier.size(28.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Availability overlaps",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "When you and a connection are both down for something that lines up in time, " +
-                        "you'll see a gold match in chat and on connection rows — not just a lightning icon alone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 

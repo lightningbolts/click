@@ -19,6 +19,8 @@ import compose.project.click.click.data.repository.SupabaseChatRepository // pra
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
+import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -92,6 +94,10 @@ class HomeViewModel(
     /** Active availability intent rows for the signed-in user (home “I’m down for…” strip). */
     private val _homeAvailabilityIntents = MutableStateFlow<List<AvailabilityIntentRow>>(emptyList())
     val homeAvailabilityIntents: StateFlow<List<AvailabilityIntentRow>> = _homeAvailabilityIntents.asStateFlow()
+
+    /** One line per connection peer when mutual availability intents overlap (home only). */
+    private val _homeAvailabilityOverlapMessages = MutableStateFlow<List<String>>(emptyList())
+    val homeAvailabilityOverlapMessages: StateFlow<List<String>> = _homeAvailabilityOverlapMessages.asStateFlow()
     
     // Track if data has been loaded already
     private var dataLoaded = false
@@ -99,6 +105,7 @@ class HomeViewModel(
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
     private var availabilityIntentRefreshJob: Job? = null
+    private var homeOverlapJob: Job? = null
 
     init {
         observeAppData()
@@ -114,7 +121,49 @@ class HomeViewModel(
             runCatching {
                 _homeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
             }
+            val arch = AppDataManager.archivedConnectionIds.value
+            val hid = AppDataManager.hiddenConnectionIds.value
+            val conns = AppDataManager.connections.value.filter { it.isActiveForUser(arch, hid) }
+            val cu = AppDataManager.connectedUsers.value
+            loadHomeAvailabilityOverlapMessages(uid, conns, cu)
         }
+    }
+
+    private suspend fun loadHomeAvailabilityOverlapMessages(
+        userId: String,
+        activeConnections: List<Connection>,
+        connectedUsers: Map<String, User>,
+    ) {
+        if (userId.isBlank()) {
+            _homeAvailabilityOverlapMessages.value = emptyList()
+            return
+        }
+        try {
+            val mine = supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, userId)
+            val lines = LinkedHashSet<String>()
+            for (conn in activeConnections) {
+                val peerId = conn.user_ids.firstOrNull { it != userId } ?: continue
+                val theirs = runCatching {
+                    supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, peerId)
+                }.getOrElse { emptyList() }
+                val has = hasActiveAvailabilityIntentOverlap(mine, theirs)
+                AvailabilityOverlapCache.put(userId, peerId, has)
+                if (has) {
+                    val who = shortPeerAvailabilityFirstName(connectedUsers[peerId])
+                    lines.add("You and $who are both available right now!")
+                }
+            }
+            _homeAvailabilityOverlapMessages.value = lines.toList()
+        } catch (e: Exception) {
+            println("HomeViewModel: availability overlap lines: ${e.message}")
+            _homeAvailabilityOverlapMessages.value = emptyList()
+        }
+    }
+
+    private fun shortPeerAvailabilityFirstName(user: User?): String {
+        val a = user?.firstName?.trim()?.substringBefore(" ")?.ifBlank { null }
+        val b = user?.name?.trim()?.substringBefore(" ")?.ifBlank { null }
+        return (a ?: b) ?: "them"
     }
     
     /**
@@ -151,8 +200,12 @@ class HomeViewModel(
                     _locationGroupedConnections.value = emptyMap()
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
+                    _homeAvailabilityOverlapMessages.value = emptyList()
+                    AvailabilityOverlapCache.clear()
                     availabilityIntentRefreshJob?.cancel()
                     availabilityIntentRefreshJob = null
+                    homeOverlapJob?.cancel()
+                    homeOverlapJob = null
                 }
 
                 when {
@@ -161,8 +214,17 @@ class HomeViewModel(
                             availabilityIntentRefreshJob = viewModelScope.launch {
                                 while (isActive) {
                                     runCatching {
+                                        val uid = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+                                            ?: return@runCatching
                                         _homeAvailabilityIntents.value =
-                                            supabaseRepository.fetchActiveAvailabilityIntentsForUser(user.id)
+                                            supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+                                        val arch = AppDataManager.archivedConnectionIds.value
+                                        val hid = AppDataManager.hiddenConnectionIds.value
+                                        val conns = AppDataManager.connections.value.filter {
+                                            it.isActiveForUser(arch, hid)
+                                        }
+                                        val cu = AppDataManager.connectedUsers.value
+                                        loadHomeAvailabilityOverlapMessages(uid, conns, cu)
                                     }
                                     delay(120_000L)
                                 }
@@ -192,6 +254,11 @@ class HomeViewModel(
                         _locationGroupedConnections.value = grouped
 
                         _connectedUsers.value = connectedUsers
+
+                        homeOverlapJob?.cancel()
+                        homeOverlapJob = viewModelScope.launch {
+                            loadHomeAvailabilityOverlapMessages(user.id, activeConnections, connectedUsers)
+                        }
 
                         _pollPairSuggestion.value = try {
                             connectionRepository.getPollPairSuggestion(
@@ -469,6 +536,8 @@ class HomeViewModel(
         connectionsChannel = null
         availabilityIntentRefreshJob?.cancel()
         availabilityIntentRefreshJob = null
+        homeOverlapJob?.cancel()
+        homeOverlapJob = null
     }
 }
 

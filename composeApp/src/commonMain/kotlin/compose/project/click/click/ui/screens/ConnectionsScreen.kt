@@ -146,7 +146,8 @@ import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.util.firstIntentOverlapLabel // pragma: allowlist secret
+import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
+import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
@@ -1421,22 +1422,27 @@ fun ConnectionItem(
         lastMessage == null || lastMessage.timeCreated < latestAt
     } ?: false
 
-    var intentOverlapLabel by remember(chatDetails.otherUser.id, viewerUserId) {
-        mutableStateOf<String?>(null)
+    val peerId = chatDetails.otherUser.id
+    var hasIntentOverlap by remember(chatDetails.otherUser.id, viewerUserId, isGroup) {
+        val v = viewerUserId
+        val cached = if (!isGroup && !v.isNullOrBlank()) AvailabilityOverlapCache.get(v, peerId) else null
+        mutableStateOf(cached == true)
     }
     val overlapRepo = remember { SupabaseRepository() }
     LaunchedEffect(chatDetails.otherUser.id, viewerUserId, isGroup) {
         if (isGroup || viewerUserId.isNullOrBlank()) {
-            intentOverlapLabel = null
+            hasIntentOverlap = false
             return@LaunchedEffect
         }
         val v = viewerUserId
-        val peerId = chatDetails.otherUser.id
-        intentOverlapLabel = withContext(Dispatchers.Default) {
+        val theirsPeer = chatDetails.otherUser.id
+        val result = withContext(Dispatchers.Default) {
             val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
-            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peerId)
-            firstIntentOverlapLabel(mine, theirs)
+            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, theirsPeer)
+            hasActiveAvailabilityIntentOverlap(mine, theirs)
         }
+        AvailabilityOverlapCache.put(v, theirsPeer, result)
+        hasIntentOverlap = result
     }
 
     val rowTapModifier = if (isIOS) {
@@ -1541,35 +1547,14 @@ fun ConnectionItem(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (!isGroup && intentOverlapLabel != null) {
+                    if (!isGroup && hasIntentOverlap) {
                         Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color(0x1AFBBF24),
-                            border = BorderStroke(1.dp, Color(0x45FBBF24)),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Icon(
-                                    Icons.Filled.Bolt,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFBBF24),
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Text(
-                                    text = intentOverlapLabel!!,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFFFFE8A8),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 120.dp),
-                                )
-                            }
-                        }
+                        Icon(
+                            Icons.Filled.Bolt,
+                            contentDescription = "Shared availability",
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                 }
                 Text(
@@ -1830,24 +1815,33 @@ fun ChatView(
                     val reactionsMap by viewModel.messageReactions.collectAsState()
                     val isGroupChat = chatDetails.groupClique != null
                     val overlapRepo = remember { SupabaseRepository() }
-                    var chatIntentOverlap by remember(chatDetails.otherUser.id, currentUserId) {
-                        mutableStateOf<String?>(null)
+                    val chatPeerId = chatDetails.otherUser.id
+                    var chatHasIntentOverlap by remember(chatDetails.otherUser.id, currentUserId, isGroupChat) {
+                        val v = currentUserId
+                        val cached = if (!isGroupChat && !v.isNullOrBlank()) {
+                            AvailabilityOverlapCache.get(v, chatPeerId)
+                        } else {
+                            null
+                        }
+                        mutableStateOf(cached == true)
                     }
                     LaunchedEffect(chatDetails.otherUser.id, currentUserId, isGroupChat) {
                         if (isGroupChat) {
-                            chatIntentOverlap = null
+                            chatHasIntentOverlap = false
                             return@LaunchedEffect
                         }
                         val v = currentUserId ?: run {
-                            chatIntentOverlap = null
+                            chatHasIntentOverlap = false
                             return@LaunchedEffect
                         }
                         val peer = chatDetails.otherUser.id
-                        chatIntentOverlap = withContext(Dispatchers.Default) {
+                        val result = withContext(Dispatchers.Default) {
                             val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
                             val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
-                            firstIntentOverlapLabel(mine, theirs)
+                            hasActiveAvailabilityIntentOverlap(mine, theirs)
                         }
+                        AvailabilityOverlapCache.put(v, peer, result)
+                        chatHasIntentOverlap = result
                     }
                     val typingPeerLabel = remember(chatDetails.otherUser.name, isGroupChat) {
                         if (isGroupChat) "Someone is typing"
@@ -2019,35 +2013,14 @@ fun ChatView(
                                     }
                                 }
 
-                                if (!isGroupChat && chatIntentOverlap != null) {
+                                if (!isGroupChat && chatHasIntentOverlap) {
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = Color(0x1AFBBF24),
-                                        border = BorderStroke(1.dp, Color(0x45FBBF24)),
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.Bolt,
-                                                contentDescription = null,
-                                                tint = Color(0xFFFBBF24),
-                                                modifier = Modifier.size(16.dp),
-                                            )
-                                            Text(
-                                                text = chatIntentOverlap!!,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFFFFE8A8),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.widthIn(max = 140.dp),
-                                            )
-                                        }
-                                    }
+                                    Icon(
+                                        Icons.Filled.Bolt,
+                                        contentDescription = "Shared availability",
+                                        tint = Color(0xFFFBBF24),
+                                        modifier = Modifier.size(22.dp),
+                                    )
                                 }
 
                                 if (isGroupChat) {
