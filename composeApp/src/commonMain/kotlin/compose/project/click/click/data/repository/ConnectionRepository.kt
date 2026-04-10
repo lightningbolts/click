@@ -826,12 +826,9 @@ class ConnectionRepository(
         connections: List<Connection>,
         connectedUsers: Map<String, User>
     ): PollPairSuggestion? {
-        val now = Clock.System.now().toEpochMilliseconds()
         return connections
             .asSequence()
-            .filter {
-                it.isVisibleInActiveUi() && !(it.expiry_state == "expired" && it.expiry < now)
-            }
+            .filter { it.isVisibleInActiveUi() }
             .mapNotNull { connection ->
                 val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
                 val lastInteraction = connection.last_message_at ?: connection.created

@@ -368,8 +368,6 @@ private enum class ChatTransitionMode {
 }
 
 private const val CHAT_TRANSITION_DURATION_MS = 300L
-private const val EXPIRY_WARNING_THRESHOLD_HOURS = 48
-private val ExpiryWarningColor = Color(0xFFFFA500)
 
 /** Sort key for Clicks list: prefer server `last_message_at`, then last message time, then connection created. */
 private fun connectionListActivityTs(chat: ChatWithDetails): Long =
@@ -395,7 +393,6 @@ fun ConnectionsListView(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Archived
     var listBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
@@ -726,15 +723,7 @@ fun ConnectionsListView(
                                     chatDetails = chatDetails,
                                     showOnlineIndicator = chatDetails.otherUser.id in onlineUsers,
                                     onAvatarClick = { onUserProfileClick(chatDetails.otherUser.id) },
-                                    onClick = {
-                                        if (chatDetails.connection.isExpiredConnection()) {
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar("This connection has expired")
-                                            }
-                                        } else {
-                                            onChatSelected(chatDetails.connection.id)
-                                        }
-                                    },
+                                    onClick = { onChatSelected(chatDetails.connection.id) },
                                     onNudge = {
                                         val chatId = chatDetails.chat.id
                                         if (chatId != null) {
@@ -872,9 +861,6 @@ fun ConnectionItem(
     val unreadCount = chatDetails.unreadCount
     val activityTs = lastMessage?.timeCreated ?: connection.last_message_at
     val timeText = activityTs?.let { formatTimestamp(it) } ?: "No messages"
-    val hoursUntilExpiry = connection.hoursUntilExpiry()
-    val showExpiryWarning = hoursUntilExpiry in 0..EXPIRY_WARNING_THRESHOLD_HOURS && !connection.isKept()
-    val isExpired = connection.isExpiredConnection()
     val showLoadingSubtitle =
         lastMessage == null && user.name == "Connection" && connection.last_message_at == null
     val previewNeedsRefresh = connection.last_message_at?.let { latestAt ->
@@ -998,16 +984,6 @@ fun ConnectionItem(
                         )
                     }
                 }
-            }
-
-            if (showExpiryWarning || isExpired) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (isExpired) "Expired" else "⏱ Expires in ${hoursUntilExpiry.coerceAtLeast(0)}h",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isExpired) MaterialTheme.colorScheme.error else ExpiryWarningColor,
-                    fontWeight = FontWeight.Medium
-                )
             }
         }
 
@@ -1203,8 +1179,6 @@ fun ChatView(
                 is ChatMessagesState.Success -> {
                     val chatDetails = state.chatDetails
                     val messages = state.messages
-                    val hoursUntilExpiry = chatDetails.connection.hoursUntilExpiry()
-                    val showExpiryBanner = hoursUntilExpiry in 0..EXPIRY_WARNING_THRESHOLD_HOURS && !chatDetails.connection.isKept()
                     val reactionsMap by viewModel.messageReactions.collectAsState()
                     val typingPeerLabel = remember(chatDetails.otherUser.name) {
                         "${chatDetails.otherUser.name ?: "Someone"} is typing"
@@ -1425,13 +1399,6 @@ fun ChatView(
                             }
                         }
 
-                    if (showExpiryBanner) {
-                        ExpiryBanner(
-                            hoursUntilExpiry = hoursUntilExpiry,
-                            onKeep = { viewModel.keepConnection() }
-                        )
-                    }
-                    
                     // Icebreaker Prompts Panel
                     if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
                         IcebreakerPanel(
@@ -2091,42 +2058,6 @@ fun ChatView(
     } // End outer Box
 }
 
-@Composable
-private fun ExpiryBanner(
-    hoursUntilExpiry: Int,
-    onKeep: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(ExpiryWarningColor.copy(alpha = 0.14f))
-            .border(1.dp, ExpiryWarningColor.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = "This connection expires in ${hoursUntilExpiry.coerceAtLeast(0)} hours — tap Keep to make it permanent",
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        TextButton(onClick = onKeep) {
-            Text(
-                text = "Keep",
-                color = ExpiryWarningColor,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
-
-private fun Connection.hoursUntilExpiry(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Int {
-    return ((expiry - nowMs) / 3_600_000L).toInt()
-}
-
 private sealed interface ChatTimelineEntry {
     val key: String
 
@@ -2255,10 +2186,6 @@ private fun formatConversationDayLabel(timestamp: Long, nowMs: Long = Clock.Syst
             }
         }
     }
-}
-
-private fun Connection.isExpiredConnection(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
-    return !isKept() && expiry < nowMs
 }
 
 @Composable

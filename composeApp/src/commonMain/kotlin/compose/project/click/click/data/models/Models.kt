@@ -30,6 +30,7 @@ data class ConnectionInsert(
     val user_ids: List<String>,
     val geo_location: GeoLocationInsert,
     val created: Long,
+    /** Legacy column retained for API compatibility; do not use for client chat access or UI gating. */
     val expiry: Long,
     val should_continue: List<Boolean>,
     val has_begun: Boolean,
@@ -292,6 +293,7 @@ data class Connection(
     val createdUtc: String? = null,
     @SerialName("time_of_day_utc")
     val timeOfDayUtc: String? = null,
+    /** Legacy server timestamp; ignored for client-side chat access (use archive lifecycle / [connection_archives]). */
     val expiry: Long,
     // Geographic location as lat/lon coordinate pair
     val geo_location: GeoLocation,

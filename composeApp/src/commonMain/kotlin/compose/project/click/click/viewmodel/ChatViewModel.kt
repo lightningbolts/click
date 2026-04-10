@@ -579,27 +579,22 @@ class ChatViewModel(
 
     /**
      * Full Clicks list: active-channel rows (pending/active/kept), server-archived rows, minus
-     * soft-removed and time-expired active rows. [ChatListState.Success.chats] is this superset;
-     * the UI splits Active vs Archived tabs.
+     * soft-removed rows. [ChatListState.Success.chats] is this superset; the UI splits Active vs Archived tabs.
+     * Connection time [Connection.expiry] is not used for visibility (archival uses server / [connection_archives]).
      */
     private fun applyChatListVisibility(chats: List<ChatWithDetails>): List<ChatWithDetails> {
         val hiddenIds = AppDataManager.hiddenConnectionIds.value
         val archivedIds = AppDataManager.archivedConnectionIds.value
-        val now = Clock.System.now().toEpochMilliseconds()
         return chats.filter { chat ->
             val c = chat.connection
             when {
                 c.id in hiddenIds -> false
                 c.normalizedConnectionStatus() == "removed" -> false
                 c.isArchivedChannelForUser(archivedIds, hiddenIds) -> true
-                c.isActiveForUser(archivedIds, hiddenIds) && !isTimeExpiredForActiveList(c, now) -> true
+                c.isActiveForUser(archivedIds, hiddenIds) -> true
                 else -> false
             }
         }
-    }
-
-    private fun isTimeExpiredForActiveList(connection: Connection, now: Long): Boolean {
-        return connection.expiry_state == "expired" && connection.expiry < now
     }
 
     private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
@@ -1784,14 +1779,12 @@ class ChatViewModel(
     }
     
     /**
-     * Handle dismissal when a connection is no longer shown (archived / expired client rule).
-     * Server-side [expire-connections] archives idle rows; client refreshes lists.
+     * Refresh chats after a connection disappears from the client (e.g. archived server-side).
+     * Idle archival is handled by [expire-connections] and [connection_archives].
      */
     fun handleExpiredConnectionDismiss() {
-        val userId = _currentUserId.value ?: return
+        if (_currentUserId.value == null) return
         viewModelScope.launch {
-            // Refresh connections list from server — expired connections
-            // will have been deleted or marked by the Edge Function
             loadChats(isForced = true)
         }
     }

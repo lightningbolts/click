@@ -57,6 +57,7 @@ data class PendingConnectionDraft(
             created = queuedAt,
             createdUtc = queuedInstant.toString(),
             timeOfDayUtc = "${queuedTime.hour.toString().padStart(2, '0')}:${queuedTime.minute.toString().padStart(2, '0')}:${queuedTime.second.toString().padStart(2, '0')} UTC",
+            // Placeholder for legacy `connections.expiry` serialization; not used for UI gating.
             expiry = queuedAt + (30L * 24 * 60 * 60 * 1000),
             geo_location = GeoLocation(lat = validLat, lon = validLon),
             contextTagId = request.contextTagObject?.label ?: request.contextTag,
