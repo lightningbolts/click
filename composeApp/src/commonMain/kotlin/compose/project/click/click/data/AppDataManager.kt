@@ -72,6 +72,17 @@ object AppDataManager {
     /** Per-user hidden rows ([connection_hidden]); excluded everywhere. */
     private val _hiddenConnectionIds = MutableStateFlow<Set<String>>(emptySet())
     val hiddenConnectionIds: StateFlow<Set<String>> = _hiddenConnectionIds.asStateFlow()
+
+    /**
+     * Incremented when a verified group ("click") is created elsewhere so [ConnectionsScreen]
+     * can force-refresh its [ChatViewModel] chat list (separate repository instance).
+     */
+    private val _chatListRefreshEpoch = MutableStateFlow(0)
+    val chatListRefreshEpoch: StateFlow<Int> = _chatListRefreshEpoch.asStateFlow()
+
+    fun bumpChatListRefresh() {
+        _chatListRefreshEpoch.value = _chatListRefreshEpoch.value + 1
+    }
     
     // Connected users info
     private val _connectedUsers = MutableStateFlow<Map<String, User>>(emptyMap())

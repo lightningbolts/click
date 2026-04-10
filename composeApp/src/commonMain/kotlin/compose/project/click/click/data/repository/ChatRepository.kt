@@ -78,6 +78,15 @@ interface ChatRepository {
     ): Result<String>
 
     /**
+     * True when every pair in [memberUserIds] (including caller) has an active/kept 1:1 connection.
+     * Caller must appear in the list; uses server RPC so friend–friend edges are visible.
+     */
+    suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean
+
+    /** Clears short-lived junction caches so the next chat list fetch hits the network. */
+    fun clearChatListLocalCaches()
+
+    /**
      * Realtime INSERT on [messages] rows the current session may read. Emits [MessageListInsertEvent]
      * with [MessageListInsertEvent.connectionId] resolved from [chats].
      */

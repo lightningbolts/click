@@ -64,6 +64,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 
 /**
  * Repository for chat operations
@@ -187,7 +188,7 @@ class SupabaseChatRepository(
                 channel.subscribe(blockUntilSubscribed = true)
                 channel.track(buildJsonObject { put("userId", userId) })
             } catch (e: Exception) {
-                println("ChatRepository: startGlobalPresence failed: ${e.message}")
+                println("ChatRepository: startGlobalPresence failed: ${e.redactedRestMessage()}")
                 presenceJob.cancel()
                 scope.cancel()
                 return@withLock
@@ -276,7 +277,7 @@ class SupabaseChatRepository(
                 }
                 ?.id
         } catch (e: Exception) {
-            println("ChatRepository: findConnectionIdBetween failed: ${e.message}")
+            println("ChatRepository: findConnectionIdBetween failed: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -318,7 +319,7 @@ class SupabaseChatRepository(
             val plain = MessageCrypto.decryptContent(memberRow.encryptedGroupKey, keys)
             MessageCrypto.decodeGroupMasterKeyBase64(plain)
         } catch (e: Exception) {
-            println("ChatRepository: unwrap group key failed: ${e.message}")
+            println("ChatRepository: unwrap group key failed: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -356,7 +357,7 @@ class SupabaseChatRepository(
                 else -> null
             }
         } catch (e: Exception) {
-            println("ChatRepository: resolveChatCrypto failed: ${e.message}")
+            println("ChatRepository: resolveChatCrypto failed: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -373,7 +374,7 @@ class SupabaseChatRepository(
                 .firstOrNull() ?: return null
             MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
         } catch (e: Exception) {
-            println("ChatRepository: Failed to derive connection keys: ${e.message}")
+            println("ChatRepository: Failed to derive connection keys: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -567,7 +568,7 @@ class SupabaseChatRepository(
                 }
             }
         } catch (e: Exception) {
-            println("ChatRepository: bulk last-message fallback failed: ${e.message}")
+            println("ChatRepository: bulk last-message fallback failed: ${e.redactedRestMessage()}")
             emptyMap()
         }
     }
@@ -615,7 +616,7 @@ class SupabaseChatRepository(
         val chatIds = chats.map { it.id }
         val perChatLatest = runCatching { fetchLatestMessageRowPerChat(chatIds) }
             .getOrElse {
-                println("ChatRepository: per-chat latest messages failed: ${it.message}")
+                println("ChatRepository: per-chat latest messages failed: ${it.redactedRestMessage()}")
                 emptyMap()
             }
         val bulkLatest = if (perChatLatest.size < chatIds.size) {
@@ -791,7 +792,7 @@ class SupabaseChatRepository(
                     ?: d.connection.created
             }
         } catch (e: Exception) {
-            println("ChatRepository: group chats fetch failed: ${e.message}")
+            println("ChatRepository: group chats fetch failed: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -820,7 +821,7 @@ class SupabaseChatRepository(
                     ?: d.connection.created
             }
         } catch (e: Exception) {
-            println("Error fetching user chats: ${e.message}")
+            println("Error fetching user chats: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -834,7 +835,7 @@ class SupabaseChatRepository(
 
             buildChatsWithDetailsForConnections(userId, archivedRows)
         } catch (e: Exception) {
-            println("Error fetching archived user chats: ${e.message}")
+            println("Error fetching archived user chats: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -881,7 +882,7 @@ class SupabaseChatRepository(
                 .decodeList<Message>()
                 .map { decryptMessage(it, crypto) }
         } catch (e: Exception) {
-            println("Error fetching messages: ${e.message}")
+            println("Error fetching messages: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -963,13 +964,13 @@ class SupabaseChatRepository(
                         messagePreviewPlaintext = content,
                     ).getOrThrow()
                 }.onFailure {
-                    println("ChatRepository: Failed to dispatch chat push: ${it.message}")
+                    println("ChatRepository: Failed to dispatch chat push: ${it.redactedRestMessage()}")
                 }
             }
 
             decrypted
         } catch (e: Exception) {
-            println("Error sending message: ${e.message}")
+            println("Error sending message: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1010,7 +1011,7 @@ class SupabaseChatRepository(
                 messages = emptyList(),
             )
         } catch (e: Exception) {
-            println("Error ensuring chat for connection $connectionId: ${e.message}")
+            println("Error ensuring chat for connection $connectionId: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1042,7 +1043,7 @@ class SupabaseChatRepository(
                     }
                 }
         } catch (e: Exception) {
-            println("Error marking messages as read: ${e.message}")
+            println("Error marking messages as read: ${e.redactedRestMessage()}")
         }
     }
 
@@ -1138,7 +1139,7 @@ class SupabaseChatRepository(
 
             Chat(id = row.id, connectionId = row.connectionId, groupId = row.groupId, messages = emptyList())
         } catch (e: Exception) {
-            println("Error fetching chat: ${e.message}")
+            println("Error fetching chat: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1162,7 +1163,7 @@ class SupabaseChatRepository(
             }
             loadChatWithDetailsByRawId(chatId, currentUserId)
         } catch (e: Exception) {
-            println("Error fetching chat with details: ${e.message}")
+            println("Error fetching chat with details: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1233,7 +1234,7 @@ class SupabaseChatRepository(
             if (userIds.isEmpty()) return emptyList()
             fetchUsersByIdsSafe(userIds)
         } catch (e: Exception) {
-            println("Error fetching participants: ${e.message}")
+            println("Error fetching participants: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -1243,7 +1244,7 @@ class SupabaseChatRepository(
         return try {
             fetchUsersByIdsSafe(listOf(userId)).firstOrNull()
         } catch (e: Exception) {
-            println("Error fetching user: ${e.message}")
+            println("Error fetching user: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1254,11 +1255,11 @@ class SupabaseChatRepository(
             val authToken = tokenStorage.getJwt() ?: return null
             val result = apiClient.updateMessage(chatId, messageId, userId, content, authToken)
             result.getOrElse {
-                println("Error updating message: ${it.message}")
+                println("Error updating message: ${it.redactedRestMessage()}")
                 null
             }
         } catch (e: Exception) {
-            println("Error updating message: ${e.message}")
+            println("Error updating message: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1269,11 +1270,11 @@ class SupabaseChatRepository(
             val authToken = tokenStorage.getJwt() ?: return false
             val result = apiClient.deleteMessage(chatId, messageId, userId, authToken)
             result.getOrElse {
-                println("Error deleting message: ${it.message}")
+                println("Error deleting message: ${it.redactedRestMessage()}")
                 false
             }
         } catch (e: Exception) {
-            println("Error deleting message: ${e.message}")
+            println("Error deleting message: ${e.redactedRestMessage()}")
             false
         }
     }
@@ -1321,7 +1322,7 @@ class SupabaseChatRepository(
                 .decodeList<ReactionRow>()
                 .map { it.toMessageReaction() }
         } catch (e: Exception) {
-            println("Error fetching reactions: ${e.message}")
+            println("Error fetching reactions: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -1347,7 +1348,7 @@ class SupabaseChatRepository(
                 )
             true
         } catch (e: Exception) {
-            println("Error adding reaction: ${e.message}")
+            println("Error adding reaction: ${e.redactedRestMessage()}")
             false
         }
     }
@@ -1365,7 +1366,7 @@ class SupabaseChatRepository(
                 }
             true
         } catch (e: Exception) {
-            println("Error removing reaction: ${e.message}")
+            println("Error removing reaction: ${e.redactedRestMessage()}")
             false
         }
     }
@@ -1412,7 +1413,7 @@ class SupabaseChatRepository(
                 message = buildJsonObject { put("userId", userId) },
             )
         } catch (e: Exception) {
-            println("ChatRepository: typing broadcast failed: ${e.message}")
+            println("ChatRepository: typing broadcast failed: ${e.redactedRestMessage()}")
         }
     }
 
@@ -1475,7 +1476,7 @@ class SupabaseChatRepository(
                 channel.subscribe(blockUntilSubscribed = true)
                 channel.track(buildJsonObject { put("userId", currentUserId) })
             } catch (e: Exception) {
-                println("ChatRepository: join chat ephemeral failed: ${e.message}")
+                println("ChatRepository: join chat ephemeral failed: ${e.redactedRestMessage()}")
                 presenceJob.cancel()
                 scope.cancel()
                 return
@@ -1532,14 +1533,14 @@ class SupabaseChatRepository(
         return try {
             val authToken = tokenStorage.getJwt() ?: return false
             apiClient.updateMessageStatus(messageId, status, authToken).getOrElse { false }
-        } catch (e: Exception) { println("Error updating status: ${e.message}"); false }
+        } catch (e: Exception) { println("Error updating status: ${e.redactedRestMessage()}"); false }
     }
 
     override suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message? {
         return try {
             val authToken = tokenStorage.getJwt() ?: return null
             apiClient.forwardMessage(messageId, targetChatId, userId, authToken).getOrElse { null }
-        } catch (e: Exception) { println("Error forwarding message: ${e.message}"); null }
+        } catch (e: Exception) { println("Error forwarding message: ${e.redactedRestMessage()}"); null }
     }
 
     override suspend fun searchMessages(chatId: String, query: String): List<Message> {
@@ -1547,7 +1548,7 @@ class SupabaseChatRepository(
             val allMessages = fetchMessagesForChat(chatId)
             allMessages.filter { it.content.contains(query, ignoreCase = true) }
         } catch (e: Exception) {
-            println("Error searching messages: ${e.message}")
+            println("Error searching messages: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -1564,7 +1565,7 @@ class SupabaseChatRepository(
                 .decodeList<ChatIdOnly>()
             rows.firstOrNull()?.id
         } catch (e: Exception) {
-            println("Error resolving chat id for connection $connectionId: ${e.message}")
+            println("Error resolving chat id for connection $connectionId: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1580,7 +1581,7 @@ class SupabaseChatRepository(
                 .firstOrNull()
                 ?.id
         } catch (e: Exception) {
-            println("Error resolving chat id for group $groupId: ${e.message}")
+            println("Error resolving chat id for group $groupId: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1613,6 +1614,37 @@ class SupabaseChatRepository(
         decodeUuidScalarFromRpc(rpcResult.data)
     }
 
+    override fun clearChatListLocalCaches() {
+        cachedJunctionData = null
+        cachedJunctionUserId = null
+        cachedJunctionTimestamp = 0L
+    }
+
+    override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean =
+        runCatching {
+            val ids = memberUserIds.distinct().sorted()
+            if (ids.size < 2) return@runCatching false
+            val body = buildJsonObject {
+                put("p_member_ids", buildJsonArray { ids.forEach { add(JsonPrimitive(it)) } })
+            }
+            val rpcResult = supabase.postgrest.rpc("verified_clique_edges_exist", body)
+            parseRpcBoolean(rpcResult.data)
+        }.getOrElse { e ->
+            println("ChatRepository: verifiedCliqueEdgesExist failed: ${e.redactedRestMessage()}")
+            false
+        }
+
+    private fun parseRpcBoolean(body: String): Boolean {
+        val t = body.trim().trim('"')
+        if (t.equals("true", ignoreCase = true)) return true
+        if (t.equals("false", ignoreCase = true)) return false
+        val el = runCatching { Json.parseToJsonElement(t) }.getOrNull() ?: return false
+        return when (el) {
+            is JsonPrimitive -> el.content.equals("true", ignoreCase = true)
+            else -> false
+        }
+    }
+
     private fun decodeUuidScalarFromRpc(body: String): String {
         val t = body.trim()
         if (t.length in 32..40 && t.count { it == '-' } == 4) return t
@@ -1632,7 +1664,7 @@ class SupabaseChatRepository(
             }
             supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(objectPath)
         } catch (e: Exception) {
-            println("ChatRepository: uploadChatMedia failed: ${e.message}")
+            println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
             null
         }
     }

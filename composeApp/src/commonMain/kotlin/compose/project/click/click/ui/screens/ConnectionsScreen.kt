@@ -441,6 +441,59 @@ fun ConnectionsListView(
         }
     }
 
+    val activeOneToOneChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats
+            .filter {
+                it.groupClique == null &&
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+            }
+            .sortedByDescending { connectionListActivityTs(it) }
+    }
+
+    val chatListRefreshEpoch by AppDataManager.chatListRefreshEpoch.collectAsState()
+    LaunchedEffect(chatListRefreshEpoch) {
+        if (chatListRefreshEpoch > 0) {
+            viewModel.loadChats(isForced = true)
+        }
+    }
+
+    var cliqueAddableMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var cliqueCreateGraphOk by remember { mutableStateOf(false) }
+
+    LaunchedEffect(
+        cliqueSheetVisible,
+        selectedCliqueFriendIds,
+        currentUserId,
+        activeOneToOneChats,
+    ) {
+        val uid = currentUserId
+        if (!cliqueSheetVisible || uid.isNullOrBlank()) {
+            cliqueAddableMask = emptyMap()
+            cliqueCreateGraphOk = false
+            return@LaunchedEffect
+        }
+        val others = activeOneToOneChats.map { it.otherUser.id }
+        val mask = linkedMapOf<String, Boolean>()
+        for (oid in others) {
+            val ok = if (oid in selectedCliqueFriendIds) {
+                true
+            } else {
+                viewModel.memberSetSatisfiesVerifiedCliqueGraph(
+                    (listOf(uid) + selectedCliqueFriendIds + oid).distinct().sorted(),
+                )
+            }
+            mask[oid] = ok
+        }
+        cliqueAddableMask = mask
+        cliqueCreateGraphOk = if (selectedCliqueFriendIds.isEmpty()) {
+            false
+        } else {
+            viewModel.memberSetSatisfiesVerifiedCliqueGraph(
+                (listOf(uid) + selectedCliqueFriendIds).distinct().sorted(),
+            )
+        }
+    }
+
     // Show nudge feedback
     LaunchedEffect(nudgeResult) {
         val result = nudgeResult
@@ -778,20 +831,16 @@ fun ConnectionsListView(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 88.dp),
+                .padding(end = 20.dp, bottom = 76.dp),
             containerColor = PrimaryBlue,
             contentColor = Color.White,
         ) {
-            Icon(Icons.Filled.Groups, contentDescription = "Create verified clique")
+            Icon(Icons.Filled.Groups, contentDescription = "Create verified click")
         }
     }
 
     val uidForClique = currentUserId
     if (cliqueSheetVisible && uidForClique != null) {
-        val activeOneToOne = effectiveChats.filter {
-            it.groupClique == null &&
-                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-        }.sortedByDescending { connectionListActivityTs(it) }
         ModalBottomSheet(
             onDismissRequest = { cliqueSheetVisible = false },
             sheetState = cliqueSheetState,
@@ -803,18 +852,18 @@ fun ConnectionsListView(
                     .padding(bottom = 24.dp),
             ) {
                 Text(
-                    text = "Create verified clique",
+                    text = "Create verified click",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Pick friends who are pairwise connected with you and with each other (active or kept).",
+                    text = "Pick friends who are pairwise connected (active or kept). Friend–friend edges are checked on the server.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                if (activeOneToOne.isEmpty()) {
+                if (activeOneToOneChats.isEmpty()) {
                     Text(
                         text = "No active 1:1 connections yet.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -826,19 +875,13 @@ fun ConnectionsListView(
                             .heightIn(max = 360.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        items(activeOneToOne, key = { it.connection.id }) { chatDetails ->
+                        items(activeOneToOneChats, key = { it.connection.id }) { chatDetails ->
                             val friendId = chatDetails.otherUser.id
                             val checked = friendId in selectedCliqueFriendIds
                             val canSelect = if (checked) {
                                 true
                             } else {
-                                canToggleFriendIntoCliqueSelection(
-                                    selectedCliqueFriendIds,
-                                    friendId,
-                                    adding = true,
-                                    selfId = uidForClique,
-                                    connections = cachedConnections,
-                                )
+                                cliqueAddableMask[friendId] == true
                             }
                             Row(
                                 modifier = Modifier
@@ -909,8 +952,7 @@ fun ConnectionsListView(
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                val canCreate = selectedCliqueFriendIds.isNotEmpty() &&
-                    isFullyConnectedFriendClique(selectedCliqueFriendIds, uidForClique, cachedConnections)
+                val canCreate = selectedCliqueFriendIds.isNotEmpty() && cliqueCreateGraphOk
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -926,14 +968,14 @@ fun ConnectionsListView(
                                 result.onSuccess {
                                     cliqueSheetVisible = false
                                     listScope.launch {
-                                        snackbarHostState.showSnackbar("Clique created")
+                                        snackbarHostState.showSnackbar("Click created")
                                     }
                                 }
                                 result.onFailure { e ->
                                     listScope.launch {
                                         snackbarHostState.showSnackbar(
                                             e.message?.takeIf { it.isNotBlank() }
-                                                ?: "Couldn’t create clique",
+                                                ?: "Couldn’t create click",
                                         )
                                     }
                                 }
@@ -992,43 +1034,6 @@ fun ConnectionsListView(
         )
     }
     } // End outer Box
-}
-
-private fun connectionPairActive(a: String, b: String, connections: List<Connection>): Boolean =
-    connections.any { c ->
-        c.user_ids.size == 2 &&
-            c.user_ids.contains(a) &&
-            c.user_ids.contains(b) &&
-            c.normalizedConnectionStatus() in setOf("active", "kept")
-    }
-
-/** True when every pair in [friendIds] ∪ {selfId} has an active or kept 1:1 connection. */
-private fun isFullyConnectedFriendClique(
-    friendIds: Set<String>,
-    selfId: String,
-    connections: List<Connection>,
-): Boolean {
-    if (friendIds.isEmpty()) return false
-    val all = friendIds + selfId
-    val list = all.toList()
-    for (i in list.indices) {
-        for (j in i + 1 until list.size) {
-            if (!connectionPairActive(list[i], list[j], connections)) return false
-        }
-    }
-    return true
-}
-
-private fun canToggleFriendIntoCliqueSelection(
-    selected: Set<String>,
-    friendId: String,
-    adding: Boolean,
-    selfId: String,
-    connections: List<Connection>,
-): Boolean {
-    if (!adding) return true
-    val next = selected + friendId
-    return isFullyConnectedFriendClique(next, selfId, connections)
 }
 
 private fun connectionHasNoGeo(connection: Connection): Boolean {

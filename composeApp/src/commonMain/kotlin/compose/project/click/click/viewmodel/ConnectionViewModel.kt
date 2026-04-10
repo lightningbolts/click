@@ -14,6 +14,9 @@ import compose.project.click.click.data.models.UserProfile // pragma: allowlist 
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
@@ -360,6 +363,27 @@ class ConnectionViewModel : ViewModel() {
                 }
                 if (!connections.any { it.isPendingSync() }) {
                     AppDataManager.refresh(force = true)
+                }
+                val selfId = AppDataManager.currentUser.value?.id
+                if (selfId != null && targetProfiles.size >= 1) {
+                    val memberUserIds = (listOf(selfId) + targetProfiles.map { it.id }).distinct().sorted()
+                    if (memberUserIds.size >= 2) {
+                        val chatRepo = SupabaseChatRepository(tokenStorage = createTokenStorage())
+                        val auto = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
+                            chatRepository = chatRepo,
+                            connections = AppDataManager.connections.value,
+                            currentUserId = selfId,
+                            memberUserIds = memberUserIds,
+                        )
+                        val created = auto.getOrNull()
+                        if (created != null) {
+                            val chatId = chatRepo.resolveChatIdForGroupId(created.groupId)
+                            if (chatId != null) {
+                                chatRepo.cacheGroupMasterKey(chatId, created.masterKey32)
+                            }
+                            AppDataManager.bumpChatListRefresh()
+                        }
+                    }
                 }
                 val primary = connections.first()
                 val summaryUser = syntheticUserForProximitySuccess(targetProfiles)

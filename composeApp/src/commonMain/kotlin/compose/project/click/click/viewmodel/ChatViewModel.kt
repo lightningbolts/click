@@ -18,6 +18,7 @@ import compose.project.click.click.data.models.isActiveForUser // pragma: allowl
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
+import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -451,7 +452,7 @@ class ChatViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                println("ChatViewModel: global message list realtime unavailable: ${e.message}")
+                println("ChatViewModel: global message list realtime unavailable: ${e.redactedRestMessage()}")
             } finally {
                 runCatching { sub?.detach() }
             }
@@ -466,6 +467,9 @@ class ChatViewModel(
         if (!isForced && _chatListState.value is ChatListState.Success) return
         
         viewModelScope.launch {
+            if (isForced) {
+                chatRepository.clearChatListLocalCaches()
+            }
             val cachedConnections = AppDataManager.connections.value
             val cachedUsers = AppDataManager.connectedUsers.value
 
@@ -553,7 +557,9 @@ class ChatViewModel(
             } catch (e: Exception) {
                 // Only show error if we don't have cached data
                 if (cachedConnections.isEmpty()) {
-                    _chatListState.value = ChatListState.Error(e.message ?: "Failed to load chats")
+                    _chatListState.value = ChatListState.Error(
+                        e.redactedRestMessage().ifBlank { "Failed to load chats" },
+                    )
                 }
                 // Otherwise keep showing cached data
             }
@@ -1900,8 +1906,13 @@ class ChatViewModel(
     }
 
     /**
-     * Creates a verified clique with [selectedFriendUserIds] (excluding self; self is added server-side via RPC list).
-     * Wraps a fresh 32-byte group key for each member using 1:1 channel keys (creator ↔ anchor for creator row).
+     * True when the unordered member set (including caller) forms a fully connected graph on the server.
+     */
+    suspend fun memberSetSatisfiesVerifiedCliqueGraph(memberUserIds: List<String>): Boolean =
+        chatRepository.verifiedCliqueEdgesExist(memberUserIds)
+
+    /**
+     * Creates a verified group chat ("click") with [selectedFriendUserIds] (excluding self; self is merged in).
      */
     fun createVerifiedClique(
         selectedFriendUserIds: List<String>,
@@ -1918,46 +1929,25 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             try {
-                val master = MessageCrypto.generateGroupMasterKey()
-                val b64 = MessageCrypto.encodeGroupMasterKeyBase64(master)
-                val creator = userId
-                val anchor = members.first { it != creator }
-                val encrypted = mutableMapOf<String, String>()
-                for (m in members) {
-                    val wrapPeer = if (m == creator) anchor else creator
-                    val connId = findActiveConnectionIdForClique(m, wrapPeer) ?: run {
-                        onResult(Result.failure(IllegalStateException("Missing verified connection for a member")))
-                        return@launch
-                    }
-                    val keys = MessageCrypto.deriveKeysForConnection(
-                        connId,
-                        listOf(m, wrapPeer).sorted(),
-                    )
-                    encrypted[m] = MessageCrypto.encryptContent(b64, keys)
-                }
-                val rpc = chatRepository.createVerifiedClique(members, encrypted)
-                val groupId = rpc.getOrNull()
-                if (groupId != null) {
-                    val chatId = chatRepository.resolveChatIdForGroupId(groupId)
+                val rpc = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
+                    chatRepository = chatRepository,
+                    connections = AppDataManager.connections.value,
+                    currentUserId = userId,
+                    memberUserIds = members,
+                )
+                val payload = rpc.getOrNull()
+                if (payload != null) {
+                    val chatId = chatRepository.resolveChatIdForGroupId(payload.groupId)
                     if (chatId != null) {
-                        chatRepository.cacheGroupMasterKey(chatId, master)
+                        chatRepository.cacheGroupMasterKey(chatId, payload.masterKey32)
                     }
                     loadChats(isForced = true)
                 }
-                onResult(rpc)
+                onResult(rpc.map { it.groupId })
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }
         }
-    }
-
-    private fun findActiveConnectionIdForClique(a: String, b: String): String? {
-        return AppDataManager.connections.value.firstOrNull { c ->
-            c.user_ids.size == 2 &&
-                c.user_ids.contains(a) &&
-                c.user_ids.contains(b) &&
-                c.normalizedConnectionStatus() in setOf("active", "kept")
-        }?.id
     }
 
     // ==================== Message Edit / Delete ====================

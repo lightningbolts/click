@@ -2,10 +2,12 @@ package compose.project.click.click.utils
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -42,6 +44,9 @@ actual class LocationService {
 
     actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? {
         if (timeoutMs <= 0L) return null
+        if (!withContext(Dispatchers.Default) { CLLocationManager.locationServicesEnabled() }) {
+            return null
+        }
         return fetchMutex.withLock {
             coroutineScope {
                 suspendCancellableCoroutine { continuation ->
@@ -65,11 +70,6 @@ actual class LocationService {
                                 continuation.resume(result)
                             }
                         }
-                    }
-
-                    if (!CLLocationManager.locationServicesEnabled()) {
-                        finishOnMain(null)
-                        return@suspendCancellableCoroutine
                     }
 
                     if (!hasLocationPermission()) {
@@ -125,6 +125,9 @@ actual class LocationService {
     }
 
     actual suspend fun getCurrentLocation(): LocationResult? {
+        if (!withContext(Dispatchers.Default) { CLLocationManager.locationServicesEnabled() }) {
+            return null
+        }
         return fetchMutex.withLock {
             withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
                 suspendCancellableCoroutine { continuation ->
@@ -149,11 +152,6 @@ actual class LocationService {
                                 continuation.resume(result)
                             }
                         }
-                    }
-
-                    if (!CLLocationManager.locationServicesEnabled()) {
-                        finishOnMain(null)
-                        return@suspendCancellableCoroutine
                     }
 
                     if (!hasLocationPermission()) {
@@ -206,9 +204,6 @@ actual class LocationService {
      * Always query the system — never a stale client-side cache or UserDefaults mirror.
      */
     actual fun hasLocationPermission(): Boolean {
-        if (!CLLocationManager.locationServicesEnabled()) {
-            return false
-        }
         IosLocationAuthorizationTracker.ensureStarted()
         return IosLocationAuthorizationTracker.hasWhenInUseOrAlways()
     }

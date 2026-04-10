@@ -170,6 +170,10 @@ class FakeChatRepository(
         encryptedKeysByUserId: Map<String, String>,
     ): Result<String> = Result.failure(UnsupportedOperationException())
 
+    override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean = true
+
+    override fun clearChatListLocalCaches() {}
+
     override suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> =
         null to emptyList()
 
