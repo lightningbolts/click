@@ -165,7 +165,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import coil3.compose.AsyncImage
 import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
@@ -187,6 +186,7 @@ fun ConnectionsScreen(
     val screenScope = rememberCoroutineScope()
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
     var profileUserId by remember { mutableStateOf<String?>(null) }
+    var groupMemberPickerUsers by remember { mutableStateOf<List<User>?>(null) }
 
     fun finalizeChatClose() {
         viewModel.leaveChatRoom()
@@ -262,7 +262,8 @@ fun ConnectionsScreen(
                 searchQuery = searchQuery,
                 onChatSelected = { chatId -> openChat(chatId) },
                 onNavigateToLocationSettings = onNavigateToLocationSettings,
-                onUserProfileClick = { profileUserId = it }
+                onUserProfileClick = { profileUserId = it },
+                onGroupMembersPicker = { groupMemberPickerUsers = it },
             )
 
             // Sits under the chat overlay; any pointer that misses the overlay (Compose "holes")
@@ -320,7 +321,8 @@ fun ConnectionsScreen(
                                 viewModel = viewModel,
                                 chatId = activeChatId,
                                 onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
-                                onOpenUserProfile = { profileUserId = it }
+                                onOpenUserProfile = { profileUserId = it },
+                                onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
                             )
                         }
                     )
@@ -351,14 +353,16 @@ fun ConnectionsScreen(
                     searchQuery = searchQuery,
                     onChatSelected = { chatId -> openChat(chatId) },
                     onNavigateToLocationSettings = onNavigateToLocationSettings,
-                    onUserProfileClick = { profileUserId = it }
+                    onUserProfileClick = { profileUserId = it },
+                    onGroupMembersPicker = { groupMemberPickerUsers = it },
                 )
             } else {
                 ChatView(
                     viewModel = viewModel,
                     chatId = activeChatId,
                     onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
-                    onOpenUserProfile = { profileUserId = it }
+                    onOpenUserProfile = { profileUserId = it },
+                    onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
                 )
             }
         }
@@ -368,6 +372,16 @@ fun ConnectionsScreen(
         viewerUserId = userId,
         onDismiss = { profileUserId = null }
     )
+    if (groupMemberPickerUsers != null) {
+        GroupMembersPickerSheet(
+            members = groupMemberPickerUsers!!,
+            onDismiss = { groupMemberPickerUsers = null },
+            onMemberClick = { id ->
+                groupMemberPickerUsers = null
+                profileUserId = id
+            },
+        )
+    }
     }
 }
 
@@ -392,6 +406,7 @@ fun ConnectionsListView(
     onChatSelected: (String) -> Unit,
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onUserProfileClick: (String) -> Unit = {},
+    onGroupMembersPicker: (List<User>) -> Unit = {},
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
@@ -826,6 +841,7 @@ fun ConnectionsListView(
                                             onUserProfileClick(chatDetails.otherUser.id)
                                         }
                                     },
+                                    onGroupMembersPicker = onGroupMembersPicker,
                                     onClick = {
                                         onChatSelected(
                                             chatDetails.chat.id ?: chatDetails.connection.id,
@@ -1150,6 +1166,107 @@ private fun LocationGapNudge(
     }
 }
 
+private fun orderedGroupMembersForPicker(chatDetails: ChatWithDetails): List<User> {
+    val gc = chatDetails.groupClique ?: return emptyList()
+    val self = AppDataManager.currentUser.value
+    val byId = (chatDetails.groupMemberUsers + listOfNotNull(self))
+        .distinctBy { it.id }
+        .associateBy { it.id }
+    return gc.memberUserIds.sorted().map { id ->
+        byId[id] ?: User(id = id, name = "Member", createdAt = 0L)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupMembersPickerSheet(
+    members: List<User>,
+    onDismiss: () -> Unit,
+    onMemberClick: (String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    fun dismissSheet() {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
+    val scroll = rememberScrollState()
+    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = surface,
+        contentColor = onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .padding(bottom = 28.dp),
+        ) {
+            Text(
+                text = "People in this click",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = onSurface,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            Text(
+                text = "Tap someone to open their profile.",
+                style = MaterialTheme.typography.bodySmall,
+                color = onVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 0.dp),
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+            )
+            members.forEach { user ->
+                val label = user.name?.trim()?.ifBlank { null } ?: "Member"
+                ListItem(
+                    headlineContent = {
+                        Text(label, color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (!user.image.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = user.image,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape),
+                                )
+                            } else {
+                                Text(
+                                    text = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = onVariant,
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.clickable {
+                        onMemberClick(user.id)
+                        dismissSheet()
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun GroupChatListAvatarStack(memberUsers: List<User>, avatarSize: Dp = 44.dp) {
     val profiles = memberUsers.map { it.toUserProfile() }
@@ -1237,6 +1354,7 @@ fun ConnectionItem(
     chatDetails: ChatWithDetails,
     showOnlineIndicator: Boolean = false,
     onAvatarClick: () -> Unit = {},
+    onGroupMembersPicker: (List<User>) -> Unit = {},
     onClick: () -> Unit,
     onNudge: () -> Unit = {},
     onOpenMenu: () -> Unit = {},
@@ -1278,10 +1396,16 @@ fun ConnectionItem(
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Avatar (stacked for verified clicks)
+        // Avatar (stacked for verified clicks) — tap opens member picker → profiles
         if (isGroup) {
             Box(
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier
+                    .size(44.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = false, radius = 24.dp),
+                        onClick = { onGroupMembersPicker(orderedGroupMembersForPicker(chatDetails)) },
+                    ),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 if (chatDetails.groupMemberUsers.isEmpty()) {
@@ -1471,6 +1595,7 @@ fun ChatView(
     chatId: String,
     onBackPressed: () -> Unit,
     onOpenUserProfile: (String) -> Unit = {},
+    onOpenGroupMembersPicker: (List<User>) -> Unit = {},
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val messageInput by viewModel.messageInput.collectAsState()
@@ -1665,7 +1790,17 @@ fun ChatView(
 
                                 if (isGroupChat) {
                                     Box(
-                                        modifier = Modifier.size(40.dp),
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = ripple(bounded = false, radius = 22.dp),
+                                                onClick = {
+                                                    onOpenGroupMembersPicker(
+                                                        orderedGroupMembersForPicker(chatDetails),
+                                                    )
+                                                },
+                                            ),
                                         contentAlignment = Alignment.CenterStart,
                                     ) {
                                         GroupChatListAvatarStack(
