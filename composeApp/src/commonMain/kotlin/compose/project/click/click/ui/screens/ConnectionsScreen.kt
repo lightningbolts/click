@@ -145,6 +145,10 @@ import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.util.firstIntentOverlapLabel // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
+import kotlinx.coroutines.withContext // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
@@ -844,6 +848,7 @@ fun ConnectionsListView(
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 ConnectionItem(
                                     chatDetails = chatDetails,
+                                    viewerUserId = currentUserId,
                                     showOnlineIndicator = chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,
                                     onAvatarClick = {
@@ -1165,7 +1170,7 @@ fun ConnectionsListView(
 }
 
 private fun connectionHasNoGeo(connection: Connection): Boolean {
-    val g = connection.geo_location
+    val g = connection.connectionMapGeo() ?: return true
     return !g.lat.isFinite() || !g.lon.isFinite() || (g.lat == 0.0 && g.lon == 0.0)
 }
 
@@ -1388,6 +1393,7 @@ private fun GroupChatListAvatarStack(memberUsers: List<User>, avatarSize: Dp = 4
 @Composable
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
+    viewerUserId: String? = null,
     showOnlineIndicator: Boolean = false,
     onAvatarClick: () -> Unit = {},
     onGroupMembersPicker: (List<User>) -> Unit = {},
@@ -1414,6 +1420,24 @@ fun ConnectionItem(
     val previewNeedsRefresh = connection.last_message_at?.let { latestAt ->
         lastMessage == null || lastMessage.timeCreated < latestAt
     } ?: false
+
+    var intentOverlapLabel by remember(chatDetails.otherUser.id, viewerUserId) {
+        mutableStateOf<String?>(null)
+    }
+    val overlapRepo = remember { SupabaseRepository() }
+    LaunchedEffect(chatDetails.otherUser.id, viewerUserId, isGroup) {
+        if (isGroup || viewerUserId.isNullOrBlank()) {
+            intentOverlapLabel = null
+            return@LaunchedEffect
+        }
+        val v = viewerUserId
+        val peerId = chatDetails.otherUser.id
+        intentOverlapLabel = withContext(Dispatchers.Default) {
+            val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
+            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peerId)
+            firstIntentOverlapLabel(mine, theirs)
+        }
+    }
 
     val rowTapModifier = if (isIOS) {
         Modifier.clickable(onClick = onClick)
@@ -1504,15 +1528,29 @@ fun ConnectionItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    headline,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                Row(
                     modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        headline,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!isGroup && intentOverlapLabel != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            Icons.Filled.Bolt,
+                            contentDescription = "Shared availability",
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
                 Text(
                     timeText,
                     style = MaterialTheme.typography.labelSmall,
@@ -1770,6 +1808,26 @@ fun ChatView(
                     val messages = state.messages
                     val reactionsMap by viewModel.messageReactions.collectAsState()
                     val isGroupChat = chatDetails.groupClique != null
+                    val overlapRepo = remember { SupabaseRepository() }
+                    var chatIntentOverlap by remember(chatDetails.otherUser.id, currentUserId) {
+                        mutableStateOf<String?>(null)
+                    }
+                    LaunchedEffect(chatDetails.otherUser.id, currentUserId, isGroupChat) {
+                        if (isGroupChat) {
+                            chatIntentOverlap = null
+                            return@LaunchedEffect
+                        }
+                        val v = currentUserId ?: run {
+                            chatIntentOverlap = null
+                            return@LaunchedEffect
+                        }
+                        val peer = chatDetails.otherUser.id
+                        chatIntentOverlap = withContext(Dispatchers.Default) {
+                            val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
+                            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
+                            firstIntentOverlapLabel(mine, theirs)
+                        }
+                    }
                     val typingPeerLabel = remember(chatDetails.otherUser.name, isGroupChat) {
                         if (isGroupChat) "Someone is typing"
                         else "${chatDetails.otherUser.name ?: "Someone"} is typing"
@@ -1938,6 +1996,16 @@ fun ChatView(
                                             }
                                         }
                                     }
+                                }
+
+                                if (!isGroupChat && chatIntentOverlap != null) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Filled.Bolt,
+                                        contentDescription = "Shared availability",
+                                        tint = Color(0xFFFBBF24),
+                                        modifier = Modifier.size(22.dp),
+                                    )
                                 }
 
                                 if (isGroupChat) {

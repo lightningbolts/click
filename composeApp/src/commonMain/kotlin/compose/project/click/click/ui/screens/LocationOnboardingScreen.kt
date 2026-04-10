@@ -184,12 +184,12 @@ fun LocationOnboardingMapPreview() {
     val validPins = connections
         .filter { conn ->
             conn.isInActiveConnectionsChannel() &&
-                conn.geo_location.let { g ->
+                conn.connectionMapGeo()?.let { g ->
                     g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
-                }
+                } == true
         }
         .take(12)
-        .map { c -> c.geo_location }
+        .mapNotNull { c -> c.connectionMapGeo() }
     val density = LocalDensity.current
     val r1 = with(density) { 12.dp.toPx() }
     val r2 = with(density) { 10.dp.toPx() }

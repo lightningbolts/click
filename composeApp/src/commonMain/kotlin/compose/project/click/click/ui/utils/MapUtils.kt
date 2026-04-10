@@ -144,15 +144,14 @@ fun getOpacityForTimeState(timeState: TimeState): Float {
  * Converts a Connection to a ConnectionMapPoint with visual metadata
  */
 fun Connection.toMapPoint(): ConnectionMapPoint {
-    val lat = geo_location.lat
-    val lon = geo_location.lon
-    if (!lat.isFinite() || !lon.isFinite() || (lat == 0.0 && lon == 0.0)) {
-        throw IllegalArgumentException("Invalid geo_location for connection $id")
-    }
+    val geo = this.connectionMapGeo()
+        ?: throw IllegalArgumentException("Invalid geo for connection $id")
+    val lat = geo.lat
+    val lon = geo.lon
 
     val timeState = calculateTimeState(created)
     
-    val displayName = semantic_location 
+    val displayName = semantic_location
         ?: displayLocationLabel
         ?: "Connection"
     

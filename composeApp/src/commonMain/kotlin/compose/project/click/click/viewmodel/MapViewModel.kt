@@ -193,18 +193,14 @@ class MapViewModel : ViewModel() {
     private fun ensureDefaultCameraTarget(connections: List<Connection>) {
         if (_defaultCameraTarget.value != null) return
 
-        val valid = connections.filter {
-            val lat = it.geo_location.lat
-            val lon = it.geo_location.lon
-            lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)
-        }
+        val valid = connections.mapNotNull { c -> c.connectionMapGeo()?.let { g -> c to g } }
 
         if (valid.isEmpty()) return
 
-        val minLat = valid.minOf { it.geo_location.lat }
-        val maxLat = valid.maxOf { it.geo_location.lat }
-        val minLon = valid.minOf { it.geo_location.lon }
-        val maxLon = valid.maxOf { it.geo_location.lon }
+        val minLat = valid.minOf { it.second.lat }
+        val maxLat = valid.maxOf { it.second.lat }
+        val minLon = valid.minOf { it.second.lon }
+        val maxLon = valid.maxOf { it.second.lon }
 
         val bounds = BoundingBox(minLat = minLat, maxLat = maxLat, minLon = minLon, maxLon = maxLon)
         val targetZoom = calculateZoomForBounds(bounds).coerceIn(2.0, 16.0)
@@ -306,9 +302,8 @@ class MapViewModel : ViewModel() {
             val state = _mapState.value
             if (state !is MapState.Success) return emptyList()
             return state.connections.filter {
-                val lat = it.geo_location.lat
-                val lon = it.geo_location.lon
-                lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)
+                val g = it.connectionMapGeo()
+                g != null && g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
             }
         }
 
@@ -316,13 +311,13 @@ class MapViewModel : ViewModel() {
         val centerLat = center?.latitude ?: run {
             val connections = validConnections()
             if (connections.isNotEmpty()) {
-                connections.map { it.geo_location.lat }.average()
+                connections.mapNotNull { it.connectionMapGeo()?.lat }.average()
             } else return
         }
         val centerLon = center?.longitude ?: run {
             val connections = validConnections()
             if (connections.isNotEmpty()) {
-                connections.map { it.geo_location.lon }.average()
+                connections.mapNotNull { it.connectionMapGeo()?.lon }.average()
             } else return
         }
 

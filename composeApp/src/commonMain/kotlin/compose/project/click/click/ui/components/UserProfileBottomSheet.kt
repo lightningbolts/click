@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -378,6 +380,38 @@ fun UserProfileBottomSheet(
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (conn != null && conn.connectionEncounters.size > 1) {
+                        Text(
+                            text = "You've crossed paths ${conn.connectionEncounters.size} times.",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 220.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            val sorted = conn.connectionEncounters.sortedByDescending { it.encounteredAt }
+                            items(sorted, key = { it.id }) { enc ->
+                                val whenLine = enc.encounteredAtInstant()?.let { ins ->
+                                    val ldt = ins.toLocalDateTime(TimeZone.currentSystemDefault())
+                                    "${ldt.monthNumber}/${ldt.dayOfMonth}/${ldt.year}"
+                                } ?: enc.encounteredAt
+                                val place = enc.locationName?.trim()?.takeIf { it.isNotEmpty() } ?: "—"
+                                val tagLine = enc.contextTags.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+                                Text(
+                                    text = listOfNotNull(whenLine, place, tagLine).joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                         Spacer(modifier = Modifier.height(12.dp))
                     }

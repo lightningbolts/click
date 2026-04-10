@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import io.github.jan.supabase.exceptions.RestException
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
@@ -144,7 +145,15 @@ class SupabaseRepository {
         val user = fetchUserById(targetUserId) ?: return null
         val tags = fetchUserInterests(targetUserId).getOrNull()?.tags.orEmpty()
         val availability = fetchUserAvailability(targetUserId)
-        val profileIntents = fetchProfileAvailabilityIntentBubbles(targetUserId)
+        val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(targetUserId)
+        val fromIntentsTable =
+            if (!viewerUserId.isNullOrBlank() && viewerUserId != targetUserId) {
+                val mutual = fetchSharedConnectionBetween(viewerUserId, targetUserId)
+                if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(targetUserId) else emptyList()
+            } else {
+                emptyList()
+            }
+        val profileIntents = if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
         val shared = viewerUserId?.takeIf { it.isNotBlank() && it != targetUserId }?.let { v ->
             fetchSharedConnectionBetween(v, targetUserId)
         }
@@ -162,9 +171,9 @@ class SupabaseRepository {
     }
 
     /**
-     * Reads [public.users.availability_intents] when the column exists (migration optional).
+     * Reads [public.users.availability_intents] JSON mirror when the column exists (migration optional).
      */
-    private suspend fun fetchProfileAvailabilityIntentBubbles(userId: String): List<ProfileAvailabilityIntentBubble> {
+    suspend fun fetchAvailabilityIntentBubblesFromUsersColumn(userId: String): List<ProfileAvailabilityIntentBubble> {
         if (userId.isBlank()) return emptyList()
         return try {
             @Serializable
@@ -184,8 +193,75 @@ class SupabaseRepository {
                 exp > now
             }
         } catch (e: Exception) {
-            println("fetchProfileAvailabilityIntentBubbles (redacted): ${e.redactedRestMessage()}")
+            println("fetchAvailabilityIntentBubblesFromUsersColumn (redacted): ${e.redactedRestMessage()}")
             emptyList()
+        }
+    }
+
+    /**
+     * Live rows from [public.availability_intents] (RLS: own row + mutual-connection read policy).
+     */
+    suspend fun fetchAvailabilityIntentBubblesFromIntentsTable(targetUserId: String): List<ProfileAvailabilityIntentBubble> {
+        if (targetUserId.isBlank()) return emptyList()
+        return try {
+            val nowIso = Clock.System.now().toString()
+            val rows = supabase.from("availability_intents")
+                .select {
+                    filter {
+                        eq("user_id", targetUserId)
+                        gte("expires_at", nowIso)
+                    }
+                    order("expires_at", Order.ASCENDING)
+                }
+                .decodeList<AvailabilityIntentRow>()
+            rows.mapNotNull { row ->
+                val tag = row.intentTag?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                ProfileAvailabilityIntentBubble(
+                    intentTag = tag,
+                    timeframe = row.timeframe?.trim().orEmpty(),
+                    expiresAt = row.expiresAt ?: row.endsAt,
+                )
+            }
+        } catch (e: Exception) {
+            println("fetchAvailabilityIntentBubblesFromIntentsTable (redacted): ${e.redactedRestMessage()}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Intent bubbles for [peerUserId] when [viewerUserId] may read them (self or mutual connection).
+     */
+    suspend fun fetchPeerProfileAvailabilityBubbles(
+        viewerUserId: String,
+        peerUserId: String,
+    ): List<ProfileAvailabilityIntentBubble> {
+        if (peerUserId.isBlank()) return emptyList()
+        if (viewerUserId == peerUserId) {
+            val t = fetchAvailabilityIntentBubblesFromIntentsTable(peerUserId)
+            return if (t.isNotEmpty()) t else fetchAvailabilityIntentBubblesFromUsersColumn(peerUserId)
+        }
+        if (fetchSharedConnectionBetween(viewerUserId, peerUserId) == null) return emptyList()
+        val t = fetchAvailabilityIntentBubblesFromIntentsTable(peerUserId)
+        return if (t.isNotEmpty()) t else fetchAvailabilityIntentBubblesFromUsersColumn(peerUserId)
+    }
+
+    private suspend fun attachConnectionEncounters(rows: List<Connection>): List<Connection> {
+        if (rows.isEmpty()) return rows
+        val ids = rows.map { it.id }.distinct()
+        return try {
+            val enc = supabase.from("connection_encounters")
+                .select {
+                    filter {
+                        isIn("connection_id", ids)
+                    }
+                    order("encountered_at", Order.ASCENDING)
+                }
+                .decodeList<ConnectionEncounter>()
+            val byConn = enc.groupBy { it.connectionId }
+            rows.map { c -> c.copy(connectionEncounters = byConn[c.id].orEmpty()) }
+        } catch (e: Exception) {
+            println("attachConnectionEncounters (redacted): ${e.redactedRestMessage()}")
+            rows
         }
     }
 
@@ -206,9 +282,10 @@ class SupabaseRepository {
                 }
                 .decodeList<Connection>()
                 .filter { it.isVisibleInActiveUi() && it.id !in hidden }
-            rows.maxByOrNull { conn ->
+            val best = rows.maxByOrNull { conn ->
                 (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
             }
+            best?.let { attachConnectionEncounters(listOf(it)).firstOrNull() }
         } catch (e: Exception) {
             println("Error fetchSharedConnectionBetween (redacted): ${e.redactedRestMessage()}")
             null
@@ -266,6 +343,7 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
+                .let { attachConnectionEncounters(it) }
         } catch (e: Exception) {
             println("fetchActiveChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
@@ -289,6 +367,7 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                 }
                 .decodeList<Connection>()
+                .let { attachConnectionEncounters(it) }
         } catch (e: Exception) {
             println("fetchArchivedChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
@@ -320,7 +399,7 @@ class SupabaseRepository {
                     }
                 }
                 .decodeList<Connection>()
-            connections.firstOrNull()
+            connections.firstOrNull()?.let { attachConnectionEncounters(listOf(it)).firstOrNull() }
         } catch (e: Exception) {
             println("Error fetching connection (redacted): ${e.redactedRestMessage()}")
             null

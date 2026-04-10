@@ -65,7 +65,8 @@ private fun structuredAddressFromFull(m: Map<String, String>?): String? {
 }
 
 fun Connection.profilePlaceLine(): String? {
-    val sem = semantic_location?.trim()?.takeIf { it.isNotEmpty() }
+    val sem = originEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
     val fromFull = structuredAddressFromFull(full_location)
     return when {
         sem != null && fromFull != null && sem != fromFull -> sem
@@ -82,7 +83,9 @@ fun Connection.profileAddressDetailLine(): String? {
 }
 
 fun Connection.profileWhenLine(): String? {
-    val instant: Instant? = createdUtc?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
+    val instant: Instant? = originEncounter()?.encounteredAt?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
+        runCatching { Instant.parse(iso) }.getOrNull()
+    } ?: createdUtc?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
         runCatching { Instant.parse(iso) }.getOrNull()
     } ?: if (created > 0L) Instant.fromEpochMilliseconds(created) else null
     instant ?: return null

@@ -28,7 +28,6 @@ data class GeoLocationInsert(
 @Serializable
 data class ConnectionInsert(
     val user_ids: List<String>,
-    val geo_location: GeoLocationInsert,
     val created: Long,
     /** Legacy column retained for API compatibility; do not use for client chat access or UI gating. */
     val expiry: Long,
@@ -36,8 +35,6 @@ data class ConnectionInsert(
     val has_begun: Boolean,
     val expiry_state: String,
     val include_in_business_insights: Boolean = true,
-    @SerialName("context_tag_id")
-    val context_tag_id: String? = null,
     val initiator_id: String? = null,
     val responder_id: String? = null
 )
@@ -326,14 +323,10 @@ data class Connection(
     val timeOfDayUtc: String? = null,
     /** Legacy server timestamp; ignored for client-side chat access (use archive lifecycle / [connection_archives]). */
     val expiry: Long,
-    // Geographic location as lat/lon coordinate pair
-    val geo_location: GeoLocation,
-    // Full JSON object from semantic location lookup (e.g., from Nominatim)
+    /** Legacy: graph edge only — prefer [connectionEncounters] for place / GPS. */
+    val geo_location: GeoLocation? = null,
     val full_location: Map<String, String>? = null,
-    // Display name from the semantic location lookup (e.g., "Red Square")
     val semantic_location: String? = null,
-    @SerialName("context_tag_id")
-    val contextTagId: String? = null,
     @SerialName("initiator_id")
     val initiatorId: String? = null,
     @SerialName("responder_id")
@@ -350,6 +343,11 @@ data class Connection(
     val exactBarometricElevationM: Double? = null,
     @SerialName("weather_condition")
     val weatherCondition: String? = null,
+    @SerialName("context_tag_id")
+    val contextTagId: String? = null,
+    /** Timeline of crossings; populated when selecting `connection_encounters` or merged client-side. */
+    @SerialName("connection_encounters")
+    val connectionEncounters: List<ConnectionEncounter> = emptyList(),
     val user_ids: List<String>,
     val chat: Chat = Chat(),
     val should_continue: List<Boolean> = listOf(false, false),
@@ -379,26 +377,47 @@ data class Connection(
         const val IDLE_ARCHIVE_DURATION_MS = 7L * 24 * 60 * 60 * 1000
     }
 
+    fun originEncounter(): ConnectionEncounter? =
+        connectionEncounters.minByOrNull { it.encounteredAt }
+
+    fun latestEncounter(): ConnectionEncounter? =
+        connectionEncounters.maxByOrNull { it.encounteredAt }
+
+    /** Origin story (oldest crossing) for profile / first-meet copy. */
+    fun originMemoryCapsule(): MemoryCapsule? =
+        originEncounter()?.toMemoryCapsule() ?: memoryCapsule
+
+    /** Newest crossing for “where we last saw each other” surfaces. */
+    fun latestMemoryCapsule(): MemoryCapsule? =
+        latestEncounter()?.toMemoryCapsule() ?: memoryCapsule
+
     val context_tag: String?
-        get() = memoryCapsule?.contextTag?.label ?: contextTagId
+        get() = originMemoryCapsule()?.contextTag?.label
+            ?: contextTagId
+            ?: originEncounter()?.contextTags?.firstOrNull()
 
     val resolvedNoiseLevel: String?
-        get() = noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
+        get() = originEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
 
     val resolvedExactNoiseLevelDb: Double?
         get() = exactNoiseLevelDb ?: memoryCapsule?.exactNoiseLevelDb
 
     val resolvedHeightCategory: String?
-        get() = heightCategory ?: memoryCapsule?.heightCategory?.name
+        get() = originEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
+            ?: heightCategory ?: memoryCapsule?.heightCategory?.name
 
     val resolvedExactBarometricElevationM: Double?
         get() = exactBarometricElevationM ?: memoryCapsule?.exactBarometricElevationMeters
 
     val resolvedWeatherCondition: String?
-        get() = weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition
+        get() = originEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
+            ?: weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition
 
     val displayLocationLabel: String?
-        get() = context_tag ?: semantic_location
+        get() = context_tag
+            ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: semantic_location
 
     /** Resolved status when [status] column is missing (legacy rows). */
     fun normalizedConnectionStatus(): String {
@@ -486,6 +505,27 @@ data class Connection(
      */
     fun getUserIndex(userId: String): Int? {
         return user_ids.indexOf(userId).takeIf { it >= 0 }
+    }
+
+    /** Map-ready coordinates: legacy [geo_location], then latest encounter GPS. */
+    fun connectionMapGeo(): GeoLocation? {
+        val direct = geo_location
+        if (direct != null && direct.lat.isFinite() && direct.lon.isFinite() &&
+            !(direct.lat == 0.0 && direct.lon == 0.0)
+        ) {
+            return direct
+        }
+        val e = latestEncounter() ?: originEncounter()
+        val la = e?.gpsLat
+        val lo = e?.gpsLon
+        if (la != null && lo != null && la.isFinite() && lo.isFinite() &&
+            !(la == 0.0 && lo == 0.0)
+        ) {
+            return GeoLocation(lat = la, lon = lo)
+        }
+        return latestMemoryCapsule()?.geoLocation?.takeIf { g ->
+            g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
+        }
     }
 }
 

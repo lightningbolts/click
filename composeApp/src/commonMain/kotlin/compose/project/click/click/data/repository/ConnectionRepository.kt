@@ -11,10 +11,11 @@ import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.PendingConnectionDraft
 import compose.project.click.click.data.models.deriveHeightCategory
-import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.HeightCategory
+import compose.project.click.click.data.models.ConnectionEncounter
 import compose.project.click.click.data.models.MemoryCapsule
+import compose.project.click.click.data.models.WeatherSnapshot
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.newPendingConnectionId
 import compose.project.click.click.data.models.PollPairSuggestion
@@ -24,8 +25,10 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -38,6 +41,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerializationException
@@ -96,6 +100,9 @@ class ConnectionRepository(
     private val weatherService: WeatherService = OpenMeteoWeatherService(),
     private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
+    @Serializable
+    private data class EncounterIdOnlyRow(val id: String)
+
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
@@ -165,9 +172,65 @@ class ConnectionRepository(
         }
     }
 
+    private suspend fun bumpChatUpdatedAt(connectionId: String, atMs: Long) {
+        try {
+            supabase.from("chats")
+                .update(buildJsonObject { put("updated_at", atMs) }) {
+                    filter { eq("connection_id", connectionId) }
+                }
+        } catch (_: Exception) {
+            // Non-fatal
+        }
+    }
+
+    private suspend fun insertConnectionEncounter(
+        connectionId: String,
+        encounteredAtMs: Long,
+        locationName: String?,
+        lat: Double?,
+        lon: Double?,
+        weather: WeatherSnapshot?,
+        contextTags: List<String>,
+        noiseLevel: String?,
+        elevationCategory: String?,
+    ) {
+        val payload = buildJsonObject {
+            put("connection_id", connectionId)
+            put("encountered_at", Instant.fromEpochMilliseconds(encounteredAtMs).toString())
+            locationName?.trim()?.takeIf { it.isNotEmpty() }?.let { put("location_name", it) }
+            if (lat != null && lon != null && lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)) {
+                put("gps_lat", lat)
+                put("gps_lon", lon)
+            }
+            if (weather != null) {
+                put("weather_snapshot", json.encodeToJsonElement(WeatherSnapshot.serializer(), weather))
+            }
+            noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let { put("noise_level", it) }
+            elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { put("elevation_category", it) }
+            put("context_tags", JsonArray(contextTags.map { JsonPrimitive(it) }))
+        }
+        try {
+            supabase.from("connection_encounters").insert(payload)
+        } catch (e: RestException) {
+            val msg = e.message ?: e.toString()
+            if (msg.contains("encounter_rate_limit_3h", ignoreCase = true)) {
+                bumpChatUpdatedAt(connectionId, encounteredAtMs)
+            } else {
+                throw e
+            }
+        } catch (e: Exception) {
+            val msg = e.message ?: ""
+            if (msg.contains("encounter_rate_limit_3h", ignoreCase = true)) {
+                bumpChatUpdatedAt(connectionId, encounteredAtMs)
+            } else {
+                throw e
+            }
+        }
+    }
+
     /**
-     * Persists subjective encounter context (and optional noise / barometric enrichment) on an
-     * existing connection row — used after proximity connections are created, including N-way fan-out.
+     * Persists subjective encounter context on the **latest** [connection_encounters] row
+     * (proximity fan-out / tag sheet after a crossing).
      */
     suspend fun updateConnectionTags(
         connectionId: String,
@@ -181,47 +244,27 @@ class ConnectionRepository(
             return Result.failure(Exception("Missing connection id"))
         }
         return try {
-            val existing = fetchConnectionById(connectionId)
-                ?: return Result.failure(Exception("Connection not found"))
+            fetchConnectionById(connectionId) ?: return Result.failure(Exception("Connection not found"))
             val normalizedContextTag = normalizeContextTag(contextTagObject = contextTag, contextTag = null)
-            val contextTagId = resolveContextTagId(normalizedContextTag)
-            val geo = existing.geo_location
-            val hasValidGeo = geo.lat.isFinite() && geo.lon.isFinite() &&
-                !(geo.lat == 0.0 && geo.lon == 0.0)
-            val mergedCapsule = when (val prior = existing.memoryCapsule) {
-                null -> MemoryCapsule(
-                    connectionId = existing.id,
-                    locationName = existing.semantic_location,
-                    geoLocation = if (hasValidGeo) GeoLocation(lat = geo.lat, lon = geo.lon) else null,
-                    connectedAtMs = existing.created,
-                    weatherSnapshot = null,
-                    contextTag = normalizedContextTag,
-                    noiseLevelCategory = noiseLevelCategory,
-                    exactNoiseLevelDb = exactNoiseLevelDb,
-                    heightCategory = heightCategory ?: deriveHeightCategory(exactBarometricElevationMeters),
-                    exactBarometricElevationMeters = exactBarometricElevationMeters,
-                )
-                else -> prior.copy(
-                    contextTag = normalizedContextTag ?: prior.contextTag,
-                    noiseLevelCategory = noiseLevelCategory ?: prior.noiseLevelCategory,
-                    exactNoiseLevelDb = exactNoiseLevelDb ?: prior.exactNoiseLevelDb,
-                    heightCategory = heightCategory ?: prior.heightCategory,
-                    exactBarometricElevationMeters = exactBarometricElevationMeters
-                        ?: prior.exactBarometricElevationMeters,
-                )
-            }
-            supabase.from("connections")
+            val latest = supabase.from("connection_encounters")
+                .select {
+                    filter { eq("connection_id", connectionId) }
+                    order("encountered_at", Order.DESCENDING)
+                    limit(1)
+                }
+                .decodeList<EncounterIdOnlyRow>()
+                .firstOrNull() ?: return Result.failure(Exception("No encounter row for connection"))
+
+            val tags = listOfNotNull(normalizedContextTag?.label?.trim()?.takeIf { it.isNotEmpty() })
+                .ifEmpty { listOfNotNull(resolveContextTagId(normalizedContextTag)?.trim()) }
+                .map { JsonPrimitive(it) }
+            supabase.from("connection_encounters")
                 .update(buildJsonObject {
-                    contextTagId?.let { put("context_tag_id", it) }
+                    put("context_tags", JsonArray(tags))
                     noiseLevelCategory?.name?.let { put("noise_level", it) }
-                    exactNoiseLevelDb?.let { put("exact_noise_level_db", it) }
-                    heightCategory?.name?.let { put("height_category", it) }
-                    exactBarometricElevationMeters?.let { put("exact_barometric_elevation_m", it) }
-                    put("memory_capsule", json.encodeToJsonElement(mergedCapsule))
+                    heightCategory?.name?.let { put("elevation_category", it) }
                 }) {
-                    filter {
-                        eq("id", connectionId)
-                    }
+                    filter { eq("id", latest.id) }
                 }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -356,17 +399,6 @@ class ConnectionRepository(
             // The server can reject if it also has the scanner's location.
             val gpsAvailable = loc1Valid
 
-            // Compute geo_location — never default to (0, 0)
-            val geoLocation = if (loc1Valid) {
-                GeoLocationInsert(
-                    lat = request.locationLat!!,
-                    lon = request.locationLng!!
-                )
-            } else {
-                // No GPS — use 0,0 as sentinel (frontend filters these)
-                GeoLocationInsert(lat = 0.0, lon = 0.0)
-            }
-
             // Compute proximity confidence score
             val proximityScore = computeProximityScore(
                 connectionMethod = request.connectionMethod,
@@ -408,14 +440,12 @@ class ConnectionRepository(
 
             val connectionInsert = ConnectionInsert(
                 user_ids = listOf(request.userId1, scannedUserId),
-                geo_location = geoLocation,
                 created = now,
                 expiry = expiry,
                 should_continue = listOf(false, false),
                 has_begun = false,
                 expiry_state = "pending",
                 include_in_business_insights = AppDataManager.locationPreferences.value.includeInInsightsEnabled,
-                context_tag_id = contextTagId,
                 initiator_id = initiatorId,
                 responder_id = responderId
             )
@@ -459,23 +489,7 @@ class ConnectionRepository(
             val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
                 ?: request.heightCategory
 
-            val memoryCapsule = MemoryCapsule(
-                connectionId = result.id,
-                locationName = semanticLocationName,
-                geoLocation = if (loc1Valid) {
-                    GeoLocation(lat = request.locationLat!!, lon = request.locationLng!!)
-                } else {
-                    null
-                },
-                connectedAtMs = now,
-                weatherSnapshot = weatherSnapshot,
-                contextTag = normalizedContextTag,
-                noiseLevelCategory = request.noiseLevelCategory,
-                exactNoiseLevelDb = request.exactNoiseLevelDb,
-                heightCategory = heightCategory,
-                exactBarometricElevationMeters = exactBarometricElevationMeters
-            )
-
+            val contextTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
             try {
                 supabase.from("connections")
                     .update(buildJsonObject {
@@ -485,20 +499,6 @@ class ConnectionRepository(
                         put("flagged", proximityScore < 20)
                         put("created_utc", createdUtc)
                         put("time_of_day_utc", timeOfDayUtc)
-                        contextTagId?.let { put("context_tag_id", it) }
-                        put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
-                        request.noiseLevelCategory?.name?.let { put("noise_level", it) }
-                        request.exactNoiseLevelDb?.let { put("exact_noise_level_db", it) }
-                        heightCategory?.name?.let { put("height_category", it) }
-                        exactBarometricElevationMeters?.let { put("exact_barometric_elevation_m", it) }
-                        weatherSnapshot?.condition?.let { put("weather_condition", it) }
-                        semanticLocationName?.let { put("semantic_location", it) }
-                        fullLocationMap?.let { addressMap ->
-                            put(
-                                "full_location",
-                                JsonObject(addressMap.mapValues { (_, value) -> JsonPrimitive(value) })
-                            )
-                        }
                     }) {
                         filter {
                             eq("id", result.id)
@@ -506,8 +506,21 @@ class ConnectionRepository(
                     }
             } catch (e: Exception) {
                 println("ConnectionRepository: Failed to update connection metadata: ${e.message}")
-                // Non-fatal — connection was created
             }
+
+            runCatching {
+                insertConnectionEncounter(
+                    connectionId = result.id,
+                    encounteredAtMs = now,
+                    locationName = semanticLocationName,
+                    lat = if (loc1Valid) request.locationLat else null,
+                    lon = if (loc1Valid) request.locationLng else null,
+                    weather = weatherSnapshot,
+                    contextTags = contextTags,
+                    noiseLevel = request.noiseLevelCategory?.name,
+                    elevationCategory = heightCategory?.name,
+                )
+            }.onFailure { println("ConnectionRepository: encounter insert: ${it.message}") }
 
             // Create chat row for this connection
             try {
@@ -550,12 +563,6 @@ class ConnectionRepository(
                 request.locationLat.isFinite() && request.locationLng.isFinite() &&
                 !(request.locationLat == 0.0 && request.locationLng == 0.0)
             val gpsAvailable = loc1Valid
-
-            val geoLocation = if (loc1Valid) {
-                GeoLocationInsert(lat = request.locationLat!!, lon = request.locationLng!!)
-            } else {
-                GeoLocationInsert(lat = 0.0, lon = 0.0)
-            }
 
             val proximityScore = computeProximityScore(
                 connectionMethod = request.connectionMethod,
@@ -625,23 +632,6 @@ class ConnectionRepository(
             val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
                 ?: request.heightCategory
 
-            val memoryCapsule = MemoryCapsule(
-                connectionId = existing.id,
-                locationName = semanticLocationName,
-                geoLocation = if (loc1Valid) {
-                    GeoLocation(lat = request.locationLat!!, lon = request.locationLng!!)
-                } else {
-                    null
-                },
-                connectedAtMs = now,
-                weatherSnapshot = weatherSnapshot,
-                contextTag = normalizedContextTag,
-                noiseLevelCategory = request.noiseLevelCategory,
-                exactNoiseLevelDb = request.exactNoiseLevelDb,
-                heightCategory = heightCategory,
-                exactBarometricElevationMeters = exactBarometricElevationMeters,
-            )
-
             val result = supabase.from("connections")
                 .update(buildJsonObject {
                     put("status", "active")
@@ -651,28 +641,13 @@ class ConnectionRepository(
                     put("expiry", expiry)
                     put("created_utc", createdUtc)
                     put("time_of_day_utc", timeOfDayUtc)
-                    put("geo_location", json.encodeToJsonElement(geoLocation))
                     put("proximity_confidence", proximityScore)
                     put("proximity_signals", proximitySignals)
                     put("connection_method", request.connectionMethod)
                     put("flagged", proximityScore < 20)
                     put("include_in_business_insights", AppDataManager.locationPreferences.value.includeInInsightsEnabled)
-                    contextTagId?.let { put("context_tag_id", it) }
                     initiatorId?.let { put("initiator_id", it) }
                     responderId?.let { put("responder_id", it) }
-                    put("memory_capsule", json.encodeToJsonElement(memoryCapsule))
-                    request.noiseLevelCategory?.name?.let { put("noise_level", it) }
-                    request.exactNoiseLevelDb?.let { put("exact_noise_level_db", it) }
-                    heightCategory?.name?.let { put("height_category", it) }
-                    exactBarometricElevationMeters?.let { put("exact_barometric_elevation_m", it) }
-                    weatherSnapshot?.condition?.let { put("weather_condition", it) }
-                    semanticLocationName?.let { put("semantic_location", it) }
-                    fullLocationMap?.let { addressMap ->
-                        put(
-                            "full_location",
-                            JsonObject(addressMap.mapValues { (_, value) -> JsonPrimitive(value) }),
-                        )
-                    }
                 }) {
                     filter {
                         eq("id", existing.id)
@@ -680,6 +655,21 @@ class ConnectionRepository(
                     select()
                 }
                 .decodeSingle<Connection>()
+
+            val restoreTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
+            runCatching {
+                insertConnectionEncounter(
+                    connectionId = result.id,
+                    encounteredAtMs = now,
+                    locationName = semanticLocationName,
+                    lat = if (loc1Valid) request.locationLat else null,
+                    lon = if (loc1Valid) request.locationLng else null,
+                    weather = weatherSnapshot,
+                    contextTags = restoreTags,
+                    noiseLevel = request.noiseLevelCategory?.name,
+                    elevationCategory = heightCategory?.name,
+                )
+            }.onFailure { println("ConnectionRepository: restore encounter insert: ${it.message}") }
 
             try {
                 supabase.from("chats")
