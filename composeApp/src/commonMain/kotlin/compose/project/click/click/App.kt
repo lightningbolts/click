@@ -65,7 +65,7 @@ import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.nfc.rememberNfcManager
+import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
@@ -1005,12 +1005,14 @@ fun App() {
                                             value = tokenStorage.getJwt() ?: ""
                                         }
 
-                                        val nfcManager = rememberNfcManager()
+                                        val proximityManager = rememberProximityManager()
 
                                         NfcScreen(
                                             userId = userId,
                                             authToken = authToken,
-                                            nfcManager = nfcManager,
+                                            httpClient = client,
+                                            proximityManager = proximityManager,
+                                            connectionViewModel = connectionViewModel,
                                             onConnectionCreated = {
                                                 showNfcScreen = false
                                                 navigateTo(NavigationItem.Connections.route)

@@ -263,7 +263,7 @@ data class ConnectionRequest(
     val exactBarometricPressureHpa: Double? = null,
     val contextTag: String? = null, // User-defined tag like "Met at Dawg Daze"
     val contextTagObject: ContextTag? = null,
-    val connectionMethod: String = "qr", // "qr" or "nfc"
+    val connectionMethod: String = "qr", // "qr" | "proximity" | legacy "nfc"
     val tokenAgeMs: Long? = null, // Milliseconds since QR token was created (null for NFC/legacy)
     val qrToken: String? = null,
     val initiatorId: String? = null,

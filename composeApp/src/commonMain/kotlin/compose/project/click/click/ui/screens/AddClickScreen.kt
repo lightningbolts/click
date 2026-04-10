@@ -6,7 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
@@ -50,7 +50,7 @@ fun AddClickScreen(
             Box(modifier = Modifier.padding(top = topInset)) {
                 PageHeader(
                     title = "Add Click",
-                    subtitle = "Connect with QR or NFC, or join a venue community hub",
+                    subtitle = "Connect with QR or Tap to Connect, or join a venue community hub",
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -224,7 +224,7 @@ fun AddClickContent(
             }
         }
 
-        // NFC Section - Full width card matching header width
+        // Tap to Connect (BLE + audio + GPS) — full width card
         AdaptiveCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -239,21 +239,21 @@ fun AddClickContent(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    Icons.Filled.Nfc,
-                    contentDescription = "NFC",
+                    Icons.Filled.BluetoothSearching,
+                    contentDescription = "Tap to Connect",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "Tap to use NFC",
+                    "Tap to Connect",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Hold phones together to connect",
+                    "Nearby handshake with Bluetooth and audio",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

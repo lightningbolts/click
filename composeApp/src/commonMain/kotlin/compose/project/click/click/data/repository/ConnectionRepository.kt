@@ -28,7 +28,13 @@ import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -70,6 +76,20 @@ sealed class ProximityResult {
     data class Error(val message: String) : ProximityResult()
 }
 
+@Serializable
+private data class BindProximityResponse(
+    val matches: List<User> = emptyList(),
+    val error: String? = null,
+)
+
+@Serializable
+private data class BindProximityRequest(
+    @SerialName("my_token") val myToken: String,
+    @SerialName("heard_tokens") val heardTokens: List<String>,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
+
 class ConnectionRepository(
     private val weatherService: WeatherService = OpenMeteoWeatherService(),
     private val tokenStorage: TokenStorage = createTokenStorage()
@@ -96,6 +116,50 @@ class ConnectionRepository(
             contextTag == null -> null
             contextTag.id == "custom" -> contextTag.label
             else -> contextTag.id
+        }
+    }
+
+    /**
+     * Server-side tri-factor clustering: posts ephemeral token + heard tokens + GPS to the
+     * Supabase Edge Function [bind-proximity-connection] and returns matched user profiles.
+     */
+    suspend fun bindProximityHandshake(
+        httpClient: HttpClient,
+        bearerJwt: String,
+        myToken: String,
+        heardTokens: List<String>,
+        latitude: Double?,
+        longitude: Double?,
+    ): Result<List<User>> {
+        return try {
+            val hasGps = latitude != null && longitude != null &&
+                latitude.isFinite() && longitude.isFinite() &&
+                !(latitude == 0.0 && longitude == 0.0)
+            val request = BindProximityRequest(
+                myToken = myToken,
+                heardTokens = heardTokens,
+                latitude = if (hasGps) latitude else null,
+                longitude = if (hasGps) longitude else null,
+            )
+            val response = httpClient.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", SupabaseConfig.supabaseAnonApiKey)
+                    append(HttpHeaders.Authorization, "Bearer $bearerJwt")
+                }
+                setBody(request)
+            }
+            val text = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                return Result.failure(Exception(text.ifBlank { "bind-proximity-connection failed" }))
+            }
+            val parsed = json.decodeFromString(BindProximityResponse.serializer(), text)
+            if (!parsed.error.isNullOrBlank()) {
+                return Result.failure(Exception(parsed.error))
+            }
+            Result.success(parsed.matches)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -267,12 +331,12 @@ class ConnectionRepository(
             val contextTagId = resolveContextTagId(normalizedContextTag)
             val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
                 "qr" -> scannedUserId
-                "nfc" -> if (request.userId1 == scannedUserId) request.userId2 else scannedUserId
+                "nfc", "proximity" -> if (request.userId1 == scannedUserId) request.userId2 else scannedUserId
                 else -> null
             }
             val responderId = request.responderId ?: when (request.connectionMethod) {
                 "qr" -> request.userId1
-                "nfc" -> if (initiatorId == request.userId1) scannedUserId else request.userId1
+                "nfc", "proximity" -> if (initiatorId == request.userId1) scannedUserId else request.userId1
                 else -> null
             }
 
@@ -454,12 +518,12 @@ class ConnectionRepository(
             val contextTagId = resolveContextTagId(normalizedContextTag)
             val initiatorId = request.initiatorId ?: when (request.connectionMethod) {
                 "qr" -> scannedUserId
-                "nfc" -> if (request.userId1 == scannedUserId) request.userId2 else scannedUserId
+                "nfc", "proximity" -> if (request.userId1 == scannedUserId) request.userId2 else scannedUserId
                 else -> null
             }
             val responderId = request.responderId ?: when (request.connectionMethod) {
                 "qr" -> request.userId1
-                "nfc" -> if (initiatorId == request.userId1) scannedUserId else request.userId1
+                "nfc", "proximity" -> if (initiatorId == request.userId1) scannedUserId else request.userId1
                 else -> null
             }
 
@@ -637,7 +701,7 @@ class ConnectionRepository(
         var score = 0
 
         // Connection method baseline
-        if (connectionMethod == "nfc") {
+        if (connectionMethod == "nfc" || connectionMethod == "proximity") {
             score += 50
         }
 
@@ -884,7 +948,9 @@ class ConnectionRepository(
 
         if (!isRetryableNetworkFailure) return false
 
-        return request.connectionMethod == "nfc" || request.connectionMethod == "qr"
+        return request.connectionMethod == "nfc" ||
+            request.connectionMethod == "proximity" ||
+            request.connectionMethod == "qr"
     }
 
     private fun shouldDropQueuedDraft(error: Throwable?): Boolean {

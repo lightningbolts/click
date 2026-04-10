@@ -4,13 +4,17 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
@@ -25,21 +29,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.nfc.NfcManager
-import compose.project.click.click.nfc.NfcSupportProfile
+import compose.project.click.click.proximity.ProximityManager
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import kotlinx.coroutines.async
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
-import compose.project.click.click.viewmodel.NfcConnectionState
-import compose.project.click.click.viewmodel.NfcViewModel
+import compose.project.click.click.viewmodel.ConnectionState
+import compose.project.click.click.viewmodel.ConnectionViewModel
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -48,19 +52,21 @@ import kotlinx.coroutines.delay
 fun NfcScreen(
     userId: String,
     authToken: String,
-    nfcManager: NfcManager,
+    httpClient: HttpClient,
+    proximityManager: ProximityManager,
+    connectionViewModel: ConnectionViewModel,
     onConnectionCreated: (String) -> Unit,
     onBackPressed: () -> Unit
 ) {
-    val viewModel: NfcViewModel = viewModel { NfcViewModel(nfcManager) }
-    val connectionState by viewModel.connectionState.collectAsState()
-    val supportProfile = remember(nfcManager) { nfcManager.supportProfile() }
+    val connectionState by connectionViewModel.connectionState.collectAsState()
+    val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
+    val capabilityNote = remember(proximityManager) { proximityManager.capabilityNote() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
     val barometricHeightMonitor = rememberBarometricHeightMonitor()
     val tokenStorage = remember { createTokenStorage() }
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
-    var pendingUser by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var pendingUser by remember { mutableStateOf<User?>(null) }
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
 
@@ -75,13 +81,9 @@ fun NfcScreen(
         }
     }
 
-    LaunchedEffect(userId) {
-        viewModel.setCurrentUser(userId)
-    }
-
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.stopScanning()
+            proximityManager.stopAll()
         }
     }
 
@@ -97,11 +99,7 @@ fun NfcScreen(
                 Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                     PageHeader(
                         title = "Tap to Connect",
-                        subtitle = if (supportProfile.supportsPhoneToPhoneExchange) {
-                            "Hold near another phone"
-                        } else {
-                            "Near-field connection tools"
-                        },
+                        subtitle = "BLE + ultrasonic handshake",
                         navigationIcon = {
                             IconButton(onClick = onBackPressed) {
                                 Icon(
@@ -112,10 +110,10 @@ fun NfcScreen(
                             }
                         },
                         actions = {
-                            IconButton(onClick = { viewModel.openNfcSettings() }) {
+                            IconButton(onClick = { proximityManager.openRadiosSettings() }) {
                                 Icon(
                                     Icons.Default.Settings,
-                                    contentDescription = "NFC Settings",
+                                    contentDescription = "Bluetooth and audio settings",
                                     tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -132,46 +130,62 @@ fun NfcScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     when (val state = connectionState) {
-                        is NfcConnectionState.Idle -> {
+                        is ConnectionState.Idle -> {
                             NfcIdleContent(
                                 onStartScanning = {
                                     if (!AppDataManager.shouldCaptureLocationAtTap()) {
-                                        viewModel.startScanning(skipLocation = true)
+                                        connectionViewModel.startTapProximityHandshake(
+                                            httpClient = httpClient,
+                                            proximityManager = proximityManager,
+                                            jwt = authToken,
+                                            currentUserId = userId,
+                                            locationService = locationService,
+                                            skipLocation = true,
+                                        )
                                     } else if (!locationService.hasLocationPermission()) {
                                         requestLocationPermissionThen {
-                                            viewModel.startScanning(skipLocation = !locationService.hasLocationPermission())
+                                            connectionViewModel.startTapProximityHandshake(
+                                                httpClient = httpClient,
+                                                proximityManager = proximityManager,
+                                                jwt = authToken,
+                                                currentUserId = userId,
+                                                locationService = locationService,
+                                                skipLocation = !locationService.hasLocationPermission(),
+                                            )
                                         }
                                     } else {
-                                        viewModel.startScanning(skipLocation = false)
+                                        connectionViewModel.startTapProximityHandshake(
+                                            httpClient = httpClient,
+                                            proximityManager = proximityManager,
+                                            jwt = authToken,
+                                            currentUserId = userId,
+                                            locationService = locationService,
+                                            skipLocation = false,
+                                        )
                                     }
                                 },
-                                isNfcAvailable = viewModel.isNfcAvailable(),
-                                isNfcEnabled = viewModel.isNfcEnabled(),
-                                supportProfile = supportProfile,
-                                onOpenSettings = { viewModel.openNfcSettings() }
+                                supportsTap = supportsTap,
+                                capabilityNote = capabilityNote,
+                                onOpenSettings = { proximityManager.openRadiosSettings() },
                             )
                         }
-                        is NfcConnectionState.FetchingLocation -> {
+                        is ConnectionState.ProximityFetchingLocation -> {
                             NfcFetchingLocationContent()
                         }
-                        is NfcConnectionState.Scanning -> {
+                        is ConnectionState.ProximityHandshaking -> {
                             NfcScanningContent()
                         }
-                        is NfcConnectionState.Sending -> {
-                            NfcSendingContent()
-                        }
-                        is NfcConnectionState.UserDetected -> {
-                            NfcUserDetectedContent(
-                                userId = state.userId,
-                                userName = state.userName,
-                                onConfirm = { pendingUser = state.userId to state.userName },
-                                onCancel = { viewModel.resetState() }
+                        is ConnectionState.PendingConfirmation -> {
+                            ProximityPickUserContent(
+                                users = state.users,
+                                onPick = { pendingUser = it },
+                                onCancel = { connectionViewModel.resetConnectionState() },
                             )
                         }
-                        is NfcConnectionState.CreatingConnection -> {
+                        is ConnectionState.Loading -> {
                             NfcCreatingConnectionContent()
                         }
-                        is NfcConnectionState.Success -> {
+                        is ConnectionState.Success -> {
                             NfcSuccessContent(
                                 connection = state.connection,
                                 connectedUser = state.connectedUser,
@@ -179,24 +193,32 @@ fun NfcScreen(
                                     onConnectionCreated(state.connection.id)
                                 },
                                 onCreateAnother = {
-                                    viewModel.resetState()
-                                    viewModel.startScanning()
+                                    connectionViewModel.resetConnectionState()
                                 }
                             )
                         }
-                        is NfcConnectionState.Error -> {
+                        is ConnectionState.Error -> {
                             NfcErrorContent(
                                 message = state.message,
-                                onRetry = { viewModel.startScanning(skipLocation = false) },
-                                onDismiss = { viewModel.resetState() }
+                                onRetry = {
+                                    connectionViewModel.startTapProximityHandshake(
+                                        httpClient = httpClient,
+                                        proximityManager = proximityManager,
+                                        jwt = authToken,
+                                        currentUserId = userId,
+                                        locationService = locationService,
+                                        skipLocation = false,
+                                    )
+                                },
+                                onDismiss = { connectionViewModel.resetConnectionState() }
                             )
                         }
                     }
                 }
 
-                pendingUser?.let { (detectedUserId, detectedUserName) ->
+                pendingUser?.let { picked ->
                     ConnectionContextSheet(
-                        otherUserName = detectedUserName,
+                        otherUserName = picked.name,
                         locationName = null,
                         initialNoiseOptIn = ambientNoiseOptIn,
                         noisePermissionGranted = ambientNoiseMonitor.hasPermission,
@@ -215,15 +237,19 @@ fun NfcScreen(
                                 val noiseSample = noiseSampleDeferred.await()
                                 val barometricSample = barometricSampleDeferred.await()
                                 pendingUser = null
-                                viewModel.createConnection(
-                                    otherUserId = detectedUserId,
+                                connectionViewModel.connectWithUser(
+                                    scannedUserId = picked.id,
+                                    currentUserId = userId,
                                     contextTag = contextTag?.label,
                                     contextTagObject = contextTag,
                                     heightCategory = barometricSample?.category,
                                     exactBarometricElevationMeters = barometricSample?.elevationMeters,
                                     exactBarometricPressureHpa = barometricSample?.pressureHpa,
                                     noiseLevelCategory = noiseSample?.category,
-                                    exactNoiseLevelDb = noiseSample?.decibels
+                                    exactNoiseLevelDb = noiseSample?.decibels,
+                                    connectionMethod = "proximity",
+                                    initiatorId = picked.id,
+                                    responderId = userId,
                                 )
                             }
                         }
@@ -231,7 +257,7 @@ fun NfcScreen(
                 }
 
                 // Instructions at bottom
-                if (connectionState is NfcConnectionState.Scanning) {
+                if (connectionState is ConnectionState.ProximityHandshaking) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -246,18 +272,17 @@ fun NfcScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (supportProfile.supportsPhoneToPhoneExchange) {
-                                    "Hold your phone near another device"
-                                } else {
-                                    "Hold near a compatible NFC tag or supported reader"
-                                },
+                                text = "Stay close — broadcasting and listening for nearby taps.",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
-                                onClick = { viewModel.stopScanning() },
+                                onClick = {
+                                    proximityManager.stopAll()
+                                    connectionViewModel.resetConnectionState()
+                                },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.error
                                 )
@@ -273,11 +298,81 @@ fun NfcScreen(
 }
 
 @Composable
+private fun ProximityPickUserContent(
+    users: List<User>,
+    onPick: (User) -> Unit,
+    onCancel: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Who did you tap?",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Pick the right person to continue.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(users, key = { it.id }) { user ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(user) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Person, contentDescription = null)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = user.name ?: "User",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            if (!user.email.isNullOrBlank()) {
+                                Text(
+                                    text = user.email!!,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        TextButton(onClick = onCancel) {
+            Text("Cancel")
+        }
+    }
+}
+
+@Composable
 private fun NfcIdleContent(
     onStartScanning: () -> Unit,
-    isNfcAvailable: Boolean,
-    isNfcEnabled: Boolean,
-    supportProfile: NfcSupportProfile,
+    supportsTap: Boolean,
+    capabilityNote: String,
     onOpenSettings: () -> Unit
 ) {
     Column(
@@ -285,10 +380,10 @@ private fun NfcIdleContent(
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            Icons.Default.Nfc,
+            Icons.Default.BluetoothSearching,
             contentDescription = null,
             modifier = Modifier.size(120.dp),
-            tint = if (isNfcAvailable && isNfcEnabled) {
+            tint = if (supportsTap) {
                 PrimaryBlue
             } else {
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
@@ -298,11 +393,7 @@ private fun NfcIdleContent(
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = when {
-                !isNfcAvailable -> "NFC Not Available"
-                !isNfcEnabled -> "NFC Disabled"
-                else -> "Ready to Connect"
-            },
+            text = if (supportsTap) "Ready to Connect" else "Tap to Connect unavailable",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -311,12 +402,10 @@ private fun NfcIdleContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = when {
-                !isNfcAvailable -> "Your device doesn't support NFC"
-                !isNfcEnabled -> "Enable NFC to connect with others"
-                supportProfile.supportsPhoneToPhoneExchange -> "Tap phones together to create a connection"
-                supportProfile.canReadTags -> "This build can read compatible NFC tags, but direct phone-to-phone taps are still limited."
-                else -> supportProfile.note
+            text = if (supportsTap) {
+                "Tap Connect together with someone nearby. Both phones should enable Bluetooth and microphone access for the handshake."
+            } else {
+                capabilityNote
             },
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
@@ -338,12 +427,12 @@ private fun NfcIdleContent(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Current NFC support",
+                    text = "How Tap to Connect works",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = supportProfile.note,
+                    text = capabilityNote,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
                 )
@@ -352,7 +441,7 @@ private fun NfcIdleContent(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        if (isNfcAvailable && isNfcEnabled) {
+        if (supportsTap) {
             Button(
                 onClick = onStartScanning,
                 modifier = Modifier
@@ -363,14 +452,10 @@ private fun NfcIdleContent(
                     containerColor = PrimaryBlue
                 )
             ) {
-                Icon(Icons.Default.Nfc, contentDescription = null)
+                Icon(Icons.Default.BluetoothSearching, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    if (supportProfile.supportsPhoneToPhoneExchange) {
-                        "Start Scanning"
-                    } else {
-                        "Start NFC Reader"
-                    },
+                    "Connect",
                     fontSize = 18.sp
                 )
             }
@@ -511,7 +596,7 @@ private fun NfcScanningContent() {
             }
 
             Icon(
-                Icons.Default.Nfc,
+                Icons.Default.BluetoothSearching,
                 contentDescription = null,
                 modifier = Modifier
                     .size(80.dp)
@@ -524,7 +609,7 @@ private fun NfcScanningContent() {
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "Scanning...",
+            text = "Handshaking…",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
@@ -532,7 +617,7 @@ private fun NfcScanningContent() {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Bring your phone close to another device",
+            text = "Stay within a few feet — BLE and audio are active",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,

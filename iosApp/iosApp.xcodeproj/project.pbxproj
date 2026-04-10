@@ -426,7 +426,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Click uses NFC to quickly connect you with nearby users by tapping phones together.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
@@ -466,7 +466,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Click uses NFC to quickly connect you with nearby users by tapping phones together.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
