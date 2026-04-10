@@ -10,6 +10,8 @@ import compose.project.click.click.data.models.ContextTag // pragma: allowlist s
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
@@ -37,6 +39,14 @@ sealed class ConnectionState {
     object ProximityFetchingLocation : ConnectionState()
     object ProximityHandshaking : ConnectionState()
     data class PendingConfirmation(val users: List<User>) : ConnectionState()
+    /**
+     * Proximity group (or single peer) connections are created; user is adding subjective context tags
+     * to be fanned out to every [newConnections] row.
+     */
+    data class TaggingContext(
+        val newConnections: List<Connection>,
+        val targetUsers: List<UserProfile>,
+    ) : ConnectionState()
 }
 
 class ConnectionViewModel : ViewModel() {
@@ -257,5 +267,123 @@ class ConnectionViewModel : ViewModel() {
 
     fun resetConnectionState() {
         _connectionState.value = ConnectionState.Idle
+    }
+
+    /**
+     * After the user confirms the proximity match list, create one connection per peer (1-to-1 edges),
+     * then move to [ConnectionState.TaggingContext] so [saveContextTags] can fan out tags.
+     */
+    fun confirmProximityConnection(peerUsers: List<User>, currentUserId: String) {
+        val peers = peerUsers.filter { it.id.isNotBlank() && it.id != currentUserId }.distinctBy { it.id }
+        if (peers.isEmpty()) {
+            _connectionState.value = ConnectionState.Error("No users to connect with")
+            return
+        }
+        viewModelScope.launch {
+            _connectionState.value = ConnectionState.Loading
+            try {
+                val created = mutableListOf<Connection>()
+                for (peer in peers) {
+                    val request = ConnectionRequest(
+                        userId1 = currentUserId,
+                        userId2 = peer.id,
+                        locationLat = lastProximityLat,
+                        locationLng = lastProximityLng,
+                        altitudeMeters = lastProximityAltitudeMeters,
+                        contextTag = null,
+                        contextTagObject = null,
+                        connectionMethod = "proximity",
+                        initiatorId = peer.id,
+                        responderId = currentUserId,
+                    )
+                    val result = withContext(Dispatchers.Default) {
+                        repository.createConnection(request)
+                    }
+                    if (result.isFailure) {
+                        _connectionState.value = ConnectionState.Error(
+                            result.exceptionOrNull()?.message ?: "Failed to create connection"
+                        )
+                        return@launch
+                    }
+                    val connection = result.getOrNull()!!
+                    created.add(connection)
+                    AppDataManager.addConnection(connection, peer)
+                }
+                if (!created.any { it.isPendingSync() }) {
+                    AppDataManager.refresh(force = true)
+                }
+                val profiles = peers.map { it.toUserProfile() }
+                _connectionState.value = ConnectionState.TaggingContext(
+                    newConnections = created,
+                    targetUsers = profiles,
+                )
+            } catch (e: Exception) {
+                _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    /**
+     * Apply the same subjective [contextTag] (and optional sensor enrichment) to every connection
+     * in the current [ConnectionState.TaggingContext], then surface [ConnectionState.Success].
+     */
+    fun saveContextTags(
+        contextTag: ContextTag?,
+        noiseLevelCategory: NoiseLevelCategory?,
+        exactNoiseLevelDb: Double?,
+        heightCategory: HeightCategory?,
+        exactBarometricElevationMeters: Double?,
+    ) {
+        val tagging = _connectionState.value as? ConnectionState.TaggingContext ?: return
+        viewModelScope.launch {
+            val connections = tagging.newConnections
+            val targetProfiles = tagging.targetUsers
+            try {
+                for (connection in connections) {
+                    if (connection.isPendingSync()) continue
+                    val patch = withContext(Dispatchers.Default) {
+                        repository.updateConnectionTags(
+                            connectionId = connection.id,
+                            contextTag = contextTag,
+                            noiseLevelCategory = noiseLevelCategory,
+                            exactNoiseLevelDb = exactNoiseLevelDb,
+                            heightCategory = heightCategory,
+                            exactBarometricElevationMeters = exactBarometricElevationMeters,
+                        )
+                    }
+                    if (patch.isFailure) {
+                        _connectionState.value = ConnectionState.Error(
+                            patch.exceptionOrNull()?.message ?: "Failed to save context"
+                        )
+                        return@launch
+                    }
+                }
+                if (!connections.any { it.isPendingSync() }) {
+                    AppDataManager.refresh(force = true)
+                }
+                val primary = connections.first()
+                val summaryUser = syntheticUserForProximitySuccess(targetProfiles)
+                _connectionState.value = ConnectionState.Success(primary, summaryUser)
+            } catch (e: Exception) {
+                _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun syntheticUserForProximitySuccess(profiles: List<UserProfile>): User {
+        val label = when (profiles.size) {
+            0 -> "Connection"
+            1 -> profiles.first().displayName
+            2 -> "${profiles[0].displayName} and ${profiles[1].displayName}"
+            else -> "${profiles[0].displayName}, ${profiles[1].displayName} +${profiles.size - 2} more"
+        }
+        val primaryId = profiles.firstOrNull()?.id ?: ""
+        val primaryImage = profiles.firstOrNull()?.avatarUrl
+        return User(
+            id = primaryId,
+            name = label,
+            image = primaryImage,
+            createdAt = 0L,
+        )
     }
 }

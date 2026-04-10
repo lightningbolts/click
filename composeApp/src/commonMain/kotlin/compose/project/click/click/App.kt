@@ -1260,7 +1260,7 @@ fun App() {
 
                         pendingQrConnection?.let { pending ->
                             ConnectionContextSheet(
-                                otherUserName = null,
+                                connectedUsers = emptyList(),
                                 locationName = null,
                                 initialNoiseOptIn = ambientNoiseOptIn,
                                 noisePermissionGranted = ambientNoiseMonitor.hasPermission,

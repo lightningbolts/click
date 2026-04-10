@@ -29,6 +29,10 @@ data class OnboardingState(
         get() = flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE && permissionsCompleted && interestsCompleted
 }
 
+/**
+ * Cold-start snapshot. Subjective proximity tags are not staged here; they flow from
+ * [compose.project.click.click.viewmodel.ConnectionState.TaggingContext] into each `connections` row after creation.
+ */
 @Serializable
 data class CachedAppSnapshot(
     val currentUser: User? = null,

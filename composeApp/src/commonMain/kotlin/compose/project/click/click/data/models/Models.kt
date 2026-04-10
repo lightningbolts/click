@@ -42,6 +42,26 @@ data class ConnectionInsert(
     val responder_id: String? = null
 )
 
+/**
+ * Minimal profile surface for connection UX (e.g. proximity context tagging).
+ * Distinct from [UserPublicProfile], which is a hydrated viewer payload.
+ */
+data class UserProfile(
+    val id: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+)
+
+fun User.toUserProfile(): UserProfile {
+    val display = name?.trim()?.takeIf { it.isNotEmpty() }
+        ?: listOfNotNull(firstName?.trim(), lastName?.trim())
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
+            .takeIf { it.isNotEmpty() }
+        ?: "User"
+    return UserProfile(id = id, displayName = display, avatarUrl = image)
+}
+
 @Serializable
 data class User(
     val id: String,

@@ -36,6 +36,7 @@ import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import kotlinx.coroutines.async
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
@@ -66,7 +67,6 @@ fun NfcScreen(
     val tokenStorage = remember { createTokenStorage() }
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
-    var pendingUser by remember { mutableStateOf<User?>(null) }
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
 
@@ -176,11 +176,16 @@ fun NfcScreen(
                             NfcScanningContent()
                         }
                         is ConnectionState.PendingConfirmation -> {
-                            ProximityPickUserContent(
+                            ProximityConfirmConnectionsContent(
                                 users = state.users,
-                                onPick = { pendingUser = it },
+                                onConfirmAll = {
+                                    connectionViewModel.confirmProximityConnection(state.users, userId)
+                                },
                                 onCancel = { connectionViewModel.resetConnectionState() },
                             )
+                        }
+                        is ConnectionState.TaggingContext -> {
+                            ProximityAwaitingContextContent(targetUsers = state.targetUsers)
                         }
                         is ConnectionState.Loading -> {
                             NfcCreatingConnectionContent()
@@ -216,13 +221,36 @@ fun NfcScreen(
                     }
                 }
 
-                pendingUser?.let { picked ->
+                if (connectionState is ConnectionState.TaggingContext) {
+                    val tagging = connectionState as ConnectionState.TaggingContext
+                    val finishWithoutTags: () -> Unit = {
+                        scope.launch {
+                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                            val noiseSampleDeferred = async {
+                                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                            }
+                            val barometricSampleDeferred = async {
+                                if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                            }
+                            val noiseSample = noiseSampleDeferred.await()
+                            val barometricSample = barometricSampleDeferred.await()
+                            connectionViewModel.saveContextTags(
+                                contextTag = null,
+                                noiseLevelCategory = noiseSample?.category,
+                                exactNoiseLevelDb = noiseSample?.decibels,
+                                heightCategory = barometricSample?.category,
+                                exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                            )
+                        }
+                    }
                     ConnectionContextSheet(
-                        otherUserName = picked.name,
+                        connectedUsers = tagging.targetUsers,
                         locationName = null,
                         initialNoiseOptIn = ambientNoiseOptIn,
                         noisePermissionGranted = ambientNoiseMonitor.hasPermission,
-                        onDismiss = { pendingUser = null },
+                        onSkip = finishWithoutTags,
+                        onDismiss = finishWithoutTags,
                         onConfirm = { contextTag, noiseOptIn ->
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
@@ -236,23 +264,15 @@ fun NfcScreen(
                                 }
                                 val noiseSample = noiseSampleDeferred.await()
                                 val barometricSample = barometricSampleDeferred.await()
-                                pendingUser = null
-                                connectionViewModel.connectWithUser(
-                                    scannedUserId = picked.id,
-                                    currentUserId = userId,
-                                    contextTag = contextTag?.label,
-                                    contextTagObject = contextTag,
-                                    heightCategory = barometricSample?.category,
-                                    exactBarometricElevationMeters = barometricSample?.elevationMeters,
-                                    exactBarometricPressureHpa = barometricSample?.pressureHpa,
+                                connectionViewModel.saveContextTags(
+                                    contextTag = contextTag,
                                     noiseLevelCategory = noiseSample?.category,
                                     exactNoiseLevelDb = noiseSample?.decibels,
-                                    connectionMethod = "proximity",
-                                    initiatorId = picked.id,
-                                    responderId = userId,
+                                    heightCategory = barometricSample?.category,
+                                    exactBarometricElevationMeters = barometricSample?.elevationMeters,
                                 )
                             }
-                        }
+                        },
                     )
                 }
 
@@ -298,11 +318,21 @@ fun NfcScreen(
 }
 
 @Composable
-private fun ProximityPickUserContent(
+private fun ProximityConfirmConnectionsContent(
     users: List<User>,
-    onPick: (User) -> Unit,
+    onConfirmAll: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    val headline = if (users.size <= 1) {
+        "Confirm your tap"
+    } else {
+        "Confirm this group"
+    }
+    val subtitle = if (users.size <= 1) {
+        "You'll add optional context next."
+    } else {
+        "You'll connect with everyone listed, then add one shared context tag."
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -310,13 +340,13 @@ private fun ProximityPickUserContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Who did you tap?",
+            text = headline,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Pick the right person to continue.",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
             textAlign = TextAlign.Center,
@@ -330,9 +360,7 @@ private fun ProximityPickUserContent(
         ) {
             items(users, key = { it.id }) { user ->
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(user) },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     ),
@@ -361,10 +389,55 @@ private fun ProximityPickUserContent(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onConfirmAll,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(26.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+        ) {
+            Text(
+                if (users.size <= 1) "Connect" else "Connect with everyone",
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         TextButton(onClick = onCancel) {
             Text("Cancel")
         }
+    }
+}
+
+@Composable
+private fun ProximityAwaitingContextContent(targetUsers: List<UserProfile>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+            tint = Color(0xFF4CAF50),
+        )
+        Text(
+            text = if (targetUsers.size <= 1) "You're connected" else "You're all connected",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Add a quick tag below (optional). It applies to this meetup.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
     }
 }
 

@@ -13,7 +13,9 @@ import compose.project.click.click.data.models.PendingConnectionDraft
 import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocationInsert
 import compose.project.click.click.data.models.GeoLocation
+import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.MemoryCapsule
+import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.newPendingConnectionId
 import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
@@ -158,6 +160,70 @@ class ConnectionRepository(
                 return Result.failure(Exception(parsed.error))
             }
             Result.success(parsed.matches)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Persists subjective encounter context (and optional noise / barometric enrichment) on an
+     * existing connection row — used after proximity connections are created, including N-way fan-out.
+     */
+    suspend fun updateConnectionTags(
+        connectionId: String,
+        contextTag: ContextTag?,
+        noiseLevelCategory: NoiseLevelCategory?,
+        exactNoiseLevelDb: Double?,
+        heightCategory: HeightCategory?,
+        exactBarometricElevationMeters: Double?,
+    ): Result<Unit> {
+        if (connectionId.isBlank()) {
+            return Result.failure(Exception("Missing connection id"))
+        }
+        return try {
+            val existing = fetchConnectionById(connectionId)
+                ?: return Result.failure(Exception("Connection not found"))
+            val normalizedContextTag = normalizeContextTag(contextTagObject = contextTag, contextTag = null)
+            val contextTagId = resolveContextTagId(normalizedContextTag)
+            val geo = existing.geo_location
+            val hasValidGeo = geo.lat.isFinite() && geo.lon.isFinite() &&
+                !(geo.lat == 0.0 && geo.lon == 0.0)
+            val mergedCapsule = when (val prior = existing.memoryCapsule) {
+                null -> MemoryCapsule(
+                    connectionId = existing.id,
+                    locationName = existing.semantic_location,
+                    geoLocation = if (hasValidGeo) GeoLocation(lat = geo.lat, lon = geo.lon) else null,
+                    connectedAtMs = existing.created,
+                    weatherSnapshot = null,
+                    contextTag = normalizedContextTag,
+                    noiseLevelCategory = noiseLevelCategory,
+                    exactNoiseLevelDb = exactNoiseLevelDb,
+                    heightCategory = heightCategory ?: deriveHeightCategory(exactBarometricElevationMeters),
+                    exactBarometricElevationMeters = exactBarometricElevationMeters,
+                )
+                else -> prior.copy(
+                    contextTag = normalizedContextTag ?: prior.contextTag,
+                    noiseLevelCategory = noiseLevelCategory ?: prior.noiseLevelCategory,
+                    exactNoiseLevelDb = exactNoiseLevelDb ?: prior.exactNoiseLevelDb,
+                    heightCategory = heightCategory ?: prior.heightCategory,
+                    exactBarometricElevationMeters = exactBarometricElevationMeters
+                        ?: prior.exactBarometricElevationMeters,
+                )
+            }
+            supabase.from("connections")
+                .update(buildJsonObject {
+                    contextTagId?.let { put("context_tag_id", it) }
+                    noiseLevelCategory?.name?.let { put("noise_level", it) }
+                    exactNoiseLevelDb?.let { put("exact_noise_level_db", it) }
+                    heightCategory?.name?.let { put("height_category", it) }
+                    exactBarometricElevationMeters?.let { put("exact_barometric_elevation_m", it) }
+                    put("memory_capsule", json.encodeToJsonElement(mergedCapsule))
+                }) {
+                    filter {
+                        eq("id", connectionId)
+                    }
+                }
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
