@@ -113,16 +113,20 @@ fun Connection.profileWhenLine(): String? {
 fun Connection.profileWeatherLine(): String? {
     latestMemoryCapsule()?.weatherSnapshot?.let { ws ->
         val parts = mutableListOf<String>()
-        if (ws.condition.isNotBlank()) parts.add(ws.condition.trim())
-        val f = (ws.temperatureCelsius * 9f / 5f) + 32f
-        if (f.isFinite()) parts.add("${f.roundToInt()}°F")
+        ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
+        ws.temperatureCelsius?.let { c ->
+            val f = (c * 9f / 5f) + 32f
+            if (f.isFinite()) parts.add("${f.roundToInt()}°F")
+        }
         if (parts.isNotEmpty()) return parts.joinToString(" · ")
     }
     memoryCapsule?.weatherSnapshot?.let { ws ->
         val parts = mutableListOf<String>()
-        if (ws.condition.isNotBlank()) parts.add(ws.condition.trim())
-        val f = (ws.temperatureCelsius * 9f / 5f) + 32f
-        if (f.isFinite()) parts.add("${f.roundToInt()}°F")
+        ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
+        ws.temperatureCelsius?.let { c ->
+            val f = (c * 9f / 5f) + 32f
+            if (f.isFinite()) parts.add("${f.roundToInt()}°F")
+        }
         if (parts.isNotEmpty()) return parts.joinToString(" · ")
     }
     val col = resolvedWeatherCondition?.trim()?.takeIf { it.isNotEmpty() } ?: return null

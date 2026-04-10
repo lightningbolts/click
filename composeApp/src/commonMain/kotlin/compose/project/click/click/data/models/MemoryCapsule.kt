@@ -20,12 +20,12 @@ data class MemoryCapsule(
 
 @Serializable
 data class WeatherSnapshot(
-    val condition: String,
-    val temperatureCelsius: Float,
+    val condition: String? = null,
+    val temperatureCelsius: Float? = null,
     val iconCode: String? = null,
     val windSpeedKph: Float? = null,
     val windDirectionDegrees: Int? = null,
-    val pressureMslHpa: Double? = null
+    val pressureMslHpa: Double? = null,
 )
 
 @Serializable

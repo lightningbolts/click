@@ -425,7 +425,8 @@ data class Connection(
     val resolvedWeatherCondition: String?
         get() = latestEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
             ?: originEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
-            ?: weatherCondition ?: memoryCapsule?.weatherSnapshot?.condition
+            ?: weatherCondition
+            ?: memoryCapsule?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
 
     val displayLocationLabel: String?
         get() = context_tag
