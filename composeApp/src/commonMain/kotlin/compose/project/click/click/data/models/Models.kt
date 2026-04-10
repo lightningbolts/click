@@ -380,12 +380,17 @@ data class Connection(
 
     fun originEncounter(): ConnectionEncounter? =
         connectionEncounters.minWithOrNull(
-            compareBy { it.encounteredAtInstant() ?: Instant.DISTANT_FUTURE },
+            compareBy<ConnectionEncounter> { it.encounteredAtInstant() ?: Instant.DISTANT_FUTURE }
+                // When timestamps fail to parse, ISO-8601 strings from PostgREST still sort chronologically.
+                .thenBy { it.encounteredAt }
+                .thenBy { it.id },
         )
 
     fun latestEncounter(): ConnectionEncounter? =
         connectionEncounters.maxWithOrNull(
-            compareBy { it.encounteredAtInstant() ?: Instant.DISTANT_PAST },
+            compareBy<ConnectionEncounter> { it.encounteredAtInstant() ?: Instant.DISTANT_PAST }
+                .thenBy { it.encounteredAt }
+                .thenBy { it.id },
         )
 
     /** Origin story (oldest crossing) for profile / first-meet copy. */

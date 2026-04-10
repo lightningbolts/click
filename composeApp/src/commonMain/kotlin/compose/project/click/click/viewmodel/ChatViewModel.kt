@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
@@ -621,6 +622,24 @@ class ChatViewModel(
             ?: chat.connection.created
 
     /**
+     * Prefer the connection row that still carries [Connection.connectionEncounters] (or any
+     * non-blank [location_name]) so list refresh / timestamp merges never drop timeline data.
+     */
+    private fun richerConnectionEncounters(a: Connection, b: Connection): List<ConnectionEncounter> {
+        val la = a.connectionEncounters
+        val lb = b.connectionEncounters
+        fun hasPlace(rows: List<ConnectionEncounter>) =
+            rows.any { !it.locationName.isNullOrBlank() }
+        return when {
+            hasPlace(la) && !hasPlace(lb) -> la
+            hasPlace(lb) && !hasPlace(la) -> lb
+            lb.size > la.size -> lb
+            la.size > lb.size -> la
+            else -> la
+        }
+    }
+
+    /**
      * Reconcile a server/AppDataManager-derived row with the in-memory chat list without
      * clobbering fresher [lastMessage] / [Connection.last_message_at] from realtime or send paths.
      */
@@ -665,9 +684,14 @@ class ChatViewModel(
         } else {
             preferredConnection.chat
         }
+        val mergedEncounters = richerConnectionEncounters(
+            listChat.connection,
+            cachedChat.connection,
+        )
         val mergedConnection = preferredConnection.copy(
             last_message_at = mergedAt ?: preferredConnection.last_message_at,
-            chat = mergedChat
+            chat = mergedChat,
+            connectionEncounters = mergedEncounters,
         )
         val resolvedOther = when {
             freshUser != null &&
