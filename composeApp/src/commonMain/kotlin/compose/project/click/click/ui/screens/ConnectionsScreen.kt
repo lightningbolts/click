@@ -143,6 +143,9 @@ import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist 
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -459,6 +462,8 @@ fun ConnectionsListView(
 
     var cliqueAddableMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var cliqueCreateGraphOk by remember { mutableStateOf(false) }
+    /** False while edge RPCs run — blocks taps so users cannot pick ineligible friends during load. */
+    var cliqueSheetEligibilityReady by remember { mutableStateOf(false) }
 
     LaunchedEffect(
         cliqueSheetVisible,
@@ -470,27 +475,51 @@ fun ConnectionsListView(
         if (!cliqueSheetVisible || uid.isNullOrBlank()) {
             cliqueAddableMask = emptyMap()
             cliqueCreateGraphOk = false
+            cliqueSheetEligibilityReady = false
             return@LaunchedEffect
         }
+        cliqueSheetEligibilityReady = false
         val others = activeOneToOneChats.map { it.otherUser.id }
-        val mask = linkedMapOf<String, Boolean>()
-        for (oid in others) {
-            val ok = if (oid in selectedCliqueFriendIds) {
-                true
+        coroutineScope {
+            val maskEntries = others.map { oid ->
+                async {
+                    val ok = if (oid in selectedCliqueFriendIds) {
+                        true
+                    } else {
+                        viewModel.memberSetSatisfiesVerifiedCliqueGraph(
+                            (listOf(uid) + selectedCliqueFriendIds + oid).distinct().sorted(),
+                        )
+                    }
+                    oid to ok
+                }
+            }.awaitAll()
+            val mask = linkedMapOf<String, Boolean>().apply { putAll(maskEntries) }
+            val fullOk = if (selectedCliqueFriendIds.isEmpty()) {
+                false
             } else {
-                viewModel.memberSetSatisfiesVerifiedCliqueGraph(
-                    (listOf(uid) + selectedCliqueFriendIds + oid).distinct().sorted(),
-                )
+                async {
+                    viewModel.memberSetSatisfiesVerifiedCliqueGraph(
+                        (listOf(uid) + selectedCliqueFriendIds).distinct().sorted(),
+                    )
+                }.await()
             }
-            mask[oid] = ok
+            cliqueAddableMask = mask
+            cliqueCreateGraphOk = fullOk
+            cliqueSheetEligibilityReady = true
         }
-        cliqueAddableMask = mask
-        cliqueCreateGraphOk = if (selectedCliqueFriendIds.isEmpty()) {
-            false
-        } else {
-            viewModel.memberSetSatisfiesVerifiedCliqueGraph(
-                (listOf(uid) + selectedCliqueFriendIds).distinct().sorted(),
-            )
+    }
+
+    val memberSetDuplicatesExistingClick = remember(
+        effectiveChats,
+        selectedCliqueFriendIds,
+        currentUserId,
+    ) {
+        val uid = currentUserId ?: return@remember false
+        if (selectedCliqueFriendIds.isEmpty()) return@remember false
+        val target = (selectedCliqueFriendIds + uid).toSet()
+        effectiveChats.any { chat ->
+            chat.groupClique != null &&
+                chat.groupClique.memberUserIds.toSet() == target
         }
     }
 
@@ -831,7 +860,7 @@ fun ConnectionsListView(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 76.dp),
+                .padding(end = 20.dp, bottom = 12.dp),
             containerColor = PrimaryBlue,
             contentColor = Color.White,
         ) {
@@ -863,6 +892,22 @@ fun ConnectionsListView(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+                if (!cliqueSheetEligibilityReady && activeOneToOneChats.isNotEmpty()) {
+                    Text(
+                        text = "Checking who can join…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                if (memberSetDuplicatesExistingClick) {
+                    Text(
+                        text = "You already have a verified click with this group.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 if (activeOneToOneChats.isEmpty()) {
                     Text(
                         text = "No active 1:1 connections yet.",
@@ -878,16 +923,13 @@ fun ConnectionsListView(
                         items(activeOneToOneChats, key = { it.connection.id }) { chatDetails ->
                             val friendId = chatDetails.otherUser.id
                             val checked = friendId in selectedCliqueFriendIds
-                            val canSelect = if (checked) {
-                                true
-                            } else {
-                                cliqueAddableMask[friendId] == true
-                            }
+                            val canSelect =
+                                checked || (cliqueSheetEligibilityReady && cliqueAddableMask[friendId] == true)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .clickable(enabled = checked || canSelect) {
+                                    .clickable(enabled = canSelect) {
                                         selectedCliqueFriendIds = if (checked) {
                                             selectedCliqueFriendIds - friendId
                                         } else {
@@ -914,7 +956,7 @@ fun ConnectionsListView(
                                             }
                                         }
                                     },
-                                    enabled = checked || canSelect,
+                                    enabled = canSelect,
                                 )
                                 AvatarWithOnlineIndicator(
                                     isOnline = chatDetails.otherUser.id in onlineUsers,
@@ -952,7 +994,10 @@ fun ConnectionsListView(
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                val canCreate = selectedCliqueFriendIds.isNotEmpty() && cliqueCreateGraphOk
+                val canCreate = cliqueSheetEligibilityReady &&
+                    selectedCliqueFriendIds.isNotEmpty() &&
+                    cliqueCreateGraphOk &&
+                    !memberSetDuplicatesExistingClick
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -973,10 +1018,13 @@ fun ConnectionsListView(
                                 }
                                 result.onFailure { e ->
                                     listScope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            e.message?.takeIf { it.isNotBlank() }
-                                                ?: "Couldn’t create click",
-                                        )
+                                        val raw = e.message?.takeIf { it.isNotBlank() }.orEmpty()
+                                        val msg = when {
+                                            raw.contains("verified click already exists", ignoreCase = true) ->
+                                                "You already have a verified click with this group."
+                                            else -> raw.ifBlank { "Couldn’t create click" }
+                                        }
+                                        snackbarHostState.showSnackbar(msg)
                                     }
                                 }
                             }

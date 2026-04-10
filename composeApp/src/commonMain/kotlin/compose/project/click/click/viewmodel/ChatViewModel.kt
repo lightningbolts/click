@@ -1927,6 +1927,18 @@ class ChatViewModel(
             onResult(Result.failure(IllegalArgumentException("Pick at least one friend")))
             return
         }
+        val memberSet = members.toSet()
+        val alreadyHaveClick = (_chatListState.value as? ChatListState.Success)?.chats?.any { chat ->
+            chat.groupClique != null && chat.groupClique.memberUserIds.toSet() == memberSet
+        } == true
+        if (alreadyHaveClick) {
+            onResult(
+                Result.failure(
+                    IllegalStateException("verified click already exists for this member set"),
+                ),
+            )
+            return
+        }
         viewModelScope.launch {
             try {
                 val rpc = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
