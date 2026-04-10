@@ -152,7 +152,7 @@ class ChatViewModelTest {
             onFetchChatWithDetails = { _, uid ->
                 if (uid == selfId) details else null
             },
-            onFetchMessagesForChat = { emptyList() },
+            onFetchMessagesForChat = { _, _ -> emptyList() },
             onFetchChatParticipants = {
                 listOf(
                     User(id = selfId, name = "Me"),
@@ -224,7 +224,7 @@ class ChatViewModelTest {
             onFetchChatWithDetails = { _, uid ->
                 if (uid == selfId) details else null
             },
-            onFetchMessagesForChat = { emptyList() },
+            onFetchMessagesForChat = { _, _ -> emptyList() },
             onFetchChatParticipants = {
                 listOf(
                     User(id = selfId, name = "Me"),
@@ -232,7 +232,7 @@ class ChatViewModelTest {
                 )
             },
             onFetchReactionsForChat = { emptyList() },
-            onSubscribeToMessages = { _ ->
+            onSubscribeToMessages = { _, _ ->
                 object : ChatMessageSubscription {
                     override suspend fun attach() {}
                     override suspend fun detach() {}

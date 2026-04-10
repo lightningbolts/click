@@ -17,6 +17,7 @@ robolectric = "4.14.1"
 kotlin = "2.2.21"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.7.3"
+krypto = "4.0.10"
 secrets = "2.0.1"
 
 [libraries]
@@ -35,6 +36,7 @@ androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle
 androidx-arch-core-testing = { module = "androidx.arch.core:core-testing", version.ref = "androidx-arch-core-testing" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+krypto = { module = "com.soywiz.korlibs.krypto:krypto", version.ref = "krypto" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

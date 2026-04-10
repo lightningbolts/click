@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -809,11 +810,13 @@ class ChatViewModel(
                     )
                 }
 
-                chatRepository.cacheEncryptionKeys(
-                    apiChatId,
-                    hydratedChatDetails.connection.id,
-                    hydratedChatDetails.connection.user_ids
-                )
+                if (hydratedChatDetails.groupClique == null) {
+                    chatRepository.cacheEncryptionKeys(
+                        apiChatId,
+                        hydratedChatDetails.connection.id,
+                        hydratedChatDetails.connection.user_ids
+                    )
+                }
 
                 if (_chatMessagesState.value is ChatMessagesState.Loading) {
                     _icebreakerPrompts.value =
@@ -874,8 +877,8 @@ class ChatViewModel(
                     updateKeepStates(chatDetails.connection, userId)
                 }
                 
-                // Mark chat as begun if this is the first time
-                if (!chatDetails.connection.has_begun) {
+                // Mark chat as begun if this is the first time (1:1 only)
+                if (hydratedChatDetails.groupClique == null && !chatDetails.connection.has_begun) {
                     supabaseRepository.updateConnectionHasBegun(resolvedConnectionId, true)
                 }
                 
@@ -905,9 +908,11 @@ class ChatViewModel(
                     val connectionId = chatDetails.connection.id
                     if (prefetchedChatPayloads.containsKey(connectionId)) return@forEach
                     val apiChatId = chatDetails.chat.id ?: return@forEach
-                    chatRepository.cacheEncryptionKeys(
-                        apiChatId, connectionId, chatDetails.connection.user_ids
-                    )
+                    if (chatDetails.groupClique == null) {
+                        chatRepository.cacheEncryptionKeys(
+                            apiChatId, connectionId, chatDetails.connection.user_ids
+                        )
+                    }
                     runCatching {
                         buildChatPayload(chatDetails, apiChatId, userId)
                     }.onSuccess { payload ->
@@ -922,7 +927,7 @@ class ChatViewModel(
         apiChatId: String,
         userId: String
     ): PrefetchedChatPayload = coroutineScope {
-        val messagesDeferred = async { chatRepository.fetchMessagesForChat(apiChatId) }
+        val messagesDeferred = async { chatRepository.fetchMessagesForChat(apiChatId, userId) }
         val participantsDeferred = async { chatRepository.fetchChatParticipants(apiChatId) }
         val reactionsDeferred = async { chatRepository.fetchReactionsForChat(apiChatId) }
 
@@ -970,7 +975,7 @@ class ChatViewModel(
             var attempt = 0
             while (attempt < MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS && currentApiChatId == chatId) {
                 try {
-                    val (subscription, changeFlow) = chatRepository.subscribeToMessages(chatId)
+                    val (subscription, changeFlow) = chatRepository.subscribeToMessages(chatId, userId)
                     activeMessageSubscription = subscription
 
                     changeFlow
@@ -1077,7 +1082,7 @@ class ChatViewModel(
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         if (currentState.chatDetails.chat.id != chatId) return
 
-        val latestMessages = chatRepository.fetchMessagesForChat(chatId)
+        val latestMessages = chatRepository.fetchMessagesForChat(chatId, userId)
         val currentMessages = currentState.messages.map { it.message }
         if (latestMessages == currentMessages) return
 
@@ -1187,6 +1192,11 @@ class ChatViewModel(
 
     private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success
+        if (currentState?.chatDetails?.groupClique != null) {
+            val id = currentState.chatDetails.chat.id?.takeIf { it.isNotBlank() } ?: return null
+            currentApiChatId = id
+            return id
+        }
         val existingChatId = currentState
             ?.takeIf { it.chatDetails.connection.id == connectionId }
             ?.chatDetails
@@ -1887,6 +1897,67 @@ class ChatViewModel(
 
     fun clearNudgeResult() {
         _nudgeResult.value = null
+    }
+
+    /**
+     * Creates a verified clique with [selectedFriendUserIds] (excluding self; self is added server-side via RPC list).
+     * Wraps a fresh 32-byte group key for each member using 1:1 channel keys (creator ↔ anchor for creator row).
+     */
+    fun createVerifiedClique(
+        selectedFriendUserIds: List<String>,
+        onResult: (Result<String>) -> Unit,
+    ) {
+        val userId = _currentUserId.value ?: run {
+            onResult(Result.failure(IllegalStateException("Not signed in")))
+            return
+        }
+        val members = (selectedFriendUserIds + userId).distinct().sorted()
+        if (members.size < 2) {
+            onResult(Result.failure(IllegalArgumentException("Pick at least one friend")))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val master = MessageCrypto.generateGroupMasterKey()
+                val b64 = MessageCrypto.encodeGroupMasterKeyBase64(master)
+                val creator = userId
+                val anchor = members.first { it != creator }
+                val encrypted = mutableMapOf<String, String>()
+                for (m in members) {
+                    val wrapPeer = if (m == creator) anchor else creator
+                    val connId = findActiveConnectionIdForClique(m, wrapPeer) ?: run {
+                        onResult(Result.failure(IllegalStateException("Missing verified connection for a member")))
+                        return@launch
+                    }
+                    val keys = MessageCrypto.deriveKeysForConnection(
+                        connId,
+                        listOf(m, wrapPeer).sorted(),
+                    )
+                    encrypted[m] = MessageCrypto.encryptContent(b64, keys)
+                }
+                val rpc = chatRepository.createVerifiedClique(members, encrypted)
+                val groupId = rpc.getOrNull()
+                if (groupId != null) {
+                    val chatId = chatRepository.resolveChatIdForGroupId(groupId)
+                    if (chatId != null) {
+                        chatRepository.cacheGroupMasterKey(chatId, master)
+                    }
+                    loadChats(isForced = true)
+                }
+                onResult(rpc)
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    private fun findActiveConnectionIdForClique(a: String, b: String): String? {
+        return AppDataManager.connections.value.firstOrNull { c ->
+            c.user_ids.size == 2 &&
+                c.user_ids.contains(a) &&
+                c.user_ids.contains(b) &&
+                c.normalizedConnectionStatus() in setOf("active", "kept")
+        }?.id
     }
 
     // ==================== Message Edit / Delete ====================

@@ -278,7 +278,18 @@ data class Chat(
     val id: String? = null,
     @SerialName("connection_id")
     val connectionId: String? = null,
+    @SerialName("group_id")
+    val groupId: String? = null,
     val messages: List<Message> = emptyList()
+)
+
+/** Metadata for a mathematically verified group clique chat (pairwise connections only). */
+data class GroupCliqueDetails(
+    val groupId: String,
+    val name: String,
+    val createdByUserId: String,
+    val keyAnchorUserId: String,
+    val memberUserIds: List<String>,
 )
 
 /**
@@ -471,13 +482,30 @@ fun Connection.isActiveForUser(archivedIds: Set<String>, hiddenIds: Set<String>)
 fun Connection.isArchivedChannelForUser(archivedIds: Set<String>, hiddenIds: Set<String>): Boolean =
     id !in hiddenIds && (isServerLifecycleArchived() || id in archivedIds)
 
+/** Placeholder [Connection] so group cliques participate in chat list / [ChatWithDetails] flows. */
+fun syntheticConnectionForGroupClique(
+    groupId: String,
+    memberUserIds: List<String>,
+    lastMessageAt: Long? = null,
+): Connection = Connection(
+    id = groupId,
+    created = 0L,
+    expiry = Long.MAX_VALUE,
+    geo_location = GeoLocation(lat = 0.0, lon = 0.0),
+    user_ids = memberUserIds.distinct(),
+    status = "kept",
+    last_message_at = lastMessageAt,
+)
+
 // UI models for chat functionality
 data class ChatWithDetails(
     val chat: Chat,
     val connection: Connection,
     val otherUser: User,
     val lastMessage: Message?,
-    val unreadCount: Int
+    val unreadCount: Int,
+    /** When non-null, [connection] is a synthetic row keyed by [GroupCliqueDetails.groupId]. */
+    val groupClique: GroupCliqueDetails? = null,
 )
 
 data class MessageWithUser(

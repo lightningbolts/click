@@ -104,6 +104,7 @@ kotlin {
 
             // Kotlinx Serialization
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.krypto)
 
             implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
 

@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -375,6 +376,7 @@ private fun connectionListActivityTs(chat: ChatWithDetails): Long =
         ?: chat.lastMessage?.timeCreated
         ?: chat.connection.created
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionsListView(
     viewModel: ChatViewModel,
@@ -404,6 +406,11 @@ fun ConnectionsListView(
 
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
+
+    var cliqueSheetVisible by remember { mutableStateOf(false) }
+    var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
+    val cliqueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listScope = rememberCoroutineScope()
 
     val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState(0, 0)
@@ -723,7 +730,11 @@ fun ConnectionsListView(
                                     chatDetails = chatDetails,
                                     showOnlineIndicator = chatDetails.otherUser.id in onlineUsers,
                                     onAvatarClick = { onUserProfileClick(chatDetails.otherUser.id) },
-                                    onClick = { onChatSelected(chatDetails.connection.id) },
+                                    onClick = {
+                                        onChatSelected(
+                                            chatDetails.chat.id ?: chatDetails.connection.id,
+                                        )
+                                    },
                                     onNudge = {
                                         val chatId = chatDetails.chat.id
                                         if (chatId != null) {
@@ -759,6 +770,184 @@ fun ConnectionsListView(
             .padding(bottom = 16.dp)
     )
 
+    if (selectedTabIndex == 0 && currentUserId != null) {
+        FloatingActionButton(
+            onClick = {
+                selectedCliqueFriendIds = emptySet()
+                cliqueSheetVisible = true
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 88.dp),
+            containerColor = PrimaryBlue,
+            contentColor = Color.White,
+        ) {
+            Icon(Icons.Filled.Groups, contentDescription = "Create verified clique")
+        }
+    }
+
+    val uidForClique = currentUserId
+    if (cliqueSheetVisible && uidForClique != null) {
+        val activeOneToOne = effectiveChats.filter {
+            it.groupClique == null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        }.sortedByDescending { connectionListActivityTs(it) }
+        ModalBottomSheet(
+            onDismissRequest = { cliqueSheetVisible = false },
+            sheetState = cliqueSheetState,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+            ) {
+                Text(
+                    text = "Create verified clique",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Pick friends who are pairwise connected with you and with each other (active or kept).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (activeOneToOne.isEmpty()) {
+                    Text(
+                        text = "No active 1:1 connections yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(activeOneToOne, key = { it.connection.id }) { chatDetails ->
+                            val friendId = chatDetails.otherUser.id
+                            val checked = friendId in selectedCliqueFriendIds
+                            val canSelect = if (checked) {
+                                true
+                            } else {
+                                canToggleFriendIntoCliqueSelection(
+                                    selectedCliqueFriendIds,
+                                    friendId,
+                                    adding = true,
+                                    selfId = uidForClique,
+                                    connections = cachedConnections,
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(enabled = checked || canSelect) {
+                                        selectedCliqueFriendIds = if (checked) {
+                                            selectedCliqueFriendIds - friendId
+                                        } else {
+                                            selectedCliqueFriendIds + friendId
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { wantChecked ->
+                                        if (wantChecked == checked) return@Checkbox
+                                        if (!wantChecked) {
+                                            selectedCliqueFriendIds = selectedCliqueFriendIds - friendId
+                                        } else if (canSelect) {
+                                            selectedCliqueFriendIds = selectedCliqueFriendIds + friendId
+                                        } else {
+                                            listScope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    "That friend isn’t connected to everyone already selected.",
+                                                )
+                                            }
+                                        }
+                                    },
+                                    enabled = checked || canSelect,
+                                )
+                                AvatarWithOnlineIndicator(
+                                    isOnline = chatDetails.otherUser.id in onlineUsers,
+                                    modifier = Modifier.size(44.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(22.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    colors = listOf(PrimaryBlue, LightBlue),
+                                                ),
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase()
+                                                ?: "?",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = chatDetails.otherUser.name?.trim()?.ifBlank { null } ?: "Friend",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                val canCreate = selectedCliqueFriendIds.isNotEmpty() &&
+                    isFullyConnectedFriendClique(selectedCliqueFriendIds, uidForClique, cachedConnections)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = { cliqueSheetVisible = false }) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
+                                result.onSuccess {
+                                    cliqueSheetVisible = false
+                                    listScope.launch {
+                                        snackbarHostState.showSnackbar("Clique created")
+                                    }
+                                }
+                                result.onFailure { e ->
+                                    listScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            e.message?.takeIf { it.isNotBlank() }
+                                                ?: "Couldn’t create clique",
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        enabled = canCreate,
+                    ) {
+                        Text("Create")
+                    }
+                }
+            }
+        }
+    }
+
     // Connection action sheet
     if (pendingMenuChat != null) {
         val selected = pendingMenuChat!!
@@ -778,7 +967,7 @@ fun ConnectionsListView(
             },
             onOpenChat = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                onChatSelected(selected.connection.id)
+                onChatSelected(selected.chat.id ?: selected.connection.id)
             },
             onArchive = {
                 val selected = pendingMenuChat ?: return@ConnectionActionSheet
@@ -805,6 +994,42 @@ fun ConnectionsListView(
     } // End outer Box
 }
 
+private fun connectionPairActive(a: String, b: String, connections: List<Connection>): Boolean =
+    connections.any { c ->
+        c.user_ids.size == 2 &&
+            c.user_ids.contains(a) &&
+            c.user_ids.contains(b) &&
+            c.normalizedConnectionStatus() in setOf("active", "kept")
+    }
+
+/** True when every pair in [friendIds] ∪ {selfId} has an active or kept 1:1 connection. */
+private fun isFullyConnectedFriendClique(
+    friendIds: Set<String>,
+    selfId: String,
+    connections: List<Connection>,
+): Boolean {
+    if (friendIds.isEmpty()) return false
+    val all = friendIds + selfId
+    val list = all.toList()
+    for (i in list.indices) {
+        for (j in i + 1 until list.size) {
+            if (!connectionPairActive(list[i], list[j], connections)) return false
+        }
+    }
+    return true
+}
+
+private fun canToggleFriendIntoCliqueSelection(
+    selected: Set<String>,
+    friendId: String,
+    adding: Boolean,
+    selfId: String,
+    connections: List<Connection>,
+): Boolean {
+    if (!adding) return true
+    val next = selected + friendId
+    return isFullyConnectedFriendClique(next, selfId, connections)
+}
 
 private fun connectionHasNoGeo(connection: Connection): Boolean {
     val g = connection.geo_location

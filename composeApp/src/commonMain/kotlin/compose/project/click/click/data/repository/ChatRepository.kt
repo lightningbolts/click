@@ -34,11 +34,14 @@ interface ChatRepository {
 
     fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>)
 
+    /** Caches the 32-byte group master key for [chatId] after local unwrap or creation. */
+    fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray)
+
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
     suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
-    suspend fun fetchMessagesForChat(chatId: String): List<Message>
+    suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String? = null): List<Message>
 
     suspend fun sendMessage(
         chatId: String,
@@ -60,7 +63,19 @@ interface ChatRepository {
 
     suspend fun markMessagesAsRead(chatId: String, userId: String)
 
-    suspend fun subscribeToMessages(chatId: String): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>>
+    /**
+     * @param viewerUserId Required to unwrap group master keys from the database when not already cached.
+     */
+    suspend fun subscribeToMessages(chatId: String, viewerUserId: String): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>>
+
+    /**
+     * Creates a verified clique server-side; returns the new **group** id on success.
+     * Caller must supply [encryptedKeysByUserId] keyed by each member's user id (wire ciphertext strings).
+     */
+    suspend fun createVerifiedClique(
+        memberUserIds: List<String>,
+        encryptedKeysByUserId: Map<String, String>,
+    ): Result<String>
 
     /**
      * Realtime INSERT on [messages] rows the current session may read. Emits [MessageListInsertEvent]
@@ -112,6 +127,8 @@ interface ChatRepository {
     suspend fun searchMessages(chatId: String, query: String): List<Message>
 
     suspend fun resolveChatIdForConnection(connectionId: String): String?
+
+    suspend fun resolveChatIdForGroupId(groupId: String): String?
 
     suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>>
 

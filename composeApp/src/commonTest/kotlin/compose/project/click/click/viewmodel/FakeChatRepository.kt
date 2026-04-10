@@ -39,10 +39,10 @@ class FakeChatRepository(
     var onFetchUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchArchivedUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchChatWithDetails: suspend (String, String) -> ChatWithDetails? = { _, _ -> null },
-    var onFetchMessagesForChat: suspend (String) -> List<Message> = { emptyList() },
+    var onFetchMessagesForChat: suspend (String, String?) -> List<Message> = { _, _ -> emptyList() },
     var onFetchChatParticipants: suspend (String) -> List<User> = { emptyList() },
     var onFetchReactionsForChat: suspend (String) -> List<MessageReaction> = { emptyList() },
-    var onSubscribeToMessages: suspend (String) -> Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> = {
+    var onSubscribeToMessages: suspend (String, String) -> Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> = { _, _ ->
         NoopMessageSubscription to emptyFlow()
     },
     var onSubscribeToMessageInserts: suspend () -> Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> = {
@@ -71,14 +71,16 @@ class FakeChatRepository(
 
     override fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {}
 
+    override fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray) {}
+
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchUserChatsWithDetails(userId)
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)
 
-    override suspend fun fetchMessagesForChat(chatId: String): List<Message> =
-        onFetchMessagesForChat(chatId)
+    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message> =
+        onFetchMessagesForChat(chatId, viewerUserId)
 
     override suspend fun sendMessage(
         chatId: String,
@@ -106,8 +108,11 @@ class FakeChatRepository(
 
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {}
 
-    override suspend fun subscribeToMessages(chatId: String): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> =
-        onSubscribeToMessages(chatId)
+    override suspend fun subscribeToMessages(
+        chatId: String,
+        viewerUserId: String,
+    ): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> =
+        onSubscribeToMessages(chatId, viewerUserId)
 
     override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> =
         onSubscribeToMessageInserts()
@@ -157,6 +162,13 @@ class FakeChatRepository(
     override suspend fun searchMessages(chatId: String, query: String): List<Message> = emptyList()
 
     override suspend fun resolveChatIdForConnection(connectionId: String): String? = null
+
+    override suspend fun resolveChatIdForGroupId(groupId: String): String? = null
+
+    override suspend fun createVerifiedClique(
+        memberUserIds: List<String>,
+        encryptedKeysByUserId: Map<String, String>,
+    ): Result<String> = Result.failure(UnsupportedOperationException())
 
     override suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> =
         null to emptyList()
