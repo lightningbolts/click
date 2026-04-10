@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
@@ -45,6 +46,7 @@ import compose.project.click.click.ui.components.AvailabilitySheet // pragma: al
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.AvailabilityIntentRow
@@ -81,6 +83,7 @@ fun SettingsScreen(
     val ghostModeEnabled by AppDataManager.ghostModeEnabled.collectAsState()
 
     val tokenStorage = remember { createTokenStorage() }
+    val proximityManager = rememberProximityManager()
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
     val locationService = remember { LocationService() }
     val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
@@ -286,6 +289,51 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    SettingsSectionHeader("Nearby & Bluetooth")
+                }
+                item {
+                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.BluetoothSearching,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                    tint = PrimaryBlue,
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Bluetooth for Connect",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "Nearby handshake uses Bluetooth Low Energy plus a short in-room audio cue. " +
+                                            "Keep Bluetooth on; the OS may still show a permission prompt the first time you connect.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = { proximityManager.openRadiosSettings() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text("Open Bluetooth & radios")
                             }
                         }
                     }

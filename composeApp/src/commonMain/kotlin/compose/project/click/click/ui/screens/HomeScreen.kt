@@ -250,13 +250,19 @@ fun HomeScreen(
                         }
 
                         item(key = "availability_intents_strip") {
-                            HomeAvailabilityIntentsRow(
-                                intents = homeAvailabilityIntents,
-                                onOpenSheet = {
-                                    availabilityViewModel.resetAvailabilityIntentSheet()
-                                    showAvailabilityIntentSheet = true
-                                },
-                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                HomeAvailabilityIntentsRow(
+                                    intents = homeAvailabilityIntents,
+                                    onOpenSheet = {
+                                        availabilityViewModel.resetAvailabilityIntentSheet()
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                )
+                                HomeAvailabilityOverlapHint()
+                            }
                         }
 
                         // Recent Connections Section — grouped by location
@@ -1025,6 +1031,44 @@ private fun InsightRow(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+private fun HomeAvailabilityOverlapHint() {
+    GlassCardCompact(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                Icons.Filled.Bolt,
+                contentDescription = null,
+                tint = Color(0xFFFBBF24),
+                modifier = Modifier.size(28.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Availability overlaps",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "When you and a connection are both down for something that lines up in time, " +
+                        "you'll see a gold match in chat and on connection rows — not just a lightning icon alone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

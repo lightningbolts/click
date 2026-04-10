@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exclude encrypted auth prefs from Auto Backup / device transfer.
+  Restoring these XML blobs without the original Keystore master key corrupts sessions.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="auth_prefs.xml" />
+    <exclude domain="sharedpref" path="click_supabase_gotrue.xml" />
+</full-backup-content>

@@ -2,22 +2,11 @@ package compose.project.click.click.data.storage
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 class AndroidTokenStorage(private val context: Context) : TokenStorage {
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val sharedPreferences: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        "auth_prefs",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val sharedPreferences: SharedPreferences =
+        createEncryptedSharedPreferences(context, AUTH_PREFS_NAME)
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
         sharedPreferences.edit().apply {
@@ -51,6 +40,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     }
 
     companion object {
+        internal const val AUTH_PREFS_NAME = "auth_prefs"
         private const val KEY_JWT = "jwt"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
@@ -240,13 +230,15 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
 private var contextInstance: Context? = null
 
 fun initTokenStorage(context: Context) {
-    contextInstance = context
+    contextInstance = context.applicationContext
 }
 
-actual fun createTokenStorage(): TokenStorage {
-    val context = contextInstance ?: throw IllegalStateException(
+internal fun androidStorageContextOrThrow(): Context =
+    contextInstance ?: throw IllegalStateException(
         "TokenStorage not initialized. Call initTokenStorage() from MainActivity first."
     )
-    return AndroidTokenStorage(context)
+
+actual fun createTokenStorage(): TokenStorage {
+    return AndroidTokenStorage(androidStorageContextOrThrow())
 }
 

@@ -1543,12 +1543,33 @@ fun ConnectionItem(
                     )
                     if (!isGroup && intentOverlapLabel != null) {
                         Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            Icons.Filled.Bolt,
-                            contentDescription = "Shared availability",
-                            tint = Color(0xFFFBBF24),
-                            modifier = Modifier.size(18.dp),
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color(0x1AFBBF24),
+                            border = BorderStroke(1.dp, Color(0x45FBBF24)),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Bolt,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    text = intentOverlapLabel!!,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFFFFE8A8),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 120.dp),
+                                )
+                            }
+                        }
                     }
                 }
                 Text(
@@ -2000,12 +2021,33 @@ fun ChatView(
 
                                 if (!isGroupChat && chatIntentOverlap != null) {
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        Icons.Filled.Bolt,
-                                        contentDescription = "Shared availability",
-                                        tint = Color(0xFFFBBF24),
-                                        modifier = Modifier.size(22.dp),
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color(0x1AFBBF24),
+                                        border = BorderStroke(1.dp, Color(0x45FBBF24)),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Bolt,
+                                                contentDescription = null,
+                                                tint = Color(0xFFFBBF24),
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Text(
+                                                text = chatIntentOverlap!!,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFFFFE8A8),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.widthIn(max = 140.dp),
+                                            )
+                                        }
+                                    }
                                 }
 
                                 if (isGroupChat) {

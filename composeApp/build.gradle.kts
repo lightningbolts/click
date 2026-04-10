@@ -108,7 +108,8 @@ kotlin {
 
             implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
 
-            // Multiplatform Settings for persistent session storage
+            // Multiplatform Settings for persistent session storage (explicit core artifact for SharedPreferencesSettings / NSUserDefaultsSettings)
+            implementation("com.russhwolf:multiplatform-settings:1.2.0")
             implementation("com.russhwolf:multiplatform-settings-no-arg:1.2.0")
         }
         iosMain.dependencies {

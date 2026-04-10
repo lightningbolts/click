@@ -331,6 +331,8 @@ class IosTokenStorage : TokenStorage {
             return false
         }
 
+        // AfterFirstUnlock*: session reads succeed after first device unlock each boot (background refresh / post-update).
+        // ThisDeviceOnly: tokens are not included in iTunes/Finder backups. Updates use delete+add (no SecItemUpdate path).
         val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to SERVICE_NAME,

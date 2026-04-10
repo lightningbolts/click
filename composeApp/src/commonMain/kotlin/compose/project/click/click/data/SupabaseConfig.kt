@@ -26,8 +26,8 @@ object SupabaseConfig {
 
     fun functionUrl(functionName: String): String = "$SUPABASE_URL/functions/v1/$functionName"
 
-    // Create a persistent Settings instance for session storage
-    private val settings: Settings by lazy { Settings() }
+    /** Persists GoTrue session JSON + PKCE verifier via platform secure storage (not in-memory [Settings]). */
+    private val authSessionSettings: Settings by lazy { createSupabaseAuthSettings() }
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -40,7 +40,7 @@ object SupabaseConfig {
                 scheme = "click"
                 host = "login"
                 // Use SettingsSessionManager for persistent session storage
-                sessionManager = SettingsSessionManager(settings)
+                sessionManager = SettingsSessionManager(authSessionSettings)
                 // Ensure tokens are auto-refreshed and auto-loaded
                 alwaysAutoRefresh = true
                 autoLoadFromStorage = true

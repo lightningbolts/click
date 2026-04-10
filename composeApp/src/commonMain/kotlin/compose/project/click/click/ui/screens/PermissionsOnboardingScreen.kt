@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -172,6 +173,13 @@ fun PermissionsOnboardingScreen(
                                 checked = notificationsEnabled,
                                 enabled = true,
                                 onCheckedChange = { notificationsEnabled = it },
+                            )
+                            PermissionCardDivider()
+                            PermissionInfoRow(
+                                icon = Icons.Default.BluetoothSearching,
+                                title = "Bluetooth for nearby Connect",
+                                description = "Tap Connect uses Bluetooth Low Energy to prove you are in the same room. " +
+                                    "Keep Bluetooth on; the system will ask for permission when you start your first handshake.",
                             )
                         }
                     }
@@ -414,6 +422,43 @@ private fun PermissionCardDivider() {
         modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
     )
+}
+
+@Composable
+private fun PermissionInfoRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = PrimaryBlue,
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
+            )
+        }
+    }
 }
 
 /**
