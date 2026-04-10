@@ -75,7 +75,14 @@ interface ChatRepository {
     suspend fun createVerifiedClique(
         memberUserIds: List<String>,
         encryptedKeysByUserId: Map<String, String>,
+        initialGroupName: String = "Clique",
     ): Result<String>
+
+    suspend fun leaveClique(groupId: String): Result<Unit>
+
+    suspend fun deleteClique(groupId: String): Result<Unit>
+
+    suspend fun renameClique(groupId: String, newName: String): Result<Unit>
 
     /**
      * True when every pair in [memberUserIds] (including caller) has an active/kept 1:1 connection.

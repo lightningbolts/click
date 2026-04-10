@@ -168,7 +168,17 @@ class FakeChatRepository(
     override suspend fun createVerifiedClique(
         memberUserIds: List<String>,
         encryptedKeysByUserId: Map<String, String>,
+        initialGroupName: String,
     ): Result<String> = Result.failure(UnsupportedOperationException())
+
+    override suspend fun leaveClique(groupId: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException())
+
+    override suspend fun deleteClique(groupId: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException())
+
+    override suspend fun renameClique(groupId: String, newName: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException())
 
     override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean = true
 

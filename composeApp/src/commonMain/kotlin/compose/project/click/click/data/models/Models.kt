@@ -526,6 +526,11 @@ data class ChatWithDetails(
     val unreadCount: Int,
     /** When non-null, [connection] is a synthetic row keyed by [GroupCliqueDetails.groupId]. */
     val groupClique: GroupCliqueDetails? = null,
+    /**
+     * For [groupClique] chats: other members (excluding viewer), sorted for stable list avatars.
+     * Empty for 1:1 chats.
+     */
+    val groupMemberUsers: List<User> = emptyList(),
 )
 
 data class MessageWithUser(

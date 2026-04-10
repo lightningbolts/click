@@ -755,6 +755,10 @@ class SupabaseChatRepository(
                     image = null,
                     createdAt = 0L,
                 )
+                val groupMemberUsers = memberIds
+                    .filter { it != userId }
+                    .mapNotNull { uid -> usersById[uid] }
+                    .sortedWith(compareBy({ it.name ?: "" }, { it.id }))
 
                 val clique = GroupCliqueDetails(
                     groupId = gid,
@@ -785,6 +789,7 @@ class SupabaseChatRepository(
                     lastMessage = lastMessage,
                     unreadCount = unreadByChatId[chatRow.id] ?: 0,
                     groupClique = clique,
+                    groupMemberUsers = groupMemberUsers,
                 )
             }.sortedByDescending { d ->
                 d.lastMessage?.timeCreated
@@ -1598,6 +1603,7 @@ class SupabaseChatRepository(
     override suspend fun createVerifiedClique(
         memberUserIds: List<String>,
         encryptedKeysByUserId: Map<String, String>,
+        initialGroupName: String,
     ): Result<String> = runCatching {
         val ids = memberUserIds.distinct().sorted()
         require(ids.size >= 2) { "Clique needs at least two members" }
@@ -1609,9 +1615,31 @@ class SupabaseChatRepository(
                     encryptedKeysByUserId.forEach { (k, v) -> put(k, JsonPrimitive(v)) }
                 },
             )
+            put("initial_group_name", JsonPrimitive(initialGroupName.trim().ifBlank { "Clique" }))
         }
         val rpcResult = supabase.postgrest.rpc("create_verified_clique", body)
         decodeUuidScalarFromRpc(rpcResult.data)
+    }
+
+    override suspend fun leaveClique(groupId: String): Result<Unit> = runCatching {
+        require(groupId.isNotBlank())
+        val body = buildJsonObject { put("target_group_id", JsonPrimitive(groupId)) }
+        supabase.postgrest.rpc("leave_clique", body)
+    }
+
+    override suspend fun deleteClique(groupId: String): Result<Unit> = runCatching {
+        require(groupId.isNotBlank())
+        val body = buildJsonObject { put("target_group_id", JsonPrimitive(groupId)) }
+        supabase.postgrest.rpc("delete_clique", body)
+    }
+
+    override suspend fun renameClique(groupId: String, newName: String): Result<Unit> = runCatching {
+        require(groupId.isNotBlank())
+        val body = buildJsonObject {
+            put("target_group_id", JsonPrimitive(groupId))
+            put("new_name", JsonPrimitive(newName))
+        }
+        supabase.postgrest.rpc("rename_clique", body)
     }
 
     override fun clearChatListLocalCaches() {

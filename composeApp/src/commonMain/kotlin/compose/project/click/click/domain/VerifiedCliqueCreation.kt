@@ -29,6 +29,7 @@ object VerifiedCliqueCreation {
         connections: List<Connection>,
         currentUserId: String,
         memberUserIds: List<String>,
+        initialGroupName: String = "Clique",
     ): Result<VerifiedCliqueCreateResult> {
         val members = memberUserIds.distinct().sorted()
         if (members.size < 2) {
@@ -53,7 +54,8 @@ object VerifiedCliqueCreation {
             )
             encrypted[m] = MessageCrypto.encryptContent(b64, keys)
         }
-        return chatRepository.createVerifiedClique(members, encrypted).map { groupId ->
+        val label = initialGroupName.trim().ifBlank { "Clique" }
+        return chatRepository.createVerifiedClique(members, encrypted, label).map { groupId ->
             VerifiedCliqueCreateResult(groupId = groupId, masterKey32 = master)
         }
     }

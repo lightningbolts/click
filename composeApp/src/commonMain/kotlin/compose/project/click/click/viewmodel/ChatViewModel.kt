@@ -1911,6 +1911,19 @@ class ChatViewModel(
     suspend fun memberSetSatisfiesVerifiedCliqueGraph(memberUserIds: List<String>): Boolean =
         chatRepository.verifiedCliqueEdgesExist(memberUserIds)
 
+    private fun buildInitialVerifiedCliqueDisplayName(memberUserIds: List<String>, currentUserId: String): String {
+        val ordered = memberUserIds.distinct().sorted()
+        return ordered.joinToString(", ") { uid ->
+            val u = when {
+                uid == currentUserId -> AppDataManager.currentUser.value
+                else -> AppDataManager.getConnectedUser(uid)
+            }
+            u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: u?.name?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                ?: "Friend"
+        }
+    }
+
     /**
      * Creates a verified group chat ("click") with [selectedFriendUserIds] (excluding self; self is merged in).
      */
@@ -1941,11 +1954,13 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             try {
+                val initialName = buildInitialVerifiedCliqueDisplayName(members, userId)
                 val rpc = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
                     chatRepository = chatRepository,
                     connections = AppDataManager.connections.value,
                     currentUserId = userId,
                     memberUserIds = members,
+                    initialGroupName = initialName,
                 )
                 val payload = rpc.getOrNull()
                 if (payload != null) {
@@ -2158,6 +2173,68 @@ class ChatViewModel(
                 _nudgeResult.value = "Failed to remove connection"
                 onComplete(false)
             }
+        }
+    }
+
+    fun leaveVerifiedClique(groupId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            chatRepository.clearChatListLocalCaches()
+            val ok = chatRepository.leaveClique(groupId).isSuccess
+            if (ok) {
+                if (currentConnectionId == groupId) {
+                    leaveChatRoom()
+                }
+                loadChats(isForced = true)
+                _nudgeResult.value = "You left the group"
+            } else {
+                _nudgeResult.value = "Could not leave group"
+            }
+            onComplete(ok)
+        }
+    }
+
+    fun deleteVerifiedClique(groupId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            chatRepository.clearChatListLocalCaches()
+            val ok = chatRepository.deleteClique(groupId).isSuccess
+            if (ok) {
+                if (currentConnectionId == groupId) {
+                    leaveChatRoom()
+                }
+                loadChats(isForced = true)
+                _nudgeResult.value = "Group deleted"
+            } else {
+                _nudgeResult.value = "Could not delete group"
+            }
+            onComplete(ok)
+        }
+    }
+
+    fun renameVerifiedClique(groupId: String, newName: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val trimmed = newName.trim()
+            if (trimmed.isEmpty()) {
+                onComplete(false)
+                return@launch
+            }
+            val ok = chatRepository.renameClique(groupId, trimmed).isSuccess
+            if (ok) {
+                val cur = _chatMessagesState.value as? ChatMessagesState.Success
+                val gc = cur?.chatDetails?.groupClique
+                if (cur != null && gc != null && gc.groupId == groupId) {
+                    _chatMessagesState.value = cur.copy(
+                        chatDetails = cur.chatDetails.copy(
+                            groupClique = gc.copy(name = trimmed),
+                            otherUser = cur.chatDetails.otherUser.copy(name = trimmed),
+                        ),
+                    )
+                }
+                loadChats(isForced = true)
+                _nudgeResult.value = "Group renamed"
+            } else {
+                _nudgeResult.value = "Could not rename group"
+            }
+            onComplete(ok)
         }
     }
 

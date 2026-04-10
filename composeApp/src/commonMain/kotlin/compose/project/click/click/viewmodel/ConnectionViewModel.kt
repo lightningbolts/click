@@ -368,12 +368,23 @@ class ConnectionViewModel : ViewModel() {
                 if (selfId != null && targetProfiles.size >= 1) {
                     val memberUserIds = (listOf(selfId) + targetProfiles.map { it.id }).distinct().sorted()
                     if (memberUserIds.size >= 2) {
+                        val selfProfile = AppDataManager.currentUser.value?.toUserProfile()
+                        val nameParts = if (selfProfile != null) {
+                            (listOf(selfProfile) + targetProfiles).distinctBy { it.id }.sortedBy { it.id }
+                        } else {
+                            targetProfiles.distinctBy { it.id }.sortedBy { it.id }
+                        }
+                        val initialGroupName = nameParts.joinToString(", ") { p ->
+                            p.displayName.trim().split(Regex("\\s+")).firstOrNull()?.takeIf { it.isNotEmpty() }
+                                ?: p.displayName.trim().ifBlank { "Friend" }
+                        }
                         val chatRepo = SupabaseChatRepository(tokenStorage = createTokenStorage())
                         val auto = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
                             chatRepository = chatRepo,
                             connections = AppDataManager.connections.value,
                             currentUserId = selfId,
                             memberUserIds = memberUserIds,
+                            initialGroupName = initialGroupName,
                         )
                         val created = auto.getOrNull()
                         if (created != null) {

@@ -53,6 +53,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.*
@@ -136,7 +137,11 @@ import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowli
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.data.models.parsedMediaMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import coil3.compose.AsyncImage // pragma: allowlist secret
+import androidx.compose.foundation.layout.offset // pragma: allowlist secret
+import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
@@ -685,7 +690,11 @@ fun ConnectionsListView(
                     sortedTabChats
                 } else {
                     sortedTabChats.filter { chat ->
-                        chat.otherUser?.name?.contains(searchQuery, ignoreCase = true) == true
+                        val groupHit =
+                            chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
+                        val userHit =
+                            chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
+                        groupHit || userHit
                     }
                 }
 
@@ -810,8 +819,13 @@ fun ConnectionsListView(
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 ConnectionItem(
                                     chatDetails = chatDetails,
-                                    showOnlineIndicator = chatDetails.otherUser.id in onlineUsers,
-                                    onAvatarClick = { onUserProfileClick(chatDetails.otherUser.id) },
+                                    showOnlineIndicator = chatDetails.groupClique == null &&
+                                        chatDetails.otherUser.id in onlineUsers,
+                                    onAvatarClick = {
+                                        if (chatDetails.groupClique == null) {
+                                            onUserProfileClick(chatDetails.otherUser.id)
+                                        }
+                                    },
                                     onClick = {
                                         onChatSelected(
                                             chatDetails.chat.id ?: chatDetails.connection.id,
@@ -826,7 +840,10 @@ fun ConnectionsListView(
                                     onOpenMenu = { pendingMenuChat = chatDetails },
                                     onLongPress = { pendingMenuChat = chatDetails }
                                 )
-                                if (connectionHasNoGeo(chatDetails.connection) && onNavigateToLocationSettings != null) {
+                                if (chatDetails.groupClique == null &&
+                                    connectionHasNoGeo(chatDetails.connection) &&
+                                    onNavigateToLocationSettings != null
+                                ) {
                                     LocationGapNudge(
                                         otherName = chatDetails.otherUser.name ?: "them",
                                         onClick = onNavigateToLocationSettings
@@ -1045,40 +1062,51 @@ fun ConnectionsListView(
         val isServerArchived = selected.connection.isServerLifecycleArchived()
         ConnectionActionSheet(
             chatDetails = selected,
+            currentUserId = currentUserId,
             isArchived = isUserArchived,
             isServerLifecycleArchived = isServerArchived,
             onDismiss = { pendingMenuChat = null },
             onNudge = {
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                val chatId = selected.chat.id
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                val chatId = sel.chat.id
                 if (chatId != null) {
-                    viewModel.sendNudgeToChat(chatId, selected.otherUser.name ?: "them")
+                    viewModel.sendNudgeToChat(chatId, sel.otherUser.name ?: "them")
                 }
             },
             onOpenChat = {
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                onChatSelected(selected.chat.id ?: selected.connection.id)
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                onChatSelected(sel.chat.id ?: sel.connection.id)
             },
             onArchive = {
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.archiveConnectionById(selected.connection.id) { }
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.archiveConnectionById(sel.connection.id) { }
             },
             onUnarchive = {
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.unarchiveConnection(selected.connection.id)
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.unarchiveConnection(sel.connection.id)
             },
             onDelete = {
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.deleteConnectionPermanentlyById(selected.connection.id) { }
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.deleteConnectionPermanentlyById(sel.connection.id) { }
             },
             onReport = { reason ->
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.reportConnectionForConnection(selected.connection.id, reason) { }
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.reportConnectionForConnection(sel.connection.id, reason) { }
             },
             onBlock = {
-                val selected = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.blockUserForConnection(selected.connection.id) { }
-            }
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                viewModel.blockUserForConnection(sel.connection.id) { }
+            },
+            onLeaveGroup = {
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                val gid = sel.groupClique?.groupId ?: return@ConnectionActionSheet
+                viewModel.leaveVerifiedClique(gid) { ok -> if (ok) pendingMenuChat = null }
+            },
+            onDeleteGroup = {
+                val sel = pendingMenuChat ?: return@ConnectionActionSheet
+                val gid = sel.groupClique?.groupId ?: return@ConnectionActionSheet
+                viewModel.deleteVerifiedClique(gid) { ok -> if (ok) pendingMenuChat = null }
+            },
         )
     }
     } // End outer Box
@@ -1123,6 +1151,88 @@ private fun LocationGapNudge(
 }
 
 @Composable
+private fun GroupChatListAvatarStack(memberUsers: List<User>, avatarSize: Dp = 44.dp) {
+    val profiles = memberUsers.map { it.toUserProfile() }
+    if (profiles.isEmpty()) return
+    val shown = profiles.take(3)
+    val overflow = (profiles.size - 3).coerceAtLeast(0)
+    val overlap = (avatarSize.value * 0.38f).dp
+    val badgeSize = (avatarSize.value * 0.92f).dp
+    val stackWidth =
+        avatarSize + overlap * (shown.size - 1).coerceAtLeast(0) +
+            if (overflow > 0) badgeSize + 6.dp else 0.dp
+    Row(
+        modifier = Modifier
+            .width(stackWidth)
+            .height(avatarSize + 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            shown.forEachIndexed { index, profile ->
+                val borderColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                Surface(
+                    modifier = Modifier
+                        .offset(x = overlap * index)
+                        .size(avatarSize)
+                        .zIndex(index.toFloat())
+                        .align(Alignment.CenterStart),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(2.dp, borderColor),
+                ) {
+                    if (!profile.avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = profile.avatarUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(avatarSize)
+                                .clip(CircleShape),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size((avatarSize.value * 0.55f).dp),
+                            )
+                        }
+                    }
+                }
+            }
+            if (overflow > 0) {
+                Surface(
+                    modifier = Modifier
+                        .offset(x = overlap * shown.size + 4.dp)
+                        .size(badgeSize)
+                        .zIndex(shown.size + 1f)
+                        .align(Alignment.CenterStart),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.surfaceContainerHigh),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Text(
+                            text = "+$overflow",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
     showOnlineIndicator: Boolean = false,
@@ -1133,6 +1243,12 @@ fun ConnectionItem(
     onLongPress: () -> Unit = {}
 ) {
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    val isGroup = chatDetails.groupClique != null
+    val headline = if (isGroup) {
+        chatDetails.groupClique?.name?.trim()?.ifBlank { null } ?: "Verified click"
+    } else {
+        chatDetails.otherUser.name ?: "Unknown"
+    }
     val user = chatDetails.otherUser
     val connection = chatDetails.connection
     val lastMessage = chatDetails.lastMessage
@@ -1162,32 +1278,61 @@ fun ConnectionItem(
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Avatar
-        AvatarWithOnlineIndicator(
-            isOnline = showOnlineIndicator,
-            modifier = Modifier
-                .size(44.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(bounded = false, radius = 24.dp),
-                    onClick = onAvatarClick,
-                )
-        ) {
+        // Avatar (stacked for verified clicks)
+        if (isGroup) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(
-                        Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
-                    ),
-                contentAlignment = Alignment.Center
+                modifier = Modifier.size(44.dp),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                Text(
-                    user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                if (chatDetails.groupMemberUsers.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Groups,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                } else {
+                    GroupChatListAvatarStack(
+                        memberUsers = chatDetails.groupMemberUsers,
+                        avatarSize = 40.dp,
+                    )
+                }
+            }
+        } else {
+            AvatarWithOnlineIndicator(
+                isOnline = showOnlineIndicator,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(bounded = false, radius = 24.dp),
+                        onClick = onAvatarClick,
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(
+                            Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
 
@@ -1200,7 +1345,7 @@ fun ConnectionItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    user.name ?: "Unknown",
+                    headline,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -1265,17 +1410,20 @@ fun ConnectionItem(
             }
         }
 
-        // Nudge button
-        IconButton(
-            onClick = onNudge,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                Icons.Filled.Notifications,
-                contentDescription = "Nudge",
-                modifier = Modifier.size(18.dp),
-                tint = PrimaryBlue.copy(alpha = 0.7f)
-            )
+        if (!isGroup) {
+            IconButton(
+                onClick = onNudge,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Notifications,
+                    contentDescription = "Nudge",
+                    modifier = Modifier.size(18.dp),
+                    tint = PrimaryBlue.copy(alpha = 0.7f)
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.size(36.dp))
         }
 
         // Overflow menu
@@ -1352,6 +1500,8 @@ fun ChatView(
 
     // Connection action sheet (archive, delete, report, block)
     var showConnectionSheet by remember { mutableStateOf(false) }
+    var showRenameGroupDialog by remember { mutableStateOf(false) }
+    var renameGroupDraft by remember { mutableStateOf("") }
     // Message context sheet (reactions, edit, delete, copy)
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
@@ -1458,8 +1608,29 @@ fun ChatView(
                     val chatDetails = state.chatDetails
                     val messages = state.messages
                     val reactionsMap by viewModel.messageReactions.collectAsState()
-                    val typingPeerLabel = remember(chatDetails.otherUser.name) {
-                        "${chatDetails.otherUser.name ?: "Someone"} is typing"
+                    val isGroupChat = chatDetails.groupClique != null
+                    val typingPeerLabel = remember(chatDetails.otherUser.name, isGroupChat) {
+                        if (isGroupChat) "Someone is typing"
+                        else "${chatDetails.otherUser.name ?: "Someone"} is typing"
+                    }
+                    val groupTitle = chatDetails.groupClique?.name?.trim()?.ifBlank { null }
+                        ?: "Verified click"
+                    val memberSummaryLine = remember(chatDetails.groupClique, chatDetails.groupMemberUsers, currentUser) {
+                        val gc = chatDetails.groupClique ?: return@remember null
+                        val self = currentUser
+                        val nameParts = buildList {
+                            val byId = (chatDetails.groupMemberUsers + listOfNotNull(self))
+                                .distinctBy { it.id }
+                                .associateBy { it.id }
+                            gc.memberUserIds.sorted().forEach { id ->
+                                val u = byId[id]
+                                val part = u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
+                                    ?: u?.name?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                                    ?: "Member"
+                                add(part)
+                            }
+                        }
+                        "${gc.memberUserIds.size} members: ${nameParts.joinToString(", ")}"
                     }
                     val mediaPickers = rememberChatMediaPickers(
                         onImagePicked = { bytes, mime -> viewModel.sendChatImage(bytes, mime) },
@@ -1492,93 +1663,128 @@ fun ChatView(
                                     )
                                 }
 
-                                // Avatar
-                                AvatarWithOnlineIndicator(
-                                    isOnline = chatDetails.otherUser.id in onlineUsers || isPeerOnline,
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = ripple(bounded = false, radius = 22.dp),
-                                            onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
-                                        ),
-                                    indicatorSize = 9.dp,
-                                    indicatorBorder = 1.25.dp
-                                ) {
+                                if (isGroupChat) {
                                     Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(18.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    colors = listOf(PrimaryBlue, LightBlue)
-                                                )
-                                            )
-                                            .border(
-                                                width = 1.dp,
-                                                color = PrimaryBlue.copy(alpha = 0.4f),
-                                                shape = RoundedCornerShape(18.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
+                                        modifier = Modifier.size(40.dp),
+                                        contentAlignment = Alignment.CenterStart,
                                     ) {
-                                        Text(
-                                            chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                            color = LightBlue.copy(alpha = 0.96f),
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.labelMedium
+                                        GroupChatListAvatarStack(
+                                            memberUsers = chatDetails.groupMemberUsers,
+                                            avatarSize = 34.dp,
                                         )
+                                    }
+                                } else {
+                                    AvatarWithOnlineIndicator(
+                                        isOnline = chatDetails.otherUser.id in onlineUsers || isPeerOnline,
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = ripple(bounded = false, radius = 22.dp),
+                                                onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
+                                            ),
+                                        indicatorSize = 9.dp,
+                                        indicatorBorder = 1.25.dp
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        colors = listOf(PrimaryBlue, LightBlue)
+                                                    )
+                                                )
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = PrimaryBlue.copy(alpha = 0.4f),
+                                                    shape = RoundedCornerShape(18.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                                color = LightBlue.copy(alpha = 0.96f),
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
                                     }
                                 }
 
                                 Spacer(modifier = Modifier.width(10.dp))
 
-                                // Name + realtime presence (channel) + legacy lastPolled when offline in channel
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = chatDetails.otherUser.name ?: "Unknown",
+                                        text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        AnimatedVisibility(
-                                            visible = isPeerOnline,
-                                            enter = fadeIn() + expandVertically(),
-                                            exit = fadeOut() + shrinkVertically()
+                                    if (isGroupChat && memberSummaryLine != null) {
+                                        Text(
+                                            text = memberSummaryLine,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    } else if (!isGroupChat) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(8.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFF22C55E))
-                                            )
-                                        }
-                                        AnimatedContent(
-                                            targetState = isPeerOnline,
-                                            transitionSpec = {
-                                                fadeIn(tween(220)) togetherWith fadeOut(tween(180))
-                                            },
-                                            label = "peer_presence_subtitle"
-                                        ) { online ->
-                                            Text(
-                                                text = if (online) "Online" else "Offline",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (online) {
-                                                    Color(0xFF16A34A)
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                                }
-                                            )
+                                            AnimatedVisibility(
+                                                visible = isPeerOnline,
+                                                enter = fadeIn() + expandVertically(),
+                                                exit = fadeOut() + shrinkVertically()
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFF22C55E))
+                                                )
+                                            }
+                                            AnimatedContent(
+                                                targetState = isPeerOnline,
+                                                transitionSpec = {
+                                                    fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                                                },
+                                                label = "peer_presence_subtitle"
+                                            ) { online ->
+                                                Text(
+                                                    text = if (online) "Online" else "Offline",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (online) {
+                                                        Color(0xFF16A34A)
+                                                    } else {
+                                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
 
-                                // Fixed-size anchor only; iOS uses Popup+Surface (Material DropdownMenu leaves white window bands).
+                                if (isGroupChat) {
+                                    IconButton(
+                                        onClick = {
+                                            renameGroupDraft = groupTitle
+                                            showRenameGroupDialog = true
+                                        },
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Edit,
+                                            contentDescription = "Rename group",
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                        )
+                                    }
+                                }
+
+                                if (!isGroupChat) {
                                 Box(modifier = Modifier.size(48.dp)) {
                                     IconButton(
                                         onClick = { showCallMenu = true },
@@ -1666,6 +1872,7 @@ fun ChatView(
                                         }
                                     }
                                 }
+                                }
                                 // Overflow / connection options
                                 IconButton(onClick = { showConnectionSheet = true }) {
                                     Icon(
@@ -1742,7 +1949,11 @@ fun ChatView(
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        "Say hi to ${chatDetails.otherUser.name}!",
+                                        if (isGroupChat) {
+                                            "Everyone here is in a verified click — say hello to the group."
+                                        } else {
+                                            "Say hi to ${chatDetails.otherUser.name}!"
+                                        },
                                         modifier = Modifier.fillMaxWidth(),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2116,8 +2327,11 @@ fun ChatView(
                                         interactionSource = composerFieldInteraction,
                                         placeholder = {
                                             Text(
-                                                if (editingMessageId != null) "Edit message…"
-                                                else "Message ${chatDetails.otherUser.name}…",
+                                                when {
+                                                    editingMessageId != null -> "Edit message…"
+                                                    isGroupChat -> "Message the group…"
+                                                    else -> "Message ${chatDetails.otherUser.name}…"
+                                                },
                                                 style = composerTextStyleCentered,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                             )
@@ -2302,6 +2516,7 @@ fun ChatView(
         val sheetConn = successState?.chatDetails?.connection
         ConnectionActionSheet(
             chatDetails = successState?.chatDetails,
+            currentUserId = currentUserId,
             isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
             isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
             onDismiss = { showConnectionSheet = false },
@@ -2330,7 +2545,49 @@ fun ChatView(
                 viewModel.blockUser { success ->
                     if (success) onBackPressed()
                 }
-            }
+            },
+            onLeaveGroup = {
+                val gid = successState?.chatDetails?.groupClique?.groupId ?: return@ConnectionActionSheet
+                viewModel.leaveVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
+            },
+            onDeleteGroup = {
+                val gid = successState?.chatDetails?.groupClique?.groupId ?: return@ConnectionActionSheet
+                viewModel.deleteVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
+            },
+        )
+    }
+
+    if (showRenameGroupDialog) {
+        val gid = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
+        AlertDialog(
+            onDismissRequest = { showRenameGroupDialog = false },
+            title = { Text("Rename group") },
+            text = {
+                OutlinedTextField(
+                    value = renameGroupDraft,
+                    onValueChange = { renameGroupDraft = it },
+                    singleLine = true,
+                    label = { Text("Group name") },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (gid != null) {
+                            viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
+                        }
+                        showRenameGroupDialog = false
+                    },
+                    enabled = renameGroupDraft.isNotBlank(),
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameGroupDialog = false }) {
+                    Text("Cancel")
+                }
+            },
         )
     }
     } // End outer Box
@@ -3836,6 +4093,7 @@ private fun MessageActionSheet(
 @Composable
 private fun ConnectionActionSheet(
     chatDetails: ChatWithDetails?,
+    currentUserId: String?,
     isArchived: Boolean = false,
     isServerLifecycleArchived: Boolean = false,
     onDismiss: () -> Unit,
@@ -3845,10 +4103,15 @@ private fun ConnectionActionSheet(
     onUnarchive: () -> Unit = {},
     onDelete: () -> Unit = {},
     onReport: (String) -> Unit = {},
-    onBlock: () -> Unit = {}
+    onBlock: () -> Unit = {},
+    onLeaveGroup: () -> Unit = {},
+    onDeleteGroup: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
+    val isGroup = chatDetails?.groupClique != null
+    val uid = currentUserId.orEmpty()
+    val isGroupCreator = isGroup && uid.isNotBlank() && chatDetails?.groupClique?.createdByUserId == uid
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showBlockConfirm by remember { mutableStateOf(false) }
     var showArchiveConfirm by remember { mutableStateOf(false) }
@@ -3902,10 +4165,15 @@ private fun ConnectionActionSheet(
                 .background(sheetBg)
                 .padding(bottom = 32.dp)
         ) {
-            // Connection name header
+            // Connection / group header
             chatDetails?.let { details ->
+                val title = if (isGroup) {
+                    details.groupClique?.name?.trim()?.ifBlank { null } ?: "Verified click"
+                } else {
+                    details.otherUser.name ?: "Connection"
+                }
                 Text(
-                    text = details.otherUser.name ?: "Connection",
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = onSurface,
                     modifier = Modifier
@@ -3915,113 +4183,157 @@ private fun ConnectionActionSheet(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
             }
 
-            // ── Nudge ──────────────────────────────────────────────────────────
-            ListItem(
-                headlineContent = {
-                    Text("Nudge 👋", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                },
-                supportingContent = {
-                    Text("Send a quick ping", color = onVariant,
-                        style = MaterialTheme.typography.bodySmall)
-                },
-                modifier = Modifier.clickable {
-                    onNudge()
-                    dismiss()
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
-
-            if (isArchived) {
+            if (!isGroup) {
+                // ── Nudge (1:1 only) ───────────────────────────────────────────
                 ListItem(
                     headlineContent = {
-                        Text("Unarchive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                        Text("Nudge 👋", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                     },
                     supportingContent = {
-                        Text(
-                            if (isServerLifecycleArchived) {
-                                "Remove from your Archived tab (server-archived connections stay read-only)"
-                            } else {
-                                "Move this connection back to Active"
-                            },
-                            color = onVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    },
-                    leadingContent = {
-                        Icon(Icons.Default.Unarchive, contentDescription = null,
-                            tint = onVariant)
-                    },
-                    modifier = Modifier.clickable {
-                        showUnarchiveConfirm = true
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-            } else if (!isServerLifecycleArchived) {
-                // ── Archive ────────────────────────────────────────────────────
-                ListItem(
-                    headlineContent = {
-                        Text("Archive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                    },
-                    supportingContent = {
-                        Text("Hide this connection (recoverable)", color = onVariant,
+                        Text("Send a quick ping", color = onVariant,
                             style = MaterialTheme.typography.bodySmall)
                     },
-                    leadingContent = {
-                        Icon(Icons.Default.Archive, contentDescription = null,
-                            tint = onVariant)
-                    },
                     modifier = Modifier.clickable {
-                        showArchiveConfirm = true
+                        onNudge()
+                        dismiss()
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
+
+                if (isArchived) {
+                    ListItem(
+                        headlineContent = {
+                            Text("Unarchive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                        },
+                        supportingContent = {
+                            Text(
+                                if (isServerLifecycleArchived) {
+                                    "Remove from your Archived tab (server-archived connections stay read-only)"
+                                } else {
+                                    "Move this connection back to Active"
+                                },
+                                color = onVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        },
+                        leadingContent = {
+                            Icon(Icons.Default.Unarchive, contentDescription = null,
+                                tint = onVariant)
+                        },
+                        modifier = Modifier.clickable {
+                            showUnarchiveConfirm = true
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                } else if (!isServerLifecycleArchived) {
+                    ListItem(
+                        headlineContent = {
+                            Text("Archive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                        },
+                        supportingContent = {
+                            Text("Hide this connection (recoverable)", color = onVariant,
+                                style = MaterialTheme.typography.bodySmall)
+                        },
+                        leadingContent = {
+                            Icon(Icons.Default.Archive, contentDescription = null,
+                                tint = onVariant)
+                        },
+                        modifier = Modifier.clickable {
+                            showArchiveConfirm = true
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+
+                ListItem(
+                    headlineContent = {
+                        Text("Remove Connection", color = Color(0xFFFF4444),
+                            style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.PersonRemove, contentDescription = null,
+                            tint = Color(0xFFFF4444))
+                    },
+                    modifier = Modifier.clickable { showDeleteConfirm = true },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                ListItem(
+                    headlineContent = {
+                        Text("Report", color = Color(0xFFFF8C00),
+                            style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Flag, contentDescription = null,
+                            tint = Color(0xFFFF8C00))
+                    },
+                    modifier = Modifier.clickable { showReportDialog = true },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                ListItem(
+                    headlineContent = {
+                        Text("Block", color = Color(0xFFFF4444),
+                            style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Block, contentDescription = null,
+                            tint = Color(0xFFFF4444))
+                    },
+                    modifier = Modifier.clickable {
+                        showBlockConfirm = true
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            } else {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                ListItem(
+                    headlineContent = {
+                        Text("Leave Group", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    leadingContent = {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = onVariant)
+                    },
+                    modifier = Modifier.clickable {
+                        openFinalConfirm(
+                            title = "Leave group?",
+                            body = "You will lose access to this verified click and its messages.",
+                            buttonLabel = "Leave",
+                            buttonColor = Color(0xFFFF4444)
+                        ) {
+                            onLeaveGroup()
+                            dismiss()
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                if (isGroupCreator) {
+                    ListItem(
+                        headlineContent = {
+                            Text("Delete Group", color = Color(0xFFFF4444),
+                                style = MaterialTheme.typography.bodyLarge)
+                        },
+                        leadingContent = {
+                            Icon(Icons.Default.Delete, contentDescription = null,
+                                tint = Color(0xFFFF4444))
+                        },
+                        modifier = Modifier.clickable {
+                            openFinalConfirm(
+                                title = "Delete group?",
+                                body = "Permanently deletes this verified click for everyone. This cannot be undone.",
+                                buttonLabel = "Delete",
+                                buttonColor = Color(0xFFFF4444)
+                            ) {
+                                onDeleteGroup()
+                                dismiss()
+                            }
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
             }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-
-            // ── Remove Connection ──────────────────────────────────────────────
-            ListItem(
-                headlineContent = {
-                    Text("Remove Connection", color = Color(0xFFFF4444),
-                        style = MaterialTheme.typography.bodyLarge)
-                },
-                leadingContent = {
-                    Icon(Icons.Default.PersonRemove, contentDescription = null,
-                        tint = Color(0xFFFF4444))
-                },
-                modifier = Modifier.clickable { showDeleteConfirm = true },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
-
-            // ── Report ─────────────────────────────────────────────────────────
-            ListItem(
-                headlineContent = {
-                    Text("Report", color = Color(0xFFFF8C00),
-                        style = MaterialTheme.typography.bodyLarge)
-                },
-                leadingContent = {
-                    Icon(Icons.Default.Flag, contentDescription = null,
-                        tint = Color(0xFFFF8C00))
-                },
-                modifier = Modifier.clickable { showReportDialog = true },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
-
-            // ── Block ──────────────────────────────────────────────────────────
-            ListItem(
-                headlineContent = {
-                    Text("Block", color = Color(0xFFFF4444),
-                        style = MaterialTheme.typography.bodyLarge)
-                },
-                leadingContent = {
-                    Icon(Icons.Default.Block, contentDescription = null,
-                        tint = Color(0xFFFF4444))
-                },
-                modifier = Modifier.clickable {
-                    showBlockConfirm = true
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
 
             Spacer(
                 modifier = Modifier
