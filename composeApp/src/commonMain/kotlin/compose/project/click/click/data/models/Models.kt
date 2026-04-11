@@ -420,7 +420,7 @@ data class Connection(
     val resolvedExactNoiseLevelDb: Double?
         get() = latestEncounter()?.exactNoiseLevelDb?.takeIf { it.isFinite() }
             ?: exactNoiseLevelDb?.takeIf { it.isFinite() }
-            ?: memoryCapsule?.exactNoiseLevelDb
+            ?: memoryCapsule?.exactNoiseLevelDb?.takeIf { it.isFinite() }
 
     val resolvedHeightCategory: String?
         get() = latestEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
@@ -430,7 +430,7 @@ data class Connection(
     val resolvedExactBarometricElevationM: Double?
         get() = latestEncounter()?.exactBarometricElevationM?.takeIf { it.isFinite() }
             ?: exactBarometricElevationM?.takeIf { it.isFinite() }
-            ?: memoryCapsule?.exactBarometricElevationMeters
+            ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
     val resolvedWeatherCondition: String?
         get() = latestEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }

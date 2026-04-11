@@ -434,6 +434,7 @@ fun UserProfileBottomSheet(
                         conn.profileWhenLine(),
                         conn.profileWeatherLine(),
                         conn.profileNoiseLine(),
+                        conn.profileBarometricLine(),
                     ).isNotEmpty()
 
                     if (hasMoment && conn != null) {
@@ -531,6 +532,14 @@ fun UserProfileBottomSheet(
                                     icon = Icons.Outlined.GraphicEq,
                                     iconTint = Color(0xFF69F0AE).copy(alpha = 0.9f),
                                     label = "Ambience",
+                                    value = line,
+                                )
+                            }
+                            conn.profileBarometricLine()?.let { line ->
+                                MomentCard(
+                                    icon = Icons.Outlined.Terrain,
+                                    iconTint = LightBlue.copy(alpha = 0.95f),
+                                    label = "Elevation",
                                     value = line,
                                 )
                             }

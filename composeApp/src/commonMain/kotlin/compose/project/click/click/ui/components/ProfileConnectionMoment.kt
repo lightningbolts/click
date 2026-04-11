@@ -164,8 +164,11 @@ fun Connection.profileNoiseLine(): String? {
             else rawCat.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         )
     }
-    val db = resolvedExactNoiseLevelDb
-    if (db != null && db.isFinite()) parts.add("${db.roundToInt()} dB")
+    resolvedExactNoiseLevelDb?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} dB") }
     if (parts.isEmpty()) return null
     return parts.joinToString(" · ")
 }
+
+/** Barometric elevation snapshot when a precise meter value exists (legacy rows omit this). */
+fun Connection.profileBarometricLine(): String? =
+    resolvedExactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
