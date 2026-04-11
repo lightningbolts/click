@@ -25,6 +25,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -428,11 +429,42 @@ fun ConnectionsListView(
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Groups, 2 = Archived
+    val tabContentOffsetX = remember { Animatable(0f) }
+    val tabContentAlpha = remember { Animatable(1f) }
+    var previousTabIndexForAnim by remember { mutableStateOf(selectedTabIndex) }
+    var hasInitializedTabAnimation by remember { mutableStateOf(false) }
     var listBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
         while (isActive) {
             delay(60_000)
             listBannerNow = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+
+    LaunchedEffect(selectedTabIndex) {
+        if (!hasInitializedTabAnimation) {
+            hasInitializedTabAnimation = true
+            previousTabIndexForAnim = selectedTabIndex
+            return@LaunchedEffect
+        }
+
+        val direction = if (selectedTabIndex >= previousTabIndexForAnim) 1f else -1f
+        previousTabIndexForAnim = selectedTabIndex
+        tabContentOffsetX.snapTo(direction * 36f)
+        tabContentAlpha.snapTo(0.88f)
+        coroutineScope {
+            launch {
+                tabContentOffsetX.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                )
+            }
+            launch {
+                tabContentAlpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
+                )
+            }
         }
     }
 
@@ -811,71 +843,22 @@ fun ConnectionsListView(
                     }
                 }
 
-                if (filteredChats.isEmpty()) {
-                    val emptyScroll = rememberScrollState()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(emptyScroll)
-                    ) {
-                        archiveBannerNotice?.let { notice ->
-                            ConnectionArchiveWarningBanner(
-                                notice = notice,
-                                onOpenChat = { onChatSelected(notice.connectionId) },
-                                onSendIcebreaker = {
-                                    viewModel.sendArchiveBannerIcebreaker(
-                                        notice.connectionId,
-                                        notice.chatLabel,
-                                    )
-                                },
-                                modifier = Modifier
-                                    .padding(horizontal = 20.dp)
-                                    .padding(bottom = 10.dp),
-                            )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = tabContentOffsetX.value
+                            alpha = tabContentAlpha.value
                         }
-                        Box(
+                ) {
+                    if (filteredChats.isEmpty()) {
+                        val emptyScroll = rememberScrollState()
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 360.dp)
-                                .padding(horizontal = 20.dp),
-                            contentAlignment = Alignment.Center
+                                .fillMaxSize()
+                                .verticalScroll(emptyScroll)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    if (searchQuery.isNotBlank()) "No matches found"
-                                    else if (selectedTabIndex == 1) "No group chats"
-                                    else if (selectedTabIndex == 2) "No archived connections"
-                                    else "No connections yet",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    if (searchQuery.isNotBlank()) "Try a different search term"
-                                    else if (selectedTabIndex == 1) "Group clicks will appear here"
-                                    else if (selectedTabIndex == 2) "Archived chats will appear here"
-                                    else "Start clicking with people nearby!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        state = connectionsLazyListState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 16.dp)
-                    ) {
-                        archiveBannerNotice?.let { notice ->
-                            item(key = "archive_banner") {
+                            archiveBannerNotice?.let { notice ->
                                 ConnectionArchiveWarningBanner(
                                     notice = notice,
                                     onOpenChat = { onChatSelected(notice.connectionId) },
@@ -890,58 +873,116 @@ fun ConnectionsListView(
                                         .padding(bottom = 10.dp),
                                 )
                             }
-                        }
-
-                        items(
-                            filteredChats,
-                            key = { chat ->
-                                val lm = chat.lastMessage
-                                val at = chat.connection.last_message_at
-                                if (lm != null) "${chat.connection.id}\u0001${lm.id}\u0001${lm.timeCreated}\u0001$at"
-                                else "${chat.connection.id}\u0001$at"
-                            }
-                        ) { chatDetails ->
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                ConnectionItem(
-                                    chatDetails = chatDetails,
-                                    viewerUserId = currentUserId,
-                                    showOnlineIndicator = chatDetails.groupClique == null &&
-                                        chatDetails.otherUser.id in onlineUsers,
-                                    onAvatarClick = {
-                                        if (chatDetails.groupClique == null) {
-                                            onUserProfileClick(chatDetails.otherUser.id)
-                                        }
-                                    },
-                                    onGroupMembersPicker = onGroupMembersPicker,
-                                    onClick = {
-                                        onChatSelected(
-                                            chatDetails.chat.id ?: chatDetails.connection.id,
-                                        )
-                                    },
-                                    onNudge = {
-                                        val chatId = chatDetails.chat.id
-                                        if (chatId != null) {
-                                            viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
-                                        }
-                                    },
-                                    onOpenMenu = { pendingMenuChat = chatDetails },
-                                    onLongPress = { pendingMenuChat = chatDetails }
-                                )
-                                if (chatDetails.groupClique == null &&
-                                    connectionHasNoGeo(chatDetails.connection) &&
-                                    onNavigateToLocationSettings != null
-                                ) {
-                                    LocationGapNudge(
-                                        otherName = chatDetails.otherUser.name ?: "them",
-                                        onClick = onNavigateToLocationSettings
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 360.dp)
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        if (searchQuery.isNotBlank()) "No matches found"
+                                        else if (selectedTabIndex == 1) "No group chats"
+                                        else if (selectedTabIndex == 2) "No archived connections"
+                                        else "No connections yet",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        if (searchQuery.isNotBlank()) "Try a different search term"
+                                        else if (selectedTabIndex == 1) "Group clicks will appear here"
+                                        else if (selectedTabIndex == 2) "Archived chats will appear here"
+                                        else "Start clicking with people nearby!",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 68.dp, end = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            state = connectionsLazyListState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            archiveBannerNotice?.let { notice ->
+                                item(key = "archive_banner") {
+                                    ConnectionArchiveWarningBanner(
+                                        notice = notice,
+                                        onOpenChat = { onChatSelected(notice.connectionId) },
+                                        onSendIcebreaker = {
+                                            viewModel.sendArchiveBannerIcebreaker(
+                                                notice.connectionId,
+                                                notice.chatLabel,
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .padding(horizontal = 20.dp)
+                                            .padding(bottom = 10.dp),
+                                    )
+                                }
+                            }
+
+                            items(
+                                filteredChats,
+                                key = { chat ->
+                                    val lm = chat.lastMessage
+                                    val at = chat.connection.last_message_at
+                                    if (lm != null) "${chat.connection.id}\u0001${lm.id}\u0001${lm.timeCreated}\u0001$at"
+                                    else "${chat.connection.id}\u0001$at"
+                                }
+                            ) { chatDetails ->
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    ConnectionItem(
+                                        chatDetails = chatDetails,
+                                        viewerUserId = currentUserId,
+                                        showOnlineIndicator = chatDetails.groupClique == null &&
+                                            chatDetails.otherUser.id in onlineUsers,
+                                        onAvatarClick = {
+                                            if (chatDetails.groupClique == null) {
+                                                onUserProfileClick(chatDetails.otherUser.id)
+                                            }
+                                        },
+                                        onGroupMembersPicker = onGroupMembersPicker,
+                                        onClick = {
+                                            onChatSelected(
+                                                chatDetails.chat.id ?: chatDetails.connection.id,
+                                            )
+                                        },
+                                        onNudge = {
+                                            val chatId = chatDetails.chat.id
+                                            if (chatId != null) {
+                                                viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
+                                            }
+                                        },
+                                        onOpenMenu = { pendingMenuChat = chatDetails },
+                                        onLongPress = { pendingMenuChat = chatDetails }
+                                    )
+                                    if (chatDetails.groupClique == null &&
+                                        connectionHasNoGeo(chatDetails.connection) &&
+                                        onNavigateToLocationSettings != null
+                                    ) {
+                                        LocationGapNudge(
+                                            otherName = chatDetails.otherUser.name ?: "them",
+                                            onClick = onNavigateToLocationSettings
+                                        )
+                                    }
+                                }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                )
+                            }
                         }
                     }
                 }
