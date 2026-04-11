@@ -10,6 +10,9 @@ import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.PendingConnectionDraft
+import compose.project.click.click.data.models.PendingHandshake
+import compose.project.click.click.data.models.ProximityHandshakeLocationSnapshot
+import compose.project.click.click.data.models.newPendingHandshakeId
 import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.HeightCategory
@@ -32,6 +35,7 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
@@ -41,6 +45,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -61,7 +67,36 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.*
+
+internal fun Throwable.isRetryableForProximityBind(): Boolean {
+    if (this is TimeoutCancellationException) return true
+    if (this is CancellationException) return false
+    val name = this::class.simpleName.orEmpty()
+    if (name.contains("HttpRequestTimeout", ignoreCase = true)) return true
+    if (name.contains("ConnectTimeout", ignoreCase = true)) return true
+    if (name.contains("UnresolvedAddress", ignoreCase = true)) return true
+    if (name.contains("IOException", ignoreCase = true)) return true
+    val m = message?.lowercase().orEmpty()
+    return m.contains("timeout") ||
+        m.contains("timed out") ||
+        m.contains("network") ||
+        m.contains("socket") ||
+        m.contains("unable to resolve") ||
+        m.contains("failed to connect") ||
+        m.contains("unreachable") ||
+        m.contains("offline") ||
+        m.contains("connection reset") ||
+        m.contains("connection refused") ||
+        m.contains("no address associated") ||
+        m.contains("host") && m.contains("unreachable")
+}
+
+data class PendingProximityHandshakeSyncResult(
+    val recoveredUsers: List<User>?,
+    val remainingInQueue: Int,
+)
 
 private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
     val utcTime = Clock.System
@@ -107,6 +142,13 @@ class ConnectionRepository(
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val json = Json { ignoreUnknownKeys = true }
+    private val edgeFunctionHttpClient by lazy {
+        HttpClient {
+            install(ContentNegotiation) {
+                json(this@ConnectionRepository.json)
+            }
+        }
+    }
     private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
 
     private companion object {
@@ -139,7 +181,7 @@ class ConnectionRepository(
      * Supabase Edge Function [bind-proximity-connection] and returns matched user profiles.
      */
     suspend fun bindProximityHandshake(
-        httpClient: HttpClient,
+        httpClient: HttpClient? = null,
         bearerJwt: String,
         myToken: String,
         heardTokens: List<String>,
@@ -147,6 +189,7 @@ class ConnectionRepository(
         longitude: Double?,
     ): Result<List<User>> {
         return try {
+            val client = httpClient ?: edgeFunctionHttpClient
             val hasGps = latitude != null && longitude != null &&
                 latitude.isFinite() && longitude.isFinite() &&
                 !(latitude == 0.0 && longitude == 0.0)
@@ -156,7 +199,7 @@ class ConnectionRepository(
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
             )
-            val response = httpClient.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
+            val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
                 contentType(ContentType.Application.Json)
                 headers {
                     append("apikey", SupabaseConfig.supabaseAnonApiKey)
@@ -176,6 +219,118 @@ class ConnectionRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun enqueuePendingProximityHandshake(
+        myToken: String,
+        heardTokens: List<String>,
+        latitude: Double?,
+        longitude: Double?,
+        altitudeMeters: Double?,
+    ) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val loc = if (latitude != null && longitude != null &&
+            latitude.isFinite() && longitude.isFinite() &&
+            !(latitude == 0.0 && longitude == 0.0)
+        ) {
+            ProximityHandshakeLocationSnapshot(
+                latitude = latitude,
+                longitude = longitude,
+                altitudeMeters = altitudeMeters?.takeIf { it.isFinite() },
+                capturedAtEpochMs = now,
+            )
+        } else {
+            null
+        }
+        val draft = PendingHandshake(
+            id = newPendingHandshakeId(),
+            myToken = myToken.trim(),
+            heardTokens = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+            capturedAtEpochMs = now,
+            location = loc,
+        )
+        val q = loadPendingProximityHandshakeQueue().toMutableList()
+        val dup = q.lastOrNull {
+            it.myToken == draft.myToken &&
+                it.heardTokens == draft.heardTokens &&
+                (now - it.capturedAtEpochMs) < 60_000L
+        }
+        if (dup != null) return
+        q += draft
+        while (q.size > 32) q.removeAt(0)
+        savePendingProximityHandshakeQueue(q)
+    }
+
+    suspend fun pendingProximityHandshakeQueueSize(): Int =
+        loadPendingProximityHandshakeQueue().size
+
+    /**
+     * Replays the oldest queued handshake against [bind-proximity-connection].
+     * Drops head when the server returns an empty match list (stale tokens).
+     */
+    suspend fun syncPendingProximityHandshakes(bearerJwt: String): PendingProximityHandshakeSyncResult {
+        if (bearerJwt.isBlank()) {
+            return PendingProximityHandshakeSyncResult(null, loadPendingProximityHandshakeQueue().size)
+        }
+        while (true) {
+            val queue = loadPendingProximityHandshakeQueue()
+            if (queue.isEmpty()) {
+                return PendingProximityHandshakeSyncResult(null, 0)
+            }
+            val head = queue.first()
+            val lat = head.location?.latitude
+            val lng = head.location?.longitude
+            val attempt = runCatching {
+                withTimeout(CONNECTION_TIMEOUT_MS + 12_000L) {
+                    bindProximityHandshake(
+                        httpClient = null,
+                        bearerJwt = bearerJwt,
+                        myToken = head.myToken,
+                        heardTokens = head.heardTokens,
+                        latitude = lat,
+                        longitude = lng,
+                    ).getOrThrow()
+                }
+            }
+            if (attempt.isSuccess) {
+                val users = attempt.getOrNull().orEmpty()
+                val rest = queue.drop(1)
+                savePendingProximityHandshakeQueue(rest)
+                if (users.isNotEmpty()) {
+                    return PendingProximityHandshakeSyncResult(users, rest.size)
+                }
+                continue
+            }
+            val err = attempt.exceptionOrNull() ?: return PendingProximityHandshakeSyncResult(null, queue.size)
+            val authHint = err.message?.lowercase().orEmpty()
+            if (authHint.contains("401") || authHint.contains("403") ||
+                authHint.contains("unauthorized") || authHint.contains("invalid jwt")
+            ) {
+                return PendingProximityHandshakeSyncResult(null, queue.size)
+            }
+            if (err is TimeoutCancellationException || err.isRetryableForProximityBind()) {
+                return PendingProximityHandshakeSyncResult(null, queue.size)
+            }
+            val rest = queue.drop(1)
+            savePendingProximityHandshakeQueue(rest)
+        }
+    }
+
+    private suspend fun loadPendingProximityHandshakeQueue(): List<PendingHandshake> {
+        val raw = tokenStorage.getPendingProximityHandshakeQueue()
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString<List<PendingHandshake>>(raw)
+        }.getOrElse {
+            println("ConnectionRepository: Failed to decode pending proximity handshake queue: ${it.message}")
+            emptyList()
+        }
+    }
+
+    private suspend fun savePendingProximityHandshakeQueue(items: List<PendingHandshake>) {
+        tokenStorage.savePendingProximityHandshakeQueue(
+            if (items.isEmpty()) null else json.encodeToString(items),
+        )
     }
 
     private suspend fun bumpChatUpdatedAt(connectionId: String, atMs: Long) {

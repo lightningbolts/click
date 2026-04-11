@@ -14,10 +14,12 @@ import compose.project.click.click.data.models.UserProfile // pragma: allowlist 
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.isRetryableForProximityBind // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
+import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 sealed class ConnectionState {
     object Idle : ConnectionState()
@@ -42,6 +45,12 @@ sealed class ConnectionState {
     object ProximityFetchingLocation : ConnectionState()
     object ProximityHandshaking : ConnectionState()
     data class PendingConfirmation(val users: List<User>) : ConnectionState()
+    /**
+     * Tri-factor tokens are stored locally; [bind-proximity-connection] will run when the device is online again.
+     */
+    data class ProximityCapturedOfflineSyncing(
+        val message: String = "Connection Captured. Syncing when online...",
+    ) : ConnectionState()
     /**
      * Proximity group (or single peer) connections are created; user is adding subjective context tags
      * to be fanned out to every [newConnections] row.
@@ -140,14 +149,18 @@ class ConnectionViewModel : ViewModel() {
 
                 _connectionState.value = ConnectionState.Loading
                 val bindResult = withContext(Dispatchers.Default) {
-                    repository.bindProximityHandshake(
-                        httpClient = httpClient,
-                        bearerJwt = jwt,
-                        myToken = myToken,
-                        heardTokens = heardTokens,
-                        latitude = lastProximityLat,
-                        longitude = lastProximityLng,
-                    )
+                    runCatching {
+                        withTimeout(22_000L) {
+                            repository.bindProximityHandshake(
+                                httpClient = httpClient,
+                                bearerJwt = jwt,
+                                myToken = myToken,
+                                heardTokens = heardTokens,
+                                latitude = lastProximityLat,
+                                longitude = lastProximityLng,
+                            ).getOrThrow()
+                        }
+                    }
                 }
 
                 bindResult.fold(
@@ -159,11 +172,56 @@ class ConnectionViewModel : ViewModel() {
                         }
                     },
                     onFailure = { e ->
-                        _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
+                        if (e.isRetryableForProximityBind()) {
+                            repository.enqueuePendingProximityHandshake(
+                                myToken = myToken,
+                                heardTokens = heardTokens,
+                                latitude = lastProximityLat,
+                                longitude = lastProximityLng,
+                                altitudeMeters = lastProximityAltitudeMeters,
+                            )
+                            scheduleProximityHandshakeSync()
+                            _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
+                        } else {
+                            _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
+                        }
                     },
                 )
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
+            }
+        }
+    }
+
+    /**
+     * When [AppDataManager] / WorkManager finishes a deferred bind, resume the confirm step.
+     */
+    fun onProximityHandshakeRecoveredFromBackground(users: List<User>) {
+        if (users.isEmpty()) return
+        val cur = _connectionState.value
+        if (cur is ConnectionState.ProximityCapturedOfflineSyncing || cur is ConnectionState.Idle) {
+            _connectionState.value = ConnectionState.PendingConfirmation(users)
+        }
+    }
+
+    /** Manual retry from the offline-captured UI. */
+    fun tryFlushPendingProximityHandshakes(jwt: String) {
+        if (jwt.isBlank()) {
+            _connectionState.value = ConnectionState.Error("Please sign in again.")
+            return
+        }
+        viewModelScope.launch {
+            _connectionState.value = ConnectionState.Loading
+            val r = withContext(Dispatchers.Default) {
+                repository.syncPendingProximityHandshakes(jwt)
+            }
+            when {
+                !r.recoveredUsers.isNullOrEmpty() ->
+                    _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                r.remainingInQueue > 0 ->
+                    _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
+                else ->
+                    _connectionState.value = ConnectionState.Idle
             }
         }
     }

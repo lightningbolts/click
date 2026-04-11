@@ -86,3 +86,29 @@ data class PendingConnectionDraft(
 fun Connection.isPendingSync(): Boolean = id.startsWith(PENDING_SYNC_CONNECTION_PREFIX)
 
 fun newPendingConnectionId(): String = "$PENDING_SYNC_CONNECTION_PREFIX${Clock.System.now().toEpochMilliseconds()}"
+
+/**
+ * GPS snapshot at tri-factor tap time for deferred [bind-proximity-connection] replay.
+ */
+@Serializable
+data class ProximityHandshakeLocationSnapshot(
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val altitudeMeters: Double? = null,
+    val capturedAtEpochMs: Long,
+)
+
+/**
+ * Offline queue item: BLE/ultrasonic tokens + optional location for server-side clustering when back online.
+ */
+@Serializable
+data class PendingHandshake(
+    val id: String,
+    val myToken: String,
+    val heardTokens: List<String>,
+    val capturedAtEpochMs: Long,
+    val location: ProximityHandshakeLocationSnapshot? = null,
+)
+
+fun newPendingHandshakeId(): String =
+    "pending-handshake:${Clock.System.now().toEpochMilliseconds()}:${kotlin.random.Random.nextInt(0, 10_000)}"

@@ -46,6 +46,10 @@ interface TokenStorage {
     suspend fun savePendingConnectionQueue(queue: String?)
     suspend fun getPendingConnectionQueue(): String?
 
+    /** JSON array of [compose.project.click.click.data.models.PendingHandshake] for offline tri-factor bind replay. */
+    suspend fun savePendingProximityHandshakeQueue(queue: String?)
+    suspend fun getPendingProximityHandshakeQueue(): String?
+
     /**
      * Clear all user-specific session data on sign-out.
      * Preserves only device-level preferences (e.g. dark mode).

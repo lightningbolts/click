@@ -192,6 +192,15 @@ fun NfcScreen(
                         is ConnectionState.Loading -> {
                             NfcCreatingConnectionContent()
                         }
+                        is ConnectionState.ProximityCapturedOfflineSyncing -> {
+                            ProximityOfflineCapturedContent(
+                                message = state.message,
+                                onTryNow = {
+                                    connectionViewModel.tryFlushPendingProximityHandshakes(authToken)
+                                },
+                                onDismiss = { connectionViewModel.resetConnectionState() },
+                            )
+                        }
                         is ConnectionState.Success -> {
                             NfcSuccessContent(
                                 connection = state.connection,
@@ -408,6 +417,57 @@ private fun ProximityConfirmConnectionsContent(
         Spacer(modifier = Modifier.height(8.dp))
         TextButton(onClick = onCancel) {
             Text("Cancel")
+        }
+    }
+}
+
+@Composable
+private fun ProximityOfflineCapturedContent(
+    message: String,
+    onTryNow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            Icons.Default.CloudOff,
+            contentDescription = null,
+            modifier = Modifier.size(88.dp),
+            tint = PrimaryBlue.copy(alpha = 0.9f),
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = "Connection Captured",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+        Button(
+            onClick = onTryNow,
+            modifier = Modifier
+                .fillMaxWidth(0.72f)
+                .height(52.dp),
+            shape = RoundedCornerShape(26.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+        ) {
+            Text("Try sync now", style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        TextButton(onClick = onDismiss) {
+            Text("Dismiss")
         }
     }
 }

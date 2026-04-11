@@ -118,6 +118,12 @@ fun App() {
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
 
+    LaunchedEffect(connectionViewModel) {
+        AppDataManager.proximityHandshakeRecovered.collect { users ->
+            connectionViewModel.onProximityHandshakeRecoveredFromBackground(users)
+        }
+    }
+
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()

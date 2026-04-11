@@ -24,8 +24,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -113,6 +117,12 @@ object AppDataManager {
 
     private val _pendingConnectionsCount = MutableStateFlow(0)
     val pendingConnectionsCount: StateFlow<Int> = _pendingConnectionsCount.asStateFlow()
+
+    private val _proximityHandshakeRecovered = MutableSharedFlow<List<User>>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val proximityHandshakeRecovered: SharedFlow<List<User>> = _proximityHandshakeRecovered.asSharedFlow()
 
     private val _usingCachedData = MutableStateFlow(false)
     val usingCachedData: StateFlow<Boolean> = _usingCachedData.asStateFlow()
@@ -857,10 +867,29 @@ object AppDataManager {
                 val currentUserId = _currentUser.value?.id
                 if (currentUserId.isNullOrBlank()) continue
 
-                runCatching { connectionRepository.syncPendingConnections() }
+                runCatching {
+                    connectionRepository.syncPendingConnections()
+                    val jwt = tokenStorage.getJwt()
+                    if (!jwt.isNullOrBlank()) {
+                        val proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+                        val recovered = proximity.recoveredUsers
+                        if (!recovered.isNullOrEmpty()) {
+                            _proximityHandshakeRecovered.emit(recovered)
+                        }
+                    }
+                }
                     .onFailure { println("AppDataManager: Pending sync attempt failed: ${it.message}") }
                 refreshPendingConnectionCount()
             }
+        }
+    }
+
+    suspend fun flushPendingProximityHandshakesFromBackgroundWorker() {
+        val jwt = tokenStorage.getJwt() ?: return
+        val proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+        val recovered = proximity.recoveredUsers
+        if (!recovered.isNullOrEmpty()) {
+            _proximityHandshakeRecovered.emit(recovered)
         }
     }
 

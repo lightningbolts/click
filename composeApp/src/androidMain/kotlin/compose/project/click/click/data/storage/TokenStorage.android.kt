@@ -56,6 +56,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
+        private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -211,6 +212,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         return sharedPreferences.getString(KEY_PENDING_CONNECTION_QUEUE, null)
     }
 
+    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {
+        sharedPreferences.edit().apply {
+            if (queue == null) {
+                remove(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+            } else {
+                putString(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE, queue)
+            }
+            apply()
+        }
+    }
+
+    override suspend fun getPendingProximityHandshakeQueue(): String? {
+        return sharedPreferences.getString(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE, null)
+    }
+
     override suspend fun clearSessionData() {
         sharedPreferences.edit().apply {
             val sessionKeys = listOf(
@@ -219,6 +235,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
                 KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
                 KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
                 KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+                KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
             )
             sessionKeys.forEach { remove(it) }
             apply()

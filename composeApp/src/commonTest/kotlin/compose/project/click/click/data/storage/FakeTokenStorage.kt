@@ -32,5 +32,7 @@ class FakeTokenStorage : TokenStorage {
     override suspend fun getCachedAppSnapshot(): String? = null
     override suspend fun savePendingConnectionQueue(queue: String?) {}
     override suspend fun getPendingConnectionQueue(): String? = null
+    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {}
+    override suspend fun getPendingProximityHandshakeQueue(): String? = null
     override suspend fun clearSessionData() {}
 }

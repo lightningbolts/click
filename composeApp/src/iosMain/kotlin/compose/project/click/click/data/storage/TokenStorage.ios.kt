@@ -49,6 +49,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
+        private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -302,6 +303,19 @@ class IosTokenStorage : TokenStorage {
         return userDefaults.stringForKey(KEY_PENDING_CONNECTION_QUEUE)
     }
 
+    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {
+        if (queue == null) {
+            userDefaults.removeObjectForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+        } else {
+            userDefaults.setObject(queue, KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getPendingProximityHandshakeQueue(): String? {
+        return userDefaults.stringForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+    }
+
     override suspend fun clearSessionData() {
         val sessionKeys = listOf(
             KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
@@ -309,6 +323,7 @@ class IosTokenStorage : TokenStorage {
             KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
             KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
             KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+            KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
         )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
         userDefaults.synchronize()
