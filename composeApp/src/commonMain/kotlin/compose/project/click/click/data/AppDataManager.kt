@@ -860,6 +860,18 @@ object AppDataManager {
         }
     }
 
+    /**
+     * Updates the in-memory current user avatar URL after a successful storage upload + DB update.
+     */
+    fun applyProfilePictureUrl(publicUrl: String) {
+        val latest = _currentUser.value ?: return
+        _currentUser.value = latest.copy(image = publicUrl)
+        scope.launch {
+            runCatching { persistSnapshot() }
+                .onFailure { println("applyProfilePictureUrl: snapshot failed: ${it.message}") }
+        }
+    }
+
     private fun startPendingConnectionSync() {
         if (pendingSyncJob?.isActive == true) return
 

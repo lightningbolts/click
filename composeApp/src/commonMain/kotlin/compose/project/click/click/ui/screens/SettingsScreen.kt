@@ -1,5 +1,8 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
@@ -12,9 +15,14 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +46,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.AdaptiveBackground
@@ -51,6 +61,7 @@ import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
@@ -65,6 +76,8 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
+import compose.project.click.click.ui.chat.rememberChatMediaPickers
 
 @Composable
 fun SettingsScreen(
@@ -89,6 +102,36 @@ fun SettingsScreen(
     val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
     val settingsScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var avatarUploading by remember { mutableStateOf(false) }
+    val authRepoForAvatar = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
+    val mediaPickers = rememberChatMediaPickers(
+        onImagePicked = { bytes, _ ->
+            settingsScope.launch {
+                if (bytes.size > 2_000_000) {
+                    snackbarHostState.showSnackbar("Image must be under 2 MB")
+                    return@launch
+                }
+                avatarUploading = true
+                try {
+                    authRepoForAvatar.uploadProfilePicture(bytes).fold(
+                        onSuccess = { url ->
+                            AppDataManager.applyProfilePictureUrl(url)
+                            snackbarHostState.showSnackbar("Profile photo updated")
+                        },
+                        onFailure = { e ->
+                            val msg = e.message?.lines()?.firstOrNull()?.take(180)
+                                ?: "Could not update profile photo"
+                            snackbarHostState.showSnackbar(msg)
+                        },
+                    )
+                } finally {
+                    avatarUploading = false
+                }
+            }
+        },
+        onAudioPicked = { _, _, _ -> },
+    )
 
     val foregroundSyncTick by platformForegroundTickFlow().collectAsState()
 
@@ -118,7 +161,8 @@ fun SettingsScreen(
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 PageHeader(title = "Settings")
@@ -378,6 +422,91 @@ fun SettingsScreen(
                 item {
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.fillMaxWidth()) {
+                            val avatarUrl = currentUser?.image
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 4.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(modifier = Modifier.size(84.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .size(72.dp)
+                                            .clip(CircleShape)
+                                            .clickable(enabled = !avatarUploading) {
+                                                mediaPickers.openPhotoLibrary()
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (!avatarUrl.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = avatarUrl,
+                                                contentDescription = "Profile photo",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(PrimaryBlue.copy(alpha = 0.45f)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = profileAvatarInitials(currentUser),
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                )
+                                            }
+                                        }
+                                        if (avatarUploading) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .matchParentSize()
+                                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(28.dp),
+                                                    strokeWidth = 2.dp,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(PrimaryBlue)
+                                            .clickable(enabled = !avatarUploading) {
+                                                mediaPickers.openPhotoLibrary()
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.PhotoCamera,
+                                            contentDescription = "Change profile photo",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = "Tap to change photo · max 2 MB",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 8.dp),
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
+
                             val (shownFirst, shownLast) = namePartsForEditor(currentUser)
                             Row(
                                 modifier = Modifier
@@ -553,7 +682,25 @@ fun SettingsScreen(
                 }
             )
         }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp),
+        )
     }
+}
+
+private fun profileAvatarInitials(user: User?): String {
+    if (user == null) return "?"
+    val (f, l) = namePartsForEditor(user)
+    val initials = buildString {
+        f.firstOrNull()?.uppercaseChar()?.let { append(it) }
+        if (length < 2) l.firstOrNull()?.uppercaseChar()?.let { append(it) }
+    }
+    return initials.ifEmpty { "?" }
 }
 
 /** Values shown in settings and prefilled in the editor (falls back to splitting [User.name]). */

@@ -1,5 +1,6 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.data.AVATARS_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -11,7 +12,10 @@ import kotlinx.serialization.json.put
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.withTimeout
+import kotlinx.datetime.Clock
 
 class AuthRepository(
     private val tokenStorage: TokenStorage = createTokenStorage()
@@ -20,6 +24,7 @@ class AuthRepository(
     private val supabase by lazy { SupabaseConfig.client }
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
+        const val MAX_PROFILE_IMAGE_BYTES = 2_000_000
     }
 
     suspend fun signInWithEmail(email: String, password: String): Result<UserInfo> {
@@ -265,6 +270,38 @@ class AuthRepository(
         val first = if (spaceIdx < 0) trimmed else trimmed.take(spaceIdx).trim()
         val last = if (spaceIdx < 0) "" else trimmed.substring(spaceIdx + 1).trim()
         return updateUserProfileNames(first, last)
+    }
+
+    /**
+     * Uploads a JPEG (or other image) to the `avatars` bucket and sets [public.users.image] to the public URL.
+     */
+    suspend fun uploadProfilePicture(imageBytes: ByteArray): Result<String> {
+        if (imageBytes.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Empty image"))
+        }
+        if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
+            return Result.failure(IllegalArgumentException("Image must be under 2 MB"))
+        }
+        val user = supabase.auth.currentUserOrNull()
+            ?: return Result.failure(Exception("Not signed in"))
+        val path = "${user.id}/${Clock.System.now().toEpochMilliseconds()}.jpg"
+        return try {
+            supabase.storage.from(AVATARS_BUCKET).upload(path, imageBytes) {
+                upsert = true
+            }
+            val publicUrl = supabase.storage.from(AVATARS_BUCKET).publicUrl(path)
+            supabase.from("users").update({
+                set("image", publicUrl)
+            }) {
+                filter {
+                    eq("id", user.id)
+                }
+            }
+            Result.success(publicUrl)
+        } catch (e: Exception) {
+            println("AuthRepository: uploadProfilePicture failed: ${e.redactedRestMessage()}")
+            Result.failure(e)
+        }
     }
 
     private fun mapAuthErrorMessage(error: Throwable, defaultMessage: String): String {
