@@ -118,6 +118,8 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material3.ripple
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
+import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
@@ -440,7 +442,29 @@ fun ConnectionsListView(
 
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
+    val cliqueSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val listScope = rememberCoroutineScope()
+
+    LaunchedEffect(cliqueSheetVisible) {
+        if (cliqueSheetVisible) {
+            try {
+                cliqueSheetState.show()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun dismissVerifiedCliqueSheet(onAfterHide: () -> Unit = {}) {
+        listScope.launch {
+            try {
+                cliqueSheetState.hide()
+            } catch (_: Exception) {
+            }
+        }.invokeOnCompletion {
+            cliqueSheetVisible = false
+            onAfterHide()
+        }
+    }
 
     val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState(0, 0)
@@ -911,20 +935,25 @@ fun ConnectionsListView(
 
     val uidForClique = currentUserId
     if (cliqueSheetVisible && uidForClique != null) {
-        Dialog(
-            onDismissRequest = { cliqueSheetVisible = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
+        val verifiedCliqueSheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
+        AdaptiveBottomSheet(
+            onDismissRequest = { dismissVerifiedCliqueSheet() },
+            adaptiveSheetState = cliqueSheetState,
+            containerColor = verifiedCliqueSheetBg,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
         ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.surface,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .background(verifiedCliqueSheetBg),
             ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp),
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
             ) {
                 Text(
                     text = "Create verified click",
@@ -1060,7 +1089,7 @@ fun ConnectionsListView(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(
-                        onClick = { cliqueSheetVisible = false },
+                        onClick = { dismissVerifiedCliqueSheet() },
                     ) {
                         Text("Cancel")
                     }
@@ -1069,9 +1098,10 @@ fun ConnectionsListView(
                         onClick = {
                             viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
                                 result.onSuccess {
-                                    listScope.launch {
-                                        cliqueSheetVisible = false
-                                        snackbarHostState.showSnackbar("Click created")
+                                    dismissVerifiedCliqueSheet {
+                                        listScope.launch {
+                                            snackbarHostState.showSnackbar("Click created")
+                                        }
                                     }
                                 }
                                 result.onFailure { e ->
