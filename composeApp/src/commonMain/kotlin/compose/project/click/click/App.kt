@@ -119,8 +119,8 @@ fun App() {
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
 
     LaunchedEffect(connectionViewModel) {
-        AppDataManager.proximityHandshakeRecovered.collect { users ->
-            connectionViewModel.onProximityHandshakeRecoveredFromBackground(users)
+        AppDataManager.proximityHandshakeRecovered.collect { payload ->
+            connectionViewModel.onProximityHandshakeRecoveredFromBackground(payload)
         }
     }
 
@@ -743,9 +743,16 @@ fun App() {
                 launchCommunityHubJoin(hid)
             }
             val connectionState by connectionViewModel.connectionState.collectAsState()
-            LaunchedEffect(connectionState) {
+            LaunchedEffect(connectionState, showNfcScreen) {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
+                        if (state.proximityCooldownMessage != null) {
+                            if (!showNfcScreen) {
+                                snackbarHostState.showSnackbar(state.proximityCooldownMessage)
+                                connectionViewModel.resetConnectionState()
+                            }
+                            return@LaunchedEffect
+                        }
                         if (state.connection.isPendingSync()) {
                             connectionRevealState = null
                             snackbarHostState.showSnackbar("Connection saved offline. It will sync automatically when you're back online.")
@@ -1020,6 +1027,7 @@ fun App() {
                                             proximityManager = proximityManager,
                                             connectionViewModel = connectionViewModel,
                                             onConnectionCreated = {
+                                                connectionViewModel.resetConnectionState()
                                                 showNfcScreen = false
                                                 navigateTo(NavigationItem.Connections.route)
                                             },

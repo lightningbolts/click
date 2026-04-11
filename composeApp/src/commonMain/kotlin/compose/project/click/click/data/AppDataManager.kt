@@ -16,6 +16,7 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
+import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -118,11 +119,12 @@ object AppDataManager {
     private val _pendingConnectionsCount = MutableStateFlow(0)
     val pendingConnectionsCount: StateFlow<Int> = _pendingConnectionsCount.asStateFlow()
 
-    private val _proximityHandshakeRecovered = MutableSharedFlow<List<User>>(
+    private val _proximityHandshakeRecovered = MutableSharedFlow<ProximityHandshakeRecoveryPayload>(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    val proximityHandshakeRecovered: SharedFlow<List<User>> = _proximityHandshakeRecovered.asSharedFlow()
+    val proximityHandshakeRecovered: SharedFlow<ProximityHandshakeRecoveryPayload> =
+        _proximityHandshakeRecovered.asSharedFlow()
 
     private val _usingCachedData = MutableStateFlow(false)
     val usingCachedData: StateFlow<Boolean> = _usingCachedData.asStateFlow()
@@ -874,7 +876,12 @@ object AppDataManager {
                         val proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
                         val recovered = proximity.recoveredUsers
                         if (!recovered.isNullOrEmpty()) {
-                            _proximityHandshakeRecovered.emit(recovered)
+                            _proximityHandshakeRecovered.emit(
+                                ProximityHandshakeRecoveryPayload(
+                                    users = recovered,
+                                    encounterLogged = proximity.recoveredEncounterLogged,
+                                ),
+                            )
                         }
                     }
                 }
@@ -889,7 +896,12 @@ object AppDataManager {
         val proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
         val recovered = proximity.recoveredUsers
         if (!recovered.isNullOrEmpty()) {
-            _proximityHandshakeRecovered.emit(recovered)
+            _proximityHandshakeRecovered.emit(
+                ProximityHandshakeRecoveryPayload(
+                    users = recovered,
+                    encounterLogged = proximity.recoveredEncounterLogged,
+                ),
+            )
         }
     }
 

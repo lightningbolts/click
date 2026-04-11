@@ -14,6 +14,7 @@ import compose.project.click.click.data.models.UserProfile // pragma: allowlist 
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload // pragma: allowlist secret
 import compose.project.click.click.data.repository.isRetryableForProximityBind // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
@@ -41,7 +42,12 @@ import kotlinx.coroutines.withTimeout
 sealed class ConnectionState {
     object Idle : ConnectionState()
     object Loading : ConnectionState()
-    data class Success(val connection: Connection, val connectedUser: User) : ConnectionState()
+    data class Success(
+        val connection: Connection,
+        val connectedUser: User,
+        /** Shown once after proximity confirm when the server skipped a new encounter (3h rate limit). */
+        val proximityCooldownMessage: String? = null,
+    ) : ConnectionState()
     data class Error(val message: String) : ConnectionState()
     object ProximityFetchingLocation : ConnectionState()
     object ProximityHandshaking : ConnectionState()
@@ -67,6 +73,12 @@ class ConnectionViewModel : ViewModel() {
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+    /**
+     * Aggregate from the last [bind-proximity-connection] response (or deferred sync recovery).
+     * When false after proximity confirm, skip [ConnectionState.TaggingContext] and show the cooldown notice instead.
+     */
+    private var lastProximityEncounterLoggedAggregate: Boolean = true
 
     private var lastProximityLat: Double? = null
     private var lastProximityLng: Double? = null
@@ -121,6 +133,7 @@ class ConnectionViewModel : ViewModel() {
         }
         viewModelScope.launch {
             try {
+                lastProximityEncounterLoggedAggregate = true
                 val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
                 val location = if (shouldFetchLocation) {
                     _connectionState.value = ConnectionState.ProximityFetchingLocation
@@ -167,7 +180,9 @@ class ConnectionViewModel : ViewModel() {
                 }
 
                 bindResult.fold(
-                    onSuccess = { users ->
+                    onSuccess = { outcome ->
+                        lastProximityEncounterLoggedAggregate = outcome.encounterLogged
+                        val users = outcome.matches
                         if (users.isEmpty()) {
                             _connectionState.value = ConnectionState.Error("No nearby tap detected. Try again closer together.")
                         } else {
@@ -199,8 +214,10 @@ class ConnectionViewModel : ViewModel() {
     /**
      * When [AppDataManager] / WorkManager finishes a deferred bind, resume the confirm step.
      */
-    fun onProximityHandshakeRecoveredFromBackground(users: List<User>) {
+    fun onProximityHandshakeRecoveredFromBackground(payload: ProximityHandshakeRecoveryPayload) {
+        val users = payload.users
         if (users.isEmpty()) return
+        lastProximityEncounterLoggedAggregate = payload.encounterLogged
         val cur = _connectionState.value
         if (cur is ConnectionState.ProximityCapturedOfflineSyncing || cur is ConnectionState.Idle) {
             _connectionState.value = ConnectionState.PendingConfirmation(users)
@@ -219,8 +236,10 @@ class ConnectionViewModel : ViewModel() {
                 repository.syncPendingProximityHandshakes(jwt)
             }
             when {
-                !r.recoveredUsers.isNullOrEmpty() ->
+                !r.recoveredUsers.isNullOrEmpty() -> {
+                    lastProximityEncounterLoggedAggregate = r.recoveredEncounterLogged
                     _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                }
                 r.remainingInQueue > 0 ->
                     _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
                 else ->
@@ -330,6 +349,7 @@ class ConnectionViewModel : ViewModel() {
     }
 
     fun resetConnectionState() {
+        lastProximityEncounterLoggedAggregate = true
         _connectionState.value = ConnectionState.Idle
     }
 
@@ -364,6 +384,7 @@ class ConnectionViewModel : ViewModel() {
                         repository.createConnection(request)
                     }
                     if (result.isFailure) {
+                        lastProximityEncounterLoggedAggregate = true
                         _connectionState.value = ConnectionState.Error(
                             result.exceptionOrNull()?.message ?: "Failed to create connection"
                         )
@@ -377,11 +398,26 @@ class ConnectionViewModel : ViewModel() {
                     AppDataManager.refresh(force = true)
                 }
                 val profiles = peers.map { it.toUserProfile() }
-                _connectionState.value = ConnectionState.TaggingContext(
-                    newConnections = created,
-                    targetUsers = profiles,
-                )
+                val cooldownMessage =
+                    "You recently crossed paths with this person! Wait a bit before logging another memory."
+                if (!lastProximityEncounterLoggedAggregate) {
+                    lastProximityEncounterLoggedAggregate = true
+                    val primary = created.first()
+                    val summaryUser = syntheticUserForProximitySuccess(profiles)
+                    _connectionState.value = ConnectionState.Success(
+                        connection = primary,
+                        connectedUser = summaryUser,
+                        proximityCooldownMessage = cooldownMessage,
+                    )
+                } else {
+                    lastProximityEncounterLoggedAggregate = true
+                    _connectionState.value = ConnectionState.TaggingContext(
+                        newConnections = created,
+                        targetUsers = profiles,
+                    )
+                }
             } catch (e: Exception) {
+                lastProximityEncounterLoggedAggregate = true
                 _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
             }
         }

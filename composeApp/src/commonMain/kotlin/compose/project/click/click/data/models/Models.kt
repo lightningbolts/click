@@ -81,7 +81,15 @@ data class User(
     val connection_today: Int = -1,
     val last_paired: Long? = null,
     // Interest tags for Common Ground feature (e.g., "music", "coding", "hiking")
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    /** Present on bind-proximity-connection match rows when the edge already exists. */
+    @SerialName("connection_id")
+    val connectionId: String? = null,
+    /** From bind-proximity-connection: false when this peer hit the 3h encounter rate limit. */
+    @SerialName("encounter_logged")
+    val encounterLogged: Boolean? = null,
+    /** e.g. `rate_limit_active` from bind-proximity-connection when [encounterLogged] is false. */
+    val reason: String? = null,
 ) {
     /**
      * Convert to insert DTO for Supabase (minimal - only required columns)

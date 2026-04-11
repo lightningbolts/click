@@ -97,6 +97,22 @@ internal fun Throwable.isRetryableForProximityBind(): Boolean {
 data class PendingProximityHandshakeSyncResult(
     val recoveredUsers: List<User>?,
     val remainingInQueue: Int,
+    /** Aggregate from the last successful bind when [recoveredUsers] is non-null. */
+    val recoveredEncounterLogged: Boolean = true,
+)
+
+data class ProximityHandshakeRecoveryPayload(
+    val users: List<User>,
+    val encounterLogged: Boolean = true,
+)
+
+data class BindProximityHandshakeOutcome(
+    val matches: List<User>,
+    /**
+     * When false, every matched peer who already had a connection hit the 3h encounter rate limit;
+     * the client should skip the post-confirm context-tagging sheet for this crossing.
+     */
+    val encounterLogged: Boolean,
 )
 
 private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
@@ -121,6 +137,8 @@ sealed class ProximityResult {
 
 @Serializable
 private data class BindProximityResponse(
+    val success: Boolean = true,
+    @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
     val matches: List<User> = emptyList(),
     val error: String? = null,
 )
@@ -188,7 +206,7 @@ class ConnectionRepository(
         heardTokens: List<String>,
         latitude: Double?,
         longitude: Double?,
-    ): Result<List<User>> {
+    ): Result<BindProximityHandshakeOutcome> {
         return try {
             val client = httpClient ?: edgeFunctionHttpClient
             val hasGps = latitude != null && longitude != null &&
@@ -216,7 +234,14 @@ class ConnectionRepository(
             if (!parsed.error.isNullOrBlank()) {
                 return Result.failure(Exception(parsed.error))
             }
-            Result.success(parsed.matches)
+            val aggregateEncounterLogged = parsed.encounterLogged
+                ?: parsed.matches.none { it.encounterLogged == false }
+            Result.success(
+                BindProximityHandshakeOutcome(
+                    matches = parsed.matches,
+                    encounterLogged = aggregateEncounterLogged,
+                ),
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -294,11 +319,16 @@ class ConnectionRepository(
                 }
             }
             if (attempt.isSuccess) {
-                val users = attempt.getOrNull().orEmpty()
+                val outcome = attempt.getOrNull()!!
+                val users = outcome.matches
                 val rest = queue.drop(1)
                 savePendingProximityHandshakeQueue(rest)
                 if (users.isNotEmpty()) {
-                    return PendingProximityHandshakeSyncResult(users, rest.size)
+                    return PendingProximityHandshakeSyncResult(
+                        recoveredUsers = users,
+                        remainingInQueue = rest.size,
+                        recoveredEncounterLogged = outcome.encounterLogged,
+                    )
                 }
                 continue
             }
