@@ -89,6 +89,25 @@ fun Connection.profileAddressDetailLine(): String? {
     return fromFull.takeIf { it != sem }
 }
 
+/** Local calendar + clock for one crossing (`connection_encounters.encountered_at` ISO). */
+fun formatEncounterTimelineWhenLine(encounteredAtIso: String): String? {
+    val instant = encounteredAtIso.trim().takeIf { it.isNotEmpty() }?.let { iso ->
+        runCatching { Instant.parse(iso) }.getOrNull()
+    } ?: return null
+    val ldt = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val datePart = "${shortDay(ldt.dayOfWeek)}, ${shortMonth(ldt.month)} ${ldt.dayOfMonth}, ${ldt.year}"
+    val hour24 = ldt.hour
+    val minute = ldt.minute
+    val ampm = if (hour24 < 12) "AM" else "PM"
+    val h12 = when {
+        hour24 == 0 -> 12
+        hour24 > 12 -> hour24 - 12
+        else -> hour24
+    }
+    val timePart = "$h12:${minute.toString().padStart(2, '0')} $ampm"
+    return "$datePart · $timePart"
+}
+
 fun Connection.profileWhenLine(): String? {
     val instant: Instant? = originEncounter()?.encounteredAt?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
         runCatching { Instant.parse(iso) }.getOrNull()

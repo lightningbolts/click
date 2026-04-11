@@ -27,6 +27,8 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Terrain
+import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +48,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -56,8 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -73,6 +76,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+import kotlin.math.roundToInt
 
 private fun sharedInterestTags(viewer: List<String>, other: List<String>): List<String> {
     if (viewer.isEmpty() || other.isEmpty()) return emptyList()
@@ -122,6 +126,158 @@ private fun ageFromBirthdayIso(birthday: String?): Int? {
         age.takeIf { it in 0..120 }
     } catch (_: Exception) {
         null
+    }
+}
+
+private fun ConnectionEncounter.metricNoiseLabel(): String? =
+    exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} dB" }
+
+private fun ConnectionEncounter.metricElevationLabel(): String? =
+    exactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
+
+private fun ConnectionEncounter.metricTemperatureLabel(): String? {
+    val c = weatherSnapshot?.temperatureCelsius ?: return null
+    if (!c.isFinite()) return null
+    val f = (c * 9f / 5f) + 32f
+    if (!f.isFinite()) return null
+    return "${f.roundToInt()}°F"
+}
+
+@Composable
+private fun TimelineMetricPill(
+    icon: ImageVector,
+    iconTint: Color,
+    text: String,
+    cardBorder: Color,
+    cardBg: Color,
+    body: Color,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .border(1.dp, cardBorder, RoundedCornerShape(50))
+            .background(cardBg)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = body,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
+    if (encounters.isEmpty()) {
+        Text(
+            text = "No crossing history on file yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    val sorted = encounters.sortedWith(
+        compareByDescending<ConnectionEncounter> { it.encounteredAt }
+            .thenByDescending { it.id },
+    )
+    val oldestId = sorted.lastOrNull()?.id
+    val lineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val dotBorder = MaterialTheme.colorScheme.surface
+    val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+    val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val body = MaterialTheme.colorScheme.onSurface
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val stroke = 2.dp.toPx()
+                val x = 16.dp.toPx()
+                drawLine(
+                    color = lineColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = stroke,
+                )
+            },
+    ) {
+            sorted.forEach { enc ->
+                val isOldest = enc.id == oldestId
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(32.dp)
+                            .padding(top = 2.dp),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, dotBorder, CircleShape)
+                                .background(PrimaryBlue),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (isOldest) {
+                            Text(
+                                text = "Where it started",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = LightBlue.copy(alpha = 0.95f),
+                                modifier = Modifier.padding(bottom = 4.dp),
+                            )
+                        }
+                        Text(
+                            text = formatEncounterTimelineWhenLine(enc.encounteredAt)
+                                ?: enc.encounteredAt,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = muted,
+                        )
+                        Text(
+                            text = enc.locationName?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown place",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = body,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                        val pills = buildList {
+                            enc.metricNoiseLabel()?.let { add(Triple(Icons.Outlined.GraphicEq, Color(0xFF69F0AE), it)) }
+                            enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
+                            enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
+                        }
+                        if (pills.isNotEmpty()) {
+                            FlowRow(
+                                modifier = Modifier.padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                pills.forEach { (ic, tint, lbl) ->
+                                    TimelineMetricPill(ic, tint, lbl, cardBorder, cardBg, body)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
     }
 }
 
@@ -384,38 +540,6 @@ fun UserProfileBottomSheet(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    if (conn != null && conn.connectionEncounters.size > 1) {
-                        Text(
-                            text = "You've crossed paths ${conn.connectionEncounters.size} times.",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 220.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            val sorted = conn.connectionEncounters.sortedByDescending { it.encounteredAt }
-                            items(sorted, key = { it.id }) { enc ->
-                                val whenLine = enc.encounteredAtInstant()?.let { ins ->
-                                    val ldt = ins.toLocalDateTime(TimeZone.currentSystemDefault())
-                                    "${ldt.monthNumber}/${ldt.dayOfMonth}/${ldt.year}"
-                                } ?: enc.encounteredAt
-                                val place = enc.locationName?.trim()?.takeIf { it.isNotEmpty() } ?: "—"
-                                val tagLine = enc.contextTags.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-                                Text(
-                                    text = listOfNotNull(whenLine, place, tagLine).joinToString(" · "),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
                     Text(
                         text = "Interests",
                         style = MaterialTheme.typography.titleSmall,
@@ -526,6 +650,26 @@ fun UserProfileBottomSheet(
                                 )
                             }
                         }
+                    }
+
+                    if (conn != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Our timeline",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Every time and place you’ve crossed paths",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OurTimelineSection(conn.connectionEncounters)
                     }
                 }
                 else -> {
