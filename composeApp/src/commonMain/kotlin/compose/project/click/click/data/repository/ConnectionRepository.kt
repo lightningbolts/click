@@ -26,6 +26,7 @@ import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.User
+import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.sensors.HardwareVibeSnapshot
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
@@ -35,7 +36,6 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
-import io.github.jan.supabase.postgrest.rpc
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
@@ -515,40 +515,40 @@ class ConnectionRepository(
         @SerialName("user_id") val userId: String? = null,
         @SerialName("token_age_ms") val tokenAgeMs: Long? = null,
         @SerialName("distance_meters") val distanceMeters: Int? = null,
+        @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
+        val reason: String? = null,
+        @SerialName("connection_id") val connectionId: String? = null,
     )
 
-    /**
-     * `redeem_qr_token` returns a JSON **object** (`RETURNS JSONB`). supabase-kt's [decodeSingle] decodes the
-     * HTTP body as `List<T>` then `.first()`, which throws "Expected start of the array '['…" on `{…}` payloads.
-     */
-    private fun decodeRedeemQrTokenPayload(body: String): RedeemQrTokenResponse {
-        val trimmed = body.trim()
-        if (trimmed.isEmpty()) {
-            throw SerializationException("Empty redeem_qr_token response")
-        }
-        return try {
-            json.decodeFromString(RedeemQrTokenResponse.serializer(), trimmed)
-        } catch (e: SerializationException) {
-            val root: JsonElement = try {
-                json.parseToJsonElement(trimmed)
-            } catch (_: Exception) {
-                throw e
-            }
-            when (root) {
-                is JsonArray -> {
-                    val sole = root.firstOrNull() as? JsonObject
-                        ?: throw SerializationException("redeem_qr_token array payload missing object row")
-                    json.decodeFromJsonElement(RedeemQrTokenResponse.serializer(), sole)
-                }
-                is JsonObject -> json.decodeFromJsonElement(RedeemQrTokenResponse.serializer(), root)
-                is JsonPrimitive -> {
-                    if (!root.isString) throw e
-                    json.decodeFromString(RedeemQrTokenResponse.serializer(), root.content)
-                }
-                else -> throw e
-            }
-        }
-    }
+    @Serializable
+    private data class QrApiRedeemRequest(
+        val token: String,
+        @SerialName("gps_lat") val gpsLat: Double? = null,
+        @SerialName("gps_lon") val gpsLon: Double? = null,
+        @SerialName("lux_level") val luxLevel: Double? = null,
+        @SerialName("motion_variance") val motionVariance: Double? = null,
+        @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
+        @SerialName("battery_level") val batteryLevel: Int? = null,
+    )
+
+    @Serializable
+    private data class QrApiRedeemData(
+        val targetUserId: String? = null,
+        val tokenAgeMs: Long? = null,
+        val encounterLogged: Boolean? = null,
+        val reason: String? = null,
+        val connectionId: String? = null,
+    )
+
+    @Serializable
+    private data class QrApiRedeemEnvelope(
+        val success: Boolean = false,
+        val error: String? = null,
+        @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
+        val reason: String? = null,
+        @SerialName("connection_id") val connectionId: String? = null,
+        val data: QrApiRedeemData? = null,
+    )
 
     /**
      * Create a connection between two users with proximity verification.
@@ -585,12 +585,16 @@ class ConnectionRepository(
 
     private suspend fun createConnectionOnline(request: ConnectionRequest): Result<ConnectionCreateOutcome> {
         return try {
-            val redeemedToken = if (!request.qrToken.isNullOrBlank()) {
+            val redeemedToken = if (!request.qrToken.isNullOrBlank() && !request.skipQrTokenRedeem) {
                 val sendScannerGps = request.venueId.isNullOrBlank()
                 redeemQrToken(
                     token = request.qrToken,
                     scannerLat = if (sendScannerGps) request.locationLat else null,
                     scannerLon = if (sendScannerGps) request.locationLng else null,
+                    luxLevel = request.luxLevel,
+                    motionVariance = request.motionVariance,
+                    compassAzimuth = request.compassAzimuth,
+                    batteryLevel = request.batteryLevel,
                 ).getOrElse { return Result.failure(it) }
             } else {
                 null
@@ -606,6 +610,8 @@ class ConnectionRepository(
             }
 
             val resolvedTokenAgeMs = redeemedToken?.tokenAgeMs ?: request.tokenAgeMs
+            val preflightConnectionId = redeemedToken?.connectionId ?: request.preflightConnectionId
+            val preflightEncounterLogged = redeemedToken?.encounterLogged ?: request.preflightEncounterLogged
 
             val existingConnection = findConnectionRowForUserPair(
                 request.userId1,
@@ -618,6 +624,8 @@ class ConnectionRepository(
                     scannedUserId = scannedUserId,
                     existing = existingConnection,
                     resolvedTokenAgeMs = resolvedTokenAgeMs,
+                    preflightConnectionId = preflightConnectionId,
+                    preflightEncounterLogged = preflightEncounterLogged,
                 )
             }
 
@@ -750,27 +758,35 @@ class ConnectionRepository(
                 println("ConnectionRepository: Failed to update connection metadata: ${e.message}")
             }
 
-            val encounterLogged = try {
-                insertConnectionEncounter(
-                    connectionId = result.id,
-                    encounteredAtMs = now,
-                    locationName = semanticLocationName,
-                    lat = if (loc1Valid) request.locationLat else null,
-                    lon = if (loc1Valid) request.locationLng else null,
-                    weather = weatherSnapshot,
-                    contextTags = contextTags,
-                    noiseLevel = request.noiseLevelCategory?.name,
-                    elevationCategory = heightCategory?.name,
-                    exactNoiseLevelDb = request.exactNoiseLevelDb,
-                    exactBarometricElevationM = exactBarometricElevationMeters,
-                    luxLevel = request.luxLevel,
-                    motionVariance = request.motionVariance,
-                    compassAzimuth = request.compassAzimuth,
-                    batteryLevel = request.batteryLevel,
-                )
-            } catch (e: Exception) {
-                println("ConnectionRepository: encounter insert: ${e.message}")
-                true
+            val encounterAlreadyHandled = request.connectionMethod == "qr" &&
+                preflightConnectionId != null &&
+                preflightConnectionId == result.id &&
+                preflightEncounterLogged != null
+            val encounterLogged = if (encounterAlreadyHandled) {
+                preflightEncounterLogged
+            } else {
+                try {
+                    insertConnectionEncounter(
+                        connectionId = result.id,
+                        encounteredAtMs = now,
+                        locationName = semanticLocationName,
+                        lat = if (loc1Valid) request.locationLat else null,
+                        lon = if (loc1Valid) request.locationLng else null,
+                        weather = weatherSnapshot,
+                        contextTags = contextTags,
+                        noiseLevel = request.noiseLevelCategory?.name,
+                        elevationCategory = heightCategory?.name,
+                        exactNoiseLevelDb = request.exactNoiseLevelDb,
+                        exactBarometricElevationM = exactBarometricElevationMeters,
+                        luxLevel = request.luxLevel,
+                        motionVariance = request.motionVariance,
+                        compassAzimuth = request.compassAzimuth,
+                        batteryLevel = request.batteryLevel,
+                    )
+                } catch (e: Exception) {
+                    println("ConnectionRepository: encounter insert: ${e.message}")
+                    true
+                }
             }
 
             // Create chat row for this connection
@@ -800,6 +816,8 @@ class ConnectionRepository(
         scannedUserId: String,
         existing: Connection,
         resolvedTokenAgeMs: Long?,
+        preflightConnectionId: String?,
+        preflightEncounterLogged: Boolean?,
     ): Result<ConnectionCreateOutcome> {
         return try {
             supabaseRepository.clearConnectionJunctionForPair(existing.id, existing.user_ids)
@@ -912,27 +930,35 @@ class ConnectionRepository(
                 .decodeSingle<Connection>()
 
             val restoreTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
-            val encounterLogged = try {
-                insertConnectionEncounter(
-                    connectionId = result.id,
-                    encounteredAtMs = now,
-                    locationName = semanticLocationName,
-                    lat = if (loc1Valid) request.locationLat else null,
-                    lon = if (loc1Valid) request.locationLng else null,
-                    weather = weatherSnapshot,
-                    contextTags = restoreTags,
-                    noiseLevel = request.noiseLevelCategory?.name,
-                    elevationCategory = heightCategory?.name,
-                    exactNoiseLevelDb = request.exactNoiseLevelDb,
-                    exactBarometricElevationM = exactBarometricElevationMeters,
-                    luxLevel = request.luxLevel,
-                    motionVariance = request.motionVariance,
-                    compassAzimuth = request.compassAzimuth,
-                    batteryLevel = request.batteryLevel,
-                )
-            } catch (e: Exception) {
-                println("ConnectionRepository: restore encounter insert: ${e.message}")
-                true
+            val encounterAlreadyHandled = request.connectionMethod == "qr" &&
+                preflightConnectionId != null &&
+                preflightConnectionId == result.id &&
+                preflightEncounterLogged != null
+            val encounterLogged = if (encounterAlreadyHandled) {
+                preflightEncounterLogged
+            } else {
+                try {
+                    insertConnectionEncounter(
+                        connectionId = result.id,
+                        encounteredAtMs = now,
+                        locationName = semanticLocationName,
+                        lat = if (loc1Valid) request.locationLat else null,
+                        lon = if (loc1Valid) request.locationLng else null,
+                        weather = weatherSnapshot,
+                        contextTags = restoreTags,
+                        noiseLevel = request.noiseLevelCategory?.name,
+                        elevationCategory = heightCategory?.name,
+                        exactNoiseLevelDb = request.exactNoiseLevelDb,
+                        exactBarometricElevationM = exactBarometricElevationMeters,
+                        luxLevel = request.luxLevel,
+                        motionVariance = request.motionVariance,
+                        compassAzimuth = request.compassAzimuth,
+                        batteryLevel = request.batteryLevel,
+                    )
+                } catch (e: Exception) {
+                    println("ConnectionRepository: restore encounter insert: ${e.message}")
+                    true
+                }
             }
 
             try {
@@ -1222,7 +1248,10 @@ class ConnectionRepository(
 
         val normalizedRequest = request.copy(
             qrToken = null,
-            tokenAgeMs = null
+            tokenAgeMs = null,
+            skipQrTokenRedeem = false,
+            preflightConnectionId = null,
+            preflightEncounterLogged = null,
         )
         val draft = PendingConnectionDraft(
             localId = newPendingConnectionId(),
@@ -1285,41 +1314,99 @@ class ConnectionRepository(
     private suspend fun redeemQrToken(
         token: String,
         scannerLat: Double? = null,
-        scannerLon: Double? = null
+        scannerLon: Double? = null,
+        luxLevel: Double? = null,
+        motionVariance: Double? = null,
+        compassAzimuth: Double? = null,
+        batteryLevel: Int? = null,
     ): Result<RedeemQrTokenResponse> {
         return try {
-            val rpcResult = supabase.postgrest.rpc(
-                "redeem_qr_token",
-                buildJsonObject {
-                    put("p_token", token)
-                    if (scannerLat != null && scannerLon != null
-                        && scannerLat.isFinite() && scannerLon.isFinite()
-                        && !(scannerLat == 0.0 && scannerLon == 0.0)) {
-                        put("p_scanner_lat", scannerLat)
-                        put("p_scanner_lon", scannerLon)
-                    }
-                }
+            val jwt = tokenStorage.getJwt()?.takeIf { it.isNotBlank() }
+                ?: return Result.failure(Exception("Please sign in again."))
+
+            val requestPayload = QrApiRedeemRequest(
+                token = token,
+                gpsLat = scannerLat?.takeIf { it.isFinite() && it != 0.0 },
+                gpsLon = scannerLon?.takeIf { it.isFinite() && it != 0.0 },
+                luxLevel = luxLevel?.takeIf { it.isFinite() },
+                motionVariance = motionVariance?.takeIf { it.isFinite() },
+                compassAzimuth = compassAzimuth?.takeIf { it.isFinite() },
+                batteryLevel = batteryLevel?.takeIf { it in 0..100 },
             )
-            val response = try {
-                decodeRedeemQrTokenPayload(rpcResult.data)
-            } catch (e: Exception) {
-                return Result.failure(e)
+
+            val response = edgeFunctionHttpClient.post("$CLICK_WEB_BASE_URL/api/qr") {
+                headers {
+                    append(HttpHeaders.Authorization, "Bearer $jwt")
+                }
+                contentType(ContentType.Application.Json)
+                setBody(requestPayload)
             }
 
-            if (!response.success) {
-                val message = when (response.error) {
+            val bodyText = response.bodyAsText()
+            val envelope = runCatching {
+                json.decodeFromString(QrApiRedeemEnvelope.serializer(), bodyText)
+            }.getOrNull()
+
+            if (!response.status.isSuccess()) {
+                val errorCode = envelope?.error
+                val message = when (errorCode) {
+                    "proximity_failed" -> "Connection failed: Users must be in the same physical location."
+                    "expired" -> "This QR code has expired. Ask them to generate a new one."
+                    "already_used" -> "This QR code was already used. Ask them to generate a new one."
+                    "not_found" -> "This QR code is no longer valid. Ask them to generate a new one."
+                    else -> envelope?.error?.takeIf { it.isNotBlank() } ?: "Failed to redeem QR code"
+                }
+                return Result.failure(Exception(message))
+            }
+
+            if (envelope == null) {
+                return Result.failure(Exception("Failed to parse QR API response"))
+            }
+
+            if (!envelope.success) {
+                val message = when (envelope.error) {
                     "proximity_failed" -> "Connection failed: Users must be in the same physical location."
                     "expired" -> "This QR code has expired. Ask them to generate a new one."
                     "already_used" -> "This QR code was already used. Ask them to generate a new one."
                     "not_found" -> "This QR code is no longer valid. Ask them to generate a new one."
                     else -> "Failed to redeem QR code"
                 }
-                Result.failure(Exception(message))
-            } else if (response.userId.isNullOrBlank()) {
-                Result.failure(Exception("Invalid QR code"))
-            } else {
-                Result.success(response)
+                return Result.failure(Exception(message))
             }
+
+            val targetUserId = envelope.data?.targetUserId
+            val tokenAgeMs = envelope.data?.tokenAgeMs
+            val encounterLogged = envelope.data?.encounterLogged ?: envelope.encounterLogged
+            val encounterReason = envelope.data?.reason ?: envelope.reason
+            val connectionId = envelope.data?.connectionId ?: envelope.connectionId
+
+            if (targetUserId.isNullOrBlank()) {
+                return Result.failure(Exception("Invalid QR code"))
+            }
+
+            if (encounterLogged == false && encounterReason == "rate_limit_active") {
+                return Result.success(
+                    RedeemQrTokenResponse(
+                        success = true,
+                        userId = targetUserId,
+                        tokenAgeMs = tokenAgeMs,
+                        encounterLogged = false,
+                        reason = encounterReason,
+                        connectionId = connectionId,
+                    )
+                )
+            }
+
+            Result.success(
+                RedeemQrTokenResponse(
+                    success = true,
+                    userId = targetUserId,
+                    tokenAgeMs = tokenAgeMs,
+                    encounterLogged = encounterLogged,
+                    reason = encounterReason,
+                    connectionId = connectionId,
+                )
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }

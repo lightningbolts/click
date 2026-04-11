@@ -305,6 +305,12 @@ data class ConnectionRequest(
     val compassAzimuth: Double? = null,
     @SerialName("battery_level")
     val batteryLevel: Int? = null,
+    /** True when /api/qr already redeemed the token and validated proximity for this request. */
+    val skipQrTokenRedeem: Boolean = false,
+    /** Existing connection id returned by /api/qr when the pair already has a row. */
+    val preflightConnectionId: String? = null,
+    /** Encounter logging decision returned by /api/qr for an existing connection. */
+    val preflightEncounterLogged: Boolean? = null,
 )
 
 @Serializable

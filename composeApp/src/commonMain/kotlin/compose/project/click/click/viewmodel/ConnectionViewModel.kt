@@ -347,6 +347,12 @@ class ConnectionViewModel : ViewModel() {
                 val locLat = latitude ?: lastProximityLat
                 val locLng = longitude ?: lastProximityLng
                 val locAlt = altitudeMeters ?: lastProximityAltitudeMeters
+                val qrHardwareVibe = if (connectionMethod == "qr") {
+                    runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                } else {
+                    null
+                }
+                val requestHardwareVibe = qrHardwareVibe ?: lastProximityHardwareVibe
 
                 val request = ConnectionRequest(
                     userId1 = currentUserId,
@@ -367,10 +373,10 @@ class ConnectionViewModel : ViewModel() {
                     responderId = resolvedResponder,
                     noiseLevelCategory = noiseLevelCategory,
                     exactNoiseLevelDb = exactNoiseLevelDb,
-                    luxLevel = lastProximityHardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
-                    motionVariance = lastProximityHardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
-                    compassAzimuth = lastProximityHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
-                    batteryLevel = lastProximityHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
+                    luxLevel = requestHardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
+                    motionVariance = requestHardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
+                    compassAzimuth = requestHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
+                    batteryLevel = requestHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
                 )
 
                 val result = withContext(Dispatchers.Default) {
