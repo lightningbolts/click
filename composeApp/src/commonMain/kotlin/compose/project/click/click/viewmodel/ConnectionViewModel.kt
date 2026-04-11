@@ -23,6 +23,7 @@ import compose.project.click.click.proximity.ProximityManager // pragma: allowli
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
+import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlin.random.Random
@@ -94,6 +95,7 @@ class ConnectionViewModel : ViewModel() {
     private var lastProximityLat: Double? = null
     private var lastProximityLng: Double? = null
     private var lastProximityAltitudeMeters: Double? = null
+    private var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
 
     /**
      * Shared connection rows from [AppDataManager] (`MutableStateFlow` backed).
@@ -118,6 +120,9 @@ class ConnectionViewModel : ViewModel() {
     fun markConnecting() {
         _connectionState.value = ConnectionState.Loading
     }
+
+    private fun shouldBlockForRateLimit(users: List<User>, aggregateEncounterLogged: Boolean): Boolean =
+        !aggregateEncounterLogged || users.any { it.encounterLogged == false || it.reason == "rate_limit_active" }
 
     /**
      * Tri-factor tap flow: GPS → concurrent BLE broadcast + 3s listen → server clustering → [PendingConfirmation].
@@ -175,23 +180,22 @@ class ConnectionViewModel : ViewModel() {
                         null
                     }
 
-                val hardwareMonitor = HardwareVibeMonitor()
                 val handshakeCapture = coroutineScope {
                     val listen = async { proximityManager.startHandshakeListening() }
                     delay(120L)
                     // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
                     delay(Random.nextLong(0, 400))
-                    val hardwareVibe = runCatching { hardwareMonitor.takeSnapshot() }.getOrNull()
                     proximityManager.startHandshakeBroadcast(myToken)
                     val heard = listen.await()
                     proximityManager.stopAll()
-                    heard to hardwareVibe
+                    heard
                 }
-                val vibeSnapshot = handshakeCapture.second
-                val tokensOnly = handshakeCapture.first
+                val tokensOnly = handshakeCapture
 
                 val baroSample = baroDeferred?.await()
                 val baroElevationM = baroSample?.elevationMeters?.takeIf { it.isFinite() }
+                val vibeSnapshot = runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                lastProximityHardwareVibe = vibeSnapshot
 
                 _connectionState.value = ConnectionState.Loading
                 val bindResult = withContext(Dispatchers.Default) {
@@ -217,6 +221,9 @@ class ConnectionViewModel : ViewModel() {
                         val users = outcome.matches
                         if (users.isEmpty()) {
                             _connectionState.value = ConnectionState.Error("No nearby tap detected. Try again closer together.")
+                        } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
+                            _connectionState.value = ConnectionState.Idle
+                            _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                         } else {
                             _connectionState.value = ConnectionState.PendingConfirmation(users)
                         }
@@ -251,6 +258,11 @@ class ConnectionViewModel : ViewModel() {
         val users = payload.users
         if (users.isEmpty()) return
         lastProximityEncounterLoggedAggregate = payload.encounterLogged
+        if (shouldBlockForRateLimit(users, payload.encounterLogged)) {
+            _connectionState.value = ConnectionState.Idle
+            _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+            return
+        }
         val cur = _connectionState.value
         if (cur is ConnectionState.ProximityCapturedOfflineSyncing || cur is ConnectionState.Idle) {
             _connectionState.value = ConnectionState.PendingConfirmation(users)
@@ -271,7 +283,12 @@ class ConnectionViewModel : ViewModel() {
             when {
                 !r.recoveredUsers.isNullOrEmpty() -> {
                     lastProximityEncounterLoggedAggregate = r.recoveredEncounterLogged
-                    _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                    if (shouldBlockForRateLimit(r.recoveredUsers, r.recoveredEncounterLogged)) {
+                        _connectionState.value = ConnectionState.Idle
+                        _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                    } else {
+                        _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                    }
                 }
                 r.remainingInQueue > 0 ->
                     _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
@@ -349,7 +366,11 @@ class ConnectionViewModel : ViewModel() {
                     initiatorId = resolvedInitiator,
                     responderId = resolvedResponder,
                     noiseLevelCategory = noiseLevelCategory,
-                    exactNoiseLevelDb = exactNoiseLevelDb
+                    exactNoiseLevelDb = exactNoiseLevelDb,
+                    luxLevel = lastProximityHardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
+                    motionVariance = lastProximityHardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
+                    compassAzimuth = lastProximityHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
+                    batteryLevel = lastProximityHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
                 )
 
                 val result = withContext(Dispatchers.Default) {
@@ -405,6 +426,7 @@ class ConnectionViewModel : ViewModel() {
 
     fun resetConnectionState() {
         lastProximityEncounterLoggedAggregate = true
+        lastProximityHardwareVibe = null
         _connectionState.value = ConnectionState.Idle
     }
 
@@ -435,6 +457,10 @@ class ConnectionViewModel : ViewModel() {
                         connectionMethod = "proximity",
                         initiatorId = peer.id,
                         responderId = currentUserId,
+                        luxLevel = lastProximityHardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
+                        motionVariance = lastProximityHardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
+                        compassAzimuth = lastProximityHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
+                        batteryLevel = lastProximityHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
                     )
                     val result = withContext(Dispatchers.Default) {
                         repository.createConnection(request)

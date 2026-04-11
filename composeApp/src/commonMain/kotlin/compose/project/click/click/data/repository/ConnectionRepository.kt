@@ -413,6 +413,10 @@ class ConnectionRepository(
         elevationCategory: String?,
         exactNoiseLevelDb: Double? = null,
         exactBarometricElevationM: Double? = null,
+        luxLevel: Double? = null,
+        motionVariance: Double? = null,
+        compassAzimuth: Double? = null,
+        batteryLevel: Int? = null,
     ): Boolean {
         val payload = buildJsonObject {
             put("connection_id", connectionId)
@@ -429,6 +433,10 @@ class ConnectionRepository(
             elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { put("elevation_category", it) }
             exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
             exactBarometricElevationM?.takeIf { it.isFinite() }?.let { put("exact_barometric_elevation_m", it) }
+            luxLevel?.takeIf { it.isFinite() }?.let { put("lux_level", it) }
+            motionVariance?.takeIf { it.isFinite() }?.let { put("motion_variance", it) }
+            compassAzimuth?.takeIf { it.isFinite() }?.let { put("compass_azimuth", it) }
+            batteryLevel?.takeIf { it in 0..100 }?.let { put("battery_level", it) }
             put("context_tags", JsonArray(contextTags.map { JsonPrimitive(it) }))
         }
         return try {
@@ -650,6 +658,10 @@ class ConnectionRepository(
                 if (!request.venueId.isNullOrBlank()) {
                     put("venue_id", request.venueId)
                 }
+                request.luxLevel?.takeIf { it.isFinite() }?.let { put("lux_level", it) }
+                request.motionVariance?.takeIf { it.isFinite() }?.let { put("motion_variance", it) }
+                request.compassAzimuth?.takeIf { it.isFinite() }?.let { put("compass_azimuth", it) }
+                request.batteryLevel?.takeIf { it in 0..100 }?.let { put("battery_level", it) }
             }
 
             val normalizedContextTag = normalizeContextTag(
@@ -751,6 +763,10 @@ class ConnectionRepository(
                     elevationCategory = heightCategory?.name,
                     exactNoiseLevelDb = request.exactNoiseLevelDb,
                     exactBarometricElevationM = exactBarometricElevationMeters,
+                    luxLevel = request.luxLevel,
+                    motionVariance = request.motionVariance,
+                    compassAzimuth = request.compassAzimuth,
+                    batteryLevel = request.batteryLevel,
                 )
             } catch (e: Exception) {
                 println("ConnectionRepository: encounter insert: ${e.message}")
@@ -817,6 +833,10 @@ class ConnectionRepository(
                 if (!request.venueId.isNullOrBlank()) {
                     put("venue_id", request.venueId)
                 }
+                request.luxLevel?.takeIf { it.isFinite() }?.let { put("lux_level", it) }
+                request.motionVariance?.takeIf { it.isFinite() }?.let { put("motion_variance", it) }
+                request.compassAzimuth?.takeIf { it.isFinite() }?.let { put("compass_azimuth", it) }
+                request.batteryLevel?.takeIf { it in 0..100 }?.let { put("battery_level", it) }
             }
 
             val normalizedContextTag = normalizeContextTag(
@@ -905,6 +925,10 @@ class ConnectionRepository(
                     elevationCategory = heightCategory?.name,
                     exactNoiseLevelDb = request.exactNoiseLevelDb,
                     exactBarometricElevationM = exactBarometricElevationMeters,
+                    luxLevel = request.luxLevel,
+                    motionVariance = request.motionVariance,
+                    compassAzimuth = request.compassAzimuth,
+                    batteryLevel = request.batteryLevel,
                 )
             } catch (e: Exception) {
                 println("ConnectionRepository: restore encounter insert: ${e.message}")

@@ -557,6 +557,10 @@ fun UserProfileBottomSheet(
                                     value = line,
                                 )
                             }
+                            ConnectionHardwareVibeBadgesRow(
+                                encounter = conn.originEncounter,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))

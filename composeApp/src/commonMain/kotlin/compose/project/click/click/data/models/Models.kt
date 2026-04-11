@@ -296,7 +296,15 @@ data class ConnectionRequest(
     val initiatorId: String? = null,
     val responderId: String? = null,
     val noiseLevelCategory: NoiseLevelCategory? = null,
-    val exactNoiseLevelDb: Double? = null
+    val exactNoiseLevelDb: Double? = null,
+    @SerialName("lux_level")
+    val luxLevel: Double? = null,
+    @SerialName("motion_variance")
+    val motionVariance: Double? = null,
+    @SerialName("compass_azimuth")
+    val compassAzimuth: Double? = null,
+    @SerialName("battery_level")
+    val batteryLevel: Int? = null,
 )
 
 @Serializable
@@ -386,13 +394,8 @@ data class Connection(
         const val IDLE_ARCHIVE_DURATION_MS = 7L * 24 * 60 * 60 * 1000
     }
 
-    fun originEncounter(): ConnectionEncounter? =
-        connectionEncounters.minWithOrNull(
-            compareBy<ConnectionEncounter> { it.encounteredAtInstant() ?: Instant.DISTANT_FUTURE }
-                // When timestamps fail to parse, ISO-8601 strings from PostgREST still sort chronologically.
-                .thenBy { it.encounteredAt }
-                .thenBy { it.id },
-        )
+    val originEncounter: ConnectionEncounter?
+        get() = connectionEncounters.minByOrNull { it.encounteredAt }
 
     fun latestEncounter(): ConnectionEncounter? =
         connectionEncounters.maxWithOrNull(
@@ -403,7 +406,7 @@ data class Connection(
 
     /** Origin story (oldest crossing) for profile / first-meet copy. */
     fun originMemoryCapsule(): MemoryCapsule? =
-        originEncounter()?.toMemoryCapsule() ?: memoryCapsule
+        originEncounter?.toMemoryCapsule() ?: memoryCapsule
 
     /** Newest crossing for “where we last saw each other” surfaces. */
     fun latestMemoryCapsule(): MemoryCapsule? =
@@ -413,7 +416,7 @@ data class Connection(
         get() = latestEncounter()?.contextTags?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
             ?: originMemoryCapsule()?.contextTag?.label
             ?: contextTagId
-            ?: originEncounter()?.contextTags?.firstOrNull()
+            ?: originEncounter?.contextTags?.firstOrNull()
 
     /** Latest crossing place label (shim for removed `semantic_location` column). */
     val semanticLocation: String?
@@ -422,7 +425,7 @@ data class Connection(
 
     val resolvedNoiseLevel: String?
         get() = latestEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originEncounter?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
             ?: noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
 
     val resolvedExactNoiseLevelDb: Double?
@@ -432,7 +435,7 @@ data class Connection(
 
     val resolvedHeightCategory: String?
         get() = latestEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originEncounter?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
             ?: heightCategory ?: memoryCapsule?.heightCategory?.name
 
     val resolvedExactBarometricElevationM: Double?
@@ -454,7 +457,7 @@ data class Connection(
 
     val resolvedWeatherCondition: String?
         get() = latestEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
+            ?: originEncounter?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
             ?: weatherCondition
             ?: memoryCapsule?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
 
@@ -562,7 +565,7 @@ data class Connection(
         ) {
             return direct
         }
-        val e = latestEncounter() ?: originEncounter()
+        val e = latestEncounter() ?: originEncounter
         val la = e?.gpsLat
         val lo = e?.gpsLon
         if (la != null && lo != null && la.isFinite() && lo.isFinite() &&

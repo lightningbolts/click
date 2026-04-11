@@ -3578,7 +3578,7 @@ fun ChatMessageBubble(
                         Box(
                             modifier = Modifier
                                 .padding(end = 6.dp, bottom = 2.dp)
-                                .size(28.dp)
+                                .size(24.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,

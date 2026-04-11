@@ -166,7 +166,7 @@ fun HubChatScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(messages, key = { it.id }) { msg ->
-                    val showGroupSenderAvatar = !msg.isMine && occupantCount >= 3
+                    val showGroupSenderAvatar = !msg.isMine
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = if (msg.isMine) Arrangement.End else Arrangement.Start,
@@ -176,7 +176,7 @@ fun HubChatScreen(
                             Box(
                                 modifier = Modifier
                                     .padding(end = 6.dp)
-                                    .size(32.dp)
+                                    .size(24.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.surfaceVariant),
                                 contentAlignment = Alignment.Center,

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionEncounter
 import compose.project.click.click.data.models.NoiseLevelCategory
+import compose.project.click.click.data.models.toMemoryCapsule
 import kotlin.math.roundToInt
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
@@ -72,12 +73,14 @@ private fun formatNoiseCategory(cat: NoiseLevelCategory): String = when (cat) {
 
 /** Event / context line (emoji + label or legacy id). */
 fun Connection.profileContextLine(): String? {
-    latestMemoryCapsule()?.contextTag?.let { tag ->
+    val origin = originEncounter
+    origin?.toMemoryCapsule()?.contextTag?.let { tag ->
         val e = tag.emoji.trim()
         val l = tag.label.trim()
         if (l.isEmpty()) return@let null
         return if (e.isNotEmpty()) "$e $l" else l
     }
+    if (origin != null) return null
     memoryCapsule?.contextTag?.let { tag ->
         val e = tag.emoji.trim()
         val l = tag.label.trim()
@@ -100,10 +103,11 @@ private fun structuredAddressFromFull(m: Map<String, String>?): String? {
 }
 
 fun Connection.profilePlaceLine(): String? {
-    val sem = originEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
-        ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+    val origin = originEncounter
+    val sem = origin?.locationName?.trim()?.takeIf { it.isNotEmpty() }
         ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
     val fromFull = structuredAddressFromFull(full_location)
+    if (origin != null) return sem
     return when {
         sem != null && fromFull != null && sem != fromFull -> sem
         sem != null -> sem
@@ -113,7 +117,8 @@ fun Connection.profilePlaceLine(): String? {
 }
 
 fun Connection.profileAddressDetailLine(): String? {
-    val sem = semanticLocation?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    if (originEncounter != null) return null
+    val sem = semantic_location?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     val fromFull = structuredAddressFromFull(full_location) ?: return null
     return fromFull.takeIf { it != sem }
 }
@@ -138,9 +143,12 @@ fun formatEncounterTimelineWhenLine(encounteredAtIso: String): String? {
 }
 
 fun Connection.profileWhenLine(): String? {
-    val instant: Instant? = originEncounter()?.encounteredAt?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
+    val origin = originEncounter
+    val originInstant = origin?.encounteredAt?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
         runCatching { Instant.parse(iso) }.getOrNull()
-    } ?: createdUtc?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
+    }
+    if (origin != null && originInstant == null) return origin.encounteredAt.takeIf { it.isNotBlank() }
+    val instant: Instant? = originInstant ?: createdUtc?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
         runCatching { Instant.parse(iso) }.getOrNull()
     } ?: if (created > 0L) Instant.fromEpochMilliseconds(created) else null
     instant ?: return null
@@ -159,7 +167,8 @@ fun Connection.profileWhenLine(): String? {
 }
 
 fun Connection.profileWeatherLine(): String? {
-    latestMemoryCapsule()?.weatherSnapshot?.let { ws ->
+    val origin = originEncounter
+    origin?.weatherSnapshot?.let { ws ->
         val parts = mutableListOf<String>()
         ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
         ws.temperatureCelsius?.let { c ->
@@ -168,6 +177,7 @@ fun Connection.profileWeatherLine(): String? {
         }
         if (parts.isNotEmpty()) return parts.joinToString(" · ")
     }
+    if (origin != null) return null
     memoryCapsule?.weatherSnapshot?.let { ws ->
         val parts = mutableListOf<String>()
         ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
@@ -177,13 +187,19 @@ fun Connection.profileWeatherLine(): String? {
         }
         if (parts.isNotEmpty()) return parts.joinToString(" · ")
     }
-    val col = resolvedWeatherCondition?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val col = weatherCondition?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return col
 }
 
 fun Connection.profileNoiseLine(): String? {
+    val origin = originEncounter
     val parts = mutableListOf<String>()
-    val rawCat = resolvedNoiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+    val rawCat = if (origin != null) {
+        origin.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+    } else {
+        noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: memoryCapsule?.noiseLevelCategory?.name
+    }
     if (rawCat != null) {
         val enumCat = runCatching {
             NoiseLevelCategory.valueOf(rawCat.uppercase().replace(' ', '_'))
@@ -193,14 +209,23 @@ fun Connection.profileNoiseLine(): String? {
             else rawCat.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         )
     }
-    resolvedExactNoiseLevelDb?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} dB") }
+    val exactNoise = if (origin != null) {
+        origin.exactNoiseLevelDb?.takeIf { it.isFinite() }
+    } else {
+        exactNoiseLevelDb?.takeIf { it.isFinite() }
+            ?: memoryCapsule?.exactNoiseLevelDb?.takeIf { it.isFinite() }
+    }
+    exactNoise?.let { parts.add("${it.roundToInt()} dB") }
     if (parts.isEmpty()) return null
     return parts.joinToString(" · ")
 }
 
 /** Barometric elevation snapshot when a precise meter value exists (legacy rows omit this). */
 fun Connection.profileBarometricLine(): String? =
-    resolvedExactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
+    originEncounter?.exactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
+        ?: exactBarometricElevationM?.takeIf { originEncounter == null && it.isFinite() }?.let { "${it.roundToInt()} m" }
+        ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { originEncounter == null && it.isFinite() }
+            ?.let { "${it.roundToInt()} m" }
 
 fun ConnectionEncounter.metricLuxLabel(): String? =
     luxLevel?.takeIf { it.isFinite() && it >= 0 }?.let { "${it.roundToInt()} lx" }
