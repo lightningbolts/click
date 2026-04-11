@@ -30,6 +30,7 @@ data class WeatherSnapshot(
 
 @Serializable
 enum class NoiseLevelCategory {
+    VERY_QUIET,
     QUIET,
     MODERATE,
     LOUD,

@@ -158,6 +158,7 @@ private data class BindProximityRequest(
     @SerialName("heard_tokens") val heardTokens: List<String>,
     val latitude: Double? = null,
     val longitude: Double? = null,
+    @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
 )
 
 class ConnectionRepository(
@@ -215,6 +216,7 @@ class ConnectionRepository(
         heardTokens: List<String>,
         latitude: Double?,
         longitude: Double?,
+        exactBarometricElevationM: Double? = null,
     ): Result<BindProximityHandshakeOutcome> {
         return try {
             val client = httpClient ?: edgeFunctionHttpClient
@@ -226,6 +228,7 @@ class ConnectionRepository(
                 heardTokens = heardTokens,
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
+                exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
             )
             val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
                 contentType(ContentType.Application.Json)

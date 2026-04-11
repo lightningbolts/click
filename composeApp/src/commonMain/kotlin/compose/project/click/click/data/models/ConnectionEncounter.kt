@@ -27,6 +27,8 @@ data class ConnectionEncounter(
     val exactNoiseLevelDb: Double? = null,
     @SerialName("exact_barometric_elevation_m")
     val exactBarometricElevationM: Double? = null,
+    @SerialName("relative_altitude_m")
+    val relativeAltitudeM: Double? = null,
     @SerialName("context_tags")
     val contextTags: List<String> = emptyList(),
 ) {

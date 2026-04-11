@@ -21,6 +21,7 @@ import compose.project.click.click.data.storage.createTokenStorage // pragma: al
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
+import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlin.random.Random
@@ -127,6 +128,7 @@ class ConnectionViewModel : ViewModel() {
         currentUserId: String,
         locationService: LocationService,
         skipLocation: Boolean,
+        barometricHeightMonitor: BarometricHeightMonitor? = null,
     ) {
         if (currentUserId.isBlank()) {
             _connectionState.value = ConnectionState.Error("User not logged in")
@@ -161,6 +163,17 @@ class ConnectionViewModel : ViewModel() {
                 val myToken = (0..9999).random().toString().padStart(4, '0')
                 _connectionState.value = ConnectionState.ProximityHandshaking
 
+                val baroMonitor = barometricHeightMonitor
+                val baroDeferred =
+                    if (baroMonitor != null && baroMonitor.isAvailable) {
+                        async {
+                            val optIn = createTokenStorage().getBarometricContextOptIn() ?: true
+                            if (optIn) baroMonitor.sampleHeightReading() else null
+                        }
+                    } else {
+                        null
+                    }
+
                 val heardTokens = coroutineScope {
                     val listen = async { proximityManager.startHandshakeListening() }
                     delay(120L)
@@ -171,6 +184,9 @@ class ConnectionViewModel : ViewModel() {
                     proximityManager.stopAll()
                     heard
                 }
+
+                val baroSample = baroDeferred?.await()
+                val baroElevationM = baroSample?.elevationMeters?.takeIf { it.isFinite() }
 
                 _connectionState.value = ConnectionState.Loading
                 val bindResult = withContext(Dispatchers.Default) {
@@ -183,6 +199,7 @@ class ConnectionViewModel : ViewModel() {
                                 heardTokens = heardTokens,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
+                                exactBarometricElevationM = baroElevationM,
                             ).getOrThrow()
                         }
                     }

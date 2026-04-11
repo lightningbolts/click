@@ -35,6 +35,7 @@ private fun shortMonth(m: Month): String = when (m) {
 }
 
 private fun formatNoiseCategory(cat: NoiseLevelCategory): String = when (cat) {
+    NoiseLevelCategory.VERY_QUIET -> "Very quiet"
     NoiseLevelCategory.QUIET -> "Quiet"
     NoiseLevelCategory.MODERATE -> "Moderate"
     NoiseLevelCategory.LOUD -> "Loud"

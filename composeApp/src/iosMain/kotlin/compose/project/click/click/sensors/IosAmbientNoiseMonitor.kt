@@ -62,12 +62,7 @@ class IosAmbientNoiseMonitor : AmbientNoiseMonitor {
         val approximateDb = (averagePower.toDouble() + 90.0).coerceIn(0.0, 100.0)
 
         return AmbientNoiseSample(
-            category = when {
-                averagePower < -50.0f -> NoiseLevelCategory.QUIET
-                averagePower < -30.0f -> NoiseLevelCategory.MODERATE
-                averagePower < -15.0f -> NoiseLevelCategory.LOUD
-                else -> NoiseLevelCategory.VERY_LOUD
-            },
+            category = noiseLevelCategoryFromApproximateDb(approximateDb),
             decibels = approximateDb
         )
     }

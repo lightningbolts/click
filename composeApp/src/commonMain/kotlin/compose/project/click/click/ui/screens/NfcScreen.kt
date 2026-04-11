@@ -143,6 +143,7 @@ fun NfcScreen(
                                             currentUserId = userId,
                                             locationService = locationService,
                                             skipLocation = true,
+                                            barometricHeightMonitor = barometricHeightMonitor,
                                         )
                                     } else if (!locationService.hasLocationPermission()) {
                                         requestLocationPermissionThen {
@@ -153,6 +154,7 @@ fun NfcScreen(
                                                 currentUserId = userId,
                                                 locationService = locationService,
                                                 skipLocation = !locationService.hasLocationPermission(),
+                                                barometricHeightMonitor = barometricHeightMonitor,
                                             )
                                         }
                                     } else {
@@ -163,6 +165,7 @@ fun NfcScreen(
                                             currentUserId = userId,
                                             locationService = locationService,
                                             skipLocation = false,
+                                            barometricHeightMonitor = barometricHeightMonitor,
                                         )
                                     }
                                 },
@@ -224,6 +227,7 @@ fun NfcScreen(
                                         currentUserId = userId,
                                         locationService = locationService,
                                         skipLocation = false,
+                                        barometricHeightMonitor = barometricHeightMonitor,
                                     )
                                 },
                                 onDismiss = { connectionViewModel.resetConnectionState() }
