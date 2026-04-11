@@ -27,8 +27,10 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +39,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -179,7 +182,10 @@ private fun TimelineMetricPill(
 }
 
 @Composable
-private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
+private fun OurTimelineSection(
+    encounters: List<ConnectionEncounter>,
+    onRenameEncounter: ((ConnectionEncounter) -> Unit)? = null,
+) {
     if (encounters.isEmpty()) {
         Text(
             text = "No crossing history on file yet.",
@@ -252,13 +258,32 @@ private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             style = MaterialTheme.typography.labelSmall,
                             color = muted,
                         )
-                        Text(
-                            text = enc.locationName?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown place",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = body,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = enc.locationName?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown place",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = body,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (onRenameEncounter != null && enc.id.isNotBlank()) {
+                                IconButton(
+                                    onClick = { onRenameEncounter(enc) },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Edit,
+                                        contentDescription = "Rename place",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         val pills = buildList {
                             enc.metricNoiseLabel()?.let { add(Triple(Icons.Outlined.GraphicEq, Color(0xFF69F0AE), it)) }
                             enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
@@ -297,8 +322,13 @@ fun UserProfileBottomSheet(
     var profile by remember(userId) { mutableStateOf<UserPublicProfile?>(null) }
     var loading by remember(userId) { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var profileReloadNonce by remember(userId) { mutableStateOf(0) }
+    var renameTarget by remember { mutableStateOf<ConnectionEncounter?>(null) }
+    var renameDraft by remember { mutableStateOf("") }
+    var renameBusy by remember { mutableStateOf(false) }
+    var renameError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(userId, viewerUserId) {
+    LaunchedEffect(userId, viewerUserId, profileReloadNonce) {
         loading = true
         error = null
         profile = null
@@ -321,6 +351,73 @@ fun UserProfileBottomSheet(
     }
 
     val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
+
+    renameTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!renameBusy) {
+                    renameTarget = null
+                    renameError = null
+                }
+            },
+            title = { Text("Rename place") },
+            text = {
+                Column {
+                    if (renameError != null) {
+                        Text(
+                            text = renameError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = renameDraft,
+                        onValueChange = { renameDraft = it },
+                        label = { Text("Place name") },
+                        singleLine = true,
+                        enabled = !renameBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = renameDraft.trim()
+                        if (name.isEmpty()) return@TextButton
+                        scope.launch {
+                            renameBusy = true
+                            renameError = null
+                            val res = withContext(Dispatchers.Default) {
+                                repository.renameEncounterLocation(target.id, name)
+                            }
+                            renameBusy = false
+                            if (res.isSuccess) {
+                                renameTarget = null
+                                profileReloadNonce++
+                            } else {
+                                renameError = res.exceptionOrNull()?.message ?: "Could not save"
+                            }
+                        }
+                    },
+                    enabled = !renameBusy && renameDraft.trim().isNotEmpty(),
+                ) { Text(if (renameBusy) "Saving…" else "Save") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (!renameBusy) {
+                            renameTarget = null
+                            renameError = null
+                        }
+                    },
+                    enabled = !renameBusy,
+                ) { Text("Cancel") }
+            },
+        )
+    }
+
     AdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
@@ -678,7 +775,14 @@ fun UserProfileBottomSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        OurTimelineSection(conn.connectionEncounters)
+                        OurTimelineSection(
+                            conn.connectionEncounters,
+                            onRenameEncounter = { enc ->
+                                renameTarget = enc
+                                renameDraft = enc.locationName?.trim().orEmpty()
+                                renameError = null
+                            },
+                        )
                     }
                 }
                 else -> {
