@@ -422,8 +422,6 @@ fun ConnectionsListView(
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
-    val cachedConnections by AppDataManager.connections.collectAsState()
-    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -471,29 +469,10 @@ fun ConnectionsListView(
         LazyListState(0, 0)
     }
 
-    // Build effective chat list: prefer ViewModel Success data, fall back to
-    // cached connections during Loading/Error to prevent blank-screen flashes.
+    // Render only the unified inbox payload emitted by ChatViewModel.
     val effectiveChats: List<ChatWithDetails> = when (val state = chatListState) {
         is ChatListState.Success -> state.chats
-        else -> {
-            val uid = currentUserId
-            if (cachedConnections.isNotEmpty() && uid != null) {
-                cachedConnections.mapNotNull { connection ->
-                    if (connection.normalizedConnectionStatus() == "removed") return@mapNotNull null
-                    val otherUserId = connection.user_ids.firstOrNull { it != uid }
-                        ?: return@mapNotNull null
-                    val otherUser = connectedUsers[otherUserId]
-                        ?: User(id = otherUserId, name = "Connection", createdAt = 0L)
-                    ChatWithDetails(
-                        chat = connection.chat,
-                        connection = connection,
-                        otherUser = otherUser,
-                        lastMessage = connection.chat.messages.lastOrNull(),
-                        unreadCount = 0
-                    )
-                }
-            } else emptyList()
-        }
+        else -> emptyList()
     }
 
     val activeOneToOneChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {

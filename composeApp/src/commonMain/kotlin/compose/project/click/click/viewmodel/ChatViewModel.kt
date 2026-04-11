@@ -118,6 +118,10 @@ sealed class ChatMessagesState {
     data class Error(val message: String) : ChatMessagesState()
 }
 
+private data class CombinedInboxState(
+    val chats: List<ChatWithDetails>,
+)
+
 class ChatViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
@@ -463,10 +467,10 @@ class ChatViewModel(
     // Load all chats for the current user
     fun loadChats(isForced: Boolean = true) {
         val userId = _currentUserId.value ?: return
-        
+
         // Avoid reload if already success and not forced
         if (!isForced && _chatListState.value is ChatListState.Success) return
-        
+
         viewModelScope.launch {
             if (isForced) {
                 chatRepository.clearChatListLocalCaches()
@@ -474,58 +478,43 @@ class ChatViewModel(
             val cachedConnections = AppDataManager.connections.value
             val cachedUsers = AppDataManager.connectedUsers.value
 
-            // Only use the fast-render cache path when the cached users have RESOLVED names.
-            // Using "Connection" placeholder names in the cache would flash unresolved names
-            // in the UI, which is exactly the bug we are fixing.
-            val canRenderCachedChats = cachedConnections.any { connection ->
-                connection.user_ids.any { otherUserId ->
-                    otherUserId != userId &&
-                    cachedUsers[otherUserId]?.let { isResolvedDisplayName(it.name) } == true
-                }
-            }
-            
             // CRITICAL: Never revert a Success state to Loading. When navigating
             // back to the connections list the previously loaded data must remain
-            // visible while the background refresh runs. Only show Loading (or
-            // cached placeholders) when no real data has ever been emitted.
+            // visible while the background refresh runs. Only show Loading when
+            // no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
-
-            // Initial load: do not emit Success from AppDataManager cache alone — it only
-            // contains 1:1 rows, so group cliques would "pop in" after the slower group
-            // decrypt path.
-            //
-            // After the first Success, never replace the list with [buildCachedChats] alone:
-            // that snapshot is 1:1-only and would temporarily hide verified clicks (same bug
-            // as exiting a group chat → [finalizeChatClose] → [loadChats]).
             if (!alreadyHasRealData) {
-                when {
-                    cachedConnections.isEmpty() -> {
-                        _chatListState.value = ChatListState.Loading
-                    }
-                    canRenderCachedChats -> {
-                        val cachedChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                        val readyChats = cachedChats.filter { isResolvedDisplayName(it.otherUser.name) }
-                        if (readyChats.isNotEmpty()) {
-                            _chatListState.value = ChatListState.Success(applyChatListVisibility(readyChats))
-                        }
-                    }
-                    else -> {
-                        val fallbackChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                        if (fallbackChats.isNotEmpty()) {
-                            _chatListState.value = ChatListState.Success(applyChatListVisibility(fallbackChats))
-                        } else {
-                            _chatListState.value = ChatListState.Loading
-                        }
-                    }
-                }
+                _chatListState.value = ChatListState.Loading
             }
-            
-            // Fetch fresh data from API in background
-            try {
-                val activeChats = chatRepository.fetchUserChatsWithDetails(userId)
-                val archivedChats = chatRepository.fetchArchivedUserChatsWithDetails(userId)
-                val chats = activeChats + archivedChats
 
+            // Build direct and group streams, then publish one combined emission so
+            // Compose renders both categories simultaneously.
+            try {
+                val combinedInbox = coroutineScope {
+                    val activeChatsDeferred = async { chatRepository.fetchUserChatsWithDetails(userId) }
+                    val archivedChatsDeferred = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
+
+                    val activeChats = activeChatsDeferred.await()
+                    val archivedChats = archivedChatsDeferred.await()
+
+                    val directChatsFlow: Flow<List<ChatWithDetails>> = flowOf(
+                        (activeChats.filter { it.groupClique == null } + archivedChats)
+                            .distinctBy { it.connection.id }
+                    )
+                    val groupChatsFlow: Flow<List<ChatWithDetails>> = flowOf(
+                        activeChats.filter { it.groupClique != null }
+                    )
+
+                    combine(directChatsFlow, groupChatsFlow) { directChats, groupChats ->
+                        CombinedInboxState(
+                            chats = (directChats + groupChats)
+                                .distinctBy { it.connection.id }
+                                .sortedByDescending { chatListActivityTimestamp(it) }
+                        )
+                    }.first()
+                }
+
+                val chats = combinedInbox.chats
                 if (chats.isNotEmpty()) {
                     // Prefer any already-resolved names from AppDataManager's cache over
                     // freshly-fetched users that still carry "Connection" (can happen when the
@@ -545,35 +534,26 @@ class ChatViewModel(
                         buildCachedChats(cachedConnections, cachedUsers, userId).associateBy { it.connection.id }
                     val mergedWithLocalPreview = enriched.map { apiChat ->
                         val cachedRow = cachedChatsById[apiChat.connection.id]
-                        val freshUser = cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
+                        val freshUser = if (apiChat.groupClique == null) {
+                            cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
+                        } else {
+                            null
+                        }
                         mergeChatRowWithCache(apiChat, cachedRow, freshUser)
                     }
                     _chatListState.value =
                         ChatListState.Success(applyChatListVisibility(mergedWithLocalPreview))
                     prefetchChatPayloads(userId, enriched)
-                } else if (cachedConnections.isNotEmpty() && canRenderCachedChats) {
-                    // Keep hydrated/cached connections visible when API is empty
-                    // (common during session bootstrap or backend shape mismatch).
-                    if (_chatListState.value !is ChatListState.Success) {
-                        val readyChats = buildCachedChats(cachedConnections, cachedUsers, userId)
-                            .filter { isResolvedDisplayName(it.otherUser.name) }
-                        if (readyChats.isNotEmpty()) {
-                            _chatListState.value = ChatListState.Success(
-                                applyChatListVisibility(readyChats)
-                            )
-                        }
-                    }
                 } else {
                     _chatListState.value = ChatListState.Success(emptyList())
                 }
             } catch (e: Exception) {
-                // Only show error if we don't have cached data
-                if (cachedConnections.isEmpty()) {
+                // Keep an existing list visible; only error on a cold-start failure.
+                if (_chatListState.value !is ChatListState.Success) {
                     _chatListState.value = ChatListState.Error(
                         e.redactedRestMessage().ifBlank { "Failed to load chats" },
                     )
                 }
-                // Otherwise keep showing cached data
             }
         }
     }
