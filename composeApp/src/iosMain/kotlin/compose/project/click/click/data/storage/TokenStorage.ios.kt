@@ -47,6 +47,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
+        private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
@@ -140,15 +141,11 @@ class IosTokenStorage : TokenStorage {
     override suspend fun clearTokens() {
         println("IosTokenStorage: Clearing tokens...")
         
-        // Clear NSUserDefaults
+        // Clear token keys in NSUserDefaults
         userDefaults.removeObjectForKey(KEY_JWT)
         userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
         userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
         userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
-        userDefaults.removeObjectForKey(KEY_TAGS_INITIALIZED)
-        userDefaults.removeObjectForKey(KEY_ONBOARDING_STATE)
-        userDefaults.removeObjectForKey(KEY_CACHED_APP_SNAPSHOT)
-        userDefaults.removeObjectForKey(KEY_PENDING_CONNECTION_QUEUE)
         userDefaults.synchronize()
         
         // Clear Keychain
@@ -277,6 +274,19 @@ class IosTokenStorage : TokenStorage {
         return userDefaults.stringForKey(KEY_ONBOARDING_STATE)
     }
 
+    override suspend fun saveHasCompletedOnboarding(completed: Boolean) {
+        userDefaults.setBool(completed, KEY_HAS_COMPLETED_ONBOARDING)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getHasCompletedOnboarding(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_HAS_COMPLETED_ONBOARDING) != null) {
+            userDefaults.boolForKey(KEY_HAS_COMPLETED_ONBOARDING)
+        } else {
+            null
+        }
+    }
+
     override suspend fun saveCachedAppSnapshot(snapshot: String?) {
         if (snapshot == null) {
             userDefaults.removeObjectForKey(KEY_CACHED_APP_SNAPSHOT)
@@ -322,7 +332,7 @@ class IosTokenStorage : TokenStorage {
             KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
             KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
             KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
-            KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+            KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
             KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
         )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }

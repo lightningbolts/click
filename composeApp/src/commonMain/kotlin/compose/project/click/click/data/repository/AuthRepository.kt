@@ -171,10 +171,12 @@ class AuthRepository(
                 
                 // Always try to refresh when restoring from TokenStorage
                 // since these tokens may be stale
+                var refreshFailed = false
                 try {
                     supabase.auth.refreshCurrentSession()
                     println("AuthRepository: Successfully refreshed session from TokenStorage")
                 } catch (e: Exception) {
+                    refreshFailed = true
                     println("AuthRepository: Failed to refresh session from TokenStorage: ${e.message}")
                 }
 
@@ -193,10 +195,14 @@ class AuthRepository(
                     }
                     Result.success(user)
                 } else {
-                    // Tokens were invalid, clear them to avoid retrying stale tokens
-                    println("AuthRepository: TokenStorage tokens invalid, clearing")
-                    tokenStorage.clearTokens()
-                    Result.failure(Exception("Session expired and could not be refreshed"))
+                    // Keep local tokens on restore failure so offline cold boots do not force sign-out.
+                    // Explicit sign-out still clears session data via AuthViewModel.signOut().
+                    if (refreshFailed) {
+                        println("AuthRepository: Session refresh failed; preserving local tokens for offline recovery")
+                    } else {
+                        println("AuthRepository: Session user unavailable after import; preserving local tokens")
+                    }
+                    Result.failure(Exception("Session could not be restored right now"))
                 }
             } else {
                 Result.failure(Exception("No saved session found"))

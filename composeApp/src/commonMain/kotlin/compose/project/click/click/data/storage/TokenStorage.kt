@@ -41,6 +41,8 @@ interface TokenStorage {
     // Serialized local state for onboarding, offline cache, and deferred sync
     suspend fun saveOnboardingState(state: String?)
     suspend fun getOnboardingState(): String?
+    suspend fun saveHasCompletedOnboarding(completed: Boolean)
+    suspend fun getHasCompletedOnboarding(): Boolean?
     suspend fun saveCachedAppSnapshot(snapshot: String?)
     suspend fun getCachedAppSnapshot(): String?
     suspend fun savePendingConnectionQueue(queue: String?)

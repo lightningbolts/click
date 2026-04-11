@@ -138,6 +138,7 @@ fun App() {
     var ambientNoiseOptIn by remember { mutableStateOf(true) }
     var barometricContextOptIn by remember { mutableStateOf(true) }
     var onboardingState by remember { mutableStateOf<OnboardingState?>(null) }
+    var hasCompletedOnboarding by remember { mutableStateOf<Boolean?>(null) }
     /** False until `user_interests` has been checked for this session (fresh install / login). */
     var interestsRemoteResolved by remember { mutableStateOf(false) }
     var isCompletingPermissions by remember { mutableStateOf(false) }
@@ -177,23 +178,41 @@ fun App() {
     LaunchedEffect(authViewModel.isAuthenticated, currentUser.id) {
         if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
             onboardingState = null
+            hasCompletedOnboarding = null
             interestsRemoteResolved = true
             return@LaunchedEffect
         }
 
         interestsRemoteResolved = false
 
+        val persistedHasCompletedOnboarding = tokenStorage.getHasCompletedOnboarding()
+
         val savedState = tokenStorage.getOnboardingState()
             ?.let { serialized ->
                 runCatching { onboardingJson.decodeFromString<OnboardingState>(serialized) }.getOrNull()
             }
 
-        when {
-            savedState != null && savedState.isComplete -> {
-                onboardingState = savedState
+        val effectiveHasCompletedOnboarding =
+            persistedHasCompletedOnboarding ?: savedState?.permissionsCompleted ?: false
+        hasCompletedOnboarding = effectiveHasCompletedOnboarding
+        if (persistedHasCompletedOnboarding == null && savedState?.permissionsCompleted == true) {
+            tokenStorage.saveHasCompletedOnboarding(true)
+        }
+
+        val normalizedSavedState = savedState?.let { state ->
+            if (effectiveHasCompletedOnboarding && !state.permissionsCompleted) {
+                state.copy(permissionsCompleted = true)
+            } else {
+                state
             }
-            savedState != null -> {
-                onboardingState = savedState
+        }
+
+        when {
+            normalizedSavedState != null && normalizedSavedState.isComplete -> {
+                onboardingState = normalizedSavedState
+            }
+            normalizedSavedState != null -> {
+                onboardingState = normalizedSavedState
             }
             else -> {
                 val shell = OnboardingState(flowVersion = 0)
@@ -206,11 +225,18 @@ fun App() {
         supabaseRepo.fetchUserInterests(currentUser.id).fold(
             onSuccess = { row ->
                 if (row != null) {
-                    val base = onboardingState ?: OnboardingState()
+                    val base = (onboardingState ?: OnboardingState()).let { state ->
+                        if (hasCompletedOnboarding == true && !state.permissionsCompleted) {
+                            state.copy(permissionsCompleted = true)
+                        } else {
+                            state
+                        }
+                    }
+                    val permissionsCompleted = hasCompletedOnboarding == true || base.permissionsCompleted
                     val merged = base.copy(
                         interestsCompleted = true,
-                        flowVersion = if (base.permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
-                        completedAt = base.completedAt ?: if (base.permissionsCompleted) {
+                        flowVersion = if (permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
+                        completedAt = base.completedAt ?: if (permissionsCompleted) {
                             kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                         } else {
                             null
@@ -463,8 +489,8 @@ fun App() {
             val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
             val onboardingScope = rememberCoroutineScope()
             val onboardingStep = when {
-                onboardingState == null || appDataUser == null || !interestsRemoteResolved -> "loading"
-                onboardingState?.permissionsCompleted != true -> "permissions"
+                onboardingState == null || appDataUser == null || !interestsRemoteResolved || hasCompletedOnboarding == null -> "loading"
+                hasCompletedOnboarding != true -> "permissions"
                 onboardingState?.interestsCompleted != true -> "interests"
                 else -> "complete"
             }
@@ -525,6 +551,8 @@ fun App() {
                                             )
                                             AppDataManager.setMessageNotificationsEnabled(selection.notificationsEnabled)
                                             AppDataManager.setCallNotificationsEnabled(selection.notificationsEnabled)
+                                            tokenStorage.saveHasCompletedOnboarding(true)
+                                            hasCompletedOnboarding = true
 
                                             val updatedState = (onboardingState ?: OnboardingState()).copy(
                                                 permissionsCompleted = true,

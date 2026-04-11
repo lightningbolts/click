@@ -36,7 +36,13 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     }
 
     override suspend fun clearTokens() {
-        sharedPreferences.edit().clear().apply()
+        sharedPreferences.edit().apply {
+            remove(KEY_JWT)
+            remove(KEY_REFRESH_TOKEN)
+            remove(KEY_EXPIRES_AT)
+            remove(KEY_TOKEN_TYPE)
+            apply()
+        }
     }
 
     companion object {
@@ -54,6 +60,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
+        private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
@@ -190,6 +197,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         return sharedPreferences.getString(KEY_ONBOARDING_STATE, null)
     }
 
+    override suspend fun saveHasCompletedOnboarding(completed: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_HAS_COMPLETED_ONBOARDING, completed)
+            apply()
+        }
+    }
+
+    override suspend fun getHasCompletedOnboarding(): Boolean? {
+        return if (sharedPreferences.contains(KEY_HAS_COMPLETED_ONBOARDING)) {
+            sharedPreferences.getBoolean(KEY_HAS_COMPLETED_ONBOARDING, false)
+        } else {
+            null
+        }
+    }
+
     override suspend fun saveCachedAppSnapshot(snapshot: String?) {
         sharedPreferences.edit().apply {
             if (snapshot == null) remove(KEY_CACHED_APP_SNAPSHOT) else putString(KEY_CACHED_APP_SNAPSHOT, snapshot)
@@ -234,7 +256,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
                 KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
                 KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
                 KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
-                KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+                KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
                 KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
             )
             sessionKeys.forEach { remove(it) }

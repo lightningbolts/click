@@ -12,6 +12,12 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -60,14 +66,20 @@ class AuthViewModel(
                             name = user.displayNameFromMetadata()
                         )
                     },
-                    onFailure = {
-                        isAuthenticated = false
-                        authState = AuthState.Idle
+                    onFailure = { error ->
+                        val restoredOffline = restoreOfflineSessionIfPossible(error)
+                        if (!restoredOffline) {
+                            isAuthenticated = false
+                            authState = AuthState.Idle
+                        }
                     }
                 )
             } catch (e: Exception) {
-                isAuthenticated = false
-                authState = AuthState.Idle
+                val restoredOffline = restoreOfflineSessionIfPossible(e)
+                if (!restoredOffline) {
+                    isAuthenticated = false
+                    authState = AuthState.Idle
+                }
             }
         }
     }
@@ -162,17 +174,99 @@ class AuthViewModel(
                 onSuccess = {
                     // Session refreshed successfully
                 },
-                onFailure = {
-                    // Refresh failed, require re-login
-                    isAuthenticated = false
-                    authState = AuthState.Idle
+                onFailure = { error ->
+                    val keptOffline = restoreOfflineSessionIfPossible(error)
+                    if (!keptOffline) {
+                        // Refresh failed for a non-network reason, require re-login
+                        isAuthenticated = false
+                        authState = AuthState.Idle
+                    }
                 }
             )
         } catch (e: Exception) {
-            isAuthenticated = false
-            authState = AuthState.Idle
+            val keptOffline = restoreOfflineSessionIfPossible(e)
+            if (!keptOffline) {
+                isAuthenticated = false
+                authState = AuthState.Idle
+            }
         }
     }
+
+    private suspend fun restoreOfflineSessionIfPossible(error: Throwable?): Boolean {
+        if (!isLikelyNetworkFailure(error)) return false
+
+        val jwt = tokenStorage.getJwt()
+        val refreshToken = tokenStorage.getRefreshToken()
+        if (jwt.isNullOrBlank() || refreshToken.isNullOrBlank()) return false
+
+        val identity = parseCachedIdentityFromJwt(jwt) ?: return false
+
+        isAuthenticated = true
+        authState = AuthState.Success(
+            userId = identity.userId,
+            email = identity.email,
+            name = identity.name,
+        )
+        println("AuthViewModel: Using cached offline auth state from persisted tokens")
+        return true
+    }
+
+    private fun isLikelyNetworkFailure(error: Throwable?): Boolean {
+        if (error == null) return false
+        var cursor: Throwable? = error
+        while (cursor != null) {
+            val message = cursor.message?.lowercase().orEmpty()
+            if (
+                message.contains("network") ||
+                message.contains("offline") ||
+                message.contains("no network") ||
+                message.contains("no internet") ||
+                message.contains("timeout") ||
+                message.contains("timed out") ||
+                message.contains("unable to resolve host") ||
+                message.contains("socket") ||
+                message.contains("connect") ||
+                message.contains("dns") ||
+                message.contains("unreachable")
+            ) {
+                return true
+            }
+            cursor = cursor.cause
+        }
+        return false
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun parseCachedIdentityFromJwt(jwt: String): CachedIdentity? {
+        return runCatching {
+            val payload = jwt.split('.')
+                .getOrNull(1)
+                ?.replace('-', '+')
+                ?.replace('_', '/')
+                ?.let { segment ->
+                    val padding = (4 - (segment.length % 4)) % 4
+                    segment + "=".repeat(padding)
+                }
+                ?: return null
+
+            val json = Base64.decode(payload).decodeToString()
+            val claims = Json.parseToJsonElement(json).jsonObject
+
+            val userId = claims["sub"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: return null
+            val email = claims["email"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val name = claims["full_name"]?.jsonPrimitive?.contentOrNull
+                ?: claims["name"]?.jsonPrimitive?.contentOrNull
+
+            CachedIdentity(userId = userId, email = email, name = name)
+        }.getOrNull()
+    }
+
+    private data class CachedIdentity(
+        val userId: String,
+        val email: String,
+        val name: String?,
+    )
 
     fun signOut() {
         viewModelScope.launch {

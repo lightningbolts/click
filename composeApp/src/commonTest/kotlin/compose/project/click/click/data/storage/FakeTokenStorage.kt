@@ -28,6 +28,8 @@ class FakeTokenStorage : TokenStorage {
     override suspend fun getLocationExplainerSeen(): Boolean? = null
     override suspend fun saveOnboardingState(state: String?) {}
     override suspend fun getOnboardingState(): String? = null
+    override suspend fun saveHasCompletedOnboarding(completed: Boolean) {}
+    override suspend fun getHasCompletedOnboarding(): Boolean? = null
     override suspend fun saveCachedAppSnapshot(snapshot: String?) {}
     override suspend fun getCachedAppSnapshot(): String? = null
     override suspend fun savePendingConnectionQueue(queue: String?) {}
