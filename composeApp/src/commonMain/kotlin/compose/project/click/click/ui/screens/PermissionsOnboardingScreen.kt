@@ -55,7 +55,6 @@ data class PermissionsOnboardingSelection(
 
 private enum class PermissionsOnboardingPhase {
     PickPreferences,
-    LocationExplainer,
     MicrophoneExplainer,
 }
 
@@ -83,6 +82,7 @@ fun PermissionsOnboardingScreen(
 
     var phase by remember { mutableStateOf(PermissionsOnboardingPhase.PickPreferences) }
     var committedSelection by remember { mutableStateOf<PermissionsOnboardingSelection?>(null) }
+    var locationPermissionFlowRunning by remember { mutableStateOf(false) }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -114,11 +114,16 @@ fun PermissionsOnboardingScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                        ) {
                             PermissionToggleRow(
                                 icon = Icons.Default.Place,
                                 title = "Connection location snap",
-                                description = "Capture a single GPS snapshot when you connect. No background tracking.",
+                                description = "One GPS point when you connect so your Memory Map and connection context stay accurate. " +
+                                    "No background tracking—the system permission dialog appears when you continue if this is on.",
                                 checked = connectionSnapEnabled,
                                 enabled = true,
                                 onCheckedChange = {
@@ -184,13 +189,13 @@ fun PermissionsOnboardingScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
                         text = "Next you'll pick at least 5 interests so Click can personalize your connections.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                        textAlign = TextAlign.Start,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp),
@@ -202,19 +207,27 @@ fun PermissionsOnboardingScreen(
                     Button(
                         onClick = {
                             val sel = selectionFromToggles()
+                            fun proceedAfterLocation() {
+                                when {
+                                    sel.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission -> {
+                                        committedSelection = sel
+                                        phase = PermissionsOnboardingPhase.MicrophoneExplainer
+                                    }
+                                    else -> onContinue(sel)
+                                }
+                            }
                             when {
                                 sel.connectionSnapEnabled && !locationService.hasLocationPermission() -> {
-                                    committedSelection = sel
-                                    phase = PermissionsOnboardingPhase.LocationExplainer
+                                    locationPermissionFlowRunning = true
+                                    requestLocationPermissionThen {
+                                        locationPermissionFlowRunning = false
+                                        proceedAfterLocation()
+                                    }
                                 }
-                                sel.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission -> {
-                                    committedSelection = sel
-                                    phase = PermissionsOnboardingPhase.MicrophoneExplainer
-                                }
-                                else -> onContinue(sel)
+                                else -> proceedAfterLocation()
                             }
                         },
-                        enabled = !isLoading,
+                        enabled = !isLoading && !locationPermissionFlowRunning,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -222,7 +235,7 @@ fun PermissionsOnboardingScreen(
                         elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     ) {
-                        if (isLoading) {
+                        if (isLoading || locationPermissionFlowRunning) {
                             AdaptiveCircularProgressIndicator(
                                 modifier = Modifier.size(22.dp),
                                 color = MaterialTheme.colorScheme.onPrimary,
@@ -233,21 +246,6 @@ fun PermissionsOnboardingScreen(
                         }
                     }
                 }
-            }
-
-            PermissionsOnboardingPhase.LocationExplainer -> {
-                val sel = committedSelection ?: return@AdaptiveBackground
-                LocationPermissionExplainerContent(
-                    topInset = topInset,
-                    requestLocationPermissionThen = requestLocationPermissionThen,
-                    onNext = {
-                        if (sel.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission) {
-                            phase = PermissionsOnboardingPhase.MicrophoneExplainer
-                        } else {
-                            onContinue(sel)
-                        }
-                    },
-                )
             }
 
             PermissionsOnboardingPhase.MicrophoneExplainer -> {
@@ -263,96 +261,12 @@ fun PermissionsOnboardingScreen(
 }
 
 @Composable
-private fun LocationPermissionExplainerContent(
-    topInset: Dp,
-    requestLocationPermissionThen: ((onComplete: () -> Unit) -> Unit),
-    onNext: () -> Unit,
-) {
-    var allowCompleted by remember { mutableStateOf(false) }
-    val btnStyle = LocalPlatformStyle.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(top = topInset, bottom = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        PageHeader(
-            title = "Connection location",
-            subtitle = "Click records one GPS point when you connect so your Memory Map and connection context stay accurate. We don't track you in the background.",
-        )
-        Spacer(modifier = Modifier.height(28.dp))
-        Icon(
-            imageVector = Icons.Default.Place,
-            contentDescription = null,
-            tint = PrimaryBlue,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(
-            text = "The next screen is the system permission dialog. You can change this anytime in Settings.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(32.dp))
-        Button(
-            onClick = {
-                requestLocationPermissionThen {
-                    allowCompleted = true
-                }
-            },
-            enabled = !allowCompleted,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
-            elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-        ) {
-            Text("Allow Location", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        TextButton(
-            onClick = { openApplicationSystemSettings() },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                "Open Settings",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = onNext,
-            enabled = allowCompleted,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
-            elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ),
-        ) {
-            Text("Next", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
 private fun MicrophonePermissionExplainerContent(
     topInset: Dp,
     requestMicrophonePermissionThen: ((onComplete: () -> Unit) -> Unit),
     onAllowComplete: () -> Unit,
 ) {
-    var allowTapped by remember { mutableStateOf(false) }
+    var micPermissionFlowRunning by remember { mutableStateOf(false) }
     val btnStyle = LocalPlatformStyle.current
 
     Column(
@@ -362,36 +276,40 @@ private fun MicrophonePermissionExplainerContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(top = topInset, bottom = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PageHeader(
             title = "Ambient sound",
             subtitle = "A short mic sample at connect time helps categorize background noise. No recordings are stored—only a rough category.",
         )
-        Spacer(modifier = Modifier.height(28.dp))
-        Icon(
-            imageVector = Icons.Default.Mic,
-            contentDescription = null,
-            tint = PrimaryBlue,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(
-            text = "When you're ready, tap below to open the system microphone permission.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(32.dp))
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                PermissionInfoRow(
+                    icon = Icons.Default.Mic,
+                    title = "Microphone permission",
+                    description = "Tap the button below to open the system dialog. You can change this anytime in Settings.",
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Button(
             onClick = {
-                if (allowTapped) return@Button
-                allowTapped = true
+                if (micPermissionFlowRunning) return@Button
+                micPermissionFlowRunning = true
                 requestMicrophonePermissionThen {
+                    micPermissionFlowRunning = false
                     onAllowComplete()
                 }
             },
-            enabled = !allowTapped,
+            enabled = !micPermissionFlowRunning,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -399,7 +317,15 @@ private fun MicrophonePermissionExplainerContent(
             elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
         ) {
-            Text("Allow microphone", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            if (micPermissionFlowRunning) {
+                AdaptiveCircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Allow microphone", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
         Spacer(modifier = Modifier.height(10.dp))
         TextButton(
