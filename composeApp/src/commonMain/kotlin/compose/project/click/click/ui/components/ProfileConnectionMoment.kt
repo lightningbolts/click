@@ -1,6 +1,34 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BatteryStd
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.NightsStay
+import androidx.compose.material.icons.outlined.DirectionsRun
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.ConnectionEncounter
 import compose.project.click.click.data.models.NoiseLevelCategory
 import kotlin.math.roundToInt
 import kotlinx.datetime.DayOfWeek
@@ -173,3 +201,98 @@ fun Connection.profileNoiseLine(): String? {
 /** Barometric elevation snapshot when a precise meter value exists (legacy rows omit this). */
 fun Connection.profileBarometricLine(): String? =
     resolvedExactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
+
+fun ConnectionEncounter.metricLuxLabel(): String? =
+    luxLevel?.takeIf { it.isFinite() && it >= 0 }?.let { "${it.roundToInt()} lx" }
+
+fun ConnectionEncounter.metricMotionVarianceLabel(): String? =
+    motionVariance?.takeIf { it.isFinite() && it >= 0 }?.let { v ->
+        val rounded = (v * 100.0).roundToInt() / 100.0
+        "$rounded"
+    }
+
+fun ConnectionEncounter.metricCompassAzimuthLabel(): String? =
+    compassAzimuth?.takeIf { it.isFinite() }?.let {
+        var deg = it % 360.0
+        if (deg < 0) deg += 360.0
+        "${deg.roundToInt()}°"
+    }
+
+fun ConnectionEncounter.metricBatteryLabel(): String? =
+    batteryLevel?.takeIf { it in 0..100 }?.let { "$it%" }
+
+/**
+ * Compact pill used for environmental / hardware metrics (connections list + profile).
+ */
+@Composable
+fun SmallBadge(
+    icon: ImageVector,
+    iconTint: Color,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+    val bg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val body = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .border(1.dp, border, RoundedCornerShape(50))
+            .background(bg)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = body,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ConnectionHardwareVibeBadgesRow(
+    encounter: ConnectionEncounter?,
+    modifier: Modifier = Modifier,
+) {
+    if (encounter == null) return
+    val luxVal = encounter.luxLevel?.takeIf { it.isFinite() && it >= 0 }
+    val isDim = luxVal != null && luxVal < 15.0
+    val luxIcon = if (isDim) Icons.Outlined.NightsStay else Icons.Outlined.WbSunny
+    val luxTint = if (isDim) Color(0xFF90CAF9) else Color(0xFFFFE082)
+    val pills = buildList<Triple<ImageVector, Color, String>> {
+        encounter.metricLuxLabel()?.let { lbl ->
+            add(Triple(luxIcon, luxTint, lbl))
+        }
+        encounter.metricBatteryLabel()?.let { lbl ->
+            add(Triple(Icons.Outlined.BatteryStd, Color(0xFFA5D6A7), lbl))
+        }
+        encounter.metricCompassAzimuthLabel()?.let { lbl ->
+            add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), lbl))
+        }
+        encounter.metricMotionVarianceLabel()?.let { lbl ->
+            add(Triple(Icons.Outlined.DirectionsRun, Color(0xFFFFAB91), lbl))
+        }
+    }
+    if (pills.isEmpty()) return
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        pills.forEach { (ic, tint, lbl) ->
+            SmallBadge(icon = ic, iconTint = tint, label = lbl)
+        }
+    }
+}

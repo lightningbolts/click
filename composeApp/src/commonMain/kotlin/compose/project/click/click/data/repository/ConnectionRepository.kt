@@ -26,6 +26,7 @@ import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.User
+import compose.project.click.click.sensors.HardwareVibeSnapshot
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.auth.auth
@@ -159,6 +160,10 @@ private data class BindProximityRequest(
     val latitude: Double? = null,
     val longitude: Double? = null,
     @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
+    @SerialName("lux_level") val luxLevel: Double? = null,
+    @SerialName("motion_variance") val motionVariance: Double? = null,
+    @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
+    @SerialName("battery_level") val batteryLevel: Int? = null,
 )
 
 class ConnectionRepository(
@@ -217,6 +222,7 @@ class ConnectionRepository(
         latitude: Double?,
         longitude: Double?,
         exactBarometricElevationM: Double? = null,
+        hardwareVibe: HardwareVibeSnapshot? = null,
     ): Result<BindProximityHandshakeOutcome> {
         return try {
             val client = httpClient ?: edgeFunctionHttpClient
@@ -229,6 +235,10 @@ class ConnectionRepository(
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
                 exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
+                luxLevel = hardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
+                motionVariance = hardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
+                compassAzimuth = hardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
+                batteryLevel = hardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
             )
             val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
                 contentType(ContentType.Application.Json)
@@ -265,6 +275,7 @@ class ConnectionRepository(
         latitude: Double?,
         longitude: Double?,
         altitudeMeters: Double?,
+        hardwareVibe: HardwareVibeSnapshot? = null,
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
         val loc = if (latitude != null && longitude != null &&
@@ -286,6 +297,7 @@ class ConnectionRepository(
             heardTokens = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
             capturedAtEpochMs = now,
             location = loc,
+            hardwareVibe = hardwareVibe,
         )
         val q = loadPendingProximityHandshakeQueue().toMutableList()
         val dup = q.lastOrNull {
@@ -327,6 +339,7 @@ class ConnectionRepository(
                         heardTokens = head.heardTokens,
                         latitude = lat,
                         longitude = lng,
+                        hardwareVibe = head.hardwareVibe,
                     ).getOrThrow()
                 }
             }

@@ -29,6 +29,14 @@ data class ConnectionEncounter(
     val exactBarometricElevationM: Double? = null,
     @SerialName("relative_altitude_m")
     val relativeAltitudeM: Double? = null,
+    @SerialName("lux_level")
+    val luxLevel: Double? = null,
+    @SerialName("motion_variance")
+    val motionVariance: Double? = null,
+    @SerialName("compass_azimuth")
+    val compassAzimuth: Double? = null,
+    @SerialName("battery_level")
+    val batteryLevel: Int? = null,
     @SerialName("context_tags")
     val contextTags: List<String> = emptyList(),
 ) {

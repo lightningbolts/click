@@ -440,6 +440,18 @@ data class Connection(
             ?: exactBarometricElevationM?.takeIf { it.isFinite() }
             ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
+    val resolvedLuxLevel: Double?
+        get() = latestEncounter()?.luxLevel?.takeIf { it.isFinite() }
+
+    val resolvedMotionVariance: Double?
+        get() = latestEncounter()?.motionVariance?.takeIf { it.isFinite() }
+
+    val resolvedCompassAzimuth: Double?
+        get() = latestEncounter()?.compassAzimuth?.takeIf { it.isFinite() }
+
+    val resolvedBatteryLevel: Int?
+        get() = latestEncounter()?.batteryLevel?.takeIf { it in 0..100 }
+
     val resolvedWeatherCondition: String?
         get() = latestEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
             ?: originEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }

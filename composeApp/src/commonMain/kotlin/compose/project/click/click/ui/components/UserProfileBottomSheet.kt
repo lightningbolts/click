@@ -24,11 +24,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.BatteryStd
+import androidx.compose.material.icons.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.NightsStay
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -263,6 +268,15 @@ private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             enc.metricNoiseLabel()?.let { add(Triple(Icons.Outlined.GraphicEq, Color(0xFF69F0AE), it)) }
                             enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
                             enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
+                            enc.metricLuxLabel()?.let { lbl ->
+                                val dim = enc.luxLevel != null && enc.luxLevel!! < 15.0
+                                val ic = if (dim) Icons.Outlined.NightsStay else Icons.Outlined.WbSunny
+                                val tint = if (dim) Color(0xFF90CAF9) else Color(0xFFFFE082)
+                                add(Triple(ic, tint, lbl))
+                            }
+                            enc.metricBatteryLabel()?.let { add(Triple(Icons.Outlined.BatteryStd, Color(0xFFA5D6A7), it)) }
+                            enc.metricCompassAzimuthLabel()?.let { add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), it)) }
+                            enc.metricMotionVarianceLabel()?.let { add(Triple(Icons.Outlined.DirectionsRun, Color(0xFFFFAB91), it)) }
                         }
                         if (pills.isNotEmpty()) {
                             FlowRow(

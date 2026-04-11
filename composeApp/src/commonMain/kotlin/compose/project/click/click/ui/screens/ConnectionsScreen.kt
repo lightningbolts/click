@@ -123,6 +123,7 @@ import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionHardwareVibeBadgesRow // pragma: allowlist secret
 import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
@@ -1544,6 +1545,10 @@ fun ConnectionItem(
                     }
                 }
             }
+            ConnectionHardwareVibeBadgesRow(
+                encounter = connection.latestEncounter(),
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
 
         if (!isGroup) {

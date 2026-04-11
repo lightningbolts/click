@@ -22,6 +22,7 @@ import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allo
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
+import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlin.random.Random
@@ -174,16 +175,20 @@ class ConnectionViewModel : ViewModel() {
                         null
                     }
 
-                val heardTokens = coroutineScope {
+                val hardwareMonitor = HardwareVibeMonitor()
+                val handshakeCapture = coroutineScope {
                     val listen = async { proximityManager.startHandshakeListening() }
                     delay(120L)
                     // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
                     delay(Random.nextLong(0, 400))
+                    val hardwareVibe = runCatching { hardwareMonitor.takeSnapshot() }.getOrNull()
                     proximityManager.startHandshakeBroadcast(myToken)
                     val heard = listen.await()
                     proximityManager.stopAll()
-                    heard
+                    heard to hardwareVibe
                 }
+                val vibeSnapshot = handshakeCapture.second
+                val tokensOnly = handshakeCapture.first
 
                 val baroSample = baroDeferred?.await()
                 val baroElevationM = baroSample?.elevationMeters?.takeIf { it.isFinite() }
@@ -196,10 +201,11 @@ class ConnectionViewModel : ViewModel() {
                                 httpClient = httpClient,
                                 bearerJwt = jwt,
                                 myToken = myToken,
-                                heardTokens = heardTokens,
+                                heardTokens = tokensOnly,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
                                 exactBarometricElevationM = baroElevationM,
+                                hardwareVibe = vibeSnapshot,
                             ).getOrThrow()
                         }
                     }
@@ -219,10 +225,11 @@ class ConnectionViewModel : ViewModel() {
                         if (e.isRetryableForProximityBind()) {
                             repository.enqueuePendingProximityHandshake(
                                 myToken = myToken,
-                                heardTokens = heardTokens,
+                                heardTokens = tokensOnly,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
                                 altitudeMeters = lastProximityAltitudeMeters,
+                                hardwareVibe = vibeSnapshot,
                             )
                             scheduleProximityHandshakeSync()
                             _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
