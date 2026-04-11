@@ -8,3 +8,6 @@
 --   WITH CHECK (bucket_id = 'chat-media');
 -- CREATE POLICY "chat_media_select_public" ON storage.objects FOR SELECT TO public
 --   USING (bucket_id = 'chat-media');
+
+-- Profile avatars bucket `avatars` (see click-web/supabase/migrations/20260410200000_avatars_storage_bucket_and_rls.sql).
+-- Without storage.objects RLS policies, uploads fail with "new row violates row-level security policy".
