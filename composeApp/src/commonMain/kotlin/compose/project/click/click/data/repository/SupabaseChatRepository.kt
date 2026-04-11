@@ -684,7 +684,7 @@ class SupabaseChatRepository(
         }
     }
 
-    private suspend fun fetchGroupChatsWithDetails(userId: String): List<ChatWithDetails> {
+    override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
             val myGroupIds = supabase.from("group_members")
                 .select(columns = Columns.list("group_id")) {
@@ -824,12 +824,9 @@ class SupabaseChatRepository(
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
-            val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
-            val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
-
             coroutineScope {
-                val direct = async { buildChatsWithDetailsForConnections(userId, activeRows) }
-                val groups = async { fetchGroupChatsWithDetails(userId) }
+                val direct = async { fetchDirectUserChatsWithDetails(userId) }
+                val groups = async { fetchGroupUserChatsWithDetails(userId) }
                 (direct.await() + groups.await()).sortedByDescending { d ->
                     d.lastMessage?.timeCreated
                         ?: d.connection.last_message_at
@@ -838,6 +835,17 @@ class SupabaseChatRepository(
             }
         } catch (e: Exception) {
             println("Error fetching user chats: ${e.redactedRestMessage()}")
+            emptyList()
+        }
+    }
+
+    override suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails> {
+        return try {
+            val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
+            val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
+            buildChatsWithDetailsForConnections(userId, activeRows)
+        } catch (e: Exception) {
+            println("Error fetching direct chats: ${e.redactedRestMessage()}")
             emptyList()
         }
     }
@@ -1195,7 +1203,7 @@ class SupabaseChatRepository(
         return when {
             row.groupId != null -> {
                 rememberChatGroupRouting(row.id, row.groupId)
-                fetchGroupChatsWithDetails(currentUserId).firstOrNull { it.chat.id == row.id }
+                fetchGroupUserChatsWithDetails(currentUserId).firstOrNull { it.chat.id == row.id }
             }
             !row.connectionId.isNullOrBlank() -> {
                 rememberChatConnectionRouting(row.id, row.connectionId)

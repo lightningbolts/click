@@ -6,6 +6,7 @@ import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.calibrateBarometricElevationMeters
+import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ConnectionInsert
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
@@ -962,14 +963,26 @@ class ConnectionRepository(
             }
 
             try {
-                supabase.from("chats")
-                    .insert(buildJsonObject {
-                        put("connection_id", result.id)
-                        put("created_at", now)
-                        put("updated_at", now)
-                    })
+                val existingChat = supabase.from("chats")
+                    .select(columns = Columns.list("id")) {
+                        filter {
+                            eq("connection_id", result.id)
+                        }
+                        limit(1)
+                    }
+                    .decodeList<Chat>()
+                    .firstOrNull()
+
+                if (existingChat == null) {
+                    supabase.from("chats")
+                        .insert(buildJsonObject {
+                            put("connection_id", result.id)
+                            put("created_at", now)
+                            put("updated_at", now)
+                        })
+                }
             } catch (e: Exception) {
-                println("ConnectionRepository: Failed to create chat on restore: ${e.message}")
+                println("ConnectionRepository: Failed to ensure chat on restore: ${e.message}")
             }
 
             AppDataManager.applyRestoredConnection(result)

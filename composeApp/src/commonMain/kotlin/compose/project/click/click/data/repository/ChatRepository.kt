@@ -39,6 +39,12 @@ interface ChatRepository {
 
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
+    /** Direct 1:1 chats only (excludes group clique chats). */
+    suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails>
+
+    /** Group clique chats only. */
+    suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails>
+
     suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
     suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String? = null): List<Message>

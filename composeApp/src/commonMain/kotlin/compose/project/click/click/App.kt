@@ -334,11 +334,7 @@ fun App() {
      */
     fun beginQrConnectionFromScan(pending: PendingQrConnection) {
         connectionScope.launch {
-            connectionViewModel.markConnecting()
-            connectionRevealState = ConnectionRevealUiState(
-                methodLabel = "QR",
-                phase = ConnectionRevealPhase.Connecting
-            )
+            connectionRevealState = null
 
             val locationDeferred = async {
                 if (!AppDataManager.shouldCaptureLocationAtTap() ||
@@ -1343,6 +1339,10 @@ fun App() {
                                 onDismiss = finishWithoutTags,
                                 onSkip = finishWithoutTags,
                                 onConfirm = { contextTag, noiseOptIn ->
+                                    connectionRevealState = ConnectionRevealUiState(
+                                        methodLabel = "QR",
+                                        phase = ConnectionRevealPhase.Connecting,
+                                    )
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)

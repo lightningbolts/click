@@ -427,6 +427,7 @@ data class Connection(
     /** Latest crossing place label (shim for removed `semantic_location` column). */
     val semanticLocation: String?
         get() = latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: latestEncounter()?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
             ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
 
     val resolvedNoiseLevel: String?
@@ -470,6 +471,7 @@ data class Connection(
     val displayLocationLabel: String?
         get() = context_tag
             ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: latestEncounter()?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
             ?: semanticLocation
 
     /** Legacy [MemoryCapsule] built from the most recent encounter (UI compatibility). */

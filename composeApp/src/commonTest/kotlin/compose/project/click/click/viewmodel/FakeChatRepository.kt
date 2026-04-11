@@ -37,6 +37,8 @@ private object NoopReactionSubscription : ChatReactionSubscription {
  */
 class FakeChatRepository(
     var onFetchUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
+    var onFetchDirectUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
+    var onFetchGroupUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchArchivedUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchChatWithDetails: suspend (String, String) -> ChatWithDetails? = { _, _ -> null },
     var onFetchMessagesForChat: suspend (String, String?) -> List<Message> = { _, _ -> emptyList() },
@@ -75,6 +77,12 @@ class FakeChatRepository(
 
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchUserChatsWithDetails(userId)
+
+    override suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails> =
+        onFetchDirectUserChatsWithDetails(userId)
+
+    override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> =
+        onFetchGroupUserChatsWithDetails(userId)
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)

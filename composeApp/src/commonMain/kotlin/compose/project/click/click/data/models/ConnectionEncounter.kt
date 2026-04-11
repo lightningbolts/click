@@ -13,6 +13,8 @@ data class ConnectionEncounter(
     val encounteredAt: String,
     @SerialName("location_name")
     val locationName: String? = null,
+    @SerialName("display_location")
+    val displayLocation: String? = null,
     @SerialName("gps_lat")
     val gpsLat: Double? = null,
     @SerialName("gps_lon")
@@ -62,7 +64,8 @@ fun ConnectionEncounter.toMemoryCapsule(): MemoryCapsule {
     }
     return MemoryCapsule(
         connectionId = this.connectionId,
-        locationName = locationName?.trim()?.takeIf { it.isNotEmpty() },
+        locationName = locationName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: displayLocation?.trim()?.takeIf { it.isNotEmpty() },
         geoLocation = geo,
         connectedAtMs = at,
         weatherSnapshot = weatherSnapshot,

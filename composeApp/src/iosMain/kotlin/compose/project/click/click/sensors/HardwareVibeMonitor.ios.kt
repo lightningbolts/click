@@ -47,14 +47,16 @@ actual class HardwareVibeMonitor actual constructor() {
 
             val brightness = UIScreen.mainScreen.brightness
             val luxProxy =
-                if (brightness.isFinite() && brightness >= 0.0) (brightness * 100.0).toFloat() else null
+                if (brightness.isFinite() && brightness >= 0.0) (brightness * 1000.0).toFloat() else null
 
             val wasMonitoring = UIDevice.currentDevice.batteryMonitoringEnabled
             UIDevice.currentDevice.batteryMonitoringEnabled = true
             val rawLevel = UIDevice.currentDevice.batteryLevel
-            val batteryPct = when {
-                rawLevel < 0f -> null
-                else -> (rawLevel * 100f).toInt().coerceIn(0, 100)
+            val batteryPct = if (rawLevel.isFinite()) {
+                val pct = (rawLevel * 100f).toInt()
+                if (pct == -100) null else pct.coerceIn(0, 100)
+            } else {
+                null
             }
             UIDevice.currentDevice.batteryMonitoringEnabled = wasMonitoring
 

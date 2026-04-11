@@ -120,6 +120,8 @@ sealed class ChatMessagesState {
 
 private data class CombinedInboxState(
     val chats: List<ChatWithDetails>,
+    val directLoaded: Boolean,
+    val groupLoaded: Boolean,
 )
 
 class ChatViewModel(
@@ -487,65 +489,86 @@ class ChatViewModel(
                 _chatListState.value = ChatListState.Loading
             }
 
-            // Build direct and group streams, then publish one combined emission so
-            // Compose renders both categories simultaneously.
+            // Build direct and group streams with immediate empty emissions so the
+            // list can paint direct chats while group chats continue loading.
             try {
-                val combinedInbox = coroutineScope {
-                    val activeChatsDeferred = async { chatRepository.fetchUserChatsWithDetails(userId) }
-                    val archivedChatsDeferred = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
-
-                    val activeChats = activeChatsDeferred.await()
-                    val archivedChats = archivedChatsDeferred.await()
-
-                    val directChatsFlow: Flow<List<ChatWithDetails>> = flowOf(
-                        (activeChats.filter { it.groupClique == null } + archivedChats)
-                            .distinctBy { it.connection.id }
+                val directChatsFlow: Flow<Pair<List<ChatWithDetails>, Boolean>> = flow {
+                    val directChats = chatRepository.fetchDirectUserChatsWithDetails(userId)
+                    val archivedChats = chatRepository.fetchArchivedUserChatsWithDetails(userId)
+                    emit(
+                        (directChats + archivedChats)
+                            .distinctBy { it.connection.id } to true
                     )
-                    val groupChatsFlow: Flow<List<ChatWithDetails>> = flowOf(
-                        activeChats.filter { it.groupClique != null }
-                    )
-
-                    combine(directChatsFlow, groupChatsFlow) { directChats, groupChats ->
-                        CombinedInboxState(
-                            chats = (directChats + groupChats)
-                                .distinctBy { it.connection.id }
-                                .sortedByDescending { chatListActivityTimestamp(it) }
-                        )
-                    }.first()
+                }.onStart {
+                    emit(emptyList<ChatWithDetails>() to false)
                 }
 
-                val chats = combinedInbox.chats
-                if (chats.isNotEmpty()) {
-                    // Prefer any already-resolved names from AppDataManager's cache over
-                    // freshly-fetched users that still carry "Connection" (can happen when the
-                    // RPC resolved names in AppDataManager before the ChatRepository fetch ran).
-                    val enriched = chats.map { chat ->
-                        val cached = cachedUsers[chat.otherUser.id]
-                        if (cached != null &&
-                            isResolvedDisplayName(cached.name) &&
-                            !isResolvedDisplayName(chat.otherUser.name)
-                        ) {
-                            chat.copy(otherUser = cached)
-                        } else {
-                            chat
-                        }
+                val groupChatsFlow: Flow<Pair<List<ChatWithDetails>, Boolean>> = flow {
+                    emit(chatRepository.fetchGroupUserChatsWithDetails(userId) to true)
+                }.onStart {
+                    emit(emptyList<ChatWithDetails>() to false)
+                }
+
+                combine(directChatsFlow, groupChatsFlow) { directState, groupState ->
+                    val (directChats, directLoaded) = directState
+                    val (groupChats, groupLoaded) = groupState
+                    CombinedInboxState(
+                        chats = (directChats + groupChats)
+                            .distinctBy { it.connection.id }
+                            .sortedByDescending { chatListActivityTimestamp(it) },
+                        directLoaded = directLoaded,
+                        groupLoaded = groupLoaded,
+                    )
+                }.collect { combinedInbox ->
+                    val chats = combinedInbox.chats
+
+                    if (!combinedInbox.directLoaded && !combinedInbox.groupLoaded) {
+                        return@collect
                     }
-                    val cachedChatsById =
-                        buildCachedChats(cachedConnections, cachedUsers, userId).associateBy { it.connection.id }
-                    val mergedWithLocalPreview = enriched.map { apiChat ->
-                        val cachedRow = cachedChatsById[apiChat.connection.id]
-                        val freshUser = if (apiChat.groupClique == null) {
-                            cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
-                        } else {
-                            null
-                        }
-                        mergeChatRowWithCache(apiChat, cachedRow, freshUser)
+                    // Keep the existing mixed inbox visible while direct 1:1 rows are still loading.
+                    // Without this guard, a faster group query can briefly replace the list with only groups.
+                    if (alreadyHasRealData && combinedInbox.groupLoaded && !combinedInbox.directLoaded) {
+                        return@collect
                     }
-                    _chatListState.value =
-                        ChatListState.Success(applyChatListVisibility(mergedWithLocalPreview))
-                    prefetchChatPayloads(userId, enriched)
-                } else {
-                    _chatListState.value = ChatListState.Success(emptyList())
+                    if (alreadyHasRealData && chats.isEmpty() && (!combinedInbox.directLoaded || !combinedInbox.groupLoaded)) {
+                        return@collect
+                    }
+
+                    if (chats.isNotEmpty()) {
+                        // Prefer any already-resolved names from AppDataManager's cache over
+                        // freshly-fetched users that still carry "Connection" (can happen when the
+                        // RPC resolved names in AppDataManager before the ChatRepository fetch ran).
+                        val enriched = chats.map { chat ->
+                            val cached = cachedUsers[chat.otherUser.id]
+                            if (cached != null &&
+                                isResolvedDisplayName(cached.name) &&
+                                !isResolvedDisplayName(chat.otherUser.name)
+                            ) {
+                                chat.copy(otherUser = cached)
+                            } else {
+                                chat
+                            }
+                        }
+                        val cachedChatsById =
+                            buildCachedChats(cachedConnections, cachedUsers, userId).associateBy { it.connection.id }
+                        val mergedWithLocalPreview = enriched.map { apiChat ->
+                            val cachedRow = cachedChatsById[apiChat.connection.id]
+                            val freshUser = if (apiChat.groupClique == null) {
+                                cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
+                            } else {
+                                null
+                            }
+                            mergeChatRowWithCache(apiChat, cachedRow, freshUser)
+                        }
+                        _chatListState.value =
+                            ChatListState.Success(applyChatListVisibility(mergedWithLocalPreview))
+
+                        if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                            prefetchChatPayloads(userId, enriched)
+                        }
+                    } else {
+                        _chatListState.value = ChatListState.Success(emptyList())
+                    }
                 }
             } catch (e: Exception) {
                 // Keep an existing list visible; only error on a cold-start failure.
