@@ -278,7 +278,8 @@ fun AddClickContent(
                     Icons.Filled.Groups,
                     contentDescription = "Community hub",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(96.dp),
+                    // DO NOT REVERT: Fixed size per design specs
+                    modifier = Modifier.size(120.dp),
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(

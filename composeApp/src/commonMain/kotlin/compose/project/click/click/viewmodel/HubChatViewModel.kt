@@ -36,6 +36,8 @@ data class HubChatMessageUi(
     val senderLabel: String,
     val isMine: Boolean,
     val createdAtIso: String,
+    /** Profile photo URL for other members when the hub has multiple people. */
+    val senderAvatarUrl: String? = null,
 )
 
 @Serializable
@@ -76,7 +78,7 @@ class HubChatViewModel(
 
     val title: String get() = hubTitle
 
-    private val senderLabelCache = mutableMapOf<String, String>()
+    private val senderUiCache = mutableMapOf<String, Pair<String, String?>>()
     private var hubChannel: RealtimeChannel? = null
     private var sessionJob: Job? = null
 
@@ -98,24 +100,25 @@ class HubChatViewModel(
         return fromObject(nested)
     }
 
-    private suspend fun labelForSender(userId: String): String {
-        if (userId == currentUserId) return "You"
-        senderLabelCache[userId]?.let { return it }
+    private suspend fun senderDisplay(userId: String, isMine: Boolean): Pair<String, String?> {
+        if (isMine) return "You" to null
+        senderUiCache[userId]?.let { return it }
         val user = userRepository.fetchUserById(userId)
         val label = user?.name?.takeIf { it.isNotBlank() } ?: "Member"
-        senderLabelCache[userId] = label
-        return label
+        val avatar = user?.image?.trim()?.takeIf { it.isNotEmpty() }
+        return (label to avatar).also { senderUiCache[userId] = it }
     }
 
     private suspend fun rowToUi(row: HubMessageRow): HubChatMessageUi {
         val mine = row.userId == currentUserId
-        val label = if (mine) "You" else labelForSender(row.userId)
+        val (label, avatar) = senderDisplay(row.userId, mine)
         return HubChatMessageUi(
             id = row.id,
             body = row.body,
             senderLabel = label,
             isMine = mine,
             createdAtIso = row.createdAt,
+            senderAvatarUrl = avatar,
         )
     }
 

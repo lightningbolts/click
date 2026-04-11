@@ -202,22 +202,6 @@ fun NfcScreen(
                             )
                         }
                         is ConnectionState.Success -> {
-                            val cooldown = state.proximityCooldownMessage
-                            var cooldownDismissed by remember(state.connection.id, cooldown) {
-                                mutableStateOf(false)
-                            }
-                            if (cooldown != null && !cooldownDismissed) {
-                                AlertDialog(
-                                    onDismissRequest = { cooldownDismissed = true },
-                                    title = { Text("Cooldown") },
-                                    text = { Text(cooldown) },
-                                    confirmButton = {
-                                        TextButton(onClick = { cooldownDismissed = true }) {
-                                            Text("OK")
-                                        }
-                                    },
-                                )
-                            }
                             NfcSuccessContent(
                                 connection = state.connection,
                                 connectedUser = state.connectedUser,

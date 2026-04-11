@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -116,6 +117,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material3.ripple
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
@@ -438,17 +440,7 @@ fun ConnectionsListView(
 
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
-    val cliqueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listScope = rememberCoroutineScope()
-
-    LaunchedEffect(cliqueSheetVisible) {
-        if (cliqueSheetVisible) {
-            try {
-                cliqueSheetState.show()
-            } catch (_: Exception) {
-            }
-        }
-    }
 
     val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState(0, 0)
@@ -919,15 +911,18 @@ fun ConnectionsListView(
 
     val uidForClique = currentUserId
     if (cliqueSheetVisible && uidForClique != null) {
-        ModalBottomSheet(
+        Dialog(
             onDismissRequest = { cliqueSheetVisible = false },
-            sheetState = cliqueSheetState,
-            modifier = Modifier.fillMaxHeight(),
+            properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
+                    .fillMaxSize()
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 24.dp),
             ) {
@@ -1065,15 +1060,7 @@ fun ConnectionsListView(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(
-                        onClick = {
-                            listScope.launch {
-                                try {
-                                    cliqueSheetState.hide()
-                                } catch (_: Exception) {
-                                }
-                                cliqueSheetVisible = false
-                            }
-                        },
+                        onClick = { cliqueSheetVisible = false },
                     ) {
                         Text("Cancel")
                     }
@@ -1083,10 +1070,6 @@ fun ConnectionsListView(
                             viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
                                 result.onSuccess {
                                     listScope.launch {
-                                        try {
-                                            cliqueSheetState.hide()
-                                        } catch (_: Exception) {
-                                        }
                                         cliqueSheetVisible = false
                                         snackbarHostState.showSnackbar("Click created")
                                     }
@@ -1109,6 +1092,7 @@ fun ConnectionsListView(
                         Text("Create")
                     }
                 }
+            }
             }
         }
     }
@@ -1310,88 +1294,6 @@ private fun GroupMembersPickerSheet(
 }
 
 @Composable
-private fun GroupChatListAvatarStack(memberUsers: List<User>, avatarSize: Dp = 44.dp) {
-    val profiles = memberUsers.map { it.toUserProfile() }
-    if (profiles.isEmpty()) return
-    val shown = profiles.take(3)
-    val overflow = (profiles.size - 3).coerceAtLeast(0)
-    val overlap = (avatarSize.value * 0.38f).dp
-    val badgeSize = (avatarSize.value * 0.92f).dp
-    val stackWidth =
-        avatarSize + overlap * (shown.size - 1).coerceAtLeast(0) +
-            if (overflow > 0) badgeSize + 6.dp else 0.dp
-    Row(
-        modifier = Modifier
-            .width(stackWidth)
-            .height(avatarSize + 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            shown.forEachIndexed { index, profile ->
-                val borderColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                Surface(
-                    modifier = Modifier
-                        .offset(x = overlap * index)
-                        .size(avatarSize)
-                        .zIndex(index.toFloat())
-                        .align(Alignment.CenterStart),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(2.dp, borderColor),
-                ) {
-                    if (!profile.avatarUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = profile.avatarUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(avatarSize)
-                                .clip(CircleShape),
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size((avatarSize.value * 0.55f).dp),
-                            )
-                        }
-                    }
-                }
-            }
-            if (overflow > 0) {
-                Surface(
-                    modifier = Modifier
-                        .offset(x = overlap * shown.size + 4.dp)
-                        .size(badgeSize)
-                        .zIndex(shown.size + 1f)
-                        .align(Alignment.CenterStart),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.surfaceContainerHigh),
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        Text(
-                            text = "+$overflow",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
     viewerUserId: String? = null,
@@ -1490,8 +1392,8 @@ fun ConnectionItem(
                         )
                     }
                 } else {
-                    GroupChatListAvatarStack(
-                        memberUsers = chatDetails.groupMemberUsers,
+                    GroupAvatar(
+                        members = chatDetails.groupMemberUsers,
                         avatarSize = 40.dp,
                     )
                 }
@@ -1912,8 +1814,8 @@ fun ChatView(
                                             ),
                                         contentAlignment = Alignment.CenterStart,
                                     ) {
-                                        GroupChatListAvatarStack(
-                                            memberUsers = chatDetails.groupMemberUsers,
+                                        GroupAvatar(
+                                            members = chatDetails.groupMemberUsers,
                                             avatarSize = 34.dp,
                                         )
                                     }
@@ -2268,6 +2170,7 @@ fun ChatView(
                                                         onSwipeReply = {
                                                             viewModel.startReplyTo(it)
                                                         },
+                                                        showPeerAvatarInGroup = isGroupChat,
                                                     )
                                                 }
                                                 if (messageWithUser.message.messageType == "call_log") {
@@ -3494,6 +3397,8 @@ fun ChatMessageBubble(
     onLongPress: (MessageWithUser) -> Unit = {},
     /** Horizontal swipe toward the center of the screen starts a reply (same idea as drag L→R on incoming). */
     onSwipeReply: (MessageWithUser) -> Unit = {},
+    /** Verified group / multi-member chat: show the sender’s face on incoming bubbles. */
+    showPeerAvatarInGroup: Boolean = false,
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -3626,9 +3531,42 @@ fun ChatMessageBubble(
                     modifier = Modifier
                         .fillMaxWidth()
                         .zIndex(1f),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = if (!isSent && showPeerAvatarInGroup) {
+                        Alignment.Bottom
+                    } else {
+                        Alignment.CenterVertically
+                    },
                     horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
                 ) {
+                    if (!isSent && showPeerAvatarInGroup) {
+                        val peer = messageWithUser.user
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 6.dp, bottom = 2.dp)
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (!peer.image.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = peer.image,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                )
+                            } else {
+                                Text(
+                                    text = peer.name?.trim()?.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                     Column(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
                         modifier = Modifier

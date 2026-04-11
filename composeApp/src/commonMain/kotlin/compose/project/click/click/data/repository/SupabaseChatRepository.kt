@@ -762,7 +762,12 @@ class SupabaseChatRepository(
                 val groupMemberUsers = memberIds
                     .filter { it != userId }
                     .mapNotNull { uid -> usersById[uid] }
-                    .sortedWith(compareBy({ it.name ?: "" }, { it.id }))
+                    .sortedWith(
+                        compareByDescending<User> {
+                            maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L)
+                        }.thenBy { it.name ?: "" }
+                            .thenBy { it.id },
+                    )
 
                 val clique = GroupCliqueDetails(
                     groupId = gid,

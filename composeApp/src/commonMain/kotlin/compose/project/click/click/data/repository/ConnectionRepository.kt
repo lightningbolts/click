@@ -71,6 +71,15 @@ import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.*
 
+/**
+ * Result of [ConnectionRepository.createConnection]: [connection] is always persisted (or queued offline);
+ * [encounterLogged] is false when the server rejected a new encounter row due to the 3h reconnection cap.
+ */
+data class ConnectionCreateOutcome(
+    val connection: Connection,
+    val encounterLogged: Boolean,
+)
+
 internal fun Throwable.isRetryableForProximityBind(): Boolean {
     if (this is TimeoutCancellationException) return true
     if (this is CancellationException) return false
@@ -375,6 +384,7 @@ class ConnectionRepository(
         }
     }
 
+    /** @return true when a new encounter row was inserted; false when rate-limited (chat bumped only). */
     private suspend fun insertConnectionEncounter(
         connectionId: String,
         encounteredAtMs: Long,
@@ -387,7 +397,7 @@ class ConnectionRepository(
         elevationCategory: String?,
         exactNoiseLevelDb: Double? = null,
         exactBarometricElevationM: Double? = null,
-    ) {
+    ): Boolean {
         val payload = buildJsonObject {
             put("connection_id", connectionId)
             put("encountered_at", Instant.fromEpochMilliseconds(encounteredAtMs).toString())
@@ -405,12 +415,14 @@ class ConnectionRepository(
             exactBarometricElevationM?.takeIf { it.isFinite() }?.let { put("exact_barometric_elevation_m", it) }
             put("context_tags", JsonArray(contextTags.map { JsonPrimitive(it) }))
         }
-        try {
+        return try {
             supabase.from("connection_encounters").insert(payload)
+            true
         } catch (e: RestException) {
             val msg = e.message ?: e.toString()
             if (msg.contains("encounter_rate_limit_3h", ignoreCase = true)) {
                 bumpChatUpdatedAt(connectionId, encounteredAtMs)
+                false
             } else {
                 throw e
             }
@@ -418,6 +430,7 @@ class ConnectionRepository(
             val msg = e.message ?: ""
             if (msg.contains("encounter_rate_limit_3h", ignoreCase = true)) {
                 bumpChatUpdatedAt(connectionId, encounteredAtMs)
+                false
             } else {
                 throw e
             }
@@ -520,7 +533,7 @@ class ConnectionRepository(
      * computes a proximity confidence score, and stores the signals.
      * The Supabase anomaly detection trigger runs on INSERT.
      */
-    suspend fun createConnection(request: ConnectionRequest): Result<Connection> {
+    suspend fun createConnection(request: ConnectionRequest): Result<ConnectionCreateOutcome> {
         return try {
             val onlineResult = withTimeout(CONNECTION_TIMEOUT_MS) {
                 createConnectionOnline(request)
@@ -530,21 +543,23 @@ class ConnectionRepository(
             } else {
                 val error = onlineResult.exceptionOrNull()
                 if (shouldQueueOffline(request, error)) {
-                    Result.success(queuePendingConnection(request))
+                    val queued = queuePendingConnection(request)
+                    Result.success(ConnectionCreateOutcome(queued, encounterLogged = true))
                 } else {
                     onlineResult
                 }
             }
         } catch (e: Exception) {
             if (shouldQueueOffline(request, e)) {
-                Result.success(queuePendingConnection(request))
+                val queued = queuePendingConnection(request)
+                Result.success(ConnectionCreateOutcome(queued, encounterLogged = true))
             } else {
                 Result.failure(e)
             }
         }
     }
 
-    private suspend fun createConnectionOnline(request: ConnectionRequest): Result<Connection> {
+    private suspend fun createConnectionOnline(request: ConnectionRequest): Result<ConnectionCreateOutcome> {
         return try {
             val redeemedToken = if (!request.qrToken.isNullOrBlank()) {
                 val sendScannerGps = request.venueId.isNullOrBlank()
@@ -707,7 +722,7 @@ class ConnectionRepository(
                 println("ConnectionRepository: Failed to update connection metadata: ${e.message}")
             }
 
-            runCatching {
+            val encounterLogged = try {
                 insertConnectionEncounter(
                     connectionId = result.id,
                     encounteredAtMs = now,
@@ -721,7 +736,10 @@ class ConnectionRepository(
                     exactNoiseLevelDb = request.exactNoiseLevelDb,
                     exactBarometricElevationM = exactBarometricElevationMeters,
                 )
-            }.onFailure { println("ConnectionRepository: encounter insert: ${it.message}") }
+            } catch (e: Exception) {
+                println("ConnectionRepository: encounter insert: ${e.message}")
+                true
+            }
 
             // Create chat row for this connection
             try {
@@ -736,7 +754,7 @@ class ConnectionRepository(
                 // Non-fatal — connection was created
             }
 
-            Result.success(result)
+            Result.success(ConnectionCreateOutcome(result, encounterLogged))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -750,7 +768,7 @@ class ConnectionRepository(
         scannedUserId: String,
         existing: Connection,
         resolvedTokenAgeMs: Long?,
-    ): Result<Connection> {
+    ): Result<ConnectionCreateOutcome> {
         return try {
             supabaseRepository.clearConnectionJunctionForPair(existing.id, existing.user_ids)
 
@@ -858,7 +876,7 @@ class ConnectionRepository(
                 .decodeSingle<Connection>()
 
             val restoreTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
-            runCatching {
+            val encounterLogged = try {
                 insertConnectionEncounter(
                     connectionId = result.id,
                     encounteredAtMs = now,
@@ -872,7 +890,10 @@ class ConnectionRepository(
                     exactNoiseLevelDb = request.exactNoiseLevelDb,
                     exactBarometricElevationM = exactBarometricElevationMeters,
                 )
-            }.onFailure { println("ConnectionRepository: restore encounter insert: ${it.message}") }
+            } catch (e: Exception) {
+                println("ConnectionRepository: restore encounter insert: ${e.message}")
+                true
+            }
 
             try {
                 supabase.from("chats")
@@ -886,7 +907,7 @@ class ConnectionRepository(
             }
 
             AppDataManager.applyRestoredConnection(result)
-            Result.success(result)
+            Result.success(ConnectionCreateOutcome(result, encounterLogged))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -911,7 +932,7 @@ class ConnectionRepository(
             }.getOrElse { Result.failure(it) }
 
             if (result.isSuccess) {
-                val connection = result.getOrNull() ?: return@forEach
+                val connection = result.getOrNull()?.connection ?: return@forEach
                 val otherUser = getUserById(draft.request.userId2).getOrNull()
                 AppDataManager.replaceLocalConnection(draft.localId, connection, otherUser)
                 syncedCount++

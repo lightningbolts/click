@@ -1,6 +1,8 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,7 +14,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -159,10 +166,42 @@ fun HubChatScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(messages, key = { it.id }) { msg ->
+                    val showGroupSenderAvatar = !msg.isMine && occupantCount >= 3
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = if (msg.isMine) Arrangement.End else Arrangement.Start,
+                        verticalAlignment = Alignment.Bottom,
                     ) {
+                        if (showGroupSenderAvatar) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (!msg.senderAvatarUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = msg.senderAvatarUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(CircleShape),
+                                    )
+                                } else {
+                                    Text(
+                                        text = msg.senderLabel.firstOrNull { !it.isWhitespace() }
+                                            ?.uppercaseChar()
+                                            ?.toString() ?: "?",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         Card(
                             modifier = Modifier.widthIn(max = 320.dp),
                             colors = CardDefaults.cardColors(

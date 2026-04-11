@@ -28,9 +28,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -45,8 +48,6 @@ sealed class ConnectionState {
     data class Success(
         val connection: Connection,
         val connectedUser: User,
-        /** Shown once after proximity confirm when the server skipped a new encounter (3h rate limit). */
-        val proximityCooldownMessage: String? = null,
     ) : ConnectionState()
     data class Error(val message: String) : ConnectionState()
     object ProximityFetchingLocation : ConnectionState()
@@ -74,9 +75,17 @@ class ConnectionViewModel : ViewModel() {
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
+    companion object {
+        const val RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE: String =
+            "You recently crossed paths with this person! Wait a bit before logging another memory."
+    }
+
+    private val _transientNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val transientNotice: SharedFlow<String> = _transientNotice.asSharedFlow()
+
     /**
      * Aggregate from the last [bind-proximity-connection] response (or deferred sync recovery).
-     * When false after proximity confirm, skip [ConnectionState.TaggingContext] and show the cooldown notice instead.
+     * Used for diagnostics; per-edge encounter logging is taken from each [ConnectionRepository.createConnection] result.
      */
     private var lastProximityEncounterLoggedAggregate: Boolean = true
 
@@ -324,19 +333,41 @@ class ConnectionViewModel : ViewModel() {
                 }
 
                 if (result.isSuccess) {
-                    val connection = result.getOrNull()!!
+                    val outcome = result.getOrNull()!!
+                    val connection = outcome.connection
+                    val encounterLogged = outcome.encounterLogged
                     val connectedUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: scannedUserId
                     val connectedUser = withContext(Dispatchers.Default) {
                         repository.getUserById(connectedUserId)
                     }.getOrElse {
                         User(id = connectedUserId, name = "Connection", createdAt = 0L)
                     }
-                    _connectionState.value = ConnectionState.Success(connection, connectedUser)
 
                     AppDataManager.addConnection(connection, connectedUser)
 
                     if (!connection.isPendingSync()) {
                         AppDataManager.refresh(force = true)
+                    }
+
+                    when {
+                        !encounterLogged -> {
+                            _connectionState.value = ConnectionState.Idle
+                            _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                        }
+                        connection.isPendingSync() -> {
+                            _connectionState.value = ConnectionState.Success(connection, connectedUser)
+                        }
+                        connectionMethod == "qr" &&
+                            contextTagObject == null &&
+                            contextTag.isNullOrBlank() -> {
+                            _connectionState.value = ConnectionState.TaggingContext(
+                                newConnections = listOf(connection),
+                                targetUsers = listOf(connectedUser.toUserProfile()),
+                            )
+                        }
+                        else -> {
+                            _connectionState.value = ConnectionState.Success(connection, connectedUser)
+                        }
                     }
                 } else {
                     val error = result.exceptionOrNull()?.message ?: "Failed to create connection"
@@ -367,6 +398,7 @@ class ConnectionViewModel : ViewModel() {
             _connectionState.value = ConnectionState.Loading
             try {
                 val created = mutableListOf<Connection>()
+                var allEncountersLogged = true
                 for (peer in peers) {
                     val request = ConnectionRequest(
                         userId1 = currentUserId,
@@ -390,7 +422,9 @@ class ConnectionViewModel : ViewModel() {
                         )
                         return@launch
                     }
-                    val connection = result.getOrNull()!!
+                    val outcome = result.getOrNull()!!
+                    allEncountersLogged = allEncountersLogged && outcome.encounterLogged
+                    val connection = outcome.connection
                     created.add(connection)
                     AppDataManager.addConnection(connection, peer)
                 }
@@ -398,19 +432,11 @@ class ConnectionViewModel : ViewModel() {
                     AppDataManager.refresh(force = true)
                 }
                 val profiles = peers.map { it.toUserProfile() }
-                val cooldownMessage =
-                    "You recently crossed paths with this person! Wait a bit before logging another memory."
-                if (!lastProximityEncounterLoggedAggregate) {
-                    lastProximityEncounterLoggedAggregate = true
-                    val primary = created.first()
-                    val summaryUser = syntheticUserForProximitySuccess(profiles)
-                    _connectionState.value = ConnectionState.Success(
-                        connection = primary,
-                        connectedUser = summaryUser,
-                        proximityCooldownMessage = cooldownMessage,
-                    )
+                lastProximityEncounterLoggedAggregate = true
+                if (!allEncountersLogged) {
+                    _connectionState.value = ConnectionState.Idle
+                    _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                 } else {
-                    lastProximityEncounterLoggedAggregate = true
                     _connectionState.value = ConnectionState.TaggingContext(
                         newConnections = created,
                         targetUsers = profiles,
