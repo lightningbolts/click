@@ -40,8 +40,8 @@ import platform.Foundation.NSString
 import platform.Foundation.create
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
-import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
+import compose.project.click.click.ui.utils.openIosUrlMain
 import platform.darwin.NSObject
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
@@ -141,10 +141,7 @@ class IosProximityManager : ProximityManager {
         "Uses Bluetooth Low Energy and short-range audio tones (including 18.5 kHz) to find nearby taps."
 
     override fun openRadiosSettings() {
-        val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
-        if (UIApplication.sharedApplication.canOpenURL(url)) {
-            UIApplication.sharedApplication.openURL(url)
-        }
+        openIosUrlMain(NSURL.URLWithString(UIApplicationOpenSettingsURLString))
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
@@ -271,9 +268,10 @@ class IosProximityManager : ProximityManager {
         if (bytes.size < 1000) return
         val pcm = extractPcm16MonoFromWav(bytes) ?: return
         if (pcmRms(pcm) < 0.002) return
-        val decoded = decodeTokenFromPcmMono(pcm) ?: return
+        val decoded = decodeAllHandshakeTokensFromPcmMono(pcm)
+        if (decoded.isEmpty()) return
         withContext(Dispatchers.Main) {
-            heardTokens.add(decoded)
+            decoded.forEach { heardTokens.add(it) }
         }
     }
 

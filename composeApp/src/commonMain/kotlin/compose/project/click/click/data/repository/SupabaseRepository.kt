@@ -505,23 +505,6 @@ class SupabaseRepository {
         }
     }
 
-    suspend fun renameEncounterLocation(encounterId: String, newName: String): Result<Unit> {
-        if (encounterId.isBlank()) return Result.failure(IllegalArgumentException("Missing encounter"))
-        return try {
-            supabase.postgrest.rpc(
-                "rename_encounter_location",
-                buildJsonObject {
-                    put("encounter_id", encounterId)
-                    put("new_name", newName)
-                },
-            )
-            Result.success(Unit)
-        } catch (e: Exception) {
-            println("rename_encounter_location (redacted): ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
-
     /**
      * Update connection should_continue status
      */

@@ -22,6 +22,7 @@ import compose.project.click.click.proximity.ProximityManager // pragma: allowli
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -141,6 +142,8 @@ class ConnectionViewModel : ViewModel() {
                 val heardTokens = coroutineScope {
                     val listen = async { proximityManager.startHandshakeListening() }
                     delay(120L)
+                    // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
+                    delay(Random.nextLong(0, 400))
                     proximityManager.startHandshakeBroadcast(myToken)
                     val heard = listen.await()
                     proximityManager.stopAll()

@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.ConnectionEncounter
+import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.models.MemoryCapsule
 import compose.project.click.click.data.models.WeatherSnapshot
 import compose.project.click.click.data.models.NoiseLevelCategory
@@ -165,7 +166,7 @@ class ConnectionRepository(
         return contextTagObject ?: contextTag
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?.let { ContextTag(id = "custom", label = it, emoji = "✏️") }
+            ?.let { ContextTagTaxonomy.formatCustomUserContextTag(it) }
     }
 
     private fun resolveContextTagId(contextTag: ContextTag?): String? {

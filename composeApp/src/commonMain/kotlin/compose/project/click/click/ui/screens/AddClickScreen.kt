@@ -264,7 +264,7 @@ fun AddClickContent(
         AdaptiveCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(160.dp),
+                .height(180.dp),
             onClick = { showHubCodeDialog = true },
         ) {
             Column(
@@ -278,10 +278,9 @@ fun AddClickContent(
                     Icons.Filled.Groups,
                     contentDescription = "Community hub",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(72.dp),
-                    // Match QR / NFC card icon geometry (those cards use 72.dp).
+                    modifier = Modifier.size(96.dp),
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     "Community hub",
                     style = MaterialTheme.typography.titleMedium,

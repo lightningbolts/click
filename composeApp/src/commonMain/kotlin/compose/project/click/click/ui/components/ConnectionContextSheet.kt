@@ -194,7 +194,7 @@ fun ConnectionContextSheet(
     fun resolveSelectedTag(): ContextTag? {
         return if (selectedTagId == "custom") {
             customTagText.trim().takeIf { it.isNotEmpty() }?.let {
-                ContextTag(id = "custom", label = it, emoji = "✏️")
+                ContextTagTaxonomy.formatCustomUserContextTag(it)
             }
         } else {
             allTags.firstOrNull { it.id == selectedTagId }

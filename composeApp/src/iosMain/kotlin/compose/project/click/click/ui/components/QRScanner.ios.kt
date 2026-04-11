@@ -28,6 +28,7 @@ import platform.Foundation.numberWithFloat
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.kCATransactionDisableActions
 import platform.UIKit.*
+import compose.project.click.click.ui.utils.openIosUrlMain
 import platform.darwin.NSObject
 import platform.darwin.dispatch_get_main_queue
 import platform.objc.sel_registerName
@@ -212,11 +213,7 @@ actual fun QRScanner(
                     )
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(onClick = {
-                        // Open app settings
-                        val settingsUrl = platform.Foundation.NSURL.URLWithString(UIApplicationOpenSettingsURLString)
-                        if (settingsUrl != null) {
-                            UIApplication.sharedApplication.openURL(settingsUrl)
-                        }
+                        openIosUrlMain(platform.Foundation.NSURL.URLWithString(UIApplicationOpenSettingsURLString))
                     }) {
                         Text("Open Settings")
                     }

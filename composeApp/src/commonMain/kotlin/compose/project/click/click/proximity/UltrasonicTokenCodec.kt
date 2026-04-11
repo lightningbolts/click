@@ -69,6 +69,25 @@ private fun appendSilence(dst: MutableList<Short>, durationMs: Int) {
  * Best-effort decode of a 4-digit token from microphone PCM (mono).
  * Returns null when no confident digit sequence is found.
  */
+/**
+ * Decodes every distinct 4-digit handshake token found in a longer recording by sliding a decode
+ * window. Used when several peers play ultrasonic tokens back-to-back in one capture window.
+ */
+internal fun decodeAllHandshakeTokensFromPcmMono(samples: ShortArray): List<String> {
+    if (samples.size < SAMPLE_RATE / 4) return emptyList()
+    val chunkSamples = (SAMPLE_RATE * 0.55).roundToInt().coerceIn(8000, samples.size)
+    val hop = (chunkSamples / 2).coerceAtLeast(SAMPLE_RATE / 20)
+    val found = linkedSetOf<String>()
+    var start = 0
+    while (start + chunkSamples <= samples.size) {
+        val chunk = samples.copyOfRange(start, start + chunkSamples)
+        decodeTokenFromPcmMono(chunk)?.let { found.add(it) }
+        start += hop
+    }
+    decodeTokenFromPcmMono(samples)?.let { found.add(it) }
+    return found.sorted()
+}
+
 internal fun decodeTokenFromPcmMono(samples: ShortArray): String? {
     if (samples.size < SAMPLE_RATE / 4) return null
     val window = (SAMPLE_RATE * 0.09).roundToInt().coerceIn(256, 4096)

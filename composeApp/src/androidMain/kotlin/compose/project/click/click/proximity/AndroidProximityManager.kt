@@ -10,6 +10,7 @@ import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -60,10 +61,22 @@ class AndroidProximityManager(
     }
 
     override fun openRadiosSettings() {
-        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        val ok = runCatching {
+            if (context is Activity) {
+                context.startActivity(intent)
+            } else {
+                context.startActivity(intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            }
+        }.isSuccess
+        if (!ok) {
+            runCatching {
+                val fallback = Intent(Settings.ACTION_SETTINGS).apply {
+                    if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallback)
+            }
         }
-        runCatching { context.startActivity(intent) }
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
@@ -183,8 +196,7 @@ class AndroidProximityManager(
         if (written < rate / 5) return
         val slice = acc.copyOf(written)
         if (pcmRms(slice) < 0.002) return
-        val decoded = decodeTokenFromPcmMono(slice) ?: return
-        sink.add(decoded)
+        decodeAllHandshakeTokensFromPcmMono(slice).forEach { sink.add(it) }
     }
 
     private suspend fun playPcmMono(pcm: ShortArray) = withContext(Dispatchers.IO) {
@@ -262,5 +274,5 @@ class AndroidProximityManager(
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
     val context = LocalContext.current
-    return remember(context) { AndroidProximityManager(context.applicationContext) }
+    return remember(context) { AndroidProximityManager(context) }
 }
