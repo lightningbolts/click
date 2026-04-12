@@ -29,6 +29,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -73,6 +74,7 @@ import compose.project.click.click.sensors.HardwareVibeMonitor
 import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
@@ -82,7 +84,6 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.encodeToString
@@ -742,6 +743,13 @@ fun App() {
                 launchCommunityHubJoin(hid)
             }
             val connectionState by connectionViewModel.connectionState.collectAsState()
+            val suppressConnectionContextSheet =
+                when (connectionRevealState?.phase) {
+                    ConnectionRevealPhase.Connecting,
+                    ConnectionRevealPhase.Success,
+                    -> true
+                    else -> false
+                }
             LaunchedEffect(connectionState, showNfcScreen) {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
@@ -1280,27 +1288,29 @@ fun App() {
                             }
                         }
 
-                        if (connectionState is ConnectionState.TaggingContext && !showNfcScreen) {
+                        if (connectionState is ConnectionState.TaggingContext && !showNfcScreen && !suppressConnectionContextSheet) {
                             val tagging = connectionState as ConnectionState.TaggingContext
                             val finishWithoutTags: () -> Unit = {
                                 connectionScope.launch {
                                     val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                                     val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                    val noiseSampleDeferred = async {
-                                        if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                    coroutineScope {
+                                        val noiseSampleDeferred = async {
+                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                        }
+                                        val barometricSampleDeferred = async {
+                                            if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                        }
+                                        val noiseSample = noiseSampleDeferred.await()
+                                        val barometricSample = barometricSampleDeferred.await()
+                                        connectionViewModel.saveContextTags(
+                                            contextTag = null,
+                                            noiseLevelCategory = noiseSample?.category,
+                                            exactNoiseLevelDb = noiseSample?.decibels,
+                                            heightCategory = barometricSample?.category,
+                                            exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                        )
                                     }
-                                    val barometricSampleDeferred = async {
-                                        if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
-                                    }
-                                    val noiseSample = noiseSampleDeferred.await()
-                                    val barometricSample = barometricSampleDeferred.await()
-                                    connectionViewModel.saveContextTags(
-                                        contextTag = null,
-                                        noiseLevelCategory = noiseSample?.category,
-                                        exactNoiseLevelDb = noiseSample?.decibels,
-                                        heightCategory = barometricSample?.category,
-                                        exactBarometricElevationMeters = barometricSample?.elevationMeters,
-                                    )
                                 }
                             }
                             ConnectionContextSheet(
@@ -1320,27 +1330,29 @@ fun App() {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                                         val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                        val noiseSampleDeferred = async {
-                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                        coroutineScope {
+                                            val noiseSampleDeferred = async {
+                                                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                            }
+                                            val barometricSampleDeferred = async {
+                                                if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                            }
+                                            val noiseSample = noiseSampleDeferred.await()
+                                            val barometricSample = barometricSampleDeferred.await()
+                                            connectionViewModel.saveContextTags(
+                                                contextTag = contextTag,
+                                                noiseLevelCategory = noiseSample?.category,
+                                                exactNoiseLevelDb = noiseSample?.decibels,
+                                                heightCategory = barometricSample?.category,
+                                                exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                            )
                                         }
-                                        val barometricSampleDeferred = async {
-                                            if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
-                                        }
-                                        val noiseSample = noiseSampleDeferred.await()
-                                        val barometricSample = barometricSampleDeferred.await()
-                                        connectionViewModel.saveContextTags(
-                                            contextTag = contextTag,
-                                            noiseLevelCategory = noiseSample?.category,
-                                            exactNoiseLevelDb = noiseSample?.decibels,
-                                            heightCategory = barometricSample?.category,
-                                            exactBarometricElevationMeters = barometricSample?.elevationMeters,
-                                        )
                                     }
                                 },
                             )
                         }
 
-                        if (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) {
+                        if (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen && !suppressConnectionContextSheet) {
                             val awaiting = connectionState as ConnectionState.QrAwaitingContext
                             val cancelQr: () -> Unit = { connectionViewModel.resetConnectionState() }
                             ConnectionContextSheet(
@@ -1359,57 +1371,66 @@ fun App() {
                                         yield()
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                        val vibe = withContext(Dispatchers.Default) {
-                                            runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                                        }
                                         val venue = awaiting.venueId
-                                        val locationCaptured = if (!venue.isNullOrBlank()) {
-                                            null
-                                        } else if (AppDataManager.shouldCaptureLocationAtTap()) {
-                                            resolveConnectionLocation(null)
-                                        } else {
-                                            null
-                                        }
-                                        val la = locationCaptured?.latitude
-                                        val lo = locationCaptured?.longitude
-                                        val weatherLabel = withContext(Dispatchers.Default) {
-                                            if (
-                                                la != null && lo != null &&
-                                                la.isFinite() && lo.isFinite() &&
-                                                !(la == 0.0 && lo == 0.0)
-                                            ) {
-                                                openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
-                                            } else {
-                                                null
-                                            }
-                                        }
                                         val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                        val noiseSampleDeferred = async {
-                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                        coroutineScope {
+                                            val vibeDeferred = async(Dispatchers.Default) {
+                                                runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                            }
+                                            val locationDeferred = async {
+                                                when {
+                                                    !venue.isNullOrBlank() -> null
+                                                    AppDataManager.shouldCaptureLocationAtTap() ->
+                                                        resolveConnectionLocation(null)
+                                                    else -> null
+                                                }
+                                            }
+                                            val noiseSampleDeferred = async {
+                                                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                            }
+                                            val barometricSampleDeferred = async {
+                                                if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                            }
+
+                                            val locationCaptured = locationDeferred.await()
+                                            val la = locationCaptured?.latitude
+                                            val lo = locationCaptured?.longitude
+                                            val weatherDeferred = async(Dispatchers.Default) {
+                                                if (
+                                                    la != null && lo != null &&
+                                                    la.isFinite() && lo.isFinite() &&
+                                                    !(la == 0.0 && lo == 0.0)
+                                                ) {
+                                                    openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
+                                                } else {
+                                                    null
+                                                }
+                                            }
+
+                                            val vibe = vibeDeferred.await()
+                                            val noiseSample = noiseSampleDeferred.await()
+                                            val barometricSample = barometricSampleDeferred.await()
+                                            val weatherLabel = weatherDeferred.await()
+
+                                            connectionViewModel.connectWithUser(
+                                                scannedUserId = awaiting.scannedUserId,
+                                                currentUserId = currentUser.id,
+                                                latitude = locationCaptured?.latitude,
+                                                longitude = locationCaptured?.longitude,
+                                                venueId = venue,
+                                                altitudeMeters = locationCaptured?.altitudeMeters,
+                                                heightCategory = barometricSample?.category,
+                                                exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                                exactBarometricPressureHpa = barometricSample?.pressureHpa,
+                                                contextTagObject = contextTag,
+                                                connectionMethod = "qr",
+                                                qrToken = awaiting.qrToken,
+                                                noiseLevelCategory = noiseSample?.category,
+                                                exactNoiseLevelDb = noiseSample?.decibels,
+                                                hardwareVibeOverride = vibe,
+                                                weatherSnapshotLabel = weatherLabel,
+                                            )
                                         }
-                                        val barometricSampleDeferred = async {
-                                            if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
-                                        }
-                                        val noiseSample = noiseSampleDeferred.await()
-                                        val barometricSample = barometricSampleDeferred.await()
-                                        connectionViewModel.connectWithUser(
-                                            scannedUserId = awaiting.scannedUserId,
-                                            currentUserId = currentUser.id,
-                                            latitude = locationCaptured?.latitude,
-                                            longitude = locationCaptured?.longitude,
-                                            venueId = venue,
-                                            altitudeMeters = locationCaptured?.altitudeMeters,
-                                            heightCategory = barometricSample?.category,
-                                            exactBarometricElevationMeters = barometricSample?.elevationMeters,
-                                            exactBarometricPressureHpa = barometricSample?.pressureHpa,
-                                            contextTagObject = contextTag,
-                                            connectionMethod = "qr",
-                                            qrToken = awaiting.qrToken,
-                                            noiseLevelCategory = noiseSample?.category,
-                                            exactNoiseLevelDb = noiseSample?.decibels,
-                                            hardwareVibeOverride = vibe,
-                                            weatherSnapshotLabel = weatherLabel,
-                                        )
                                     }
                                 },
                             )
@@ -1418,7 +1439,9 @@ fun App() {
                         connectionRevealState?.let { revealState ->
                             ConnectionRevealOverlay(
                                 state = revealState,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(10_000f),
                             )
                         }
 
