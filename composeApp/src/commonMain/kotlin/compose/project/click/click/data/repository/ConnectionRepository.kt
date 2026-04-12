@@ -522,18 +522,23 @@ class ConnectionRepository(
                 .decodeList<EncounterIdOnlyRow>()
                 .firstOrNull() ?: return Result.failure(Exception("No encounter row for connection"))
 
-            val tags = listOfNotNull(normalizedContextTag?.label?.trim()?.takeIf { it.isNotEmpty() })
-                .ifEmpty { listOfNotNull(resolveContextTagId(normalizedContextTag)?.trim()) }
-                .map { JsonPrimitive(it) }
+            val tagId = resolveContextTagId(normalizedContextTag)?.trim()?.takeIf { it.isNotEmpty() }
+            val tagPrimitives = tagId?.let { listOf(JsonPrimitive(it)) } ?: emptyList()
+            val payload = buildJsonObject {
+                if (tagPrimitives.isNotEmpty()) {
+                    put("context_tags", JsonArray(tagPrimitives))
+                }
+                noiseLevelCategory?.name?.let { put("noise_level", it) }
+                heightCategory?.name?.let { put("elevation_category", it) }
+                exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
+                exactBarometricElevationMeters?.takeIf { it.isFinite() }
+                    ?.let { put("exact_barometric_elevation_m", it) }
+            }
+            if (payload.isEmpty()) {
+                return Result.success(Unit)
+            }
             supabase.from("connection_encounters")
-                .update(buildJsonObject {
-                    put("context_tags", JsonArray(tags))
-                    noiseLevelCategory?.name?.let { put("noise_level", it) }
-                    heightCategory?.name?.let { put("elevation_category", it) }
-                    exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
-                    exactBarometricElevationMeters?.takeIf { it.isFinite() }
-                        ?.let { put("exact_barometric_elevation_m", it) }
-                }) {
+                .update(payload) {
                     filter { eq("id", latest.id) }
                 }
             Result.success(Unit)

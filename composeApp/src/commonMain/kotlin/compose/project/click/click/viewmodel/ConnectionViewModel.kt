@@ -535,15 +535,18 @@ class ConnectionViewModel : ViewModel() {
     /**
      * Apply the same subjective [contextTag] (and optional sensor enrichment) to every connection
      * in the current [ConnectionState.TaggingContext], then surface [ConnectionState.Success].
+     *
+     * @param tagging Snapshot from the UI at confirm time so a brief sensor capture cannot race
+     * past a state transition that would otherwise make this call a silent no-op.
      */
     fun saveContextTags(
+        tagging: ConnectionState.TaggingContext,
         contextTag: ContextTag?,
         noiseLevelCategory: NoiseLevelCategory?,
         exactNoiseLevelDb: Double?,
         heightCategory: HeightCategory?,
         exactBarometricElevationMeters: Double?,
     ) {
-        val tagging = _connectionState.value as? ConnectionState.TaggingContext ?: return
         viewModelScope.launch {
             val connections = tagging.newConnections
             val targetProfiles = tagging.targetUsers
@@ -604,7 +607,12 @@ class ConnectionViewModel : ViewModel() {
                 }
                 val primary = connections.first()
                 val summaryUser = syntheticUserForProximitySuccess(targetProfiles)
-                _connectionState.value = ConnectionState.Success(primary, summaryUser)
+                val stillTagging = _connectionState.value as? ConnectionState.TaggingContext
+                val sameBatch = stillTagging?.newConnections?.map { it.id }?.toSet() ==
+                    connections.map { it.id }.toSet()
+                if (stillTagging != null && sameBatch) {
+                    _connectionState.value = ConnectionState.Success(primary, summaryUser)
+                }
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
             }

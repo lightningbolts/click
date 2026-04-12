@@ -284,6 +284,7 @@ fun NfcScreen(
                                 barometricContextOptIn = baroOptIn,
                             )
                             connectionViewModel.saveContextTags(
+                                tagging = tagging,
                                 contextTag = null,
                                 noiseLevelCategory = sensors.noiseLevelCategory,
                                 exactNoiseLevelDb = sensors.exactNoiseLevelDb,
@@ -312,6 +313,7 @@ fun NfcScreen(
                                     barometricContextOptIn = baroOptIn,
                                 )
                                 connectionViewModel.saveContextTags(
+                                    tagging = tagging,
                                     contextTag = contextTag,
                                     noiseLevelCategory = sensors.noiseLevelCategory,
                                     exactNoiseLevelDb = sensors.exactNoiseLevelDb,

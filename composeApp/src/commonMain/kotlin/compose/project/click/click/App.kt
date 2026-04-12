@@ -1311,6 +1311,7 @@ fun App() {
                                         barometricContextOptIn = baroOptIn,
                                     )
                                     connectionViewModel.saveContextTags(
+                                        tagging = tagging,
                                         contextTag = null,
                                         noiseLevelCategory = sensors.noiseLevelCategory,
                                         exactNoiseLevelDb = sensors.exactNoiseLevelDb,
@@ -1342,6 +1343,7 @@ fun App() {
                                             barometricContextOptIn = baroOptIn,
                                         )
                                         connectionViewModel.saveContextTags(
+                                            tagging = tagging,
                                             contextTag = contextTag,
                                             noiseLevelCategory = sensors.noiseLevelCategory,
                                             exactNoiseLevelDb = sensors.exactNoiseLevelDb,
