@@ -176,6 +176,13 @@ private data class BindProximityRequest(
     @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
 )
 
+/**
+ * Connection + encounter persistence.
+ *
+ * **QR (token) flows** must use the Next.js companion host only:
+ * `POST {CLICK_WEB_BASE_URL}/api/qr` for redemption — never Supabase Edge `bind-proximity-connection`.
+ * Proximity tap / deferred replay is the sole caller of [bindProximityHandshake].
+ */
 class ConnectionRepository(
     private val weatherService: WeatherService = OpenMeteoWeatherService(),
     private val tokenStorage: TokenStorage = createTokenStorage()
@@ -195,7 +202,16 @@ class ConnectionRepository(
         ignoreUnknownKeys = true
         isLenient = true
     }
-    private val edgeFunctionHttpClient by lazy {
+    /** Next.js companion (`/api/qr`, etc.) — not Supabase Functions. */
+    private val companionWebHttpClient by lazy {
+        HttpClient {
+            install(ContentNegotiation) {
+                json(this@ConnectionRepository.json)
+            }
+        }
+    }
+    /** Supabase Edge Functions only (e.g. `bind-proximity-connection`). */
+    private val supabaseFunctionsHttpClient by lazy {
         HttpClient {
             install(ContentNegotiation) {
                 json(this@ConnectionRepository.json)
@@ -250,7 +266,7 @@ class ConnectionRepository(
         bindHeightCategory: HeightCategory? = null,
     ): Result<BindProximityHandshakeOutcome> {
         return try {
-            val client = httpClient ?: edgeFunctionHttpClient
+            val client = httpClient ?: supabaseFunctionsHttpClient
             val hasGps = latitude != null && longitude != null &&
                 latitude.isFinite() && longitude.isFinite() &&
                 !(latitude == 0.0 && longitude == 0.0)
@@ -881,11 +897,11 @@ class ConnectionRepository(
             val exactBarometricElevationMeters = calibrateBarometricElevationMeters(
                 stationPressureHpa = request.exactBarometricPressureHpa,
                 seaLevelPressureHpa = weatherSnapshot?.pressureMslHpa
-            ) ?: request.altitudeMeters?.takeIf { request.exactBarometricPressureHpa != null }
-                ?: request.exactBarometricElevationMeters
+            )?.takeIf { it.isFinite() }
+                ?: request.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
-            val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
-                ?: request.heightCategory
+            // Never infer `elevation_category` from GPS `altitudeMeters` — only from barometric elevation we persist.
+            val heightCategory = exactBarometricElevationMeters?.let { deriveHeightCategory(it) }
 
             val contextTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
             try {
@@ -1065,11 +1081,10 @@ class ConnectionRepository(
             val exactBarometricElevationMeters = calibrateBarometricElevationMeters(
                 stationPressureHpa = request.exactBarometricPressureHpa,
                 seaLevelPressureHpa = weatherSnapshot?.pressureMslHpa,
-            ) ?: request.altitudeMeters?.takeIf { request.exactBarometricPressureHpa != null }
-                ?: request.exactBarometricElevationMeters
+            )?.takeIf { it.isFinite() }
+                ?: request.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
-            val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
-                ?: request.heightCategory
+            val heightCategory = exactBarometricElevationMeters?.let { deriveHeightCategory(it) }
 
             val result = try {
                 supabase.from("connections")
@@ -1537,6 +1552,8 @@ class ConnectionRepository(
                 ?: return Result.failure(Exception("Please sign in again."))
 
             val trimmedWeather = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
+            val finiteBaro = exactBarometricElevationM?.takeIf { it.isFinite() }
+            val heightWire = heightCategory?.name?.takeIf { finiteBaro != null }
             val requestPayload = QrApiRedeemRequest(
                 token = token,
                 gpsLat = scannerLat?.takeIf { it.isFinite() && it != 0.0 },
@@ -1548,13 +1565,13 @@ class ConnectionRepository(
                 weatherSnapshot = trimmedWeather,
                 noiseLevelCategory = noiseLevelCategory?.name,
                 exactNoiseLevelDb = exactNoiseLevelDb?.takeIf { it.isFinite() },
-                heightCategory = heightCategory?.name,
-                elevationCategory = heightCategory?.name,
-                exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
+                heightCategory = heightWire,
+                elevationCategory = heightWire,
+                exactBarometricElevationM = finiteBaro,
                 contextTags = contextTags?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.isNotEmpty() },
             )
 
-            val response = edgeFunctionHttpClient.post("$CLICK_WEB_BASE_URL/api/qr") {
+            val response = companionWebHttpClient.post("$CLICK_WEB_BASE_URL/api/qr") {
                 headers {
                     append(HttpHeaders.Authorization, "Bearer $jwt")
                 }

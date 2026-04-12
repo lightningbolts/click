@@ -51,6 +51,10 @@ import kotlinx.datetime.Clock
 import kotlin.math.roundToInt
 
 /**
+ * QR scan UI only parses payloads and forwards them to the app shell; token redemption is performed
+ * in [compose.project.click.click.data.repository.ConnectionRepository] via the Next.js companion
+ * `/api/qr` route (never the Supabase `bind-proximity-connection` Edge Function).
+ *
  * Result types for QR code scanning.
  * Now supports both token-based (new) and userId-only (legacy) results.
  */

@@ -8,15 +8,85 @@ import android.hardware.SensorManager
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.deriveHeightCategory
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.datetime.Clock
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
+import kotlin.math.pow
 
-class AndroidBarometricHeightMonitor(
-    context: Context
+internal class AndroidBarometricStream(
+    private val sensorManager: SensorManager,
+    private val pressureSensor: Sensor,
+) {
+    private val lock = Any()
+    private var refCount = 0
+    private var listener: SensorEventListener? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val cachedSample = AtomicReference<BarometricHeightSample?>(null)
+    private val cacheEpochMs = AtomicLong(0L)
+
+    fun retain() {
+        val shouldStart = synchronized(lock) {
+            refCount++
+            refCount == 1
+        }
+        if (!shouldStart) return
+
+        val lis = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                val pressureHpa = event.values.firstOrNull()?.takeIf { it > 0f }?.toDouble() ?: return
+                val elevation = 44330.0 * (1.0 - (pressureHpa / 1013.25).pow(0.1903))
+                if (!elevation.isFinite() || elevation !in -500.0..12000.0) return
+                val category = deriveHeightCategory(elevation) ?: return
+                cachedSample.set(
+                    BarometricHeightSample(
+                        category = category,
+                        elevationMeters = elevation,
+                        pressureHpa = pressureHpa,
+                    ),
+                )
+                cacheEpochMs.set(Clock.System.now().toEpochMilliseconds())
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        synchronized(lock) {
+            listener = lis
+        }
+        sensorManager.registerListener(lis, pressureSensor, SensorManager.SENSOR_DELAY_UI)
+    }
+
+    fun release() {
+        val lis = synchronized(lock) {
+            if (refCount > 0) refCount--
+            if (refCount == 0) {
+                val l = listener
+                listener = null
+                l
+            } else {
+                null
+            }
+        }
+        lis?.let { sensorManager.unregisterListener(it) }
+        mainHandler.removeCallbacksAndMessages(null)
+    }
+
+    fun cached(maxAgeMs: Long): BarometricHeightSample? {
+        val sample = cachedSample.get() ?: return null
+        val age = Clock.System.now().toEpochMilliseconds() - cacheEpochMs.get()
+        return sample.takeIf { age in 0..maxAgeMs }
+    }
+}
+
+internal class AndroidBarometricHeightMonitor(
+    context: Context,
+    private val stream: AndroidBarometricStream?,
 ) : BarometricHeightMonitor {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val pressureSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_PRESSURE)
@@ -24,9 +94,19 @@ class AndroidBarometricHeightMonitor(
     override val isAvailable: Boolean
         get() = sensorManager != null && pressureSensor != null
 
+    override fun ensureBackgroundCaching() {
+        stream?.retain()
+    }
+
+    override fun releaseBackgroundCaching() {
+        stream?.release()
+    }
+
     override suspend fun sampleHeightReading(durationMs: Int): BarometricHeightSample? {
         val manager = sensorManager ?: return null
         val sensor = pressureSensor ?: return null
+
+        stream?.cached(12_000L)?.let { return it }
 
         return suspendCancellableCoroutine { continuation ->
             val mainHandler = Handler(Looper.getMainLooper())
@@ -38,8 +118,7 @@ class AndroidBarometricHeightMonitor(
                     pressureReadings += pressureHpa
                 }
 
-                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-                }
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
             }
 
             fun finish() {
@@ -51,12 +130,13 @@ class AndroidBarometricHeightMonitor(
                 }?.toDouble()
                 if (continuation.isActive) {
                     val sample = altitudeMeters
+                        ?.takeIf { it.isFinite() && it in -500.0..12000.0 }
                         ?.let { elevation ->
                             deriveHeightCategory(elevation)?.let { category ->
                                 BarometricHeightSample(
                                     category = category,
                                     elevationMeters = elevation,
-                                    pressureHpa = averagePressure?.toDouble()
+                                    pressureHpa = averagePressure?.toDouble(),
                                 )
                             }
                         }
@@ -82,5 +162,21 @@ class AndroidBarometricHeightMonitor(
 @Composable
 actual fun rememberBarometricHeightMonitor(): BarometricHeightMonitor {
     val context = LocalContext.current
-    return remember(context) { AndroidBarometricHeightMonitor(context) }
+    val monitor = remember(context) {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val ps = sm?.getDefaultSensor(Sensor.TYPE_PRESSURE)
+        val stream = if (sm != null && ps != null) {
+            AndroidBarometricStream(sm, ps)
+        } else {
+            null
+        }
+        AndroidBarometricHeightMonitor(context, stream)
+    }
+    DisposableEffect(monitor) {
+        monitor.ensureBackgroundCaching()
+        onDispose {
+            monitor.releaseBackgroundCaching()
+        }
+    }
+    return monitor
 }

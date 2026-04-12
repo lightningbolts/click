@@ -11,6 +11,15 @@ data class BarometricHeightSample(
 interface BarometricHeightMonitor {
     val isAvailable: Boolean
 
+    /**
+     * Starts low-rate barometric sampling so a short [sampleHeightReading] window can reuse
+     * recent data instead of cold-starting the driver (especially important on iOS).
+     */
+    fun ensureBackgroundCaching() {}
+
+    /** Stops background sampling started by [ensureBackgroundCaching]. */
+    fun releaseBackgroundCaching() {}
+
     suspend fun sampleHeightReading(durationMs: Int = 1500): BarometricHeightSample?
 
     suspend fun sampleHeightCategory(durationMs: Int = 1500): HeightCategory? =
