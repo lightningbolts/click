@@ -110,6 +110,8 @@ data class PendingProximityHandshakeSyncResult(
     val remainingInQueue: Int,
     /** Aggregate from the last successful bind when [recoveredUsers] is non-null. */
     val recoveredEncounterLogged: Boolean = true,
+    /** True when the last bind attempt failed due to an auth/session issue (401/403/invalid JWT). */
+    val authorizationFailed: Boolean = false,
 )
 
 data class ProximityHandshakeRecoveryPayload(
@@ -363,7 +365,11 @@ class ConnectionRepository(
             if (authHint.contains("401") || authHint.contains("403") ||
                 authHint.contains("unauthorized") || authHint.contains("invalid jwt")
             ) {
-                return PendingProximityHandshakeSyncResult(null, queue.size)
+                return PendingProximityHandshakeSyncResult(
+                    recoveredUsers = null,
+                    remainingInQueue = queue.size,
+                    authorizationFailed = true,
+                )
             }
             if (err is TimeoutCancellationException || err.isRetryableForProximityBind()) {
                 return PendingProximityHandshakeSyncResult(null, queue.size)

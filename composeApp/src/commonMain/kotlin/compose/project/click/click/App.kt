@@ -1273,14 +1273,18 @@ fun App() {
                             Card(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
-                                    .padding(top = 16.dp, start = 16.dp, end = 16.dp),
+                                    .windowInsetsPadding(WindowInsets.statusBars)
+                                    .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                                    .fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
                                 ),
                                 shape = RoundedCornerShape(18.dp)
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     if (usingCachedData) {

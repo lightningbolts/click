@@ -48,6 +48,7 @@ object AppDataManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var presenceHeartbeatJob: Job? = null
     private var pendingSyncJob: Job? = null
+    private var pendingSyncPausedForAuth: Boolean = false
     
     /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
     private val tokenStorage by lazy { createTokenStorage() }
@@ -111,6 +112,7 @@ object AppDataManager {
     private const val PRESENCE_HEARTBEAT_MS = 30_000L
     private const val PENDING_SYNC_RETRY_MS = 15_000L
     private const val STARTUP_TIMEOUT_MS = 15_000L
+    private const val TOKEN_REFRESH_SKEW_MS = 60_000L
     
     // Error state
     private val _error = MutableStateFlow<String?>(null)
@@ -353,7 +355,7 @@ object AppDataManager {
         } catch (e: Exception) {
             println("Error loading app data: ${e.redactedRestMessage()}")
             // Do not printStackTrace() — RestException.message embeds Authorization/apikey headers.
-            _error.value = e.redactedRestMessage().ifBlank { "No internet connection" }
+            _error.value = mapStartupErrorMessage(e.redactedRestMessage())
             _isDataLoaded.value = true
             if (restoredFromCache) {
                 _usingCachedData.value = true
@@ -872,6 +874,72 @@ object AppDataManager {
         }
     }
 
+    private fun mapStartupErrorMessage(rawMessage: String): String {
+        val trimmed = rawMessage.trim()
+        val normalized = trimmed.lowercase()
+        return when {
+            normalized.contains("401") ||
+                normalized.contains("403") ||
+                normalized.contains("unauthorized") ||
+                normalized.contains("not authorized") ||
+                normalized.contains("invalid jwt") ->
+                "Your session expired. Please sign in again to resume sync."
+            trimmed.isBlank() -> "No internet connection"
+            else -> trimmed
+        }
+    }
+
+    private fun Throwable.isAuthorizationFailure(): Boolean {
+        val normalized = message?.lowercase().orEmpty()
+        return normalized.contains("401") ||
+            normalized.contains("403") ||
+            normalized.contains("unauthorized") ||
+            normalized.contains("not authorized") ||
+            normalized.contains("invalid jwt") ||
+            normalized.contains("jwt expired")
+    }
+
+    private fun pausePendingSyncForAuth() {
+        if (!pendingSyncPausedForAuth) {
+            println("AppDataManager: Pending sync paused until a valid auth session is restored.")
+        }
+        pendingSyncPausedForAuth = true
+    }
+
+    private fun resumePendingSyncIfPaused() {
+        if (pendingSyncPausedForAuth) {
+            println("AppDataManager: Pending sync resumed after auth recovery.")
+        }
+        pendingSyncPausedForAuth = false
+    }
+
+    private suspend fun resolveJwtForPendingSync(forceRefresh: Boolean = false): String? {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val existingJwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val expiresAt = tokenStorage.getExpiresAt()
+        val needsRefresh = forceRefresh ||
+            existingJwt == null ||
+            (expiresAt != null && expiresAt <= now + TOKEN_REFRESH_SKEW_MS)
+
+        if (!needsRefresh) return existingJwt
+
+        authRepository.refreshSession()
+            .onFailure { println("AppDataManager: Session refresh for pending sync failed: ${it.message}") }
+
+        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+
+        val restoreResult = authRepository.restoreSession()
+        if (restoreResult.isFailure) {
+            println("AppDataManager: Session restore for pending sync failed: ${restoreResult.exceptionOrNull()?.message}")
+            return null
+        }
+
+        authRepository.refreshSession()
+            .onFailure { println("AppDataManager: Session refresh after restore failed: ${it.message}") }
+
+        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     private fun startPendingConnectionSync() {
         if (pendingSyncJob?.isActive == true) return
 
@@ -881,31 +949,76 @@ object AppDataManager {
                 val currentUserId = _currentUser.value?.id
                 if (currentUserId.isNullOrBlank()) continue
 
+                val jwt = resolveJwtForPendingSync()
+                if (jwt.isNullOrBlank()) {
+                    pausePendingSyncForAuth()
+                    refreshPendingConnectionCount()
+                    continue
+                }
+
                 runCatching {
                     connectionRepository.syncPendingConnections()
-                    val jwt = tokenStorage.getJwt()
-                    if (!jwt.isNullOrBlank()) {
-                        val proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
-                        val recovered = proximity.recoveredUsers
-                        if (!recovered.isNullOrEmpty()) {
-                            _proximityHandshakeRecovered.emit(
-                                ProximityHandshakeRecoveryPayload(
-                                    users = recovered,
-                                    encounterLogged = proximity.recoveredEncounterLogged,
-                                ),
-                            )
+                    var proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+                    if (proximity.authorizationFailed) {
+                        val refreshedJwt = resolveJwtForPendingSync(forceRefresh = true)
+                        if (refreshedJwt.isNullOrBlank()) {
+                            pausePendingSyncForAuth()
+                            return@runCatching
+                        }
+                        proximity = connectionRepository.syncPendingProximityHandshakes(refreshedJwt)
+                        if (proximity.authorizationFailed) {
+                            pausePendingSyncForAuth()
+                            return@runCatching
                         }
                     }
+
+                    resumePendingSyncIfPaused()
+
+                    val recovered = proximity.recoveredUsers
+                    if (!recovered.isNullOrEmpty()) {
+                        _proximityHandshakeRecovered.emit(
+                            ProximityHandshakeRecoveryPayload(
+                                users = recovered,
+                                encounterLogged = proximity.recoveredEncounterLogged,
+                            ),
+                        )
+                    }
                 }
-                    .onFailure { println("AppDataManager: Pending sync attempt failed: ${it.message}") }
+                    .onFailure {
+                        if (it.isAuthorizationFailure()) {
+                            pausePendingSyncForAuth()
+                        } else {
+                            println("AppDataManager: Pending sync attempt failed: ${it.message}")
+                        }
+                    }
                 refreshPendingConnectionCount()
             }
         }
     }
 
     suspend fun flushPendingProximityHandshakesFromBackgroundWorker() {
-        val jwt = tokenStorage.getJwt() ?: return
-        val proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+        val jwt = resolveJwtForPendingSync(forceRefresh = true)
+        if (jwt.isNullOrBlank()) {
+            pausePendingSyncForAuth()
+            return
+        }
+
+        var proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+        if (proximity.authorizationFailed) {
+            val refreshedJwt = resolveJwtForPendingSync(forceRefresh = true)
+            if (refreshedJwt.isNullOrBlank()) {
+                pausePendingSyncForAuth()
+                return
+            }
+            proximity = connectionRepository.syncPendingProximityHandshakes(refreshedJwt)
+            if (proximity.authorizationFailed) {
+                pausePendingSyncForAuth()
+                return
+            }
+        }
+
+        resumePendingSyncIfPaused()
+
         val recovered = proximity.recoveredUsers
         if (!recovered.isNullOrEmpty()) {
             _proximityHandshakeRecovered.emit(
