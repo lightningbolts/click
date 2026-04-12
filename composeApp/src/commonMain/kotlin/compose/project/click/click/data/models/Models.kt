@@ -90,6 +90,18 @@ data class User(
     val encounterLogged: Boolean? = null,
     /** e.g. `rate_limit_active` from bind-proximity-connection when [encounterLogged] is false. */
     val reason: String? = null,
+    /**
+     * From bind-proximity-connection: false when this bind attached to an existing `connections` row
+     * (reconnection). Defaults to true when the field is absent (older servers).
+     */
+    @SerialName("is_new_connection")
+    val isNewConnection: Boolean = true,
+    /**
+     * True when bind-proximity-connection inserted or debounced a `connection_encounters` row for this peer
+     * in this request (skip a duplicate encounter insert on confirm).
+     */
+    @SerialName("encounter_persisted_on_bind")
+    val encounterPersistedOnBind: Boolean = false,
 ) {
     /**
      * Convert to insert DTO for Supabase (minimal - only required columns)
@@ -311,6 +323,11 @@ data class ConnectionRequest(
     val preflightConnectionId: String? = null,
     /** Encounter logging decision returned by /api/qr for an existing connection. */
     val preflightEncounterLogged: Boolean? = null,
+    /**
+     * When true, proximity confirm skips inserting another `connection_encounters` row because
+     * bind-proximity-connection already persisted this crossing.
+     */
+    val skipEncounterInsert: Boolean = false,
     /** Human-readable weather from the client (e.g. `15°C, Clear`) for `/api/qr` and encounter rows. */
     @SerialName("weather_snapshot")
     val weatherSnapshotLabel: String? = null,

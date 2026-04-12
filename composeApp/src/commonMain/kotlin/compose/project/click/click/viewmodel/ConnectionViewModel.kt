@@ -154,8 +154,16 @@ class ConnectionViewModel : ViewModel() {
         _connectionState.value = ConnectionState.Loading
     }
 
-    private fun shouldBlockForRateLimit(users: List<User>, aggregateEncounterLogged: Boolean): Boolean =
-        !aggregateEncounterLogged || users.any { it.encounterLogged == false || it.reason == "rate_limit_active" }
+    private fun shouldBlockForRateLimit(users: List<User>, aggregateEncounterLogged: Boolean): Boolean {
+        if (users.isEmpty()) return false
+        val allReconnect = users.all { !it.isNewConnection }
+        val allBoundPersisted = users.all { it.encounterPersistedOnBind }
+        if (allReconnect && allBoundPersisted && aggregateEncounterLogged) {
+            return false
+        }
+        return !aggregateEncounterLogged ||
+            users.any { it.encounterLogged == false || it.reason == "rate_limit_active" }
+    }
 
     /**
      * Tri-factor tap flow: GPS → concurrent BLE broadcast + 3s listen → server clustering → [PendingConfirmation].
@@ -532,6 +540,7 @@ class ConnectionViewModel : ViewModel() {
                         compassAzimuth = vibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
                         batteryLevel = vibe?.batteryLevel?.takeIf { it in 0..100 },
                         weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
+                        skipEncounterInsert = peer.encounterPersistedOnBind,
                     )
                     val result = withContext(Dispatchers.Default) {
                         repository.createConnection(request)

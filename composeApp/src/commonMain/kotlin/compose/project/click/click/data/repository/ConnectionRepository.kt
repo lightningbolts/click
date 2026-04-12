@@ -152,6 +152,8 @@ sealed class ProximityResult {
 private data class BindProximityResponse(
     val success: Boolean? = true,
     @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
+    @SerialName("connection_id") val connectionId: String? = null,
+    @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
     val matches: List<User>? = null,
     val error: String? = null,
 )
@@ -926,10 +928,10 @@ class ConnectionRepository(
                 preflightConnectionId != null &&
                 preflightConnectionId == result.id &&
                 preflightEncounterLogged != null
-            val encounterLogged = if (encounterAlreadyHandled) {
-                preflightEncounterLogged
-            } else {
-                try {
+            val encounterLogged = when {
+                request.skipEncounterInsert -> true
+                encounterAlreadyHandled -> preflightEncounterLogged!!
+                else -> try {
                     insertConnectionEncounter(
                         connectionId = result.id,
                         encounteredAtMs = now,
@@ -1121,10 +1123,10 @@ class ConnectionRepository(
                 preflightConnectionId != null &&
                 preflightConnectionId == result.id &&
                 preflightEncounterLogged != null
-            val encounterLogged = if (encounterAlreadyHandled) {
-                preflightEncounterLogged
-            } else {
-                try {
+            val encounterLogged = when {
+                request.skipEncounterInsert -> true
+                encounterAlreadyHandled -> preflightEncounterLogged!!
+                else -> try {
                     insertConnectionEncounter(
                         connectionId = result.id,
                         encounteredAtMs = now,
