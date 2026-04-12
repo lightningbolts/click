@@ -160,9 +160,13 @@ private data class BindProximityResponse(
 private data class BindProximityRequest(
     @SerialName("my_token") val myToken: String,
     @SerialName("heard_tokens") val heardTokens: List<String>,
-    val latitude: Double? = null,
-    val longitude: Double? = null,
+    @SerialName("latitude") val latitude: Double? = null,
+    @SerialName("longitude") val longitude: Double? = null,
     @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
+    @SerialName("noise_level") val noiseLevel: String? = null,
+    @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
+    @SerialName("context_tags") val contextTags: List<String>? = null,
+    @SerialName("height_category") val heightCategory: String? = null,
     @SerialName("lux_level") val luxLevel: Double? = null,
     @SerialName("motion_variance") val motionVariance: Double? = null,
     @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
@@ -234,6 +238,10 @@ class ConnectionRepository(
         hardwareVibe: HardwareVibeSnapshot? = null,
         clientContextFirst: Boolean = true,
         weatherSnapshotLabel: String? = null,
+        bindContextTags: List<String>? = null,
+        bindNoiseLevelCategory: NoiseLevelCategory? = null,
+        bindExactNoiseLevelDb: Double? = null,
+        bindHeightCategory: HeightCategory? = null,
     ): Result<BindProximityHandshakeOutcome> {
         return try {
             val client = httpClient ?: edgeFunctionHttpClient
@@ -241,12 +249,21 @@ class ConnectionRepository(
                 latitude.isFinite() && longitude.isFinite() &&
                 !(latitude == 0.0 && longitude == 0.0)
             val trimmedWeather = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
+            val normalizedBindTags = bindContextTags
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.distinct()
+                ?.takeIf { it.isNotEmpty() }
             val request = BindProximityRequest(
                 myToken = myToken,
                 heardTokens = heardTokens,
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
                 exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
+                noiseLevel = bindNoiseLevelCategory?.name,
+                exactNoiseLevelDb = bindExactNoiseLevelDb?.takeIf { it.isFinite() },
+                contextTags = normalizedBindTags,
+                heightCategory = bindHeightCategory?.name,
                 luxLevel = hardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
                 motionVariance = hardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
                 compassAzimuth = hardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
@@ -295,6 +312,11 @@ class ConnectionRepository(
         longitude: Double?,
         altitudeMeters: Double?,
         hardwareVibe: HardwareVibeSnapshot? = null,
+        noiseLevel: String? = null,
+        exactNoiseLevelDb: Double? = null,
+        heightCategory: String? = null,
+        exactBarometricElevationM: Double? = null,
+        contextTags: List<String> = emptyList(),
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
         val loc = if (latitude != null && longitude != null &&
@@ -317,6 +339,11 @@ class ConnectionRepository(
             capturedAtEpochMs = now,
             location = loc,
             hardwareVibe = hardwareVibe,
+            noiseLevel = noiseLevel?.trim()?.takeIf { it.isNotEmpty() },
+            exactNoiseLevelDb = exactNoiseLevelDb?.takeIf { it.isFinite() },
+            heightCategory = heightCategory?.trim()?.takeIf { it.isNotEmpty() },
+            exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
+            contextTags = contextTags.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
         )
         val q = loadPendingProximityHandshakeQueue().toMutableList()
         val dup = q.lastOrNull {
@@ -358,7 +385,16 @@ class ConnectionRepository(
                         heardTokens = head.heardTokens,
                         latitude = lat,
                         longitude = lng,
+                        exactBarometricElevationM = head.exactBarometricElevationM,
                         hardwareVibe = head.hardwareVibe,
+                        bindContextTags = head.contextTags.takeIf { it.isNotEmpty() },
+                        bindNoiseLevelCategory = head.noiseLevel?.let { raw ->
+                            runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }.getOrNull()
+                        },
+                        bindExactNoiseLevelDb = head.exactNoiseLevelDb,
+                        bindHeightCategory = head.heightCategory?.let { raw ->
+                            runCatching { HeightCategory.valueOf(raw.uppercase().replace(' ', '_')) }.getOrNull()
+                        },
                     ).getOrThrow()
                 }
             }

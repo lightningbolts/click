@@ -21,7 +21,10 @@ import compose.project.click.click.data.storage.createTokenStorage // pragma: al
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
+import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
+import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
+import compose.project.click.click.sensors.ConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
@@ -164,6 +167,7 @@ class ConnectionViewModel : ViewModel() {
         currentUserId: String,
         locationService: LocationService,
         skipLocation: Boolean,
+        ambientNoiseMonitor: AmbientNoiseMonitor? = null,
         barometricHeightMonitor: BarometricHeightMonitor? = null,
     ) {
         if (currentUserId.isBlank()) {
@@ -210,7 +214,24 @@ class ConnectionViewModel : ViewModel() {
                     heard
                 }
 
-                lastProximityHardwareVibe = null
+                val tokenStorage = createTokenStorage()
+                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                val proximitySensorContext =
+                    if (ambientNoiseMonitor != null && barometricHeightMonitor != null) {
+                        captureConnectionSensorContext(
+                            ambientNoiseMonitor = ambientNoiseMonitor,
+                            barometricHeightMonitor = barometricHeightMonitor,
+                            ambientNoiseOptIn = noiseOptIn,
+                            barometricContextOptIn = baroOptIn,
+                        )
+                    } else {
+                        null
+                    }
+                val vibe = withContext(Dispatchers.Default) {
+                    runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                }
+                lastProximityHardwareVibe = vibe
 
                 _connectionState.value = ConnectionState.ProximityResolving
                 val bindResult = withContext(Dispatchers.Default) {
@@ -223,9 +244,14 @@ class ConnectionViewModel : ViewModel() {
                                 heardTokens = tokensOnly,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
-                                exactBarometricElevationM = null,
-                                hardwareVibe = null,
+                                exactBarometricElevationM = proximitySensorContext
+                                    ?.exactBarometricElevationMeters
+                                    ?.takeIf { it.isFinite() },
+                                hardwareVibe = vibe,
                                 clientContextFirst = true,
+                                bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
+                                bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                bindHeightCategory = proximitySensorContext?.heightCategory,
                             ).getOrThrow()
                         }
                     }
@@ -252,7 +278,13 @@ class ConnectionViewModel : ViewModel() {
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
                                 altitudeMeters = lastProximityAltitudeMeters,
-                                hardwareVibe = null,
+                                hardwareVibe = lastProximityHardwareVibe,
+                                noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
+                                exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                heightCategory = proximitySensorContext?.heightCategory?.name,
+                                exactBarometricElevationM = proximitySensorContext
+                                    ?.exactBarometricElevationMeters
+                                    ?.takeIf { it.isFinite() },
                             )
                             scheduleProximityHandshakeSync()
                             _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
@@ -465,6 +497,7 @@ class ConnectionViewModel : ViewModel() {
         currentUserId: String,
         hardwareVibe: HardwareVibeSnapshot? = null,
         weatherSnapshotLabel: String? = null,
+        sensorContext: ConnectionSensorContext? = null,
     ) {
         val peers = peerUsers.filter { it.id.isNotBlank() && it.id != currentUserId }.distinctBy { it.id }
         if (peers.isEmpty()) {
@@ -484,11 +517,16 @@ class ConnectionViewModel : ViewModel() {
                         locationLat = lastProximityLat,
                         locationLng = lastProximityLng,
                         altitudeMeters = lastProximityAltitudeMeters,
+                        heightCategory = sensorContext?.heightCategory,
+                        exactBarometricElevationMeters = sensorContext?.exactBarometricElevationMeters,
+                        exactBarometricPressureHpa = sensorContext?.exactBarometricPressureHpa,
                         contextTag = null,
                         contextTagObject = null,
                         connectionMethod = "proximity",
                         initiatorId = peer.id,
                         responderId = currentUserId,
+                        noiseLevelCategory = sensorContext?.noiseLevelCategory,
+                        exactNoiseLevelDb = sensorContext?.exactNoiseLevelDb,
                         luxLevel = vibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
                         motionVariance = vibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
                         compassAzimuth = vibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),

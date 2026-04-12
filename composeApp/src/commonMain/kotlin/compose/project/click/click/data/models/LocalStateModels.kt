@@ -1,6 +1,7 @@
 package compose.project.click.click.data.models
 
 import compose.project.click.click.sensors.HardwareVibeSnapshot
+import kotlinx.serialization.SerialName
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -110,6 +111,11 @@ data class PendingHandshake(
     val capturedAtEpochMs: Long,
     val location: ProximityHandshakeLocationSnapshot? = null,
     val hardwareVibe: HardwareVibeSnapshot? = null,
+    @SerialName("noise_level") val noiseLevel: String? = null,
+    @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
+    @SerialName("height_category") val heightCategory: String? = null,
+    @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
+    @SerialName("context_tags") val contextTags: List<String> = emptyList(),
 )
 
 fun newPendingHandshakeId(): String =

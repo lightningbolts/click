@@ -149,6 +149,7 @@ fun NfcScreen(
                                             currentUserId = userId,
                                             locationService = locationService,
                                             skipLocation = true,
+                                            ambientNoiseMonitor = ambientNoiseMonitor,
                                             barometricHeightMonitor = barometricHeightMonitor,
                                         )
                                     } else if (!locationService.hasLocationPermission()) {
@@ -160,6 +161,7 @@ fun NfcScreen(
                                                 currentUserId = userId,
                                                 locationService = locationService,
                                                 skipLocation = !locationService.hasLocationPermission(),
+                                                ambientNoiseMonitor = ambientNoiseMonitor,
                                                 barometricHeightMonitor = barometricHeightMonitor,
                                             )
                                         }
@@ -171,6 +173,7 @@ fun NfcScreen(
                                             currentUserId = userId,
                                             locationService = locationService,
                                             skipLocation = false,
+                                            ambientNoiseMonitor = ambientNoiseMonitor,
                                             barometricHeightMonitor = barometricHeightMonitor,
                                         )
                                     }
@@ -210,11 +213,20 @@ fun NfcScreen(
                                                 null
                                             }
                                         }
+                                        val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                                        val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                        val sensors = captureConnectionSensorContext(
+                                            ambientNoiseMonitor = ambientNoiseMonitor,
+                                            barometricHeightMonitor = barometricHeightMonitor,
+                                            ambientNoiseOptIn = noiseOptIn,
+                                            barometricContextOptIn = baroOptIn,
+                                        )
                                         connectionViewModel.confirmProximityConnection(
                                             peerUsers = state.users,
                                             currentUserId = userId,
                                             hardwareVibe = vibe,
                                             weatherSnapshotLabel = weatherLabel,
+                                            sensorContext = sensors,
                                         )
                                     }
                                 },
@@ -262,6 +274,7 @@ fun NfcScreen(
                                         currentUserId = userId,
                                         locationService = locationService,
                                         skipLocation = false,
+                                        ambientNoiseMonitor = ambientNoiseMonitor,
                                         barometricHeightMonitor = barometricHeightMonitor,
                                     )
                                 },
