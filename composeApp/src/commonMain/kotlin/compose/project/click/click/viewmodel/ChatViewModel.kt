@@ -485,8 +485,15 @@ class ChatViewModel(
             // visible while the background refresh runs. Only show Loading when
             // no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
+            val cachedSeedChats = applyChatListVisibility(
+                buildCachedChats(cachedConnections, cachedUsers, userId),
+            )
             if (!alreadyHasRealData) {
-                _chatListState.value = ChatListState.Loading
+                if (cachedSeedChats.isNotEmpty()) {
+                    _chatListState.value = ChatListState.Success(cachedSeedChats)
+                } else {
+                    _chatListState.value = ChatListState.Loading
+                }
             }
 
             // Build direct and group streams with immediate empty emissions so the
@@ -494,11 +501,11 @@ class ChatViewModel(
             try {
                 val directChatsFlow: Flow<Pair<List<ChatWithDetails>, Boolean>> = flow {
                     val directChats = chatRepository.fetchDirectUserChatsWithDetails(userId)
+                    // Emit direct 1:1 rows first; archived can merge in a second pass.
+                    emit(directChats.distinctBy { it.connection.id } to true)
+
                     val archivedChats = chatRepository.fetchArchivedUserChatsWithDetails(userId)
-                    emit(
-                        (directChats + archivedChats)
-                            .distinctBy { it.connection.id } to true
-                    )
+                    emit((directChats + archivedChats).distinctBy { it.connection.id } to true)
                 }.onStart {
                     emit(emptyList<ChatWithDetails>() to false)
                 }
@@ -522,12 +529,9 @@ class ChatViewModel(
                 }.collect { combinedInbox ->
                     val chats = combinedInbox.chats
 
-                    if (!combinedInbox.directLoaded && !combinedInbox.groupLoaded) {
-                        return@collect
-                    }
-                    // Keep the existing mixed inbox visible while direct 1:1 rows are still loading.
-                    // Without this guard, a faster group query can briefly replace the list with only groups.
-                    if (alreadyHasRealData && combinedInbox.groupLoaded && !combinedInbox.directLoaded) {
+                    // Direct 1:1 chat data drives the primary Clicks list. Do not emit
+                    // an empty success state before direct rows have loaded.
+                    if (!combinedInbox.directLoaded) {
                         return@collect
                     }
                     if (alreadyHasRealData && chats.isEmpty() && (!combinedInbox.directLoaded || !combinedInbox.groupLoaded)) {
