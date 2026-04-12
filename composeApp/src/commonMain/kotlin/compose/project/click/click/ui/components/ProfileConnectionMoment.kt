@@ -29,8 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionEncounter
+import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
+import compose.project.click.click.data.models.WeatherSnapshot
 import compose.project.click.click.data.models.toMemoryCapsule
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
@@ -104,7 +107,15 @@ private fun structuredAddressFromFull(m: Map<String, String>?): String? {
 
 fun Connection.profilePlaceLine(): String? {
     val origin = originEncounter
-    val sem = origin?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+    val display = origin?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+    val locName = origin?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+    val fromEncounter = when {
+        locName != null && display != null && locName != display -> "$locName · $display"
+        display != null -> display
+        locName != null -> locName
+        else -> null
+    }
+    val sem = fromEncounter
         ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
     val fromFull = structuredAddressFromFull(full_location)
     if (origin != null) return sem
@@ -166,26 +177,45 @@ fun Connection.profileWhenLine(): String? {
     return "$datePart · $timePart"
 }
 
+private fun windCompassAbbrev(deg: Int): String {
+    val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    val x = ((deg % 360) + 360) % 360
+    val idx = (floor((x + 22.5) / 45.0).toInt() % 8 + 8) % 8
+    return dirs[idx]
+}
+
+private fun formatWeatherSnapshotLine(ws: WeatherSnapshot): String? {
+    val parts = mutableListOf<String>()
+    val cond = ws.condition?.trim()?.takeIf { it.isNotEmpty() }
+    val icon = ws.iconCode?.trim()?.takeIf { it.isNotEmpty() }
+    when {
+        cond != null -> parts.add(cond)
+        icon != null -> parts.add(icon.replaceFirstChar { it.titlecase() })
+    }
+    ws.temperatureCelsius?.takeIf { it.isFinite() }?.let { c ->
+        val f = (c * 9.0 / 5.0) + 32.0
+        if (f.isFinite()) {
+            parts.add("${f.roundToInt()}°F (${c.roundToInt()}°C)")
+        }
+    }
+    ws.windSpeedKph?.takeIf { it.isFinite() }?.let { k ->
+        val dir = ws.windDirectionDegrees?.takeIf { it in 0..359 }?.let { d -> " ${windCompassAbbrev(d)}" } ?: ""
+        parts.add("${k.roundToInt()} km/h$dir")
+    }
+    ws.pressureMslHpa?.takeIf { it.isFinite() }?.let { p ->
+        parts.add("${p.roundToInt()} hPa")
+    }
+    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+}
+
 fun Connection.profileWeatherLine(): String? {
     val origin = originEncounter
     origin?.weatherSnapshot?.let { ws ->
-        val parts = mutableListOf<String>()
-        ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
-        ws.temperatureCelsius?.let { c ->
-            val f = (c * 9.0 / 5.0) + 32.0
-            if (f.isFinite()) parts.add("${f.roundToInt()}°F")
-        }
-        if (parts.isNotEmpty()) return parts.joinToString(" · ")
+        formatWeatherSnapshotLine(ws)?.let { return it }
     }
     if (origin != null) return null
     memoryCapsule?.weatherSnapshot?.let { ws ->
-        val parts = mutableListOf<String>()
-        ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
-        ws.temperatureCelsius?.let { c ->
-            val f = (c * 9.0 / 5.0) + 32.0
-            if (f.isFinite()) parts.add("${f.roundToInt()}°F")
-        }
-        if (parts.isNotEmpty()) return parts.joinToString(" · ")
+        formatWeatherSnapshotLine(ws)?.let { return it }
     }
     val col = weatherCondition?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return col
@@ -220,12 +250,32 @@ fun Connection.profileNoiseLine(): String? {
     return parts.joinToString(" · ")
 }
 
-/** Barometric elevation snapshot when a precise meter value exists (legacy rows omit this). */
-fun Connection.profileBarometricLine(): String? =
-    originEncounter?.exactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
-        ?: exactBarometricElevationM?.takeIf { originEncounter == null && it.isFinite() }?.let { "${it.roundToInt()} m" }
+private fun formatElevationCategoryLabel(raw: String): String {
+    val enumCat = runCatching {
+        HeightCategory.valueOf(raw.uppercase().replace(' ', '_'))
+    }.getOrNull()
+    return when (enumCat) {
+        HeightCategory.BELOW_GROUND -> "Below ground"
+        HeightCategory.GROUND_LEVEL -> "Ground level"
+        HeightCategory.ELEVATED -> "Elevated"
+        HeightCategory.HIGH_RISE -> "High rise"
+        null -> raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+    }
+}
+
+/** Barometric / floor context: category label when present, plus meter snapshot. */
+fun Connection.profileBarometricLine(): String? {
+    val origin = originEncounter
+    val parts = mutableListOf<String>()
+    origin?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+        parts.add(formatElevationCategoryLabel(raw))
+    }
+    val meters = origin?.exactBarometricElevationM?.takeIf { it.isFinite() }
+        ?: exactBarometricElevationM?.takeIf { originEncounter == null && it.isFinite() }
         ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { originEncounter == null && it.isFinite() }
-            ?.let { "${it.roundToInt()} m" }
+    meters?.let { parts.add("${it.roundToInt()} m") }
+    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+}
 
 fun ConnectionEncounter.metricLuxLabel(): String? =
     luxLevel?.takeIf { it.isFinite() && it >= 0 }?.let { "${it.roundToInt()} lx" }

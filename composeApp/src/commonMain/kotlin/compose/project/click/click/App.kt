@@ -84,6 +84,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.encodeToString
@@ -1296,10 +1297,16 @@ fun App() {
                                     val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                                     coroutineScope {
                                         val noiseSampleDeferred = async {
-                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                            if (!noiseOptIn) null
+                                            else withContext(Dispatchers.Main) {
+                                                ambientNoiseMonitor.sampleNoiseReading()
+                                            }
                                         }
                                         val barometricSampleDeferred = async {
-                                            if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                            if (!baroOptIn) null
+                                            else withContext(Dispatchers.Main) {
+                                                barometricHeightMonitor.sampleHeightReading()
+                                            }
                                         }
                                         val noiseSample = noiseSampleDeferred.await()
                                         val barometricSample = barometricSampleDeferred.await()
@@ -1332,10 +1339,16 @@ fun App() {
                                         val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                                         coroutineScope {
                                             val noiseSampleDeferred = async {
-                                                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                                if (!noiseOptIn) null
+                                                else withContext(Dispatchers.Main) {
+                                                    ambientNoiseMonitor.sampleNoiseReading()
+                                                }
                                             }
                                             val barometricSampleDeferred = async {
-                                                if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                                if (!baroOptIn) null
+                                                else withContext(Dispatchers.Main) {
+                                                    barometricHeightMonitor.sampleHeightReading()
+                                                }
                                             }
                                             val noiseSample = noiseSampleDeferred.await()
                                             val barometricSample = barometricSampleDeferred.await()
@@ -1386,10 +1399,16 @@ fun App() {
                                                 }
                                             }
                                             val noiseSampleDeferred = async {
-                                                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                                if (!noiseOptIn) null
+                                                else withContext(Dispatchers.Main) {
+                                                    ambientNoiseMonitor.sampleNoiseReading()
+                                                }
                                             }
                                             val barometricSampleDeferred = async {
-                                                if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                                if (!baroOptIn) null
+                                                else withContext(Dispatchers.Main) {
+                                                    barometricHeightMonitor.sampleHeightReading()
+                                                }
                                             }
 
                                             val locationCaptured = locationDeferred.await()

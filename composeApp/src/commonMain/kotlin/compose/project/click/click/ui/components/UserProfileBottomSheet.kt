@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.DirectionsRun
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.NightsStay
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material.icons.outlined.WbSunny
@@ -66,6 +68,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
+import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -134,18 +138,71 @@ private fun ageFromBirthdayIso(birthday: String?): Int? {
     }
 }
 
-private fun ConnectionEncounter.metricNoiseLabel(): String? =
-    exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} dB" }
+private fun ConnectionEncounter.metricNoiseLabel(): String? {
+    val parts = mutableListOf<String>()
+    noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+        val friendly = runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }
+            .getOrNull()?.let { formatNoiseCategoryForTimeline(it) }
+            ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+        parts.add(friendly)
+    }
+    exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} dB") }
+    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+}
 
-private fun ConnectionEncounter.metricElevationLabel(): String? =
-    exactBarometricElevationM?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} m" }
+private fun formatNoiseCategoryForTimeline(cat: NoiseLevelCategory): String = when (cat) {
+    NoiseLevelCategory.VERY_QUIET -> "Very quiet"
+    NoiseLevelCategory.QUIET -> "Quiet"
+    NoiseLevelCategory.MODERATE -> "Moderate"
+    NoiseLevelCategory.LOUD -> "Loud"
+    NoiseLevelCategory.VERY_LOUD -> "Very loud"
+}
+
+private fun ConnectionEncounter.metricElevationLabel(): String? {
+    val parts = mutableListOf<String>()
+    elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+        val friendly = runCatching { HeightCategory.valueOf(raw.uppercase().replace(' ', '_')) }
+            .getOrNull()?.let { hc ->
+                when (hc) {
+                    HeightCategory.BELOW_GROUND -> "Below ground"
+                    HeightCategory.GROUND_LEVEL -> "Ground level"
+                    HeightCategory.ELEVATED -> "Elevated"
+                    HeightCategory.HIGH_RISE -> "High rise"
+                }
+            } ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+        parts.add(friendly)
+    }
+    exactBarometricElevationM?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} m") }
+    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+}
+
+private fun ConnectionEncounter.metricWindLabel(): String? {
+    val ws = weatherSnapshot ?: return null
+    val kph = ws.windSpeedKph ?: return null
+    if (!kph.isFinite()) return null
+    val deg = ws.windDirectionDegrees
+    val suffix = deg?.takeIf { it in 0..359 }?.let { d ->
+        val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+        val x = ((d % 360) + 360) % 360
+        val idx = (kotlin.math.floor((x + 22.5) / 45.0).toInt() % 8 + 8) % 8
+        " ${dirs[idx]}"
+    } ?: ""
+    return "${kph.roundToInt()} km/h$suffix"
+}
+
+private fun ConnectionEncounter.metricPressureLabel(): String? =
+    weatherSnapshot?.pressureMslHpa?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} hPa" }
+
+private fun ConnectionEncounter.metricConditionLabel(): String? =
+    weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
+        ?: weatherSnapshot?.iconCode?.trim()?.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.titlecase() }
 
 private fun ConnectionEncounter.metricTemperatureLabel(): String? {
     val c = weatherSnapshot?.temperatureCelsius ?: return null
     if (!c.isFinite()) return null
-    val f = (c * 9f / 5f) + 32f
+    val f = (c * 9.0 / 5.0) + 32.0
     if (!f.isFinite()) return null
-    return "${f.roundToInt()}°F"
+    return "${f.roundToInt()}°F (${c.roundToInt()}°C)"
 }
 
 @Composable
@@ -258,16 +315,21 @@ private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             color = muted,
                         )
                         Text(
-                            text = enc.locationName?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown place",
+                            text = enc.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: enc.locationName?.trim()?.takeIf { it.isNotEmpty() }
+                                ?: "Unknown place",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = body,
                             modifier = Modifier.padding(top = 2.dp),
                         )
                         val pills = buildList {
+                            enc.metricConditionLabel()?.let { add(Triple(Icons.Outlined.Cloud, Color(0xFFB0BEC5), it)) }
+                            enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
+                            enc.metricWindLabel()?.let { add(Triple(Icons.Outlined.Air, Color(0xFF81D4FA), it)) }
+                            enc.metricPressureLabel()?.let { add(Triple(Icons.Outlined.Speed, Color(0xFFCE93D8), it)) }
                             enc.metricNoiseLabel()?.let { add(Triple(Icons.Outlined.GraphicEq, Color(0xFF69F0AE), it)) }
                             enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
-                            enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
                             enc.metricLuxLabel()?.let { lbl ->
                                 val dim = enc.luxLevel != null && enc.luxLevel!! < 15.0
                                 val ic = if (dim) Icons.Outlined.NightsStay else Icons.Outlined.WbSunny

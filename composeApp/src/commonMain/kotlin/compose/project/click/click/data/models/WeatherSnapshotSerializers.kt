@@ -51,14 +51,30 @@ object FlexibleWeatherSnapshotSerializer : KSerializer<WeatherSnapshot?> {
 
 internal fun parseWeatherSnapshotElement(element: JsonElement, json: Json): WeatherSnapshot? {
     if (element is JsonNull) return null
-    if (element is JsonPrimitive) {
-        if (!element.isString) return null
-        val s = element.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        runCatching { json.decodeFromString(WeatherSnapshot.serializer(), s) }.getOrNull()?.let { return it }
-        return legacyWeatherLabelToSnapshot(s)
-    }
     if (element is JsonObject) {
         return runCatching { json.decodeFromJsonElement(WeatherSnapshot.serializer(), element) }.getOrNull()
+    }
+    if (element is JsonPrimitive) {
+        if (!element.isString) return null
+        var s = element.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        repeat(8) {
+            runCatching { json.decodeFromString(WeatherSnapshot.serializer(), s) }.getOrNull()?.let { return it }
+            legacyWeatherLabelToSnapshot(s)?.let { return it }
+            val nested = runCatching { json.parseToJsonElement(s) }.getOrNull() ?: return null
+            when (nested) {
+                is JsonObject ->
+                    return runCatching {
+                        json.decodeFromJsonElement(WeatherSnapshot.serializer(), nested)
+                    }.getOrNull()
+                is JsonPrimitive -> {
+                    if (!nested.isString) return null
+                    val inner = nested.content.trim()
+                    if (inner.isEmpty() || inner == s) return null
+                    s = inner
+                }
+                else -> return null
+            }
+        }
     }
     return null
 }

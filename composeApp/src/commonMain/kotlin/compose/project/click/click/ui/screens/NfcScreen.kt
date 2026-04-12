@@ -278,10 +278,12 @@ fun NfcScreen(
                             val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                             val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                             val noiseSampleDeferred = async {
-                                if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                if (!noiseOptIn) null
+                                else withContext(Dispatchers.Main) { ambientNoiseMonitor.sampleNoiseReading() }
                             }
                             val barometricSampleDeferred = async {
-                                if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                if (!baroOptIn) null
+                                else withContext(Dispatchers.Main) { barometricHeightMonitor.sampleHeightReading() }
                             }
                             val noiseSample = noiseSampleDeferred.await()
                             val barometricSample = barometricSampleDeferred.await()
@@ -308,10 +310,12 @@ fun NfcScreen(
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                                 val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                                 val noiseSampleDeferred = async {
-                                    if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                    if (!noiseOptIn) null
+                                    else withContext(Dispatchers.Main) { ambientNoiseMonitor.sampleNoiseReading() }
                                 }
                                 val barometricSampleDeferred = async {
-                                    if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                    if (!baroOptIn) null
+                                    else withContext(Dispatchers.Main) { barometricHeightMonitor.sampleHeightReading() }
                                 }
                                 val noiseSample = noiseSampleDeferred.await()
                                 val barometricSample = barometricSampleDeferred.await()
