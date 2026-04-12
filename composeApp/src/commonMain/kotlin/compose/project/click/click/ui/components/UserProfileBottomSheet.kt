@@ -323,6 +323,27 @@ private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             color = body,
                             modifier = Modifier.padding(top = 2.dp),
                         )
+                        val momentTags = enc.contextTags
+                            .mapNotNull { it.trim().takeIf { s -> s.isNotEmpty() } }
+                            .distinct()
+                        if (momentTags.isNotEmpty()) {
+                            FlowRow(
+                                modifier = Modifier.padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                momentTags.forEach { tag ->
+                                    TimelineMetricPill(
+                                        icon = Icons.Filled.AutoAwesome,
+                                        iconTint = PrimaryBlue.copy(alpha = 0.9f),
+                                        text = tag,
+                                        cardBorder = cardBorder,
+                                        cardBg = cardBg,
+                                        body = body,
+                                    )
+                                }
+                            }
+                        }
                         val pills = buildList {
                             enc.metricConditionLabel()?.let { add(Triple(Icons.Outlined.Cloud, Color(0xFFB0BEC5), it)) }
                             enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
