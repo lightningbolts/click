@@ -69,6 +69,9 @@ import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
+import compose.project.click.click.sensors.HardwareVibeMonitor
+import compose.project.click.click.data.OpenMeteoWeatherService
+import compose.project.click.click.data.models.toSnapshotLabel
 import kotlinx.coroutines.async
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -92,12 +95,6 @@ import compose.project.click.click.data.hub.HubVerifyResult
 @Composable
 @Preview
 fun App() {
-    data class PendingQrConnection(
-        val userId: String,
-        val qrToken: String?,
-        val venueId: String? = null,
-    )
-
     // Default to dark until persisted preference is loaded.
     var isDarkMode by remember { mutableStateOf(true) }
 
@@ -117,6 +114,7 @@ fun App() {
     val appScope = rememberCoroutineScope()
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
+    val openMeteoWeather = remember { OpenMeteoWeatherService() }
 
     LaunchedEffect(connectionViewModel) {
         AppDataManager.proximityHandshakeRecovered.collect { payload ->
@@ -290,7 +288,9 @@ fun App() {
         exactBarometricElevationMeters: Double? = null,
         exactBarometricPressureHpa: Double? = null,
         noiseLevelCategory: NoiseLevelCategory? = null,
-        exactNoiseLevelDb: Double? = null
+        exactNoiseLevelDb: Double? = null,
+        hardwareVibeOverride: compose.project.click.click.sensors.HardwareVibeSnapshot? = null,
+        weatherSnapshotLabel: String? = null,
     ) {
         if (currentUser.id.isNotEmpty()) {
             connectionScope.launch {
@@ -317,7 +317,9 @@ fun App() {
                     tokenAgeMs = tokenAgeMs,
                     qrToken = qrToken,
                     noiseLevelCategory = noiseLevelCategory,
-                    exactNoiseLevelDb = exactNoiseLevelDb
+                    exactNoiseLevelDb = exactNoiseLevelDb,
+                    hardwareVibeOverride = hardwareVibeOverride,
+                    weatherSnapshotLabel = weatherSnapshotLabel,
                 )
             }
         }
@@ -328,48 +330,16 @@ fun App() {
     var showQRScanner by remember { mutableStateOf(false) }
     var connectionRevealState by remember { mutableStateOf<ConnectionRevealUiState?>(null) }
 
-    /**
-     * QR flow: create the edge on the server first (with optional noise/location enrichment).
-     * Context tags are applied only after [ConnectionState.TaggingContext] once [encounterLogged] is true.
-     */
-    fun beginQrConnectionFromScan(pending: PendingQrConnection) {
-        connectionScope.launch {
-            connectionRevealState = null
-
-            val locationDeferred = async {
-                if (!AppDataManager.shouldCaptureLocationAtTap() ||
-                    !pending.venueId.isNullOrBlank()
-                ) {
-                    null
-                } else {
-                    resolveConnectionLocation()
+    LaunchedEffect(Unit) {
+        launch {
+            connectionViewModel.transientNotice.collect { message ->
+                if (message == ConnectionViewModel.RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE) {
+                    connectionRevealState = null
                 }
             }
-            val noiseSampleDeferred = async {
-                if (ambientNoiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
-            }
-            val barometricSampleDeferred = async {
-                if (barometricContextOptIn) barometricHeightMonitor.sampleHeightReading() else null
-            }
-
-            val noiseSample = noiseSampleDeferred.await()
-            val barometricSample = barometricSampleDeferred.await()
-            val capturedLocation = locationDeferred.await()
-
-            connectWithUser(
-                userId = pending.userId,
-                qrToken = pending.qrToken,
-                venueId = pending.venueId,
-                contextTagObject = null,
-                capturedLocation = capturedLocation,
-                heightCategory = barometricSample?.category,
-                exactBarometricElevationMeters = barometricSample?.elevationMeters,
-                exactBarometricPressureHpa = barometricSample?.pressureHpa,
-                noiseLevelCategory = noiseSample?.category,
-                exactNoiseLevelDb = noiseSample?.decibels
-            )
         }
     }
+
     val isIOS = remember {
         getPlatform().name.contains("iOS", ignoreCase = true)
     }
@@ -803,6 +773,7 @@ fun App() {
                         showQRScanner ||
                         showNfcScreen ||
                         (connectionState is ConnectionState.TaggingContext && !showNfcScreen) ||
+                        (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) ||
                         currentRoute != "home"
                     ) && !iOSSwipeOwnsBack
             ) {
@@ -812,6 +783,8 @@ fun App() {
                     showQRScanner -> showQRScanner = false
                     showNfcScreen -> showNfcScreen = false
                     connectionState is ConnectionState.TaggingContext && !showNfcScreen ->
+                        connectionViewModel.resetConnectionState()
+                    connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen ->
                         connectionViewModel.resetConnectionState()
                     pendingChatId != null -> pendingChatId = null // close open chat first
                     else -> navigateBack()
@@ -977,38 +950,21 @@ fun App() {
                                             onQRCodeScanned = { userId ->
                                                 showQRScanner = false
                                                 if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    val pending = PendingQrConnection(
-                                                        userId = userId,
-                                                        qrToken = null
+                                                    connectionViewModel.presentQrContextSheetFromScan(
+                                                        scannedUserId = userId,
+                                                        qrToken = null,
+                                                        venueId = null,
                                                     )
-                                                    if (!AppDataManager.shouldCaptureLocationAtTap()) {
-                                                        beginQrConnectionFromScan(pending)
-                                                    } else if (!locationService.hasLocationPermission()) {
-                                                        requestLocationPermissionThen {
-                                                            beginQrConnectionFromScan(pending)
-                                                        }
-                                                    } else {
-                                                        beginQrConnectionFromScan(pending)
-                                                    }
                                                 }
                                             },
                                             onQRCodeScannedWithToken = { userId, qrToken, venueId ->
                                                 showQRScanner = false
                                                 if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    val pending = PendingQrConnection(
-                                                        userId = userId,
+                                                    connectionViewModel.presentQrContextSheetFromScan(
+                                                        scannedUserId = userId,
                                                         qrToken = qrToken,
                                                         venueId = venueId?.takeIf { it.isNotBlank() },
                                                     )
-                                                    if (!AppDataManager.shouldCaptureLocationAtTap()) {
-                                                        beginQrConnectionFromScan(pending)
-                                                    } else if (!locationService.hasLocationPermission()) {
-                                                        requestLocationPermissionThen {
-                                                            beginQrConnectionFromScan(pending)
-                                                        }
-                                                    } else {
-                                                        beginQrConnectionFromScan(pending)
-                                                    }
                                                 }
                                             },
                                             onCommunityHubScanned = { hubId ->
@@ -1070,7 +1026,13 @@ fun App() {
                                             onBackPressed = {
                                                 transitionMode = NavigationTransitionMode.Tap
                                                 showNfcScreen = false
-                                            }
+                                            },
+                                            onProximityFinalizeStart = {
+                                                connectionRevealState = ConnectionRevealUiState(
+                                                    methodLabel = "Tap",
+                                                    phase = ConnectionRevealPhase.Connecting,
+                                                )
+                                            },
                                         )
                                     }
 
@@ -1365,6 +1327,76 @@ fun App() {
                                             exactNoiseLevelDb = noiseSample?.decibels,
                                             heightCategory = barometricSample?.category,
                                             exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                        )
+                                    }
+                                },
+                            )
+                        }
+
+                        if (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) {
+                            val awaiting = connectionState as ConnectionState.QrAwaitingContext
+                            val cancelQr: () -> Unit = { connectionViewModel.resetConnectionState() }
+                            ConnectionContextSheet(
+                                connectedUsers = awaiting.targetUsers,
+                                locationName = null,
+                                initialNoiseOptIn = ambientNoiseOptIn,
+                                noisePermissionGranted = ambientNoiseMonitor.hasPermission,
+                                onDismiss = cancelQr,
+                                onSkip = cancelQr,
+                                onConfirm = { contextTag, noiseOptIn ->
+                                    connectionRevealState = ConnectionRevealUiState(
+                                        methodLabel = "QR",
+                                        phase = ConnectionRevealPhase.Connecting,
+                                    )
+                                    connectionScope.launch {
+                                        ambientNoiseOptIn = noiseOptIn
+                                        tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+                                        val vibe = runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                        val venue = awaiting.venueId
+                                        val locationCaptured = if (!venue.isNullOrBlank()) {
+                                            null
+                                        } else if (AppDataManager.shouldCaptureLocationAtTap()) {
+                                            resolveConnectionLocation(null)
+                                        } else {
+                                            null
+                                        }
+                                        val la = locationCaptured?.latitude
+                                        val lo = locationCaptured?.longitude
+                                        val weatherLabel = if (
+                                            la != null && lo != null &&
+                                            la.isFinite() && lo.isFinite() &&
+                                            !(la == 0.0 && lo == 0.0)
+                                        ) {
+                                            openMeteoWeather.fetchWeather(la, lo)?.toSnapshotLabel()
+                                        } else {
+                                            null
+                                        }
+                                        val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                        val noiseSampleDeferred = async {
+                                            if (noiseOptIn) ambientNoiseMonitor.sampleNoiseReading() else null
+                                        }
+                                        val barometricSampleDeferred = async {
+                                            if (baroOptIn) barometricHeightMonitor.sampleHeightReading() else null
+                                        }
+                                        val noiseSample = noiseSampleDeferred.await()
+                                        val barometricSample = barometricSampleDeferred.await()
+                                        connectionViewModel.connectWithUser(
+                                            scannedUserId = awaiting.scannedUserId,
+                                            currentUserId = currentUser.id,
+                                            latitude = locationCaptured?.latitude,
+                                            longitude = locationCaptured?.longitude,
+                                            venueId = venue,
+                                            altitudeMeters = locationCaptured?.altitudeMeters,
+                                            heightCategory = barometricSample?.category,
+                                            exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                            exactBarometricPressureHpa = barometricSample?.pressureHpa,
+                                            contextTagObject = contextTag,
+                                            connectionMethod = "qr",
+                                            qrToken = awaiting.qrToken,
+                                            noiseLevelCategory = noiseSample?.category,
+                                            exactNoiseLevelDb = noiseSample?.decibels,
+                                            hardwareVibeOverride = vibe,
+                                            weatherSnapshotLabel = weatherLabel,
                                         )
                                     }
                                 },

@@ -35,6 +35,8 @@ import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import kotlinx.coroutines.async
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.OpenMeteoWeatherService
+import compose.project.click.click.data.models.toSnapshotLabel
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.ui.components.AdaptiveBackground
@@ -43,6 +45,7 @@ import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
+import compose.project.click.click.sensors.HardwareVibeMonitor
 import compose.project.click.click.viewmodel.ConnectionState
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import io.ktor.client.HttpClient
@@ -58,7 +61,8 @@ fun NfcScreen(
     proximityManager: ProximityManager,
     connectionViewModel: ConnectionViewModel,
     onConnectionCreated: (String) -> Unit,
-    onBackPressed: () -> Unit
+    onBackPressed: () -> Unit,
+    onProximityFinalizeStart: () -> Unit = {},
 ) {
     val connectionState by connectionViewModel.connectionState.collectAsState()
     val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
@@ -66,6 +70,7 @@ fun NfcScreen(
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
     val barometricHeightMonitor = rememberBarometricHeightMonitor()
     val tokenStorage = remember { createTokenStorage() }
+    val openMeteoWeather = remember { OpenMeteoWeatherService() }
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     val locationService = remember { compose.project.click.click.utils.LocationService() }
@@ -180,11 +185,33 @@ fun NfcScreen(
                         is ConnectionState.ProximityHandshaking -> {
                             NfcScanningContent()
                         }
+                        is ConnectionState.ProximityResolving -> {
+                            NfcMatchingPeersContent()
+                        }
                         is ConnectionState.PendingConfirmation -> {
                             ProximityConfirmConnectionsContent(
                                 users = state.users,
                                 onConfirmAll = {
-                                    connectionViewModel.confirmProximityConnection(state.users, userId)
+                                    onProximityFinalizeStart()
+                                    scope.launch {
+                                        val vibe = runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                        val (la, lo) = connectionViewModel.lastProximityCoordinates()
+                                        val weatherLabel = if (
+                                            la != null && lo != null &&
+                                            la.isFinite() && lo.isFinite() &&
+                                            !(la == 0.0 && lo == 0.0)
+                                        ) {
+                                            openMeteoWeather.fetchWeather(la, lo)?.toSnapshotLabel()
+                                        } else {
+                                            null
+                                        }
+                                        connectionViewModel.confirmProximityConnection(
+                                            peerUsers = state.users,
+                                            currentUserId = userId,
+                                            hardwareVibe = vibe,
+                                            weatherSnapshotLabel = weatherLabel,
+                                        )
+                                    }
                                 },
                                 onCancel = { connectionViewModel.resetConnectionState() },
                             )
@@ -215,6 +242,9 @@ fun NfcScreen(
                                     connectionViewModel.resetConnectionState()
                                 }
                             )
+                        }
+                        is ConnectionState.QrAwaitingContext -> {
+                            Box(modifier = Modifier.fillMaxSize())
                         }
                         is ConnectionState.Error -> {
                             NfcErrorContent(
@@ -267,6 +297,7 @@ fun NfcScreen(
                         onSkip = finishWithoutTags,
                         onDismiss = finishWithoutTags,
                         onConfirm = { contextTag, noiseOptIn ->
+                            onProximityFinalizeStart()
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
@@ -899,6 +930,38 @@ private fun NfcCreatingConnectionContent() {
             text = "Creating Connection...",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun NfcMatchingPeersContent() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        AdaptiveCircularProgressIndicator(
+            modifier = Modifier.size(80.dp),
+            color = PrimaryBlue,
+            strokeWidth = 6.dp
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            text = "Matching nearby taps…",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Hang tight — this step is quick.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
     }
 }

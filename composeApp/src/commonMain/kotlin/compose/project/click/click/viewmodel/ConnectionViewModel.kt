@@ -70,6 +70,17 @@ sealed class ConnectionState {
         val newConnections: List<Connection>,
         val targetUsers: List<UserProfile>,
     ) : ConnectionState()
+
+    /** QR parsed locally; user fills context before any redeem/create network work. */
+    data class QrAwaitingContext(
+        val scannedUserId: String,
+        val qrToken: String?,
+        val venueId: String?,
+        val targetUsers: List<UserProfile>,
+    ) : ConnectionState()
+
+    /** Bind in flight after handshake; avoids [Loading] so the NFC sheet stays responsive. */
+    object ProximityResolving : ConnectionState()
 }
 
 class ConnectionViewModel : ViewModel() {
@@ -96,6 +107,25 @@ class ConnectionViewModel : ViewModel() {
     private var lastProximityLng: Double? = null
     private var lastProximityAltitudeMeters: Double? = null
     private var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
+
+    fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
+
+    /**
+     * After a valid QR payload is read, show the context sheet before redeem/create.
+     */
+    fun presentQrContextSheetFromScan(scannedUserId: String, qrToken: String?, venueId: String?) {
+        if (scannedUserId.isBlank()) return
+        viewModelScope.launch {
+            val profile = repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()
+                ?: UserProfile(id = scannedUserId, displayName = "Connection")
+            _connectionState.value = ConnectionState.QrAwaitingContext(
+                scannedUserId = scannedUserId,
+                qrToken = qrToken,
+                venueId = venueId?.takeIf { it.isNotBlank() },
+                targetUsers = listOf(profile),
+            )
+        }
+    }
 
     /**
      * Shared connection rows from [AppDataManager] (`MutableStateFlow` backed).
@@ -169,18 +199,7 @@ class ConnectionViewModel : ViewModel() {
                 val myToken = (0..9999).random().toString().padStart(4, '0')
                 _connectionState.value = ConnectionState.ProximityHandshaking
 
-                val baroMonitor = barometricHeightMonitor
-                val baroDeferred =
-                    if (baroMonitor != null && baroMonitor.isAvailable) {
-                        async {
-                            val optIn = createTokenStorage().getBarometricContextOptIn() ?: true
-                            if (optIn) baroMonitor.sampleHeightReading() else null
-                        }
-                    } else {
-                        null
-                    }
-
-                val handshakeCapture = coroutineScope {
+                val tokensOnly = coroutineScope {
                     val listen = async { proximityManager.startHandshakeListening() }
                     delay(120L)
                     // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
@@ -190,14 +209,10 @@ class ConnectionViewModel : ViewModel() {
                     proximityManager.stopAll()
                     heard
                 }
-                val tokensOnly = handshakeCapture
 
-                val baroSample = baroDeferred?.await()
-                val baroElevationM = baroSample?.elevationMeters?.takeIf { it.isFinite() }
-                val vibeSnapshot = runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                lastProximityHardwareVibe = vibeSnapshot
+                lastProximityHardwareVibe = null
 
-                _connectionState.value = ConnectionState.Loading
+                _connectionState.value = ConnectionState.ProximityResolving
                 val bindResult = withContext(Dispatchers.Default) {
                     runCatching {
                         withTimeout(22_000L) {
@@ -208,8 +223,9 @@ class ConnectionViewModel : ViewModel() {
                                 heardTokens = tokensOnly,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
-                                exactBarometricElevationM = baroElevationM,
-                                hardwareVibe = vibeSnapshot,
+                                exactBarometricElevationM = null,
+                                hardwareVibe = null,
+                                clientContextFirst = true,
                             ).getOrThrow()
                         }
                     }
@@ -236,7 +252,7 @@ class ConnectionViewModel : ViewModel() {
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
                                 altitudeMeters = lastProximityAltitudeMeters,
-                                hardwareVibe = vibeSnapshot,
+                                hardwareVibe = null,
                             )
                             scheduleProximityHandshakeSync()
                             _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
@@ -323,6 +339,8 @@ class ConnectionViewModel : ViewModel() {
         exactNoiseLevelDb: Double? = null,
         initiatorId: String? = null,
         responderId: String? = null,
+        hardwareVibeOverride: HardwareVibeSnapshot? = null,
+        weatherSnapshotLabel: String? = null,
     ) {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
@@ -347,10 +365,9 @@ class ConnectionViewModel : ViewModel() {
                 val locLat = latitude ?: lastProximityLat
                 val locLng = longitude ?: lastProximityLng
                 val locAlt = altitudeMeters ?: lastProximityAltitudeMeters
-                val qrHardwareVibe = if (connectionMethod == "qr") {
-                    runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                } else {
-                    null
+                val qrHardwareVibe = when (connectionMethod) {
+                    "qr" -> hardwareVibeOverride ?: runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                    else -> null
                 }
                 val requestHardwareVibe = qrHardwareVibe ?: lastProximityHardwareVibe
 
@@ -377,6 +394,7 @@ class ConnectionViewModel : ViewModel() {
                     motionVariance = requestHardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
                     compassAzimuth = requestHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
                     batteryLevel = requestHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
+                    weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
                 )
 
                 val result = withContext(Dispatchers.Default) {
@@ -440,7 +458,12 @@ class ConnectionViewModel : ViewModel() {
      * After the user confirms the proximity match list, create one connection per peer (1-to-1 edges),
      * then move to [ConnectionState.TaggingContext] so [saveContextTags] can fan out tags.
      */
-    fun confirmProximityConnection(peerUsers: List<User>, currentUserId: String) {
+    fun confirmProximityConnection(
+        peerUsers: List<User>,
+        currentUserId: String,
+        hardwareVibe: HardwareVibeSnapshot? = null,
+        weatherSnapshotLabel: String? = null,
+    ) {
         val peers = peerUsers.filter { it.id.isNotBlank() && it.id != currentUserId }.distinctBy { it.id }
         if (peers.isEmpty()) {
             _connectionState.value = ConnectionState.Error("No users to connect with")
@@ -449,6 +472,7 @@ class ConnectionViewModel : ViewModel() {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
             try {
+                val vibe = hardwareVibe ?: lastProximityHardwareVibe
                 val created = mutableListOf<Connection>()
                 var allEncountersLogged = true
                 for (peer in peers) {
@@ -463,10 +487,11 @@ class ConnectionViewModel : ViewModel() {
                         connectionMethod = "proximity",
                         initiatorId = peer.id,
                         responderId = currentUserId,
-                        luxLevel = lastProximityHardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
-                        motionVariance = lastProximityHardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
-                        compassAzimuth = lastProximityHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
-                        batteryLevel = lastProximityHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
+                        luxLevel = vibe?.luxLevel?.takeIf { it.isFinite() }?.toDouble(),
+                        motionVariance = vibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
+                        compassAzimuth = vibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
+                        batteryLevel = vibe?.batteryLevel?.takeIf { it in 0..100 },
+                        weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
                     )
                     val result = withContext(Dispatchers.Default) {
                         repository.createConnection(request)

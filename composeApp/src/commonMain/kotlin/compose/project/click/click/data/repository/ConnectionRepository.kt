@@ -19,7 +19,6 @@ import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.ConnectionEncounter
 import compose.project.click.click.data.ContextTagTaxonomy
-import compose.project.click.click.data.models.MemoryCapsule
 import compose.project.click.click.data.models.WeatherSnapshot
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.newPendingConnectionId
@@ -167,6 +166,9 @@ private data class BindProximityRequest(
     @SerialName("motion_variance") val motionVariance: Double? = null,
     @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
     @SerialName("battery_level") val batteryLevel: Int? = null,
+    /** When true, edge function defers encounter rows until connection create. */
+    @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
+    @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
 )
 
 class ConnectionRepository(
@@ -226,12 +228,15 @@ class ConnectionRepository(
         longitude: Double?,
         exactBarometricElevationM: Double? = null,
         hardwareVibe: HardwareVibeSnapshot? = null,
+        clientContextFirst: Boolean = true,
+        weatherSnapshotLabel: String? = null,
     ): Result<BindProximityHandshakeOutcome> {
         return try {
             val client = httpClient ?: edgeFunctionHttpClient
             val hasGps = latitude != null && longitude != null &&
                 latitude.isFinite() && longitude.isFinite() &&
                 !(latitude == 0.0 && longitude == 0.0)
+            val trimmedWeather = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
             val request = BindProximityRequest(
                 myToken = myToken,
                 heardTokens = heardTokens,
@@ -242,6 +247,8 @@ class ConnectionRepository(
                 motionVariance = hardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.toDouble(),
                 compassAzimuth = hardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
                 batteryLevel = hardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
+                clientContextFirst = if (clientContextFirst) true else null,
+                weatherSnapshot = trimmedWeather,
             )
             val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
                 contentType(ContentType.Application.Json)
@@ -424,7 +431,9 @@ class ConnectionRepository(
         motionVariance: Double? = null,
         compassAzimuth: Double? = null,
         batteryLevel: Int? = null,
+        weatherSnapshotLabel: String? = null,
     ): Boolean {
+        val trimmedLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
         val payload = buildJsonObject {
             put("connection_id", connectionId)
             put("encountered_at", Instant.fromEpochMilliseconds(encounteredAtMs).toString())
@@ -433,8 +442,10 @@ class ConnectionRepository(
                 put("gps_lat", lat)
                 put("gps_lon", lon)
             }
-            if (weather != null) {
-                put("weather_snapshot", json.encodeToJsonElement(WeatherSnapshot.serializer(), weather))
+            when {
+                trimmedLabel != null -> put("weather_snapshot", JsonPrimitive(trimmedLabel))
+                weather != null ->
+                    put("weather_snapshot", json.encodeToJsonElement(WeatherSnapshot.serializer(), weather))
             }
             noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let { put("noise_level", it) }
             elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { put("elevation_category", it) }
@@ -536,6 +547,7 @@ class ConnectionRepository(
         @SerialName("motion_variance") val motionVariance: Double? = null,
         @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
         @SerialName("battery_level") val batteryLevel: Int? = null,
+        @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
     )
 
     @Serializable
@@ -602,6 +614,7 @@ class ConnectionRepository(
                     motionVariance = request.motionVariance,
                     compassAzimuth = request.compassAzimuth,
                     batteryLevel = request.batteryLevel,
+                    weatherSnapshotLabel = request.weatherSnapshotLabel,
                 ).getOrElse { return Result.failure(it) }
             } else {
                 null
@@ -731,10 +744,11 @@ class ConnectionRepository(
                 }
             }
 
-            val weatherSnapshot = if (loc1Valid) {
-                weatherService.fetchWeather(request.locationLat!!, request.locationLng!!)
-            } else {
-                null
+            val clientWeatherLabel = request.weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
+            val weatherSnapshot = when {
+                clientWeatherLabel != null -> null
+                loc1Valid -> weatherService.fetchWeather(request.locationLat!!, request.locationLng!!)
+                else -> null
             }
 
             val exactBarometricElevationMeters = calibrateBarometricElevationMeters(
@@ -789,6 +803,7 @@ class ConnectionRepository(
                         motionVariance = request.motionVariance,
                         compassAzimuth = request.compassAzimuth,
                         batteryLevel = request.batteryLevel,
+                        weatherSnapshotLabel = clientWeatherLabel,
                     )
                 } catch (e: Exception) {
                     println("ConnectionRepository: encounter insert: ${e.message}")
@@ -897,10 +912,11 @@ class ConnectionRepository(
                 }
             }
 
-            val weatherSnapshot = if (loc1Valid) {
-                weatherService.fetchWeather(request.locationLat!!, request.locationLng!!)
-            } else {
-                null
+            val clientWeatherLabelRestore = request.weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
+            val weatherSnapshot = when {
+                clientWeatherLabelRestore != null -> null
+                loc1Valid -> weatherService.fetchWeather(request.locationLat!!, request.locationLng!!)
+                else -> null
             }
 
             val exactBarometricElevationMeters = calibrateBarometricElevationMeters(
@@ -961,6 +977,7 @@ class ConnectionRepository(
                         motionVariance = request.motionVariance,
                         compassAzimuth = request.compassAzimuth,
                         batteryLevel = request.batteryLevel,
+                        weatherSnapshotLabel = clientWeatherLabelRestore,
                     )
                 } catch (e: Exception) {
                     println("ConnectionRepository: restore encounter insert: ${e.message}")
@@ -1114,8 +1131,13 @@ class ConnectionRepository(
                 v.jsonPrimitive.contentOrNull ?: ""
             } ?: emptyMap()
 
-            // Use a short display name: prefer building/amenity, then road, then full display_name
-            val shortName = addressMap["building"]
+            val houseNum = addressMap["house_number"]?.trim()?.takeIf { it.isNotEmpty() }
+            val roadOnly = addressMap["road"]?.trim()?.takeIf { it.isNotEmpty() }
+            val houseAndRoad = if (houseNum != null && roadOnly != null) "$houseNum $roadOnly" else null
+
+            // Use a short display name: prefer house+road, then building/amenity, then road area, then display_name
+            val shortName = houseAndRoad
+                ?: addressMap["building"]
                 ?: addressMap["amenity"]
                 ?: addressMap["leisure"]
                 ?: addressMap["tourism"]
@@ -1338,11 +1360,13 @@ class ConnectionRepository(
         motionVariance: Double? = null,
         compassAzimuth: Double? = null,
         batteryLevel: Int? = null,
+        weatherSnapshotLabel: String? = null,
     ): Result<RedeemQrTokenResponse> {
         return try {
             val jwt = tokenStorage.getJwt()?.takeIf { it.isNotBlank() }
                 ?: return Result.failure(Exception("Please sign in again."))
 
+            val trimmedWeather = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
             val requestPayload = QrApiRedeemRequest(
                 token = token,
                 gpsLat = scannerLat?.takeIf { it.isFinite() && it != 0.0 },
@@ -1351,6 +1375,7 @@ class ConnectionRepository(
                 motionVariance = motionVariance?.takeIf { it.isFinite() },
                 compassAzimuth = compassAzimuth?.takeIf { it.isFinite() },
                 batteryLevel = batteryLevel?.takeIf { it in 0..100 },
+                weatherSnapshot = trimmedWeather,
             )
 
             val response = edgeFunctionHttpClient.post("$CLICK_WEB_BASE_URL/api/qr") {

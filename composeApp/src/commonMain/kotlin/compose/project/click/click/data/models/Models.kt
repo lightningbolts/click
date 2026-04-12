@@ -311,6 +311,9 @@ data class ConnectionRequest(
     val preflightConnectionId: String? = null,
     /** Encounter logging decision returned by /api/qr for an existing connection. */
     val preflightEncounterLogged: Boolean? = null,
+    /** Human-readable weather from the client (e.g. `15°C, Clear`) for `/api/qr` and encounter rows. */
+    @SerialName("weather_snapshot")
+    val weatherSnapshotLabel: String? = null,
 )
 
 @Serializable

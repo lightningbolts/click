@@ -2,7 +2,8 @@
  * Edge Function: bind-proximity-connection
  *
  * POST JSON { my_token, heard_tokens[], latitude?, longitude?, gps_lat?, gps_lon?,
- *   exact_barometric_elevation_m?, noise_level?, exact_noise_level_db? }
+ *   exact_barometric_elevation_m?, noise_level?, exact_noise_level_db?,
+ *   lux_level?, motion_variance?, compass_azimuth?, battery_level? }
  * Authorization: Bearer <user JWT>
  *
  * Inserts this device's handshake, then returns other users whose pings overlap in time,
@@ -28,6 +29,7 @@ const ENCOUNTER_DEBOUNCE_MAX_M = 50;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const EXTENDED_HANGOUT_TAG = 'Extended Hangout';
 const NOMINATIM_REVERSE_TIMEOUT_MS = 3_500;
+const OPEN_METEO_TIMEOUT_MS = 3_500;
 const NOMINATIM_USER_AGENT = 'ClickPlatformsApp/1.0 (contact@click.com)';
 const DISPLAY_LOCATION_FALLBACK = 'A new city';
 
@@ -119,9 +121,61 @@ function extractDisplayLocation(semanticLocation: Record<string, unknown>): stri
   return state ? `${city}, ${state}` : city;
 }
 
+function extractSpecificLocationName(semanticLocation: Record<string, unknown>): string | null {
+  const address = isRecord(semanticLocation.address) ? semanticLocation.address : null;
+  if (address) {
+    const hn = firstNonEmptyString([address.house_number]);
+    const rd = firstNonEmptyString([address.road]);
+    if (hn != null && rd != null) return `${hn} ${rd}`;
+  }
+
+  return firstNonEmptyString([
+    semanticLocation.name,
+    address?.amenity,
+    address?.building,
+    address?.residential,
+    address?.road,
+  ]);
+}
+
+function openMeteoCodeToLabel(code: number): string {
+  if (code === 0) return 'Clear';
+  if ([1, 2, 3].includes(code)) return 'Cloudy';
+  if ([45, 48].includes(code)) return 'Foggy';
+  if ([51, 53, 55, 56, 57].includes(code)) return 'Drizzle';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'Rain';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snow';
+  if ([95, 96, 99].includes(code)) return 'Storm';
+  return 'Clear';
+}
+
+async function fetchOpenMeteoWeatherSnapshot(lat: number, lon: number): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OPEN_METEO_TIMEOUT_MS);
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const raw = (await res.json()) as {
+      current_weather?: { temperature?: unknown; weathercode?: unknown };
+    };
+    const cw = raw.current_weather;
+    const temp = typeof cw?.temperature === 'number' && Number.isFinite(cw.temperature) ? cw.temperature : null;
+    const codeRaw = cw?.weathercode;
+    const code = typeof codeRaw === 'number' && Number.isFinite(codeRaw) ? codeRaw : 0;
+    if (temp == null) return null;
+    return `${Math.round(temp)}°C, ${openMeteoCodeToLabel(code)}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchNominatimReverseGeocode(lat: number, lon: number): Promise<{
   semanticLocation: Record<string, unknown> | null;
   displayLocation: string;
+  specificLocationName: string | null;
 }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), NOMINATIM_REVERSE_TIMEOUT_MS);
@@ -135,18 +189,31 @@ async function fetchNominatimReverseGeocode(lat: number, lon: number): Promise<{
       },
     });
     if (!response.ok) {
-      return { semanticLocation: null, displayLocation: DISPLAY_LOCATION_FALLBACK };
+      return {
+        semanticLocation: null,
+        displayLocation: DISPLAY_LOCATION_FALLBACK,
+        specificLocationName: null,
+      };
     }
     const payload = (await response.json()) as unknown;
     if (!isRecord(payload)) {
-      return { semanticLocation: null, displayLocation: DISPLAY_LOCATION_FALLBACK };
+      return {
+        semanticLocation: null,
+        displayLocation: DISPLAY_LOCATION_FALLBACK,
+        specificLocationName: null,
+      };
     }
     return {
       semanticLocation: payload,
       displayLocation: extractDisplayLocation(payload),
+      specificLocationName: extractSpecificLocationName(payload),
     };
   } catch {
-    return { semanticLocation: null, displayLocation: DISPLAY_LOCATION_FALLBACK };
+    return {
+      semanticLocation: null,
+      displayLocation: DISPLAY_LOCATION_FALLBACK,
+      specificLocationName: null,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -262,6 +329,9 @@ Deno.serve(async (req) => {
     motion_variance?: unknown;
     compass_azimuth?: unknown;
     battery_level?: unknown;
+    location_name?: unknown;
+    client_context_first?: unknown;
+    weather_snapshot?: unknown;
   };
   try {
     body = await req.json();
@@ -295,6 +365,16 @@ Deno.serve(async (req) => {
   const selfMotion = finiteNumber(body.motion_variance);
   const selfAz = finiteNumber(body.compass_azimuth);
   const selfBattery = finiteBatteryPct(body.battery_level);
+  const manualLocationName =
+    typeof body.location_name === 'string' && body.location_name.trim().length > 0
+      ? body.location_name.trim()
+      : null;
+
+  const clientContextFirst = body.client_context_first === true;
+  const clientWeatherSnapshot =
+    typeof body.weather_snapshot === 'string' && body.weather_snapshot.trim().length > 0
+      ? body.weather_snapshot.trim()
+      : null;
 
   const cutoffIso = new Date(Date.now() - CLEANUP_GRACE_MS).toISOString();
   await admin.from('proximity_handshake_events').delete().lt('created_at', cutoffIso);
@@ -403,20 +483,25 @@ Deno.serve(async (req) => {
     lat != null && lon != null && !(lat === 0 && lon === 0) ? lon : null;
 
   let relativeAltitudeM: number | null = null;
-  if (exactBarometricElevationM != null && encLat != null && encLon != null) {
-    const terrainM = await fetchTerrainElevationM(encLat, encLon);
-    if (terrainM != null) {
-      relativeAltitudeM = exactBarometricElevationM - terrainM;
-    }
-  }
-
   let semanticLocation: Record<string, unknown> | null = null;
   let displayLocation = DISPLAY_LOCATION_FALLBACK;
-  if (encLat != null && encLon != null) {
-    const geocoded = await fetchNominatimReverseGeocode(encLat, encLon);
-    semanticLocation = geocoded.semanticLocation;
-    displayLocation = geocoded.displayLocation;
+  let specificLocationName: string | null = null;
+
+  if (!clientContextFirst) {
+    if (exactBarometricElevationM != null && encLat != null && encLon != null) {
+      const terrainM = await fetchTerrainElevationM(encLat, encLon);
+      if (terrainM != null) {
+        relativeAltitudeM = exactBarometricElevationM - terrainM;
+      }
+    }
+    if (encLat != null && encLon != null) {
+      const geocoded = await fetchNominatimReverseGeocode(encLat, encLon);
+      semanticLocation = geocoded.semanticLocation;
+      displayLocation = geocoded.displayLocation;
+      specificLocationName = geocoded.specificLocationName;
+    }
   }
+  const resolvedLocationName = manualLocationName ?? specificLocationName;
 
   async function connectionIdForPair(peerId: string): Promise<string | null> {
     const { data, error } = await admin
@@ -519,65 +604,88 @@ Deno.serve(async (req) => {
   const peerEncounterLogged: { peerId: string; connectionId: string | null; encounterLogged: boolean; reason?: string }[] =
     [];
 
-  for (const peerId of ids) {
-    const connectionId = await connectionIdForPair(peerId);
-    if (!connectionId) {
-      peerEncounterLogged.push({
-        peerId,
-        connectionId: null,
-        encounterLogged: true,
-      });
-      continue;
-    }
-    const peerRow = rows.find((r) => r && String(r.user_id) === peerId) as Record<string, unknown> | undefined;
-    const peerMotion = peerRow ? finiteNumber(peerRow.motion_variance) : null;
-    const peerAz = peerRow ? finiteNumber(peerRow.compass_azimuth) : null;
-    const vibeTags = buildVibeContextTags({
-      lux: selfLux,
-      selfMotion,
-      peerMotion,
-      selfAz,
-      peerAz,
-      battery: selfBattery,
-    });
-    const insertRow: Record<string, unknown> = {
-      connection_id: connectionId,
-      encountered_at: new Date().toISOString(),
-      context_tags: vibeTags,
-      display_location: displayLocation,
-    };
-    if (encLat != null && encLon != null) {
-      insertRow.gps_lat = encLat;
-      insertRow.gps_lon = encLon;
-    }
-    if (semanticLocation != null) insertRow.semantic_location = semanticLocation;
-    if (noiseLevel != null) insertRow.noise_level = noiseLevel;
-    if (exactNoiseLevelDb != null) insertRow.exact_noise_level_db = exactNoiseLevelDb;
-    if (exactBarometricElevationM != null) {
-      insertRow.exact_barometric_elevation_m = exactBarometricElevationM;
-    }
-    if (relativeAltitudeM != null) insertRow.relative_altitude_m = relativeAltitudeM;
-    if (selfLux != null) insertRow.lux_level = selfLux;
-    if (selfMotion != null) insertRow.motion_variance = selfMotion;
-    if (selfAz != null) insertRow.compass_azimuth = selfAz;
-    if (selfBattery != null) insertRow.battery_level = selfBattery;
-    const outcome = await insertOrDebounceEncounter(connectionId, insertRow, encLat, encLon);
-    if (outcome === 'rate_limited') {
-      peerEncounterLogged.push({
-        peerId,
-        connectionId,
-        encounterLogged: false,
-        reason: 'rate_limit_active',
-      });
-    } else {
+  if (clientContextFirst) {
+    for (const peerId of ids) {
+      const connectionId = await connectionIdForPair(peerId);
       peerEncounterLogged.push({
         peerId,
         connectionId,
         encounterLogged: true,
-        ...(outcome === 'insert_error' || outcome === 'debounce_update_error'
-          ? { reason: 'encounter_mutation_failed' as const }
-          : {}),
       });
+    }
+  } else {
+    for (const peerId of ids) {
+      const connectionId = await connectionIdForPair(peerId);
+      if (!connectionId) {
+        peerEncounterLogged.push({
+          peerId,
+          connectionId: null,
+          encounterLogged: true,
+        });
+        continue;
+      }
+      const peerRow = rows.find((r) => r && String(r.user_id) === peerId) as Record<string, unknown> | undefined;
+      const peerMotion = peerRow ? finiteNumber(peerRow.motion_variance) : null;
+      const peerAz = peerRow ? finiteNumber(peerRow.compass_azimuth) : null;
+      const vibeTags = buildVibeContextTags({
+        lux: selfLux,
+        selfMotion,
+        peerMotion,
+        selfAz,
+        peerAz,
+        battery: selfBattery,
+      });
+      const insertRow: Record<string, unknown> = {
+        connection_id: connectionId,
+        encountered_at: new Date().toISOString(),
+        context_tags: vibeTags,
+        display_location: displayLocation,
+      };
+      if (resolvedLocationName) {
+        insertRow.location_name = resolvedLocationName;
+      }
+      if (encLat != null && encLon != null) {
+        insertRow.gps_lat = encLat;
+        insertRow.gps_lon = encLon;
+      }
+      if (semanticLocation != null) insertRow.semantic_location = semanticLocation;
+      if (noiseLevel != null) insertRow.noise_level = noiseLevel;
+      if (exactNoiseLevelDb != null) insertRow.exact_noise_level_db = exactNoiseLevelDb;
+      if (exactBarometricElevationM != null) {
+        insertRow.exact_barometric_elevation_m = exactBarometricElevationM;
+      }
+      if (relativeAltitudeM != null) insertRow.relative_altitude_m = relativeAltitudeM;
+      if (selfLux != null) insertRow.lux_level = selfLux;
+      if (selfMotion != null) insertRow.motion_variance = selfMotion;
+      if (selfAz != null) insertRow.compass_azimuth = selfAz;
+      if (selfBattery != null) insertRow.battery_level = selfBattery;
+
+      let resolvedWeather = clientWeatherSnapshot;
+      if (resolvedWeather == null && encLat != null && encLon != null) {
+        resolvedWeather = await fetchOpenMeteoWeatherSnapshot(encLat, encLon);
+      }
+      if (resolvedWeather != null) {
+        insertRow.weather_snapshot = resolvedWeather;
+      }
+
+      const outcome = await insertOrDebounceEncounter(connectionId, insertRow, encLat, encLon);
+      if (outcome === 'rate_limited') {
+        peerEncounterLogged.push({
+          peerId,
+          connectionId,
+          encounterLogged: false,
+          reason: 'rate_limit_active',
+        });
+      } else {
+        peerEncounterLogged.push({
+          peerId,
+          connectionId,
+          encounterLogged: true,
+          ...(outcome === 'insert_error' || outcome === 'debounce_update_error'
+            ? { reason: 'encounter_mutation_failed' as const }
+            : {}),
+        });
+      }
     }
   }
 

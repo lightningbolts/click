@@ -28,6 +28,13 @@ data class WeatherSnapshot(
     val pressureMslHpa: Double? = null,
 )
 
+/** Compact label for API payloads and jsonb `weather_snapshot` string storage. */
+fun WeatherSnapshot.toSnapshotLabel(): String {
+    val cond = condition?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown"
+    val t = temperatureCelsius
+    return if (t != null && t.isFinite()) "${t.toInt()}°C, $cond" else cond
+}
+
 @Serializable
 enum class NoiseLevelCategory {
     VERY_QUIET,
