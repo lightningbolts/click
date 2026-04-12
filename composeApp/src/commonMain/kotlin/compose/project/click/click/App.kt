@@ -1317,6 +1317,10 @@ fun App() {
                                         exactNoiseLevelDb = sensors.exactNoiseLevelDb,
                                         heightCategory = sensors.heightCategory,
                                         exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                        ambientNoiseMonitor = ambientMonitor,
+                                        barometricHeightMonitor = baroMonitor,
+                                        ambientNoiseOptIn = noiseOptIn,
+                                        barometricContextOptIn = baroOptIn,
                                     )
                                 }
                             }
@@ -1349,6 +1353,10 @@ fun App() {
                                             exactNoiseLevelDb = sensors.exactNoiseLevelDb,
                                             heightCategory = sensors.heightCategory,
                                             exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                            ambientNoiseMonitor = ambientMonitor,
+                                            barometricHeightMonitor = baroMonitor,
+                                            ambientNoiseOptIn = noiseOptIn,
+                                            barometricContextOptIn = baroOptIn,
                                         )
                                     }
                                 },

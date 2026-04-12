@@ -183,6 +183,12 @@ class ConnectionRepository(
     @Serializable
     private data class EncounterIdOnlyRow(val id: String)
 
+    @Serializable
+    private data class EncounterPatchRow(
+        val id: String,
+        @SerialName("context_tags") val contextTags: List<String>? = null,
+    )
+
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val json = Json {
@@ -532,6 +538,64 @@ class ConnectionRepository(
     }
 
     /**
+     * Merges [contextTag] into existing `context_tags` (deduped, order preserved) and applies
+     * optional sensor columns on the latest [connection_encounters] row for [connectionId].
+     */
+    private suspend fun mergePatchLatestEncounter(
+        connectionId: String,
+        contextTag: ContextTag?,
+        noiseLevelCategory: NoiseLevelCategory?,
+        exactNoiseLevelDb: Double?,
+        heightCategory: HeightCategory?,
+        exactBarometricElevationMeters: Double?,
+    ): Result<Unit> {
+        if (connectionId.isBlank()) {
+            return Result.failure(Exception("Missing connection id"))
+        }
+        return try {
+            val latest = supabase.from("connection_encounters")
+                .select {
+                    filter { eq("connection_id", connectionId) }
+                    order("encountered_at", Order.DESCENDING)
+                    limit(1)
+                }
+                .decodeList<EncounterPatchRow>()
+                .firstOrNull() ?: return Result.failure(Exception("No encounter row for connection"))
+
+            val normalizedContextTag = normalizeContextTag(contextTagObject = contextTag, contextTag = null)
+            val existingTags = latest.contextTags.orEmpty()
+            val tagId = resolveContextTagId(normalizedContextTag)?.trim()?.takeIf { it.isNotEmpty() }
+            val tagAddsNew = tagId != null && !existingTags.contains(tagId)
+            val mergedTags = if (tagAddsNew) {
+                existingTags + tagId!!
+            } else {
+                existingTags
+            }
+
+            val payload = buildJsonObject {
+                if (tagAddsNew) {
+                    put("context_tags", JsonArray(mergedTags.map { JsonPrimitive(it) }))
+                }
+                noiseLevelCategory?.name?.let { put("noise_level", it) }
+                heightCategory?.name?.let { put("elevation_category", it) }
+                exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
+                exactBarometricElevationMeters?.takeIf { it.isFinite() }
+                    ?.let { put("exact_barometric_elevation_m", it) }
+            }
+            if (payload.isEmpty()) {
+                return Result.success(Unit)
+            }
+            supabase.from("connection_encounters")
+                .update(payload) {
+                    filter { eq("id", latest.id) }
+                }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Persists subjective encounter context on the **latest** [connection_encounters] row
      * (proximity fan-out / tag sheet after a crossing).
      */
@@ -548,36 +612,14 @@ class ConnectionRepository(
         }
         return try {
             fetchConnectionById(connectionId) ?: return Result.failure(Exception("Connection not found"))
-            val normalizedContextTag = normalizeContextTag(contextTagObject = contextTag, contextTag = null)
-            val latest = supabase.from("connection_encounters")
-                .select {
-                    filter { eq("connection_id", connectionId) }
-                    order("encountered_at", Order.DESCENDING)
-                    limit(1)
-                }
-                .decodeList<EncounterIdOnlyRow>()
-                .firstOrNull() ?: return Result.failure(Exception("No encounter row for connection"))
-
-            val tagId = resolveContextTagId(normalizedContextTag)?.trim()?.takeIf { it.isNotEmpty() }
-            val tagPrimitives = tagId?.let { listOf(JsonPrimitive(it)) } ?: emptyList()
-            val payload = buildJsonObject {
-                if (tagPrimitives.isNotEmpty()) {
-                    put("context_tags", JsonArray(tagPrimitives))
-                }
-                noiseLevelCategory?.name?.let { put("noise_level", it) }
-                heightCategory?.name?.let { put("elevation_category", it) }
-                exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
-                exactBarometricElevationMeters?.takeIf { it.isFinite() }
-                    ?.let { put("exact_barometric_elevation_m", it) }
-            }
-            if (payload.isEmpty()) {
-                return Result.success(Unit)
-            }
-            supabase.from("connection_encounters")
-                .update(payload) {
-                    filter { eq("id", latest.id) }
-                }
-            Result.success(Unit)
+            mergePatchLatestEncounter(
+                connectionId = connectionId,
+                contextTag = contextTag,
+                noiseLevelCategory = noiseLevelCategory,
+                exactNoiseLevelDb = exactNoiseLevelDb,
+                heightCategory = heightCategory,
+                exactBarometricElevationMeters = exactBarometricElevationMeters,
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -606,6 +648,12 @@ class ConnectionRepository(
         @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
         @SerialName("battery_level") val batteryLevel: Int? = null,
         @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+        @SerialName("noise_level_category") val noiseLevelCategory: String? = null,
+        @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
+        @SerialName("height_category") val heightCategory: String? = null,
+        @SerialName("elevation_category") val elevationCategory: String? = null,
+        @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
+        @SerialName("context_tags") val contextTags: List<String>? = null,
     )
 
     @Serializable
@@ -669,6 +717,11 @@ class ConnectionRepository(
         return try {
             val redeemedToken = if (!request.qrToken.isNullOrBlank() && !request.skipQrTokenRedeem) {
                 val sendScannerGps = request.venueId.isNullOrBlank()
+                val redeemContextTag = normalizeContextTag(
+                    contextTagObject = request.contextTagObject,
+                    contextTag = request.contextTag,
+                )
+                val redeemTagLine = resolveContextTagId(redeemContextTag)?.trim()?.takeIf { it.isNotEmpty() }
                 redeemQrToken(
                     token = request.qrToken,
                     scannerLat = if (sendScannerGps) request.locationLat else null,
@@ -678,6 +731,11 @@ class ConnectionRepository(
                     compassAzimuth = request.compassAzimuth,
                     batteryLevel = request.batteryLevel,
                     weatherSnapshotLabel = request.weatherSnapshotLabel,
+                    noiseLevelCategory = request.noiseLevelCategory,
+                    exactNoiseLevelDb = request.exactNoiseLevelDb,
+                    heightCategory = request.heightCategory,
+                    exactBarometricElevationM = request.exactBarometricElevationMeters,
+                    contextTags = redeemTagLine?.let { listOf(it) },
                 ).getOrElse { return Result.failure(it) }
             } else {
                 null
@@ -880,6 +938,22 @@ class ConnectionRepository(
                 }
             }
 
+            if (encounterAlreadyHandled && request.connectionMethod == "qr") {
+                mergePatchLatestEncounter(
+                    connectionId = result.id,
+                    contextTag = normalizeContextTag(
+                        contextTagObject = request.contextTagObject,
+                        contextTag = request.contextTag,
+                    ),
+                    noiseLevelCategory = request.noiseLevelCategory,
+                    exactNoiseLevelDb = request.exactNoiseLevelDb,
+                    heightCategory = heightCategory,
+                    exactBarometricElevationMeters = exactBarometricElevationMeters,
+                ).exceptionOrNull()?.let {
+                    println("ConnectionRepository: post-redeem encounter merge (new row): ${it.message}")
+                }
+            }
+
             // Create chat row for this connection
             try {
                 supabase.from("chats")
@@ -1057,6 +1131,22 @@ class ConnectionRepository(
                 } catch (e: Exception) {
                     println("ConnectionRepository: restore encounter insert: ${e.message}")
                     true
+                }
+            }
+
+            if (encounterAlreadyHandled && request.connectionMethod == "qr") {
+                mergePatchLatestEncounter(
+                    connectionId = result.id,
+                    contextTag = normalizeContextTag(
+                        contextTagObject = request.contextTagObject,
+                        contextTag = request.contextTag,
+                    ),
+                    noiseLevelCategory = request.noiseLevelCategory,
+                    exactNoiseLevelDb = request.exactNoiseLevelDb,
+                    heightCategory = heightCategory,
+                    exactBarometricElevationMeters = exactBarometricElevationMeters,
+                ).exceptionOrNull()?.let {
+                    println("ConnectionRepository: post-redeem encounter merge: ${it.message}")
                 }
             }
 
@@ -1436,6 +1526,11 @@ class ConnectionRepository(
         compassAzimuth: Double? = null,
         batteryLevel: Int? = null,
         weatherSnapshotLabel: String? = null,
+        noiseLevelCategory: NoiseLevelCategory? = null,
+        exactNoiseLevelDb: Double? = null,
+        heightCategory: HeightCategory? = null,
+        exactBarometricElevationM: Double? = null,
+        contextTags: List<String>? = null,
     ): Result<RedeemQrTokenResponse> {
         return try {
             val jwt = tokenStorage.getJwt()?.takeIf { it.isNotBlank() }
@@ -1451,6 +1546,12 @@ class ConnectionRepository(
                 compassAzimuth = compassAzimuth?.takeIf { it.isFinite() },
                 batteryLevel = batteryLevel?.takeIf { it in 0..100 },
                 weatherSnapshot = trimmedWeather,
+                noiseLevelCategory = noiseLevelCategory?.name,
+                exactNoiseLevelDb = exactNoiseLevelDb?.takeIf { it.isFinite() },
+                heightCategory = heightCategory?.name,
+                elevationCategory = heightCategory?.name,
+                exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
+                contextTags = contextTags?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.isNotEmpty() },
             )
 
             val response = edgeFunctionHttpClient.post("$CLICK_WEB_BASE_URL/api/qr") {

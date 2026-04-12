@@ -584,21 +584,47 @@ class ConnectionViewModel : ViewModel() {
         exactNoiseLevelDb: Double?,
         heightCategory: HeightCategory?,
         exactBarometricElevationMeters: Double?,
+        ambientNoiseMonitor: AmbientNoiseMonitor? = null,
+        barometricHeightMonitor: BarometricHeightMonitor? = null,
+        ambientNoiseOptIn: Boolean = true,
+        barometricContextOptIn: Boolean = true,
     ) {
         viewModelScope.launch {
             val connections = tagging.newConnections
             val targetProfiles = tagging.targetUsers
             try {
+                val sensorsMissing = noiseLevelCategory == null &&
+                    exactNoiseLevelDb == null &&
+                    heightCategory == null &&
+                    exactBarometricElevationMeters == null
+                val snapshot = if (
+                    sensorsMissing &&
+                    ambientNoiseMonitor != null &&
+                    barometricHeightMonitor != null
+                ) {
+                    captureConnectionSensorContext(
+                        ambientNoiseMonitor = ambientNoiseMonitor,
+                        barometricHeightMonitor = barometricHeightMonitor,
+                        ambientNoiseOptIn = ambientNoiseOptIn,
+                        barometricContextOptIn = barometricContextOptIn,
+                    )
+                } else {
+                    null
+                }
+                val noiseOut = noiseLevelCategory ?: snapshot?.noiseLevelCategory
+                val exactDbOut = exactNoiseLevelDb ?: snapshot?.exactNoiseLevelDb
+                val heightOut = heightCategory ?: snapshot?.heightCategory
+                val baroOut = exactBarometricElevationMeters ?: snapshot?.exactBarometricElevationMeters
                 for (connection in connections) {
                     if (connection.isPendingSync()) continue
                     val patch = withContext(Dispatchers.Default) {
                         repository.updateConnectionTags(
                             connectionId = connection.id,
                             contextTag = contextTag,
-                            noiseLevelCategory = noiseLevelCategory,
-                            exactNoiseLevelDb = exactNoiseLevelDb,
-                            heightCategory = heightCategory,
-                            exactBarometricElevationMeters = exactBarometricElevationMeters,
+                            noiseLevelCategory = noiseOut,
+                            exactNoiseLevelDb = exactDbOut,
+                            heightCategory = heightOut,
+                            exactBarometricElevationMeters = baroOut,
                         )
                     }
                     if (patch.isFailure) {

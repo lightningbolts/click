@@ -303,6 +303,10 @@ fun NfcScreen(
                                 exactNoiseLevelDb = sensors.exactNoiseLevelDb,
                                 heightCategory = sensors.heightCategory,
                                 exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                ambientNoiseMonitor = ambientNoiseMonitor,
+                                barometricHeightMonitor = barometricHeightMonitor,
+                                ambientNoiseOptIn = noiseOptIn,
+                                barometricContextOptIn = baroOptIn,
                             )
                         }
                     }
@@ -332,6 +336,10 @@ fun NfcScreen(
                                     exactNoiseLevelDb = sensors.exactNoiseLevelDb,
                                     heightCategory = sensors.heightCategory,
                                     exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = noiseOptIn,
+                                    barometricContextOptIn = baroOptIn,
                                 )
                             }
                         },
