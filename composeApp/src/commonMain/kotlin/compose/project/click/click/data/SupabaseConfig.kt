@@ -73,7 +73,6 @@ object SupabaseConfig {
                 when (status) {
                     is SessionStatus.Authenticated -> {
                         val session = status.session
-                        println("SupabaseConfig: Session authenticated/refreshed — syncing to TokenStorage")
                         tokenStorage.saveTokens(
                             jwt = session.accessToken,
                             refreshToken = session.refreshToken,
@@ -82,11 +81,10 @@ object SupabaseConfig {
                         )
                     }
                     is SessionStatus.NotAuthenticated -> {
-                        println("SupabaseConfig: Session not authenticated")
                         // Don't clear tokens here — let explicit sign-out handle that
                     }
                     else -> {
-                        println("SupabaseConfig: Session status: $status")
+                        // Transitional session states — avoid logging session payloads.
                     }
                 }
             }

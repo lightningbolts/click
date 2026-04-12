@@ -57,8 +57,6 @@ class IosTokenStorage : TokenStorage {
     private val userDefaults = NSUserDefaults(suiteName = PREFS_SUITE_NAME) ?: NSUserDefaults.standardUserDefaults
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
-        println("IosTokenStorage: Saving tokens...")
-        
         // Save to NSUserDefaults (primary - always works)
         userDefaults.setObject(jwt, KEY_JWT)
         userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
@@ -73,13 +71,11 @@ class IosTokenStorage : TokenStorage {
             userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
         }
         userDefaults.synchronize()
-        println("IosTokenStorage: Saved to NSUserDefaults")
-        
+
         // Also save to Keychain (for update persistence)
-        val jwtSaved = setKeychainItem(KEY_JWT, jwt)
-        val refreshSaved = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
-        println("IosTokenStorage: Keychain save - jwt: $jwtSaved, refresh: $refreshSaved")
-        
+        setKeychainItem(KEY_JWT, jwt)
+        setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
+
         if (expiresAt != null) {
             setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
         }
@@ -92,13 +88,11 @@ class IosTokenStorage : TokenStorage {
         // Try Keychain first (survives updates), then NSUserDefaults
         val keychainValue = getKeychainItem(KEY_JWT)
         if (!keychainValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got JWT from Keychain")
             return keychainValue
         }
-        
+
         val defaultsValue = userDefaults.stringForKey(KEY_JWT)
         if (!defaultsValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got JWT from NSUserDefaults")
             // Sync to Keychain for future updates
             setKeychainItem(KEY_JWT, defaultsValue)
         }
@@ -108,13 +102,11 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getRefreshToken(): String? {
         val keychainValue = getKeychainItem(KEY_REFRESH_TOKEN)
         if (!keychainValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got refresh token from Keychain")
             return keychainValue
         }
-        
+
         val defaultsValue = userDefaults.stringForKey(KEY_REFRESH_TOKEN)
         if (!defaultsValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got refresh token from NSUserDefaults")
             setKeychainItem(KEY_REFRESH_TOKEN, defaultsValue)
         }
         return defaultsValue
@@ -139,8 +131,6 @@ class IosTokenStorage : TokenStorage {
     }
 
     override suspend fun clearTokens() {
-        println("IosTokenStorage: Clearing tokens...")
-        
         // Clear token keys in NSUserDefaults
         userDefaults.removeObjectForKey(KEY_JWT)
         userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
@@ -154,7 +144,6 @@ class IosTokenStorage : TokenStorage {
         deleteKeychainItem(KEY_EXPIRES_AT)
         deleteKeychainItem(KEY_TOKEN_TYPE)
         
-        println("IosTokenStorage: Tokens cleared from both storages")
     }
 
     override suspend fun saveFreeThisWeek(isFree: Boolean) {

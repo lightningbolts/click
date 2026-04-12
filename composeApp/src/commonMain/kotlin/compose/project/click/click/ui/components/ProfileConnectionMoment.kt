@@ -172,7 +172,7 @@ fun Connection.profileWeatherLine(): String? {
         val parts = mutableListOf<String>()
         ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
         ws.temperatureCelsius?.let { c ->
-            val f = (c * 9f / 5f) + 32f
+            val f = (c * 9.0 / 5.0) + 32.0
             if (f.isFinite()) parts.add("${f.roundToInt()}°F")
         }
         if (parts.isNotEmpty()) return parts.joinToString(" · ")
@@ -182,7 +182,7 @@ fun Connection.profileWeatherLine(): String? {
         val parts = mutableListOf<String>()
         ws.condition?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
         ws.temperatureCelsius?.let { c ->
-            val f = (c * 9f / 5f) + 32f
+            val f = (c * 9.0 / 5.0) + 32.0
             if (f.isFinite()) parts.add("${f.roundToInt()}°F")
         }
         if (parts.isNotEmpty()) return parts.joinToString(" · ")

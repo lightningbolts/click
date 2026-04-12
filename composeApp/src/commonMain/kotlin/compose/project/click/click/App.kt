@@ -71,7 +71,7 @@ import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import compose.project.click.click.sensors.HardwareVibeMonitor
 import compose.project.click.click.data.OpenMeteoWeatherService
-import compose.project.click.click.data.models.toSnapshotLabel
+import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
 import kotlinx.coroutines.async
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -79,8 +79,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -102,7 +105,10 @@ fun App() {
     val client = remember {
         HttpClient {
             install(ContentNegotiation) {
-                json()
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
             }
         }
     }
@@ -1310,6 +1316,7 @@ fun App() {
                                         phase = ConnectionRevealPhase.Connecting,
                                     )
                                     connectionScope.launch {
+                                        yield()
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                                         val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
@@ -1349,9 +1356,12 @@ fun App() {
                                         phase = ConnectionRevealPhase.Connecting,
                                     )
                                     connectionScope.launch {
+                                        yield()
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                        val vibe = runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                        val vibe = withContext(Dispatchers.Default) {
+                                            runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                        }
                                         val venue = awaiting.venueId
                                         val locationCaptured = if (!venue.isNullOrBlank()) {
                                             null
@@ -1362,14 +1372,16 @@ fun App() {
                                         }
                                         val la = locationCaptured?.latitude
                                         val lo = locationCaptured?.longitude
-                                        val weatherLabel = if (
-                                            la != null && lo != null &&
-                                            la.isFinite() && lo.isFinite() &&
-                                            !(la == 0.0 && lo == 0.0)
-                                        ) {
-                                            openMeteoWeather.fetchWeather(la, lo)?.toSnapshotLabel()
-                                        } else {
-                                            null
+                                        val weatherLabel = withContext(Dispatchers.Default) {
+                                            if (
+                                                la != null && lo != null &&
+                                                la.isFinite() && lo.isFinite() &&
+                                                !(la == 0.0 && lo == 0.0)
+                                            ) {
+                                                openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
+                                            } else {
+                                                null
+                                            }
                                         }
                                         val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                                         val noiseSampleDeferred = async {

@@ -9,6 +9,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.math.roundToInt
 
 interface WeatherService {
     suspend fun fetchWeather(lat: Double, lon: Double): WeatherSnapshot?
@@ -37,15 +38,14 @@ class OpenMeteoWeatherService(
 
             val current = response.current ?: return null
             WeatherSnapshot(
-                condition = current.weatherCode.toConditionLabel(),
-                temperatureCelsius = current.temperature.toFloat(),
                 iconCode = current.weatherCode.toIconCode(),
-                windSpeedKph = current.windSpeed?.toFloat(),
-                windDirectionDegrees = current.windDirection?.toInt(),
-                pressureMslHpa = current.pressureMsl
+                condition = current.weatherCode.toConditionLabel(),
+                windSpeedKph = current.windSpeed,
+                pressureMslHpa = current.pressureMsl,
+                temperatureCelsius = current.temperature,
+                windDirectionDegrees = current.windDirection?.roundToInt(),
             )
-        } catch (error: Exception) {
-            println("OpenMeteoWeatherService: Failed to fetch weather: ${error.message}")
+        } catch (_: Exception) {
             null
         }
     }

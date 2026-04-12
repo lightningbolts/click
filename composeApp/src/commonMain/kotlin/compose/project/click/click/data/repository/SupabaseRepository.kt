@@ -295,7 +295,8 @@ class SupabaseRepository {
         val activeRows = fetchActiveChannelConnections(userId, excludedForActive)
         val validArchiveIds = archivedIds - hiddenIds
         val archivedRows = fetchArchivedChannelConnections(userId, validArchiveIds)
-        val merged = (activeRows + archivedRows)
+        val lifecycleArchivedRows = fetchLifecycleArchivedConnections(userId, hiddenIds)
+        val merged = (activeRows + archivedRows + lifecycleArchivedRows)
             .distinctBy { it.id }
             .filter { it.normalizedConnectionStatus() != "removed" }
             .sortedByDescending { it.created }
@@ -359,6 +360,35 @@ class SupabaseRepository {
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
             println("fetchArchivedChannelConnections (redacted): ${e.redactedRestMessage()}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Rows where the server set [Connection.status] to `archived` (idle expiry, etc.).
+     * Distinct from per-user [connection_archives] — those without a junction row were previously missing from snapshots.
+     */
+    private suspend fun fetchLifecycleArchivedConnections(
+        userId: String,
+        hiddenIds: Set<String>,
+    ): List<Connection> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            supabase.from("connections")
+                .select(columns = connectionsSelectWithEncounters) {
+                    filter {
+                        contains("user_ids", listOf(userId))
+                        eq("status", "archived")
+                        if (hiddenIds.isNotEmpty()) {
+                            filterNot("id", FilterOperator.IN, "(${hiddenIds.joinToString(",")})")
+                        }
+                    }
+                    order("created", Order.DESCENDING)
+                }
+                .decodeList<Connection>()
+                .withEncountersSortedNewestFirst()
+        } catch (e: Exception) {
+            println("fetchLifecycleArchivedConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
     }

@@ -149,9 +149,9 @@ sealed class ProximityResult {
 
 @Serializable
 private data class BindProximityResponse(
-    val success: Boolean = true,
+    val success: Boolean? = true,
     @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
-    val matches: List<User> = emptyList(),
+    val matches: List<User>? = null,
     val error: String? = null,
 )
 
@@ -180,7 +180,10 @@ class ConnectionRepository(
 
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
     private val edgeFunctionHttpClient by lazy {
         HttpClient {
             install(ContentNegotiation) {
@@ -262,15 +265,20 @@ class ConnectionRepository(
             if (!response.status.isSuccess()) {
                 return Result.failure(Exception(text.ifBlank { "bind-proximity-connection failed" }))
             }
-            val parsed = json.decodeFromString(BindProximityResponse.serializer(), text)
+            val parsed = runCatching {
+                json.decodeFromString(BindProximityResponse.serializer(), text)
+            }.getOrElse {
+                return Result.failure(Exception("Could not read proximity server response."))
+            }
             if (!parsed.error.isNullOrBlank()) {
                 return Result.failure(Exception(parsed.error))
             }
+            val rows = parsed.matches.orEmpty()
             val aggregateEncounterLogged = parsed.encounterLogged
-                ?: parsed.matches.none { it.encounterLogged == false }
+                ?: rows.none { it.encounterLogged == false }
             Result.success(
                 BindProximityHandshakeOutcome(
-                    matches = parsed.matches,
+                    matches = rows,
                     encounterLogged = aggregateEncounterLogged,
                 ),
             )
@@ -445,7 +453,10 @@ class ConnectionRepository(
             when {
                 trimmedLabel != null -> put("weather_snapshot", JsonPrimitive(trimmedLabel))
                 weather != null ->
-                    put("weather_snapshot", json.encodeToJsonElement(WeatherSnapshot.serializer(), weather))
+                    put(
+                        "weather_snapshot",
+                        JsonPrimitive(json.encodeToString(WeatherSnapshot.serializer(), weather)),
+                    )
             }
             noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let { put("noise_level", it) }
             elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { put("elevation_category", it) }
@@ -528,7 +539,7 @@ class ConnectionRepository(
 
     @Serializable
     private data class RedeemQrTokenResponse(
-        val success: Boolean,
+        val success: Boolean? = null,
         val error: String? = null,
         @SerialName("user_id") val userId: String? = null,
         @SerialName("token_age_ms") val tokenAgeMs: Long? = null,
@@ -536,6 +547,7 @@ class ConnectionRepository(
         @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
         val reason: String? = null,
         @SerialName("connection_id") val connectionId: String? = null,
+        @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
     )
 
     @Serializable
@@ -557,15 +569,20 @@ class ConnectionRepository(
         val encounterLogged: Boolean? = null,
         val reason: String? = null,
         val connectionId: String? = null,
+        val message: String? = null,
+        val initiatorId: String? = null,
+        val targetUserName: String? = null,
+        @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
     )
 
     @Serializable
     private data class QrApiRedeemEnvelope(
-        val success: Boolean = false,
+        val success: Boolean? = false,
         val error: String? = null,
         @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
         val reason: String? = null,
         @SerialName("connection_id") val connectionId: String? = null,
+        @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
         val data: QrApiRedeemData? = null,
     )
 
@@ -720,11 +737,17 @@ class ConnectionRepository(
                 responder_id = responderId
             )
 
-            val result = supabase.from("connections")
-                .insert(connectionInsert) {
-                    select()
-                }
-                .decodeSingle<Connection>()
+            val result = try {
+                supabase.from("connections")
+                    .insert(connectionInsert) {
+                        select()
+                    }
+                    .decodeSingle<Connection>()
+            } catch (e: SerializationException) {
+                return Result.failure(
+                    Exception("Could not read the new connection from the server. Try refreshing your connections."),
+                )
+            }
 
             var semanticLocationName: String? = null
             var fullLocationMap: Map<String, String>? = null
@@ -928,29 +951,35 @@ class ConnectionRepository(
             val heightCategory = deriveHeightCategory(exactBarometricElevationMeters ?: request.altitudeMeters)
                 ?: request.heightCategory
 
-            val result = supabase.from("connections")
-                .update(buildJsonObject {
-                    put("status", "active")
-                    put("expiry_state", "active")
-                    put("last_message_at", now)
-                    put("created", now)
-                    put("expiry", expiry)
-                    put("created_utc", createdUtc)
-                    put("time_of_day_utc", timeOfDayUtc)
-                    put("proximity_confidence", proximityScore)
-                    put("proximity_signals", proximitySignals)
-                    put("connection_method", request.connectionMethod)
-                    put("flagged", proximityScore < 20)
-                    put("include_in_business_insights", AppDataManager.locationPreferences.value.includeInInsightsEnabled)
-                    initiatorId?.let { put("initiator_id", it) }
-                    responderId?.let { put("responder_id", it) }
-                }) {
-                    filter {
-                        eq("id", existing.id)
+            val result = try {
+                supabase.from("connections")
+                    .update(buildJsonObject {
+                        put("status", "active")
+                        put("expiry_state", "active")
+                        put("last_message_at", now)
+                        put("created", now)
+                        put("expiry", expiry)
+                        put("created_utc", createdUtc)
+                        put("time_of_day_utc", timeOfDayUtc)
+                        put("proximity_confidence", proximityScore)
+                        put("proximity_signals", proximitySignals)
+                        put("connection_method", request.connectionMethod)
+                        put("flagged", proximityScore < 20)
+                        put("include_in_business_insights", AppDataManager.locationPreferences.value.includeInInsightsEnabled)
+                        initiatorId?.let { put("initiator_id", it) }
+                        responderId?.let { put("responder_id", it) }
+                    }) {
+                        filter {
+                            eq("id", existing.id)
+                        }
+                        select()
                     }
-                    select()
-                }
-                .decodeSingle<Connection>()
+                    .decodeSingle<Connection>()
+            } catch (e: SerializationException) {
+                return Result.failure(
+                    Exception("Could not read the restored connection from the server. Try refreshing your connections."),
+                )
+            }
 
             val restoreTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
             val encounterAlreadyHandled = request.connectionMethod == "qr" &&
@@ -1407,7 +1436,7 @@ class ConnectionRepository(
                 return Result.failure(Exception("Failed to parse QR API response"))
             }
 
-            if (!envelope.success) {
+            if (envelope.success != true) {
                 val message = when (envelope.error) {
                     "proximity_failed" -> "Connection failed: Users must be in the same physical location."
                     "expired" -> "This QR code has expired. Ask them to generate a new one."

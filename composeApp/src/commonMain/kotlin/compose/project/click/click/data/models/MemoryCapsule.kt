@@ -1,6 +1,8 @@
 package compose.project.click.click.data.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlin.math.pow
 
 @Serializable
@@ -18,22 +20,29 @@ data class MemoryCapsule(
     val exactBarometricElevationMeters: Double? = null
 )
 
+/**
+ * Canonical wire format for [connection_encounters.weather_snapshot] and QR / proximity payloads:
+ * a stringified JSON object with these keys (camelCase).
+ */
 @Serializable
 data class WeatherSnapshot(
-    val condition: String? = null,
-    val temperatureCelsius: Float? = null,
-    val iconCode: String? = null,
-    val windSpeedKph: Float? = null,
-    val windDirectionDegrees: Int? = null,
+    val iconCode: String = "",
+    val condition: String = "",
+    val windSpeedKph: Double? = null,
     val pressureMslHpa: Double? = null,
+    val temperatureCelsius: Double? = null,
+    val windDirectionDegrees: Int? = null,
 )
 
-/** Compact label for API payloads and jsonb `weather_snapshot` string storage. */
-fun WeatherSnapshot.toSnapshotLabel(): String {
-    val cond = condition?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown"
-    val t = temperatureCelsius
-    return if (t != null && t.isFinite()) "${t.toInt()}°C, $cond" else cond
+private val weatherPayloadJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    encodeDefaults = false
 }
+
+/** Stringified JSON for API / DB `weather_snapshot` text or jsonb. */
+fun WeatherSnapshot.toConnectionPayloadWeatherJson(): String =
+    weatherPayloadJson.encodeToString(WeatherSnapshot.serializer(), this)
 
 @Serializable
 enum class NoiseLevelCategory {

@@ -36,7 +36,7 @@ import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import kotlinx.coroutines.async
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.OpenMeteoWeatherService
-import compose.project.click.click.data.models.toSnapshotLabel
+import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.ui.components.AdaptiveBackground
@@ -51,6 +51,7 @@ import compose.project.click.click.viewmodel.ConnectionViewModel
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
 @Composable
@@ -194,16 +195,20 @@ fun NfcScreen(
                                 onConfirmAll = {
                                     onProximityFinalizeStart()
                                     scope.launch {
-                                        val vibe = runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                        val vibe = withContext(Dispatchers.Default) {
+                                            runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                                        }
                                         val (la, lo) = connectionViewModel.lastProximityCoordinates()
-                                        val weatherLabel = if (
-                                            la != null && lo != null &&
-                                            la.isFinite() && lo.isFinite() &&
-                                            !(la == 0.0 && lo == 0.0)
-                                        ) {
-                                            openMeteoWeather.fetchWeather(la, lo)?.toSnapshotLabel()
-                                        } else {
-                                            null
+                                        val weatherLabel = withContext(Dispatchers.Default) {
+                                            if (
+                                                la != null && lo != null &&
+                                                la.isFinite() && lo.isFinite() &&
+                                                !(la == 0.0 && lo == 0.0)
+                                            ) {
+                                                openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
+                                            } else {
+                                                null
+                                            }
                                         }
                                         connectionViewModel.confirmProximityConnection(
                                             peerUsers = state.users,

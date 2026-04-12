@@ -20,6 +20,7 @@ data class ConnectionEncounter(
     @SerialName("gps_lon")
     val gpsLon: Double? = null,
     @SerialName("weather_snapshot")
+    @Serializable(with = FlexibleWeatherSnapshotSerializer::class)
     val weatherSnapshot: WeatherSnapshot? = null,
     @SerialName("noise_level")
     val noiseLevel: String? = null,

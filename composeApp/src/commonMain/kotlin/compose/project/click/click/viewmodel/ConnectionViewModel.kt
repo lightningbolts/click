@@ -366,7 +366,9 @@ class ConnectionViewModel : ViewModel() {
                 val locLng = longitude ?: lastProximityLng
                 val locAlt = altitudeMeters ?: lastProximityAltitudeMeters
                 val qrHardwareVibe = when (connectionMethod) {
-                    "qr" -> hardwareVibeOverride ?: runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                    "qr" -> hardwareVibeOverride ?: withContext(Dispatchers.Default) {
+                        runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                    }
                     else -> null
                 }
                 val requestHardwareVibe = qrHardwareVibe ?: lastProximityHardwareVibe
