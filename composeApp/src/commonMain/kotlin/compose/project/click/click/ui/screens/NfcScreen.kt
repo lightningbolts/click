@@ -31,9 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.ProximityManager
-import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
-import compose.project.click.click.sensors.rememberBarometricHeightMonitor
-import kotlinx.coroutines.async
+import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
+import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pragma: allowlist secret
+import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
@@ -68,8 +68,8 @@ fun NfcScreen(
     val connectionState by connectionViewModel.connectionState.collectAsState()
     val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
     val capabilityNote = remember(proximityManager) { proximityManager.capabilityNote() }
-    val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
-    val barometricHeightMonitor = rememberBarometricHeightMonitor()
+    val ambientNoiseMonitor = AmbientNoiseMonitorProvider.current
+    val barometricHeightMonitor = BarometricHeightMonitorProvider.current
     val tokenStorage = remember { createTokenStorage() }
     val openMeteoWeather = remember { OpenMeteoWeatherService() }
     val scope = rememberCoroutineScope()
@@ -277,22 +277,18 @@ fun NfcScreen(
                         scope.launch {
                             val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                             val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                            val noiseSampleDeferred = async {
-                                if (!noiseOptIn) null
-                                else withContext(Dispatchers.Main) { ambientNoiseMonitor.sampleNoiseReading() }
-                            }
-                            val barometricSampleDeferred = async {
-                                if (!baroOptIn) null
-                                else withContext(Dispatchers.Main) { barometricHeightMonitor.sampleHeightReading() }
-                            }
-                            val noiseSample = noiseSampleDeferred.await()
-                            val barometricSample = barometricSampleDeferred.await()
+                            val sensors = captureConnectionSensorContext(
+                                ambientNoiseMonitor = ambientNoiseMonitor,
+                                barometricHeightMonitor = barometricHeightMonitor,
+                                ambientNoiseOptIn = noiseOptIn,
+                                barometricContextOptIn = baroOptIn,
+                            )
                             connectionViewModel.saveContextTags(
                                 contextTag = null,
-                                noiseLevelCategory = noiseSample?.category,
-                                exactNoiseLevelDb = noiseSample?.decibels,
-                                heightCategory = barometricSample?.category,
-                                exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                noiseLevelCategory = sensors.noiseLevelCategory,
+                                exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                heightCategory = sensors.heightCategory,
+                                exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
                             )
                         }
                     }
@@ -309,22 +305,18 @@ fun NfcScreen(
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                                 val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                val noiseSampleDeferred = async {
-                                    if (!noiseOptIn) null
-                                    else withContext(Dispatchers.Main) { ambientNoiseMonitor.sampleNoiseReading() }
-                                }
-                                val barometricSampleDeferred = async {
-                                    if (!baroOptIn) null
-                                    else withContext(Dispatchers.Main) { barometricHeightMonitor.sampleHeightReading() }
-                                }
-                                val noiseSample = noiseSampleDeferred.await()
-                                val barometricSample = barometricSampleDeferred.await()
+                                val sensors = captureConnectionSensorContext(
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = noiseOptIn,
+                                    barometricContextOptIn = baroOptIn,
+                                )
                                 connectionViewModel.saveContextTags(
                                     contextTag = contextTag,
-                                    noiseLevelCategory = noiseSample?.category,
-                                    exactNoiseLevelDb = noiseSample?.decibels,
-                                    heightCategory = barometricSample?.category,
-                                    exactBarometricElevationMeters = barometricSample?.elevationMeters,
+                                    noiseLevelCategory = sensors.noiseLevelCategory,
+                                    exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                    heightCategory = sensors.heightCategory,
+                                    exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
                                 )
                             }
                         },
