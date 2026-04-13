@@ -1174,22 +1174,26 @@ class SupabaseRepository {
     }
 
     /**
-     * User IDs that have blocked [userId] (i.e. rows where `blocked_id = userId`).
-     * Connections with these users should be excluded from the snapshot so the
-     * blocked user no longer sees the connection after the blocker hides it.
+     * User IDs that have blocked [userId] (rows in `user_blocks` where `blocked_id = userId`).
+     * Uses RPC `blockers_for_blocked_user` (SECURITY DEFINER): direct PostgREST SELECT on `user_blocks`
+     * is denied to the blocked party by RLS (`blocker_select` only allows `auth.uid() = blocker_id`).
      */
     suspend fun getBlockedByUserIds(userId: String): Set<String> {
         if (userId.isBlank()) return emptySet()
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) {
+            println("getBlockedByUserIds: session user mismatch")
+            return emptySet()
+        }
         return try {
             @Serializable
             data class BlockRow(
                 @SerialName("blocker_id") val blockerId: String,
             )
-            val rows = supabase.from("user_blocks")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("blocker_id")) {
-                    filter { eq("blocked_id", userId) }
-                }
-                .decodeList<BlockRow>()
+            val rows = supabase.postgrest.rpc(
+                "blockers_for_blocked_user",
+                buildJsonObject { },
+            ).decodeList<BlockRow>()
             rows.map { it.blockerId }.toSet()
         } catch (e: Exception) {
             println("getBlockedByUserIds (non-fatal, redacted): ${e.redactedRestMessage()}")
