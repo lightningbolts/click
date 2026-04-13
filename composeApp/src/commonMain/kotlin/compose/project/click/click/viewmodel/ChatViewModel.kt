@@ -2199,6 +2199,7 @@ class ChatViewModel(
                 if (currentConnectionId == connectionId) {
                     leaveChatRoom()
                 }
+                AppDataManager.refresh(force = true)
                 loadChats(isForced = true)
                 _nudgeResult.value = "Connection removed"
                 onComplete(true)

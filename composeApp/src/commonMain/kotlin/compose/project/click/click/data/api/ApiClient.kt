@@ -62,6 +62,17 @@ data class NotificationPreferencesPatchResponse(
     val message: String,
 )
 
+@Serializable
+private data class ConnectionLifecyclePostBody(
+    @SerialName("connection_id") val connectionId: String,
+)
+
+@Serializable
+private data class SafetyReportPostBody(
+    @SerialName("connection_id") val connectionId: String,
+    val reason: String,
+)
+
 class ApiClient(private val baseUrl: String = BASE_URL) {
 
     companion object {
@@ -357,6 +368,85 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             }
             if (response.status.value in 200..299) {
                 Result.success(response.body<NotificationPreferencesPatchResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/archive` — per-user archive junction (`connection_archives`). */
+    suspend fun postConnectionArchive(connectionId: String): Result<Unit> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/archive") {
+                contentType(ContentType.Application.Json)
+                setBody(ConnectionLifecyclePostBody(connectionId = id))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/unarchive` — remove archive row and restore lifecycle (`kept`). */
+    suspend fun postConnectionUnarchive(connectionId: String): Result<Unit> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/unarchive") {
+                contentType(ContentType.Application.Json)
+                setBody(ConnectionLifecyclePostBody(connectionId = id))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/hide` — per-user hide (`connection_hidden`) for the JWT user only. */
+    suspend fun postConnectionHide(connectionId: String): Result<Unit> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/hide") {
+                contentType(ContentType.Application.Json)
+                setBody(ConnectionLifecyclePostBody(connectionId = id))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/safety/report` — insert `connection_reports` for the JWT user. */
+    suspend fun postSafetyReport(connectionId: String, reason: String): Result<Unit> {
+        val id = connectionId.trim()
+        val trimmedReason = reason.trim()
+        if (id.isEmpty() || trimmedReason.isEmpty()) {
+            return Result.failure(IllegalArgumentException("connection_id and reason are required"))
+        }
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/safety/report") {
+                contentType(ContentType.Application.Json)
+                setBody(SafetyReportPostBody(connectionId = id, reason = trimmedReason))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
