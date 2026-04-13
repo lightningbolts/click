@@ -3445,6 +3445,16 @@ private fun ChatBubblePhotoContent(
                         .clip(RoundedCornerShape(16.dp)),
                 )
             }
+            isEncrypted -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 220.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
             else -> {
                 AsyncImage(
                     model = mediaUrl,
