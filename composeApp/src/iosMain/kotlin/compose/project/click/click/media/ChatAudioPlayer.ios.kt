@@ -26,9 +26,16 @@ import platform.Foundation.NSURL
 import platform.darwin.dispatch_get_main_queue
 
 @Composable
-actual fun rememberChatAudioPlayer(mediaUrl: String, durationHintMs: Long): ChatAudioPlayer {
-    val player = remember(mediaUrl, durationHintMs) { IosChatAudioPlayer(mediaUrl, durationHintMs) }
-    DisposableEffect(mediaUrl) {
+actual fun rememberChatAudioPlayer(
+    mediaUrl: String,
+    durationHintMs: Long,
+    localFilePathForPlayback: String?,
+): ChatAudioPlayer {
+    val resolvedUrl = localFilePathForPlayback?.takeIf { it.isNotBlank() }?.let { path ->
+        NSURL.fileURLWithPath(path).absoluteString ?: path
+    } ?: mediaUrl
+    val player = remember(resolvedUrl, durationHintMs) { IosChatAudioPlayer(resolvedUrl, durationHintMs) }
+    DisposableEffect(resolvedUrl) {
         onDispose { player.dispose() }
     }
     return player

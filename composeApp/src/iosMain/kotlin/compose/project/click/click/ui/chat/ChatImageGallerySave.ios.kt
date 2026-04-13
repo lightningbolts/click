@@ -24,17 +24,30 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 @OptIn(ExperimentalForeignApi::class)
-actual suspend fun saveChatImageToGallery(imageUrl: String): Result<Unit> = withContext(Dispatchers.Default) {
+actual suspend fun saveChatImageToGallery(
+    imageUrl: String,
+    decryptedImageBytes: ByteArray?,
+    mimeTypeHint: String?,
+): Result<Unit> = withContext(Dispatchers.Default) {
     runCatching {
-        val client = HttpClient(Darwin)
-        val bytes = try {
-            client.get(imageUrl).bodyAsBytes()
-        } finally {
-            client.close()
+        val bytes = if (decryptedImageBytes != null && decryptedImageBytes.isNotEmpty()) {
+            decryptedImageBytes
+        } else {
+            val client = HttpClient(Darwin)
+            try {
+                client.get(imageUrl).bodyAsBytes()
+            } finally {
+                client.close()
+            }
         }
         if (bytes.isEmpty()) error("Empty image response")
 
-        val path = NSTemporaryDirectory().trimEnd('/') + "/click_dl_${kotlin.random.Random.nextLong()}.jpg"
+        val ext = when {
+            mimeTypeHint?.contains("png", ignoreCase = true) == true -> "png"
+            mimeTypeHint?.contains("webp", ignoreCase = true) == true -> "webp"
+            else -> "jpg"
+        }
+        val path = NSTemporaryDirectory().trimEnd('/') + "/click_dl_${kotlin.random.Random.nextLong()}.$ext"
         val f = fopen(path, "wb") ?: error("fopen")
         bytes.usePinned { pinned ->
             val n = fwrite(pinned.addressOf(0), 1u, bytes.size.toULong(), f)

@@ -196,4 +196,10 @@ class FakeChatRepository(
         null to emptyList()
 
     override suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String? = null
+
+    override suspend fun downloadAndDecryptChatMedia(
+        chatId: String,
+        viewerUserId: String,
+        mediaUrl: String,
+    ): ByteArray? = null
 }

@@ -9,9 +9,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 
 @Composable
-actual fun rememberChatAudioPlayer(mediaUrl: String, durationHintMs: Long): ChatAudioPlayer {
-    val player = remember(mediaUrl) { AndroidChatAudioPlayer(mediaUrl) }
-    DisposableEffect(mediaUrl) {
+actual fun rememberChatAudioPlayer(
+    mediaUrl: String,
+    durationHintMs: Long,
+    localFilePathForPlayback: String?,
+): ChatAudioPlayer {
+    val src = localFilePathForPlayback?.takeIf { it.isNotBlank() } ?: mediaUrl
+    val player = remember(mediaUrl, localFilePathForPlayback) { AndroidChatAudioPlayer(src) }
+    DisposableEffect(mediaUrl, localFilePathForPlayback) {
         onDispose { player.dispose() }
     }
     return player

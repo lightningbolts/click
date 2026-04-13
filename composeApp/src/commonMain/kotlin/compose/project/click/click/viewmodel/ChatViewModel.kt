@@ -14,6 +14,9 @@ import compose.project.click.click.data.models.MessageWithUser // pragma: allowl
 import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
@@ -43,6 +46,8 @@ import compose.project.click.click.data.repository.ChatReactionSubscription // p
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
+import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -128,7 +133,7 @@ class ChatViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository()
-) : ViewModel() {
+) : ViewModel(), SecureChatMediaHost {
 
     private data class PrefetchedChatPayload(
         val messages: List<MessageWithUser>,
@@ -210,6 +215,10 @@ class ChatViewModel(
     // ── Reactions state: messageId → list of reactions ─────────────────────────
     private val _messageReactions = MutableStateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>>(emptyMap())
     val messageReactions: StateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>> = _messageReactions.asStateFlow()
+
+    private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
+    override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
+        _secureChatMediaLoadState.asStateFlow()
 
     private var currentConnectionId: String? = null
     private var currentApiChatId: String? = null
@@ -1017,9 +1026,77 @@ class ChatViewModel(
         )
     }
 
+    private fun clearSecureChatMediaCache() {
+        _secureChatMediaLoadState.value.values.forEach { st ->
+            deleteSecureChatAudioTempFile(st.audioLocalPath)
+        }
+        _secureChatMediaLoadState.value = emptyMap()
+    }
+
+    override fun ensureSecureChatImageLoaded(scopeId: String, viewerUserId: String, message: Message) {
+        if (!message.isEncryptedMedia()) return
+        if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
+        val url = message.mediaUrlOrNull() ?: return
+        if (url.isBlank()) return
+        val cur = _secureChatMediaLoadState.value[message.id]
+        if (cur?.imageBytes != null || cur?.loading == true) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            val bytes = chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+            if (bytes == null || bytes.isEmpty()) {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
+                }
+            } else {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
+                }
+            }
+        }
+    }
+
+    override fun ensureSecureChatAudioLoaded(scopeId: String, viewerUserId: String, message: Message) {
+        if (!message.isEncryptedMedia()) return
+        if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
+        val url = message.mediaUrlOrNull() ?: return
+        if (url.isBlank()) return
+        val cur = _secureChatMediaLoadState.value[message.id]
+        if (cur?.audioLocalPath != null || cur?.loading == true) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            val bytes = chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+            if (bytes == null || bytes.isEmpty()) {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
+                }
+                return@launch
+            }
+            val path = writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
+            if (path.isNullOrBlank()) {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
+                }
+            } else {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
+                }
+            }
+        }
+    }
+
+    suspend fun fetchDecryptedChatMediaBytes(message: Message): ByteArray? {
+        val s = _chatMessagesState.value as? ChatMessagesState.Success ?: return null
+        val cid = s.chatDetails.chat.id ?: return null
+        val uid = _currentUserId.value ?: return null
+        val url = message.mediaUrlOrNull() ?: return null
+        if (!message.isEncryptedMedia()) return null
+        return chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
+    }
+
     // Subscribe to real-time message updates
     private fun subscribeToNewMessages(chatId: String, userId: String) {
         realtimeJob?.cancel()
+        clearSecureChatMediaCache()
         currentApiChatId = chatId
         viewModelScope.launch {
             // Clean up previous channel
@@ -1381,11 +1458,15 @@ class ChatViewModel(
                 val meta = if (replyTarget != null) {
                     buildJsonObject {
                         put("media_url", url)
+                        put("original_mime_type", mimeType)
                         put("reply_to_id", replyTarget.message.id)
                         put("reply_to_content", replySnippetForMessage(replyTarget.message))
                     }
                 } else {
-                    buildJsonObject { put("media_url", url) }
+                    buildJsonObject {
+                        put("media_url", url)
+                        put("original_mime_type", mimeType)
+                    }
                 }
                 val message = chatRepository.sendMessage(
                     chatId = apiChatId,
@@ -1439,6 +1520,7 @@ class ChatViewModel(
                 val meta = if (replyTarget != null) {
                     buildJsonObject {
                         put("media_url", url)
+                        put("original_mime_type", mimeType)
                         if (durationSeconds != null) put("duration_seconds", durationSeconds)
                         put("reply_to_id", replyTarget.message.id)
                         put("reply_to_content", replySnippetForMessage(replyTarget.message))
@@ -1446,6 +1528,7 @@ class ChatViewModel(
                 } else {
                     buildJsonObject {
                         put("media_url", url)
+                        put("original_mime_type", mimeType)
                         if (durationSeconds != null) put("duration_seconds", durationSeconds)
                     }
                 }
@@ -1534,6 +1617,7 @@ class ChatViewModel(
         if (chatId != null && userId != null) {
              onUserStoppedTyping(chatId)
         }
+        clearSecureChatMediaCache()
         realtimeJob?.cancel()
         realtimeJob = null
         // Remove the realtime channels from Supabase

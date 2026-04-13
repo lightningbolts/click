@@ -1,10 +1,13 @@
 package compose.project.click.click.data.api
 
 import compose.project.click.click.data.models.*
+import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.SerialName
@@ -17,6 +20,7 @@ import kotlinx.serialization.json.JsonElement
  */
 class ChatApiClient(
     private val baseUrl: String = ApiConfig.BASE_URL,
+    private val clickWebBaseUrl: String = CLICK_WEB_BASE_URL.trimEnd('/'),
     private val httpClient: HttpClient? = null
 ) {
     private val client = httpClient ?: HttpClient {
@@ -28,6 +32,114 @@ class ChatApiClient(
             })
         }
     }
+
+    private fun bearerAuthHeader(rawToken: String): String {
+        val t = rawToken.trim()
+        return if (t.startsWith("Bearer ", ignoreCase = true)) t else "Bearer $t"
+    }
+
+    /** Public GET (e.g. Supabase Storage public URL for chat-media). */
+    suspend fun downloadUrlBytes(url: String): Result<ByteArray> {
+        return try {
+            val response = client.get(url)
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ByteArray>())
+            } else {
+                Result.failure(Exception("HTTP ${response.status} for media download"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    @Serializable
+    private data class ClickWebMessageDto(
+        val id: String,
+        @SerialName("chat_id") val chat_id: String,
+        @SerialName("user_id") val user_id: String,
+        val content: String,
+        @SerialName("time_created") val time_created: Long,
+        @SerialName("time_edited") val time_edited: Long? = null,
+        @SerialName("is_read") val is_read: Boolean = false,
+        @SerialName("message_type") val message_type: String = "text",
+        val metadata: JsonElement? = null,
+    ) {
+        fun toMessage(): Message = Message(
+            id = id,
+            user_id = user_id,
+            content = content,
+            timeCreated = time_created,
+            timeEdited = time_edited,
+            isRead = is_read,
+            messageType = message_type,
+            metadata = metadata,
+        )
+    }
+
+    @Serializable
+    private data class ClickWebMessageEnvelope(val message: ClickWebMessageDto)
+
+    @Serializable
+    private data class ClickWebSendMessageBody(
+        @SerialName("chat_id") val chat_id: String,
+        @SerialName("user_id") val user_id: String,
+        val content: String,
+        @SerialName("message_type") val message_type: String? = null,
+        val metadata: JsonElement? = null,
+    )
+
+    @Serializable
+    private data class ClickWebPatchMessageBody(
+        @SerialName("message_id") val message_id: String,
+        @SerialName("chat_id") val chat_id: String,
+        val content: String,
+    )
+
+    @Serializable
+    private data class ClickWebReactionEnvelope(
+        val action: String,
+        val reaction: ReactionApiModel? = null,
+    )
+
+    @Serializable
+    private data class ClickWebReactionPostBody(
+        val messageId: String,
+        val reactionType: String,
+    )
+
+    @Serializable
+    private data class ClickWebReactionDeleteBody(
+        val messageId: String,
+        val reactionType: String,
+    )
+
+    @Serializable
+    private data class ChatMediaUploadResponse(val path: String)
+
+    @Serializable
+    private data class ClickWebHubMessageEnvelope(val message: HubMessageApiDto)
+
+    /** Row returned from POST /api/hub/messages (matches public.hub_messages). */
+    @Serializable
+    data class HubMessageApiDto(
+        val id: String,
+        @SerialName("hub_id") val hubId: String,
+        @SerialName("user_id") val userId: String,
+        val body: String,
+        @SerialName("created_at") val createdAt: String,
+        @SerialName("message_type") val messageType: String = "text",
+        val metadata: JsonElement? = null,
+    )
+
+    @Serializable
+    private data class ClickWebHubSendMessageBody(
+        @SerialName("hub_id") val hubId: String,
+        val body: String,
+        @SerialName("user_lat") val userLat: Double,
+        @SerialName("user_long") val userLong: Double,
+        @SerialName("message_type") val messageType: String? = null,
+        val metadata: JsonElement? = null,
+    )
 
     // Response wrapper classes
     @Serializable
@@ -242,7 +354,7 @@ class ChatApiClient(
     }
 
     /**
-     * Send a new message in a chat
+     * Insert an encrypted (or plaintext) message row via [clickWebBaseUrl]/api/chat/messages (gatekeeper).
      */
     suspend fun sendMessage(
         chatId: String,
@@ -253,15 +365,23 @@ class ChatApiClient(
         metadata: JsonElement? = null,
     ): Result<Message> {
         return try {
-            val response = client.post("$baseUrl/api/chats/$chatId/messages") {
-                header("Authorization", authToken)
+            val response = client.post("$clickWebBaseUrl/api/chat/messages") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 contentType(ContentType.Application.Json)
-                setBody(SendMessageRequest(userId, content, messageType, metadata))
+                setBody(
+                    ClickWebSendMessageBody(
+                        chat_id = chatId,
+                        user_id = userId,
+                        content = content,
+                        message_type = messageType,
+                        metadata = metadata,
+                    ),
+                )
             }
 
             if (response.status.value in 200..299) {
-                val messageResponse = response.body<MessageResponse>()
-                Result.success(messageResponse.message.toMessage())
+                val envelope = response.body<ClickWebMessageEnvelope>()
+                Result.success(envelope.message.toMessage())
             } else {
                 Result.failure(Exception("Failed to send message: ${response.status}"))
             }
@@ -294,7 +414,42 @@ class ChatApiClient(
     }
 
     /**
-     * Update a message's content
+     * Patch message content via Next.js gatekeeper (E2EE ciphertext).
+     */
+    suspend fun editMessage(
+        chatId: String,
+        messageId: String,
+        userId: String,
+        content: String,
+        authToken: String,
+    ): Result<Message> {
+        return try {
+            val response = client.patch("$clickWebBaseUrl/api/chat/messages") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ClickWebPatchMessageBody(
+                        message_id = messageId,
+                        chat_id = chatId,
+                        content = content,
+                    ),
+                )
+            }
+
+            if (response.status.value in 200..299) {
+                val envelope = response.body<ClickWebMessageEnvelope>()
+                Result.success(envelope.message.toMessage())
+            } else {
+                Result.failure(Exception("Failed to update message: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            println("Error updating message: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * @deprecated Use [editMessage]; retained for call sites that still reference [updateMessage].
      */
     suspend fun updateMessage(
         chatId: String,
@@ -302,22 +457,130 @@ class ChatApiClient(
         userId: String,
         content: String,
         authToken: String
-    ): Result<Message> {
-        return try {
-            val response = client.put("$baseUrl/api/chats/$chatId/messages/$messageId") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                setBody(UpdateMessageRequest(userId, content))
-            }
+    ): Result<Message> = editMessage(chatId, messageId, userId, content, authToken)
 
+    /**
+     * Upload ciphertext bytes to chat-media via gatekeeper; returns the storage object path.
+     */
+    suspend fun uploadMedia(
+        fileBytes: ByteArray,
+        chatId: String,
+        mimeType: String,
+        objectPath: String,
+        authToken: String,
+    ): Result<String> {
+        if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/chat/media") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append("chat_id", chatId)
+                            append("object_path", objectPath)
+                            append("mime_type", mimeType)
+                            append(
+                                "file",
+                                fileBytes,
+                                Headers.build {
+                                    append(HttpHeaders.ContentDisposition, "filename=\"blob\"")
+                                    append(HttpHeaders.ContentType, mimeType.ifBlank { "application/octet-stream" })
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
             if (response.status.value in 200..299) {
-                val messageResponse = response.body<MessageResponse>()
-                Result.success(messageResponse.message.toMessage())
+                Result.success(response.body<ChatMediaUploadResponse>().path)
             } else {
-                Result.failure(Exception("Failed to update message: ${response.status}"))
+                Result.failure(Exception("Failed to upload media: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error updating message: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Insert a hub message via Next.js gatekeeper (JWT + geofence). Realtime still delivers rows to clients.
+     */
+    suspend fun sendHubMessage(
+        hubId: String,
+        body: String,
+        userLat: Double,
+        userLong: Double,
+        authToken: String,
+        messageType: String? = null,
+        metadata: JsonElement? = null,
+    ): Result<HubMessageApiDto> {
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/hub/messages") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ClickWebHubSendMessageBody(
+                        hubId = hubId,
+                        body = body,
+                        userLat = userLat,
+                        userLong = userLong,
+                        messageType = messageType,
+                        metadata = metadata,
+                    ),
+                )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ClickWebHubMessageEnvelope>().message)
+            } else {
+                Result.failure(Exception("Failed to send hub message: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            println("Error sending hub message: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Upload hub ciphertext to chat-media; [objectPath] must be `{userId}/hub/{hubId}/...`.
+     */
+    suspend fun uploadHubMedia(
+        fileBytes: ByteArray,
+        hubId: String,
+        mimeType: String,
+        objectPath: String,
+        authToken: String,
+        userLat: Double,
+        userLong: Double,
+    ): Result<String> {
+        if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/hub/media") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append("hub_id", hubId)
+                            append("object_path", objectPath)
+                            append("mime_type", mimeType)
+                            append("user_lat", userLat.toString())
+                            append("user_long", userLong.toString())
+                            append(
+                                "file",
+                                fileBytes,
+                                Headers.build {
+                                    append(HttpHeaders.ContentDisposition, "filename=\"blob\"")
+                                    append(HttpHeaders.ContentType, mimeType.ifBlank { "application/octet-stream" })
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ChatMediaUploadResponse>().path)
+            } else {
+                Result.failure(Exception("Failed to upload hub media: ${response.status}"))
+            }
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }
@@ -412,34 +675,60 @@ class ChatApiClient(
     }
 
     /**
-     * Add a reaction to a message
+     * Add a reaction via Next.js gatekeeper.
      */
-    suspend fun addReaction(messageId: String, userId: String, reactionType: String, authToken: String): Result<MessageReaction> {
+    suspend fun sendReaction(messageId: String, userId: String, reactionType: String, authToken: String): Result<MessageReaction> {
         return try {
-            val response = client.post("$baseUrl/api/messages/$messageId/reactions") {
-                header("Authorization", authToken)
+            val response = client.post("$clickWebBaseUrl/api/chat/reactions") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 contentType(ContentType.Application.Json)
-                setBody(AddReactionRequest(user_id = userId, reaction_type = reactionType))
+                setBody(ClickWebReactionPostBody(messageId = messageId, reactionType = reactionType))
             }
             if (response.status.value in 200..299) {
-                val reactionWrapper = response.body<ReactionResponse>()
-                Result.success(reactionWrapper.reaction.toReaction())
-            } else Result.failure(Exception("Failed to add reaction: ${response.status}"))
-        } catch (e: Exception) { Result.failure(e) }
+                val env = response.body<ClickWebReactionEnvelope>()
+                val row = env.reaction
+                if (row != null) {
+                    Result.success(row.toReaction())
+                } else if (env.action == "exists") {
+                    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    Result.success(
+                        MessageReaction(
+                            id = "dup-$messageId-$reactionType-$now",
+                            messageId = messageId,
+                            userId = userId,
+                            reactionType = reactionType,
+                            createdAt = now,
+                        ),
+                    )
+                } else {
+                    Result.failure(Exception("Reaction insert returned no row"))
+                }
+            } else {
+                Result.failure(Exception("Failed to add reaction: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
+    /** @deprecated Use [sendReaction]. */
+    suspend fun addReaction(messageId: String, userId: String, reactionType: String, authToken: String): Result<MessageReaction> =
+        sendReaction(messageId, userId, reactionType, authToken)
+
     /**
-     * Remove a reaction from a message
+     * Remove the caller's reaction via Next.js gatekeeper.
      */
     suspend fun removeReaction(messageId: String, userId: String, reactionType: String, authToken: String): Result<Boolean> {
         return try {
-            val response = client.delete("$baseUrl/api/messages/$messageId/reactions") {
-                header("Authorization", authToken)
+            val response = client.delete("$clickWebBaseUrl/api/chat/reactions") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 contentType(ContentType.Application.Json)
-                setBody(RemoveReactionRequest(user_id = userId, reaction_type = reactionType))
+                setBody(ClickWebReactionDeleteBody(messageId, reactionType))
             }
             Result.success(response.status.value in 200..299)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**

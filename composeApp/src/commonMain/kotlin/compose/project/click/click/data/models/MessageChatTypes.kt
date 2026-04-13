@@ -3,6 +3,7 @@ package compose.project.click.click.data.models
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -33,6 +34,29 @@ fun Message.parsedMediaMetadata(): MessageMediaMetadata? {
 }
 
 fun Message.mediaUrlOrNull(): String? = parsedMediaMetadata()?.mediaUrl
+
+fun Message.isEncryptedMedia(): Boolean {
+    val root = metadata as? JsonObject ?: return false
+    return root["is_encrypted_media"]?.jsonPrimitive?.booleanOrNull == true ||
+        root["is_encrypted_media"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true
+}
+
+fun Message.originalMimeTypeOrNull(): String? {
+    val root = metadata as? JsonObject ?: return null
+    return root["original_mime_type"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: root["originalMimeType"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+fun Message.audioCacheFileExtension(): String {
+    val mt = originalMimeTypeOrNull()?.lowercase() ?: return "m4a"
+    return when {
+        "wav" in mt -> "wav"
+        "webm" in mt -> "webm"
+        "ogg" in mt -> "ogg"
+        "mpeg" in mt || "mp3" in mt -> "mp3"
+        else -> "m4a"
+    }
+}
 
 /** Chat list / previews: short label independent of encryption noise in [Message.content]. */
 fun Message.previewLabel(): String {

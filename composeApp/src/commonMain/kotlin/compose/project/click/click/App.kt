@@ -1117,6 +1117,7 @@ fun App() {
                                                     transitionMode = NavigationTransitionMode.Tap
                                                     hubChatArgs = null
                                                 },
+                                                resolveHubGatekeeperLocation = { resolveConnectionLocation() },
                                             )
                                         } else {
                                             Box(

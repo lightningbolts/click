@@ -46,6 +46,21 @@ object MessageCrypto {
         return DerivedKeys(encKey = encKey, macKey = macKey)
     }
 
+    /**
+     * Ephemeral hub broadcast key: derived from [hubId] only. Anyone who can read hub_messages
+     * (and knows [hubId]) can derive the same key; geofence / gatekeeper limits who may post.
+     * Server never receives plaintext media — only ciphertext blobs.
+     */
+    fun deriveKeysForHub(hubId: String): DerivedKeys {
+        val trimmed = hubId.trim()
+        require(trimmed.isNotEmpty()) { "hubId must be non-empty" }
+        val input = "$E2EE_SALT:hub-broadcast:$trimmed"
+        val master = PlatformCrypto.sha256(input.encodeToByteArray())
+        val encKey = PlatformCrypto.sha256(master + byteArrayOf(0x01))
+        val macKey = PlatformCrypto.sha256(master + byteArrayOf(0x02))
+        return DerivedKeys(encKey = encKey, macKey = macKey)
+    }
+
     /** Derives per-message AES/HMAC keys from the 32-byte group master key (not the wire format). */
     fun deriveMessageKeysFromGroupMaster(groupMasterKey32: ByteArray): DerivedKeys {
         require(groupMasterKey32.size == GROUP_MASTER_KEY_BYTES) {
@@ -152,4 +167,33 @@ object MessageCrypto {
     fun isGroupMessageEncrypted(content: String): Boolean = content.startsWith(E2EE_GROUP_MSG_PREFIX)
 
     fun isAnyE2eeWireContent(content: String): Boolean = isEncrypted(content) || isGroupMessageEncrypted(content)
+
+    // ── Binary media (AES-256-CBC + HMAC-SHA256, same primitive as text; wire is raw bytes: IV||HMAC||ciphertext) ──
+
+    fun encryptMediaBytes(plain: ByteArray, keys: DerivedKeys): ByteArray {
+        val iv = PlatformCrypto.secureRandomBytes(IV_LENGTH)
+        val ciphertext = PlatformCrypto.aesCbcEncrypt(keys.encKey, iv, plain)
+        val hmac = PlatformCrypto.hmacSha256(keys.macKey, iv + ciphertext)
+        return iv + hmac + ciphertext
+    }
+
+    fun encryptMediaBytes(plain: ByteArray, groupMasterKey32: ByteArray): ByteArray =
+        encryptMediaBytes(plain, deriveMessageKeysFromGroupMaster(groupMasterKey32))
+
+    fun decryptMediaBytes(blob: ByteArray, keys: DerivedKeys): ByteArray {
+        if (blob.size < IV_LENGTH + HMAC_LENGTH + 1) {
+            throw MessageEncryptionException("Encrypted media blob too short")
+        }
+        val iv = blob.copyOfRange(0, IV_LENGTH)
+        val storedHmac = blob.copyOfRange(IV_LENGTH, IV_LENGTH + HMAC_LENGTH)
+        val ciphertext = blob.copyOfRange(IV_LENGTH + HMAC_LENGTH, blob.size)
+        val computedHmac = PlatformCrypto.hmacSha256(keys.macKey, iv + ciphertext)
+        if (!computedHmac.contentEquals(storedHmac)) {
+            throw MessageEncryptionException("Encrypted media HMAC verification failed")
+        }
+        return PlatformCrypto.aesCbcDecrypt(keys.encKey, iv, ciphertext)
+    }
+
+    fun decryptMediaBytes(blob: ByteArray, groupMasterKey32: ByteArray): ByteArray =
+        decryptMediaBytes(blob, deriveMessageKeysFromGroupMaster(groupMasterKey32))
 }
