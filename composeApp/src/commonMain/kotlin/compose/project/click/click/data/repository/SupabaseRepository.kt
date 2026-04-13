@@ -683,12 +683,7 @@ class SupabaseRepository {
         return try {
             val result = clickWebApi.postConnectionHide(connectionId.trim())
             if (result.isSuccess) return true
-            val msg = result.exceptionOrNull()?.message?.lowercase().orEmpty()
-            if (msg.contains("not available") || msg.contains("database configuration") || msg.contains("503")) {
-                connectionHiddenTableMissing = true
-            } else {
-                println("hideConnectionForUser (redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
-            }
+            println("hideConnectionForUser (redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
             false
         } catch (e: Exception) {
             if (isConnectionHiddenUnavailableError(e)) {
@@ -1229,19 +1224,10 @@ class SupabaseRepository {
         return try {
             val result = clickWebApi.postConnectionArchive(connectionId.trim())
             if (result.isSuccess) return true
-            val msg = result.exceptionOrNull()?.message?.lowercase().orEmpty()
-            if (msg.contains("not available") || msg.contains("database configuration") || msg.contains("503")) {
-                connectionArchivesTableMissing = true
-            } else {
-                println("archiveConnection (non-fatal, redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
-            }
+            println("archiveConnection (non-fatal, redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
             false
         } catch (e: Exception) {
-            if (isConnectionArchivesUnavailableError(e)) {
-                connectionArchivesTableMissing = true
-            } else {
-                println("archiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
-            }
+            println("archiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -1259,19 +1245,10 @@ class SupabaseRepository {
         return try {
             val result = clickWebApi.postConnectionUnarchive(connectionId.trim())
             if (result.isSuccess) return true
-            val msg = result.exceptionOrNull()?.message?.lowercase().orEmpty()
-            if (msg.contains("not available") || msg.contains("database configuration") || msg.contains("503")) {
-                connectionArchivesTableMissing = true
-            } else {
-                println("unarchiveConnection (non-fatal, redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
-            }
+            println("unarchiveConnection (non-fatal, redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
             false
         } catch (e: Exception) {
-            if (isConnectionArchivesUnavailableError(e)) {
-                connectionArchivesTableMissing = true
-            } else {
-                println("unarchiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
-            }
+            println("unarchiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
             false
         }
     }
