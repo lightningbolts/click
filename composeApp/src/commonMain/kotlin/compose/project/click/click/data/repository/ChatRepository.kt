@@ -156,4 +156,7 @@ interface ChatRepository {
 
     /** Uploads raw bytes to Supabase Storage (`chat-media` bucket) and returns a public URL, or null on failure. */
     suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String?
+
+    /** Downloads ciphertext from [mediaUrl] and decrypts for [chatId] as [viewerUserId]. */
+    suspend fun downloadAndDecryptChatMedia(chatId: String, viewerUserId: String, mediaUrl: String): ByteArray?
 }

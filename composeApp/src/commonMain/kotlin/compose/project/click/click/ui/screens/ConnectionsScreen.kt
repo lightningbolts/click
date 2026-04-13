@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -137,6 +138,8 @@ import compose.project.click.click.data.models.isActiveForUser // pragma: allowl
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
@@ -151,6 +154,7 @@ import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
@@ -159,6 +163,7 @@ import kotlinx.coroutines.withContext // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
+import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -2284,6 +2289,8 @@ fun ChatView(
                                                             viewModel.startReplyTo(it)
                                                         },
                                                         showPeerAvatarInGroup = isGroupChat,
+                                                        secureMediaHost = viewModel,
+                                                        activeChatId = activeApiChatId,
                                                     )
                                                 }
                                                 if (messageWithUser.message.messageType == "call_log") {
@@ -3386,6 +3393,100 @@ private fun ReplySwipeSideIcon(
     }
 }
 
+@Composable
+private fun ChatBubblePhotoContent(
+    mediaUrl: String,
+    message: Message,
+    isEncrypted: Boolean,
+    secureState: SecureChatMediaLoadState?,
+    modifier: Modifier = Modifier,
+    overflowTint: Color,
+    onOverflow: () -> Unit,
+    useLightOverflowContrast: Boolean,
+    borderIfReceived: Boolean = false,
+) {
+    Box(modifier = modifier.fillMaxWidth()) {
+        when {
+            isEncrypted && secureState?.loading == true -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 220.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            isEncrypted && secureState?.error?.isNotBlank() == true -> {
+                Text(
+                    text = secureState.error ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+            isEncrypted && secureState?.imageBytes != null -> {
+                val bmp = remember(secureState.imageBytes) { secureState.imageBytes!!.toImageBitmap() }
+                Image(
+                    bitmap = bmp,
+                    contentDescription = "Photo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .then(
+                            if (borderIfReceived) {
+                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clip(RoundedCornerShape(16.dp)),
+                )
+            }
+            else -> {
+                AsyncImage(
+                    model = mediaUrl,
+                    contentDescription = "Photo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .then(
+                            if (borderIfReceived) {
+                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clip(RoundedCornerShape(16.dp)),
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (useLightOverflowContrast) Color.Black.copy(alpha = 0.35f)
+                        else Color.Black.copy(alpha = 0.22f),
+                    )
+                    .align(Alignment.Center),
+            )
+            ChatMessageOverflowButton(
+                onClick = onOverflow,
+                tint = overflowTint,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
+}
+
 private fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
     val totalSec = when {
         durationMs > 0 -> (durationMs / 1000).toInt()
@@ -3410,11 +3511,38 @@ private fun ChatAudioBubbleRow(
     durationSeconds: Int?,
     contentColor: Color,
     accentColor: Color,
+    localFilePathForPlayback: String? = null,
+    secureLoading: Boolean = false,
+    secureError: String? = null,
 ) {
     val hintMs = remember(durationSeconds) {
         durationSeconds?.takeIf { it > 0 }?.times(1000L) ?: 0L
     }
-    val player = rememberChatAudioPlayer(mediaUrl, durationHintMs = hintMs)
+    if (secureLoading) {
+        Box(
+            modifier = Modifier
+                .widthIn(min = 0.dp, max = 280.dp)
+                .height(56.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = accentColor)
+        }
+        return
+    }
+    if (!secureError.isNullOrBlank()) {
+        Text(
+            text = secureError,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.widthIn(max = 280.dp),
+        )
+        return
+    }
+    val player = rememberChatAudioPlayer(
+        mediaUrl = mediaUrl,
+        durationHintMs = hintMs,
+        localFilePathForPlayback = localFilePathForPlayback,
+    )
     val durationMs = remember(player.durationMs, hintMs) {
         when {
             player.durationMs > 0 -> player.durationMs
@@ -3512,6 +3640,8 @@ fun ChatMessageBubble(
     onSwipeReply: (MessageWithUser) -> Unit = {},
     /** Verified group / multi-member chat: show the sender’s face on incoming bubbles. */
     showPeerAvatarInGroup: Boolean = false,
+    secureMediaHost: ChatViewModel? = null,
+    activeChatId: String? = null,
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -3524,6 +3654,19 @@ fun ChatMessageBubble(
     val mediaUrl = message.mediaUrlOrNull()
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
     val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
+
+    val secureMediaStates = secureMediaHost?.secureChatMediaLoadState?.collectAsState()
+    val secureSt = secureMediaStates?.value?.get(message.id)
+    LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, message.metadata) {
+        val chatId = activeChatId
+        val viewer = currentUserId
+        if (message.isEncryptedMedia() && secureMediaHost != null && chatId != null && viewer != null) {
+            when (mt) {
+                ChatMessageType.IMAGE -> secureMediaHost.ensureSecureChatImageLoaded(chatId, viewer, message)
+                ChatMessageType.AUDIO -> secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
+            }
+        }
+    }
 
     // Gradient for sent bubbles — matches brand violet palette
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
@@ -3715,35 +3858,16 @@ fun ChatMessageBubble(
                                     )
                                 }
                             }
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                AsyncImage(
-                                    model = mediaUrl,
-                                    contentDescription = "Photo",
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 220.dp)
-                                        .clip(RoundedCornerShape(16.dp)),
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(6.dp),
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.Black.copy(alpha = 0.35f))
-                                            .align(Alignment.Center),
-                                    )
-                                    ChatMessageOverflowButton(
-                                        onClick = { onLongPress(messageWithUser) },
-                                        tint = Color.White.copy(alpha = 0.92f),
-                                        modifier = Modifier.align(Alignment.Center),
-                                    )
-                                }
-                            }
+                            ChatBubblePhotoContent(
+                                mediaUrl = mediaUrl,
+                                message = message,
+                                isEncrypted = message.isEncryptedMedia(),
+                                secureState = secureSt,
+                                overflowTint = Color.White.copy(alpha = 0.92f),
+                                onOverflow = { onLongPress(messageWithUser) },
+                                useLightOverflowContrast = true,
+                                borderIfReceived = false,
+                            )
                             val capImg = message.content.trim()
                             if (capImg.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -3824,6 +3948,9 @@ fun ChatMessageBubble(
                                         durationSeconds = audioDurSec,
                                         contentColor = Color.White,
                                         accentColor = Color.White,
+                                        localFilePathForPlayback = secureSt?.audioLocalPath,
+                                        secureLoading = message.isEncryptedMedia() && secureSt?.loading == true,
+                                        secureError = if (message.isEncryptedMedia()) secureSt?.error else null,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
@@ -3907,36 +4034,16 @@ fun ChatMessageBubble(
                             }
                             val onBody = MaterialTheme.colorScheme.onSurface
                             val linkC = MaterialTheme.colorScheme.primary
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                AsyncImage(
-                                    model = mediaUrl,
-                                    contentDescription = "Photo",
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 220.dp)
-                                        .border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
-                                        .clip(RoundedCornerShape(16.dp)),
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(6.dp),
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.Black.copy(alpha = 0.22f))
-                                            .align(Alignment.Center),
-                                    )
-                                    ChatMessageOverflowButton(
-                                        onClick = { onLongPress(messageWithUser) },
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.95f),
-                                        modifier = Modifier.align(Alignment.Center),
-                                    )
-                                }
-                            }
+                            ChatBubblePhotoContent(
+                                mediaUrl = mediaUrl,
+                                message = message,
+                                isEncrypted = message.isEncryptedMedia(),
+                                secureState = secureSt,
+                                overflowTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.95f),
+                                onOverflow = { onLongPress(messageWithUser) },
+                                useLightOverflowContrast = false,
+                                borderIfReceived = true,
+                            )
                             val capRx = message.content.trim()
                             if (capRx.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -4014,6 +4121,9 @@ fun ChatMessageBubble(
                                         durationSeconds = audioDurSec,
                                         contentColor = onBody,
                                         accentColor = linkC,
+                                        localFilePathForPlayback = secureSt?.audioLocalPath,
+                                        secureLoading = message.isEncryptedMedia() && secureSt?.loading == true,
+                                        secureError = if (message.isEncryptedMedia()) secureSt?.error else null,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
@@ -4266,7 +4376,18 @@ private fun MessageActionSheet(
                     },
                     modifier = Modifier.clickable {
                         scope.launch {
-                            saveChatImageToGallery(imageUrl).onSuccess { dismiss() }
+                            if (message.isEncryptedMedia()) {
+                                val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
+                                if (bytes != null) {
+                                    saveChatImageToGallery(
+                                        imageUrl = imageUrl,
+                                        decryptedImageBytes = bytes,
+                                        mimeTypeHint = message.originalMimeTypeOrNull(),
+                                    ).onSuccess { dismiss() }
+                                }
+                            } else {
+                                saveChatImageToGallery(imageUrl).onSuccess { dismiss() }
+                            }
                         }
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)

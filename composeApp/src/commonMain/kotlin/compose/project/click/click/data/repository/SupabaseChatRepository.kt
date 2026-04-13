@@ -54,14 +54,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -911,6 +911,19 @@ class SupabaseChatRepository(
         }
     }
 
+    private fun enrichMediaEncryptionMetadata(messageType: String, metadata: JsonElement?): JsonElement? {
+        val mt = messageType.lowercase()
+        if (mt != ChatMessageType.IMAGE && mt != ChatMessageType.AUDIO) return metadata
+        return when (metadata) {
+            is JsonObject -> buildJsonObject {
+                for ((k, v) in metadata.entries) put(k, v)
+                put("is_encrypted_media", JsonPrimitive(true))
+            }
+            null -> buildJsonObject { put("is_encrypted_media", JsonPrimitive(true)) }
+            else -> metadata
+        }
+    }
+
     override suspend fun sendMessage(
         chatId: String,
         userId: String,
@@ -930,40 +943,19 @@ class SupabaseChatRepository(
             }
 
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            val payload = buildJsonObject {
-                put("chat_id", chatId)
-                put("user_id", userId)
-                put("content", wireContent)
-                put("time_created", now)
-                put("message_type", messageType)
-                if (metadata != null) put("metadata", metadata)
-            }
+            val authToken = tokenStorage.getJwt() ?: return null
+            val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
 
-            val inserted = runCatching {
-                supabase.from("messages")
-                    .insert(payload) {
-                        select()
-                    }
-                    .decodeSingle<Message>()
-            }.getOrElse {
-                supabase.from("messages")
-                    .select {
-                        filter {
-                            eq("chat_id", chatId)
-                            eq("user_id", userId)
-                            eq("content", wireContent)
-                            eq("time_created", now)
-                            eq("message_type", messageType)
-                        }
-                        order("time_created", Order.DESCENDING)
-                        limit(1)
-                    }
-                    .decodeList<Message>()
-                    .firstOrNull()
-                    ?: throw it
-            }
+            val insertedWire = apiClient.sendMessage(
+                chatId = chatId,
+                userId = userId,
+                content = wireContent,
+                authToken = authToken,
+                messageType = messageType,
+                metadata = enrichedMetadata,
+            ).getOrNull() ?: return null
 
-            val decrypted = decryptMessage(inserted, crypto)
+            val decrypted = decryptMessage(insertedWire, crypto)
 
             try {
                 supabase.from("chats")
@@ -1362,38 +1354,22 @@ class SupabaseChatRepository(
     @Serializable
     private data class ChatIdOnly(val id: String)
 
-    /** Add a reaction. Uses upsert with the unique constraint to avoid duplicates. */
+    /** Add a reaction via Next.js gatekeeper. */
     override suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            supabase.from("message_reactions")
-                .insert(
-                    buildJsonObject {
-                        put("message_id", messageId)
-                        put("user_id", userId)
-                        put("reaction_type", reactionType)
-                        put("created_at", now)
-                    }
-                )
-            true
+            val jwt = tokenStorage.getJwt() ?: return false
+            apiClient.sendReaction(messageId, userId, reactionType, jwt).isSuccess
         } catch (e: Exception) {
             println("Error adding reaction: ${e.redactedRestMessage()}")
             false
         }
     }
 
-    /** Remove a reaction by matching message_id, user_id, reaction_type. */
+    /** Remove a reaction via Next.js gatekeeper. */
     override suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            supabase.from("message_reactions")
-                .delete {
-                    filter {
-                        eq("message_id", messageId)
-                        eq("user_id", userId)
-                        eq("reaction_type", reactionType)
-                    }
-                }
-            true
+            val jwt = tokenStorage.getJwt() ?: return false
+            apiClient.removeReaction(messageId, userId, reactionType, jwt).getOrElse { false }
         } catch (e: Exception) {
             println("Error removing reaction: ${e.redactedRestMessage()}")
             false
@@ -1711,12 +1687,43 @@ class SupabaseChatRepository(
     override suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String? {
         if (bytes.isEmpty()) return null
         return try {
-            supabase.storage.from(CHAT_MEDIA_BUCKET).upload(objectPath, bytes) {
-                upsert = true
+            val parts = objectPath.split('/').map { it.trim() }.filter { it.isNotEmpty() }
+            val chatId = parts.getOrNull(1) ?: return null
+            val senderUserId = parts.getOrNull(0) ?: return null
+            val crypto = resolveChatCrypto(chatId, senderUserId) ?: return null
+            val cipher = when (crypto) {
+                is ResolvedChatCrypto.GroupMaster -> MessageCrypto.encryptMediaBytes(bytes, crypto.masterKey)
+                is ResolvedChatCrypto.Pairwise -> MessageCrypto.encryptMediaBytes(bytes, crypto.keys)
             }
-            supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(objectPath)
+            val jwt = tokenStorage.getJwt() ?: return null
+            val path = apiClient.uploadMedia(
+                fileBytes = cipher,
+                chatId = chatId,
+                mimeType = contentType.ifBlank { "application/octet-stream" },
+                objectPath = objectPath,
+                authToken = jwt,
+            ).getOrElse { return null }
+            supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(path)
         } catch (e: Exception) {
             println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
+            null
+        }
+    }
+
+    override suspend fun downloadAndDecryptChatMedia(
+        chatId: String,
+        viewerUserId: String,
+        mediaUrl: String,
+    ): ByteArray? {
+        return try {
+            val crypto = resolveChatCrypto(chatId, viewerUserId) ?: return null
+            val raw = apiClient.downloadUrlBytes(mediaUrl).getOrElse { return null }
+            when (crypto) {
+                is ResolvedChatCrypto.GroupMaster -> MessageCrypto.decryptMediaBytes(raw, crypto.masterKey)
+                is ResolvedChatCrypto.Pairwise -> MessageCrypto.decryptMediaBytes(raw, crypto.keys)
+            }
+        } catch (e: Exception) {
+            println("ChatRepository: downloadAndDecryptChatMedia failed: ${e.redactedRestMessage()}")
             null
         }
     }

@@ -19,4 +19,6 @@ interface ChatAudioPlayer {
 expect fun rememberChatAudioPlayer(
     mediaUrl: String,
     durationHintMs: Long = 0L,
+    /** When set, the player reads this local decrypted file instead of [mediaUrl]. */
+    localFilePathForPlayback: String? = null,
 ): ChatAudioPlayer
