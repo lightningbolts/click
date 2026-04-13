@@ -10,9 +10,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
-import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
@@ -22,6 +22,7 @@ class AuthRepository(
 ) {
     /** Lazy so [AppDataManager] and JVM tests can load without touching Supabase / Android crypto. */
     private val supabase by lazy { SupabaseConfig.client }
+    private val clickWebApi by lazy { ApiClient() }
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
         const val MAX_PROFILE_IMAGE_BYTES = 2_000_000
@@ -296,12 +297,8 @@ class AuthRepository(
                 upsert = true
             }
             val publicUrl = supabase.storage.from(AVATARS_BUCKET).publicUrl(path)
-            supabase.from("users").update({
-                set("image", publicUrl)
-            }) {
-                filter {
-                    eq("id", user.id)
-                }
+            clickWebApi.patchUserProfile(userId = user.id, image = publicUrl).getOrElse { e ->
+                return Result.failure(e)
             }
             Result.success(publicUrl)
         } catch (e: Exception) {

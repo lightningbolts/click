@@ -128,6 +128,19 @@ object AppDataManager {
     val proximityHandshakeRecovered: SharedFlow<ProximityHandshakeRecoveryPayload> =
         _proximityHandshakeRecovered.asSharedFlow()
 
+    /** One-shot UI messages (e.g. profile or notification settings save failed). */
+    private val _transientUserMessages = MutableSharedFlow<String>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val transientUserMessages: SharedFlow<String> = _transientUserMessages.asSharedFlow()
+
+    /** Surfaces a one-shot message to UI collectors (e.g. onboarding before the main scaffold exists). */
+    fun postTransientUserMessage(message: String) {
+        if (message.isBlank()) return
+        scope.launch { _transientUserMessages.emit(message.trim()) }
+    }
+
     private val _usingCachedData = MutableStateFlow(false)
     val usingCachedData: StateFlow<Boolean> = _usingCachedData.asStateFlow()
     
@@ -580,6 +593,7 @@ object AppDataManager {
 
     private fun updateNotificationPreferences(preferences: NotificationPreferences) {
         val userId = _currentUser.value?.id ?: return
+        val previousPreferences = _notificationPreferences.value
         _notificationPreferences.value = preferences
         NotificationRuntimeState.setNotificationPreferences(
             messageEnabled = preferences.messagePushEnabled,
@@ -589,7 +603,20 @@ object AppDataManager {
         scope.launch {
             tokenStorage.saveMessageNotificationsEnabled(preferences.messagePushEnabled)
             tokenStorage.saveCallNotificationsEnabled(preferences.callPushEnabled)
-            notificationPreferencesRepository.savePreferences(userId, preferences)
+            val saveResult = notificationPreferencesRepository.savePreferences(userId, preferences)
+            if (saveResult.isFailure) {
+                _notificationPreferences.value = previousPreferences
+                NotificationRuntimeState.setNotificationPreferences(
+                    messageEnabled = previousPreferences.messagePushEnabled,
+                    callEnabled = previousPreferences.callPushEnabled,
+                )
+                tokenStorage.saveMessageNotificationsEnabled(previousPreferences.messagePushEnabled)
+                tokenStorage.saveCallNotificationsEnabled(previousPreferences.callPushEnabled)
+                val msg = saveResult.exceptionOrNull()?.message?.trim().orEmpty()
+                    .ifBlank { "Couldn't save notification settings. Please try again." }
+                _transientUserMessages.emit(msg)
+                return@launch
+            }
 
             if (preferences.messagePushEnabled || preferences.callPushEnabled) {
                 runCatching { pushNotificationService.requestPermission() }
@@ -844,20 +871,24 @@ object AppDataManager {
                     println("updateProfileName: Warning - failed to update auth metadata")
                 }
 
-                val upsertResult = supabaseRepository.upsertUser(updatedUser)
-                println("updateProfileName: Upsert user result: $upsertResult")
-
-                val success = supabaseRepository.updateUserProfileNames(user.id, f, l)
-                if (!success) {
-                    println("updateProfileName: Failed to update names in database")
+                val dbResult = supabaseRepository.updateUserProfileNames(user.id, f, l)
+                if (dbResult.isFailure) {
+                    println("updateProfileName: Failed to update names in database: ${dbResult.exceptionOrNull()?.message}")
+                    _currentUser.value = previousUser
+                    val msg = dbResult.exceptionOrNull()?.message?.trim().orEmpty()
+                        .ifBlank { "Couldn't update your profile. Please try again." }
+                    _transientUserMessages.emit(msg)
                 } else {
                     println("updateProfileName: Successfully updated profile to: $display")
+                    persistSnapshot()
                 }
-                persistSnapshot()
             } catch (e: Exception) {
                 println("updateProfileName: Error updating profile: ${e.message}")
                 e.printStackTrace()
                 _currentUser.value = previousUser
+                _transientUserMessages.emit(
+                    e.message?.trim().orEmpty().ifBlank { "Couldn't update your profile. Please try again." },
+                )
             }
         }
     }
