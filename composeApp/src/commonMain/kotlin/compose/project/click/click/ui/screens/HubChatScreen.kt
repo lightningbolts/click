@@ -1,31 +1,22 @@
 package compose.project.click.click.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +32,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,7 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.utils.LocationResult
 import compose.project.click.click.viewmodel.HubChatViewModel
 
 data class HubChatNavArgs(
@@ -63,20 +57,31 @@ fun HubChatScreen(
     args: HubChatNavArgs,
     currentUserId: String,
     onNavigateBack: () -> Unit,
-    viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
+    resolveHubGatekeeperLocation: suspend () -> LocationResult? = { null },
+) {
+    val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
         HubChatViewModel(
             hubId = args.hubId,
             realtimeChannelName = args.realtimeChannel,
             hubTitle = args.hubTitle,
             currentUserId = currentUserId,
+            hubLocationResolver = resolveHubGatekeeperLocation,
         )
-    },
-) {
+    }
+
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
+
+    val mediaPickers = rememberChatMediaPickers(
+        onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
+        onAudioPicked = { _, _, _ -> },
+        onMediaAccessBlocked = { },
+    )
+
+    val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
 
     val inLobby = occupantCount < 3
 
@@ -162,73 +167,22 @@ fun HubChatScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(messages, key = { it.id }) { msg ->
-                    val showGroupSenderAvatar = !msg.isMine
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (msg.isMine) Arrangement.End else Arrangement.Start,
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        if (showGroupSenderAvatar) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (!msg.senderAvatarUrl.isNullOrBlank()) {
-                                    AsyncImage(
-                                        model = msg.senderAvatarUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(CircleShape),
-                                    )
-                                } else {
-                                    Text(
-                                        text = msg.senderLabel.firstOrNull { !it.isWhitespace() }
-                                            ?.uppercaseChar()
-                                            ?.toString() ?: "?",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        Card(
-                            modifier = Modifier.widthIn(max = 320.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (msg.isMine) {
-                                    PrimaryBlue.copy(alpha = 0.22f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-                                },
-                            ),
-                            shape = RoundedCornerShape(16.dp),
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                Text(
-                                    text = msg.senderLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = msg.body,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
-                    }
+                items(messages, key = { it.message.id }) { mwu ->
+                    ChatMessageBubble(
+                        messageWithUser = mwu,
+                        currentUserId = currentUserId,
+                        reactions = emptyList(),
+                        onToggleReaction = {},
+                        onForward = {},
+                        onLongPress = {},
+                        onSwipeReply = {},
+                        showPeerAvatarInGroup = true,
+                        secureMediaHost = viewModel,
+                        activeChatId = hubIdForSecureMedia,
+                    )
                 }
             }
 
@@ -263,6 +217,20 @@ fun HubChatScreen(
                     maxLines = 4,
                     shape = RoundedCornerShape(20.dp),
                 )
+                IconButton(
+                    onClick = { mediaPickers.openPhotoLibrary() },
+                    enabled = !inLobby && !isSending,
+                ) {
+                    Icon(
+                        Icons.Outlined.Image,
+                        contentDescription = "Attach image",
+                        tint = if (!inLobby && !isSending) {
+                            PrimaryBlue
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        },
+                    )
+                }
                 IconButton(
                     onClick = { viewModel.sendMessage() },
                     enabled = !inLobby && draft.isNotBlank() && !isSending,

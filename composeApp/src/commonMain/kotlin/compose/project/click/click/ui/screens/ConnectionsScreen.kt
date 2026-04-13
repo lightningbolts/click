@@ -154,6 +154,7 @@ import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
@@ -3640,7 +3641,7 @@ fun ChatMessageBubble(
     onSwipeReply: (MessageWithUser) -> Unit = {},
     /** Verified group / multi-member chat: show the sender’s face on incoming bubbles. */
     showPeerAvatarInGroup: Boolean = false,
-    secureMediaHost: ChatViewModel? = null,
+    secureMediaHost: SecureChatMediaHost? = null,
     activeChatId: String? = null,
 ) {
     val message = messageWithUser.message

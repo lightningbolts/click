@@ -2,10 +2,26 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.api.ChatApiClient
+import compose.project.click.click.data.models.ChatMessageType
+import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.audioCacheFileExtension
+import compose.project.click.click.data.models.isEncryptedMedia
+import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
+import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
+import compose.project.click.click.utils.LocationResult
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Presence
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -14,31 +30,29 @@ import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
+import kotlin.random.Random
 
-data class HubChatMessageUi(
-    val id: String,
-    val body: String,
-    val senderLabel: String,
-    val isMine: Boolean,
-    val createdAtIso: String,
-    /** Profile photo URL for other members when the hub has multiple people. */
-    val senderAvatarUrl: String? = null,
-)
+private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
 
 @Serializable
 private data class HubMessageRow(
@@ -47,22 +61,37 @@ private data class HubMessageRow(
     @SerialName("user_id") val userId: String,
     val body: String,
     @SerialName("created_at") val createdAt: String,
+    @SerialName("message_type") val messageType: String = ChatMessageType.TEXT,
+    val metadata: JsonElement? = null,
 )
 
-private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
+private fun hubCreatedAtToEpoch(iso: String): Long {
+    val t = iso.trim().replace(" ", "T")
+    return runCatching { Instant.parse(t) }.getOrNull()?.toEpochMilliseconds()
+        ?: Clock.System.now().toEpochMilliseconds()
+}
+
+private fun randomHubMediaLeaf(): String =
+    buildString(20) {
+        val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        repeat(20) { append(alphabet[Random.nextInt(alphabet.length)]) }
+    }
 
 class HubChatViewModel(
     private val hubId: String,
     private val realtimeChannelName: String,
     private val hubTitle: String,
     private val currentUserId: String,
-) : ViewModel() {
+    private val hubLocationResolver: suspend () -> LocationResult? = { null },
+    private val tokenStorage: TokenStorage = createTokenStorage(),
+    private val chatApi: ChatApiClient = ChatApiClient(),
+) : ViewModel(), SecureChatMediaHost {
 
     private val supabase by lazy { SupabaseConfig.client }
     private val userRepository by lazy { SupabaseRepository() }
 
-    private val _messages = MutableStateFlow<List<HubChatMessageUi>>(emptyList())
-    val messages: StateFlow<List<HubChatMessageUi>> = _messages.asStateFlow()
+    private val _messages = MutableStateFlow<List<MessageWithUser>>(emptyList())
+    val messages: StateFlow<List<MessageWithUser>> = _messages.asStateFlow()
 
     private val _occupantCount = MutableStateFlow(1)
     val occupantCount: StateFlow<Int> = _occupantCount.asStateFlow()
@@ -75,6 +104,10 @@ class HubChatViewModel(
 
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
+
+    private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
+    override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
+        _secureChatMediaLoadState.asStateFlow()
 
     val title: String get() = hubTitle
 
@@ -109,31 +142,47 @@ class HubChatViewModel(
         return (label to avatar).also { senderUiCache[userId] = it }
     }
 
-    private suspend fun rowToUi(row: HubMessageRow): HubChatMessageUi {
+    private suspend fun rowToMessageWithUser(row: HubMessageRow): MessageWithUser {
         val mine = row.userId == currentUserId
         val (label, avatar) = senderDisplay(row.userId, mine)
-        return HubChatMessageUi(
+        val message = Message(
             id = row.id,
-            body = row.body,
-            senderLabel = label,
-            isMine = mine,
-            createdAtIso = row.createdAt,
-            senderAvatarUrl = avatar,
+            user_id = row.userId,
+            content = row.body,
+            timeCreated = hubCreatedAtToEpoch(row.createdAt),
+            timeEdited = null,
+            isRead = true,
+            messageType = row.messageType,
+            metadata = row.metadata,
         )
+        val user = if (mine) {
+            User(id = row.userId, name = "You", image = null, createdAt = 0L)
+        } else {
+            User(id = row.userId, name = label, image = avatar, createdAt = 0L)
+        }
+        return MessageWithUser(message = message, user = user, isSent = mine)
     }
 
     private suspend fun mergeMessages(rows: List<HubMessageRow>) {
         val ui = rows
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
-            .map { rowToUi(it) }
+            .map { rowToMessageWithUser(it) }
         _messages.value = ui
+    }
+
+    private fun clearHubSecureMediaCache() {
+        _secureChatMediaLoadState.value.values.forEach { st ->
+            deleteSecureChatAudioTempFile(st.audioLocalPath)
+        }
+        _secureChatMediaLoadState.value = emptyMap()
     }
 
     private fun startSession() {
         sessionJob?.cancel()
         sessionJob = viewModelScope.launch {
             try {
+                clearHubSecureMediaCache()
                 loadInitialMessages()
                 val channel = supabase.channel(realtimeChannelName) {
                     presence {
@@ -191,8 +240,8 @@ class HubChatViewModel(
                             is PostgresAction.Insert -> {
                                 val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
                                 if (row.hubId != hubId) return@collect
-                                val ui = rowToUi(row)
-                                if (_messages.value.none { it.id == ui.id }) {
+                                val ui = rowToMessageWithUser(row)
+                                if (_messages.value.none { it.message.id == ui.message.id }) {
                                     _messages.value = _messages.value + ui
                                 }
                             }
@@ -234,6 +283,15 @@ class HubChatViewModel(
         }
     }
 
+    private suspend fun resolveGatekeeperLocationOrThrow(): LocationResult {
+        val loc = hubLocationResolver()
+            ?: throw IllegalStateException("Location is required to send hub messages.")
+        if (!loc.latitude.isFinite() || !loc.longitude.isFinite()) {
+            throw IllegalStateException("Invalid location.")
+        }
+        return loc
+    }
+
     fun sendMessage() {
         val text = _draft.value.trim()
         if (text.isEmpty() || _isSending.value) return
@@ -241,13 +299,18 @@ class HubChatViewModel(
             _isSending.value = true
             _sendError.value = null
             try {
-                supabase.from("hub_messages").insert(
-                    buildJsonObject {
-                        put("hub_id", hubId)
-                        put("user_id", currentUserId)
-                        put("body", text)
-                    },
-                )
+                val loc = resolveGatekeeperLocationOrThrow()
+                val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Please sign in again.")
+                chatApi.sendHubMessage(
+                    hubId = hubId,
+                    body = text,
+                    userLat = loc.latitude,
+                    userLong = loc.longitude,
+                    authToken = jwt,
+                    messageType = ChatMessageType.TEXT,
+                    metadata = null,
+                ).getOrElse { e -> throw e }
                 _draft.value = ""
             } catch (e: Exception) {
                 _sendError.value = e.message ?: "Could not send"
@@ -257,9 +320,117 @@ class HubChatViewModel(
         }
     }
 
+    /**
+     * Encrypt with hub broadcast key, upload ciphertext via gatekeeper, then insert image message.
+     */
+    fun sendHubImageFromPicker(imageBytes: ByteArray, mimeType: String) {
+        if (imageBytes.isEmpty() || _isSending.value) return
+        viewModelScope.launch {
+            _isSending.value = true
+            _sendError.value = null
+            try {
+                val loc = resolveGatekeeperLocationOrThrow()
+                val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Please sign in again.")
+                val keys = MessageCrypto.deriveKeysForHub(hubId)
+                val cipher = MessageCrypto.encryptMediaBytes(imageBytes, keys)
+                val leaf = randomHubMediaLeaf()
+                val objectPath = "$currentUserId/hub/$hubId/$leaf.bin"
+                val path = chatApi.uploadHubMedia(
+                    fileBytes = cipher,
+                    hubId = hubId,
+                    mimeType = "application/octet-stream",
+                    objectPath = objectPath,
+                    authToken = jwt,
+                    userLat = loc.latitude,
+                    userLong = loc.longitude,
+                ).getOrElse { e -> throw e }
+                val publicUrl = supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(path)
+                val metadata: JsonObject = buildJsonObject {
+                    put("media_url", JsonPrimitive(publicUrl))
+                    put("is_encrypted_media", JsonPrimitive(true))
+                    put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
+                }
+                chatApi.sendHubMessage(
+                    hubId = hubId,
+                    body = "Photo",
+                    userLat = loc.latitude,
+                    userLong = loc.longitude,
+                    authToken = jwt,
+                    messageType = ChatMessageType.IMAGE,
+                    metadata = metadata,
+                ).getOrElse { e -> throw e }
+            } catch (e: Exception) {
+                _sendError.value = e.message ?: "Could not send image"
+            } finally {
+                _isSending.value = false
+            }
+        }
+    }
+
+    override fun ensureSecureChatImageLoaded(scopeId: String, viewerUserId: String, message: Message) {
+        if (scopeId != hubId) return
+        if (!message.isEncryptedMedia()) return
+        if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
+        val url = message.mediaUrlOrNull() ?: return
+        if (url.isBlank()) return
+        val cur = _secureChatMediaLoadState.value[message.id]
+        if (cur?.imageBytes != null || cur?.loading == true) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            val bytes = runCatching {
+                val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
+                MessageCrypto.decryptMediaBytes(raw, MessageCrypto.deriveKeysForHub(hubId))
+            }.getOrNull()
+            if (bytes == null || bytes.isEmpty()) {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
+                }
+            } else {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
+                }
+            }
+        }
+    }
+
+    override fun ensureSecureChatAudioLoaded(scopeId: String, viewerUserId: String, message: Message) {
+        if (scopeId != hubId) return
+        if (!message.isEncryptedMedia()) return
+        if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
+        val url = message.mediaUrlOrNull() ?: return
+        if (url.isBlank()) return
+        val cur = _secureChatMediaLoadState.value[message.id]
+        if (cur?.audioLocalPath != null || cur?.loading == true) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            val bytes = runCatching {
+                val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
+                MessageCrypto.decryptMediaBytes(raw, MessageCrypto.deriveKeysForHub(hubId))
+            }.getOrNull()
+            if (bytes == null || bytes.isEmpty()) {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
+                }
+                return@launch
+            }
+            val path = writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
+            if (path.isNullOrBlank()) {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
+                }
+            } else {
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
+                }
+            }
+        }
+    }
+
     override fun onCleared() {
         sessionJob?.cancel()
         sessionJob = null
+        clearHubSecureMediaCache()
         val ch = hubChannel
         hubChannel = null
         if (ch != null) {

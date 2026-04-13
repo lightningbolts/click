@@ -107,13 +107,6 @@ private sealed class ConnectionsRealtimeEvent {
     data class HiddenJunction(val action: PostgresAction) : ConnectionsRealtimeEvent()
 }
 
-data class SecureChatMediaLoadState(
-    val loading: Boolean = false,
-    val imageBytes: ByteArray? = null,
-    val audioLocalPath: String? = null,
-    val error: String? = null,
-)
-
 sealed class ChatListState {
     data object Loading : ChatListState()
     data class Success(val chats: List<ChatWithDetails>) : ChatListState()
@@ -140,7 +133,7 @@ class ChatViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository()
-) : ViewModel() {
+) : ViewModel(), SecureChatMediaHost {
 
     private data class PrefetchedChatPayload(
         val messages: List<MessageWithUser>,
@@ -224,7 +217,8 @@ class ChatViewModel(
     val messageReactions: StateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>> = _messageReactions.asStateFlow()
 
     private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
-    val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> = _secureChatMediaLoadState.asStateFlow()
+    override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
+        _secureChatMediaLoadState.asStateFlow()
 
     private var currentConnectionId: String? = null
     private var currentApiChatId: String? = null
@@ -1039,7 +1033,7 @@ class ChatViewModel(
         _secureChatMediaLoadState.value = emptyMap()
     }
 
-    fun ensureSecureChatImageLoaded(chatId: String, viewerUserId: String, message: Message) {
+    override fun ensureSecureChatImageLoaded(scopeId: String, viewerUserId: String, message: Message) {
         if (!message.isEncryptedMedia()) return
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
@@ -1048,7 +1042,7 @@ class ChatViewModel(
         if (cur?.imageBytes != null || cur?.loading == true) return
         viewModelScope.launch(Dispatchers.Default) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
-            val bytes = chatRepository.downloadAndDecryptChatMedia(chatId, viewerUserId, url)
+            val bytes = chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             if (bytes == null || bytes.isEmpty()) {
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
@@ -1061,7 +1055,7 @@ class ChatViewModel(
         }
     }
 
-    fun ensureSecureChatAudioLoaded(chatId: String, viewerUserId: String, message: Message) {
+    override fun ensureSecureChatAudioLoaded(scopeId: String, viewerUserId: String, message: Message) {
         if (!message.isEncryptedMedia()) return
         if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
         val url = message.mediaUrlOrNull() ?: return
@@ -1070,7 +1064,7 @@ class ChatViewModel(
         if (cur?.audioLocalPath != null || cur?.loading == true) return
         viewModelScope.launch(Dispatchers.Default) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
-            val bytes = chatRepository.downloadAndDecryptChatMedia(chatId, viewerUserId, url)
+            val bytes = chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             if (bytes == null || bytes.isEmpty()) {
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))

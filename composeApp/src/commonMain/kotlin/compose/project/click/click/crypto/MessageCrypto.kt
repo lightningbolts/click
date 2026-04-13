@@ -46,6 +46,21 @@ object MessageCrypto {
         return DerivedKeys(encKey = encKey, macKey = macKey)
     }
 
+    /**
+     * Ephemeral hub broadcast key: derived from [hubId] only. Anyone who can read hub_messages
+     * (and knows [hubId]) can derive the same key; geofence / gatekeeper limits who may post.
+     * Server never receives plaintext media — only ciphertext blobs.
+     */
+    fun deriveKeysForHub(hubId: String): DerivedKeys {
+        val trimmed = hubId.trim()
+        require(trimmed.isNotEmpty()) { "hubId must be non-empty" }
+        val input = "$E2EE_SALT:hub-broadcast:$trimmed"
+        val master = PlatformCrypto.sha256(input.encodeToByteArray())
+        val encKey = PlatformCrypto.sha256(master + byteArrayOf(0x01))
+        val macKey = PlatformCrypto.sha256(master + byteArrayOf(0x02))
+        return DerivedKeys(encKey = encKey, macKey = macKey)
+    }
+
     /** Derives per-message AES/HMAC keys from the 32-byte group master key (not the wire format). */
     fun deriveMessageKeysFromGroupMaster(groupMasterKey32: ByteArray): DerivedKeys {
         require(groupMasterKey32.size == GROUP_MASTER_KEY_BYTES) {

@@ -116,6 +116,31 @@ class ChatApiClient(
     @Serializable
     private data class ChatMediaUploadResponse(val path: String)
 
+    @Serializable
+    private data class ClickWebHubMessageEnvelope(val message: HubMessageApiDto)
+
+    /** Row returned from POST /api/hub/messages (matches public.hub_messages). */
+    @Serializable
+    data class HubMessageApiDto(
+        val id: String,
+        @SerialName("hub_id") val hubId: String,
+        @SerialName("user_id") val userId: String,
+        val body: String,
+        @SerialName("created_at") val createdAt: String,
+        @SerialName("message_type") val messageType: String = "text",
+        val metadata: JsonElement? = null,
+    )
+
+    @Serializable
+    private data class ClickWebHubSendMessageBody(
+        @SerialName("hub_id") val hubId: String,
+        val body: String,
+        @SerialName("user_lat") val userLat: Double,
+        @SerialName("user_long") val userLong: Double,
+        @SerialName("message_type") val messageType: String? = null,
+        val metadata: JsonElement? = null,
+    )
+
     // Response wrapper classes
     @Serializable
     data class ChatsResponse(val chats: List<ChatApiModel>)
@@ -470,6 +495,90 @@ class ChatApiClient(
                 Result.success(response.body<ChatMediaUploadResponse>().path)
             } else {
                 Result.failure(Exception("Failed to upload media: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Insert a hub message via Next.js gatekeeper (JWT + geofence). Realtime still delivers rows to clients.
+     */
+    suspend fun sendHubMessage(
+        hubId: String,
+        body: String,
+        userLat: Double,
+        userLong: Double,
+        authToken: String,
+        messageType: String? = null,
+        metadata: JsonElement? = null,
+    ): Result<HubMessageApiDto> {
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/hub/messages") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ClickWebHubSendMessageBody(
+                        hubId = hubId,
+                        body = body,
+                        userLat = userLat,
+                        userLong = userLong,
+                        messageType = messageType,
+                        metadata = metadata,
+                    ),
+                )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ClickWebHubMessageEnvelope>().message)
+            } else {
+                Result.failure(Exception("Failed to send hub message: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            println("Error sending hub message: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Upload hub ciphertext to chat-media; [objectPath] must be `{userId}/hub/{hubId}/...`.
+     */
+    suspend fun uploadHubMedia(
+        fileBytes: ByteArray,
+        hubId: String,
+        mimeType: String,
+        objectPath: String,
+        authToken: String,
+        userLat: Double,
+        userLong: Double,
+    ): Result<String> {
+        if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/hub/media") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append("hub_id", hubId)
+                            append("object_path", objectPath)
+                            append("mime_type", mimeType)
+                            append("user_lat", userLat.toString())
+                            append("user_long", userLong.toString())
+                            append(
+                                "file",
+                                fileBytes,
+                                Headers.build {
+                                    append(HttpHeaders.ContentDisposition, "filename=\"blob\"")
+                                    append(HttpHeaders.ContentType, mimeType.ifBlank { "application/octet-stream" })
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ChatMediaUploadResponse>().path)
+            } else {
+                Result.failure(Exception("Failed to upload hub media: ${response.status}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
