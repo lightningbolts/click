@@ -36,6 +36,7 @@ import platform.AVFAudio.AVEncoderAudioQualityKey
 import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
+import platform.AVFoundation.*
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSURL
 import platform.Foundation.NSTemporaryDirectory
@@ -67,10 +68,12 @@ import platform.posix.memcpy
 actual fun rememberChatMediaPickers(
     onImagePicked: (ByteArray, String) -> Unit,
     onAudioPicked: (ByteArray, String, Long?) -> Unit,
+    onMediaAccessBlocked: (String) -> Unit,
 ): ChatMediaPickerHandles {
     val viewController = LocalUIViewController.current
     val onImagePickedState by rememberUpdatedState(onImagePicked)
     val onAudioPickedState by rememberUpdatedState(onAudioPicked)
+    val onMediaAccessBlockedState by rememberUpdatedState(onMediaAccessBlocked)
 
     var showVoiceDialog by remember { mutableStateOf(false) }
 
@@ -78,14 +81,26 @@ actual fun rememberChatMediaPickers(
         object : NSObject(), PHPickerViewControllerDelegateProtocol {
             override fun picker(picker: PHPickerViewController, didFinishPicking: List<*>) {
                 picker.dismissViewControllerAnimated(true, completion = null)
+                if (didFinishPicking.isEmpty()) return
                 val result = didFinishPicking.firstOrNull() as? PHPickerResult ?: return
                 val provider = result.itemProvider
                 provider.loadDataRepresentationForTypeIdentifier(UTTypeImage.identifier) { data, _ ->
-                    if (data == null) return@loadDataRepresentationForTypeIdentifier
+                    if (data == null) {
+                        dispatch_async(dispatch_get_main_queue()) {
+                            onMediaAccessBlockedState(
+                                "Couldn't read that photo. If access was denied, enable Photos for Click in Settings.",
+                            )
+                        }
+                        return@loadDataRepresentationForTypeIdentifier
+                    }
                     val bytes = data.toByteArray()
                     dispatch_async(dispatch_get_main_queue()) {
                         if (bytes.isNotEmpty()) {
                             onImagePickedState(bytes, "image/jpeg")
+                        } else {
+                            onMediaAccessBlockedState(
+                                "Couldn't read that photo. Enable Photos access for Click in Settings.",
+                            )
                         }
                     }
                 }
@@ -125,9 +140,10 @@ actual fun rememberChatMediaPickers(
         viewController.presentViewController(picker, animated = true, completion = null)
     }
 
-    fun openCamera() {
+    fun openCameraInternal() {
         val cameraSource = UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera
         if (!UIImagePickerController.isSourceTypeAvailable(cameraSource)) {
+            onMediaAccessBlockedState("Camera is not available on this device.")
             return
         }
         val picker = UIImagePickerController()
@@ -137,15 +153,49 @@ actual fun rememberChatMediaPickers(
         viewController.presentViewController(picker, animated = true, completion = null)
     }
 
+    fun openCamera() {
+        when (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo)) {
+            AVAuthorizationStatusDenied, AVAuthorizationStatusRestricted -> {
+                onMediaAccessBlockedState(
+                    "Camera permission is off. To take photos in chat, enable Camera for Click in Settings.",
+                )
+            }
+            AVAuthorizationStatusNotDetermined -> {
+                AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted: Boolean ->
+                    dispatch_async(dispatch_get_main_queue()) {
+                        if (granted) {
+                            openCameraInternal()
+                        } else {
+                            onMediaAccessBlockedState(
+                                "Camera permission is off. To take photos in chat, enable Camera for Click in Settings.",
+                            )
+                        }
+                    }
+                }
+            }
+            else -> openCameraInternal()
+        }
+    }
+
     fun requestMicThenShowVoiceDialog() {
         val session = AVAudioSession.sharedInstance()
         when (session.recordPermission) {
             AVAudioSessionRecordPermissionGranted -> showVoiceDialog = true
-            AVAudioSessionRecordPermissionDenied -> { /* user denied */ }
+            AVAudioSessionRecordPermissionDenied -> {
+                onMediaAccessBlockedState(
+                    "Microphone permission is off. To send voice clips, enable Microphone for Click in Settings.",
+                )
+            }
             else -> {
                 session.requestRecordPermission { granted: Boolean ->
                     dispatch_async(dispatch_get_main_queue()) {
-                        if (granted) showVoiceDialog = true
+                        if (granted) {
+                            showVoiceDialog = true
+                        } else {
+                            onMediaAccessBlockedState(
+                                "Microphone permission is off. To send voice clips, enable Microphone for Click in Settings.",
+                            )
+                        }
                     }
                 }
             }

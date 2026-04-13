@@ -21,6 +21,7 @@ private val pushTokenRepository = PushTokenRepository()
  */
 fun onApplicationDidBecomeActive() {
     notifyPlatformApplicationForeground()
+    AppDataManager.handleApplicationForegrounded()
 }
 
 fun savePushToken(token: String, platform: String) {

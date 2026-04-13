@@ -131,6 +131,9 @@ fun SettingsScreen(
             }
         },
         onAudioPicked = { _, _, _ -> },
+        onMediaAccessBlocked = { msg ->
+            settingsScope.launch { snackbarHostState.showSnackbar(msg) }
+        },
     )
 
     val foregroundSyncTick by platformForegroundTickFlow().collectAsState()

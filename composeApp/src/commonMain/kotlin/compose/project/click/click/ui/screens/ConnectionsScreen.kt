@@ -1881,6 +1881,9 @@ fun ChatView(
                     val mediaPickers = rememberChatMediaPickers(
                         onImagePicked = { bytes, mime -> viewModel.sendChatImage(bytes, mime) },
                         onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
+                        onMediaAccessBlocked = { msg ->
+                            coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                        },
                     )
                     var attachmentMenuExpanded by remember { mutableStateOf(false) }
 

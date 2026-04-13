@@ -310,6 +310,15 @@ class ChatViewModel(
                 }
             }
         }
+
+        viewModelScope.launch {
+            AppDataManager.foregroundRealtimeRecovery.collect {
+                val uid = _currentUserId.value ?: return@collect
+                startGlobalConnectionsRealtime(uid)
+                startGlobalMessageListRealtime()
+                restoreActiveChatSubscriptionsIfNeeded()
+            }
+        }
     }
 
     // Set the current user

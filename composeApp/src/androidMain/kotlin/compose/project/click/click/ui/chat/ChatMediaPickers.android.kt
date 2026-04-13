@@ -40,6 +40,7 @@ import java.io.File
 actual fun rememberChatMediaPickers(
     onImagePicked: (ByteArray, String) -> Unit,
     onAudioPicked: (ByteArray, String, Long?) -> Unit,
+    onMediaAccessBlocked: (String) -> Unit,
 ): ChatMediaPickerHandles {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -52,7 +53,14 @@ actual fun rememberChatMediaPickers(
     ) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
-            val (bytes, mime) = readUriBytes(context, uri) ?: return@launch
+            val read = readUriBytes(context, uri)
+            if (read == null) {
+                onMediaAccessBlocked(
+                    "Couldn't read that photo. If access was denied, enable Photos & videos permission for Click in Settings.",
+                )
+                return@launch
+            }
+            val (bytes, mime) = read
             onImagePicked(bytes, mime)
         }
     }
@@ -86,13 +94,23 @@ actual fun rememberChatMediaPickers(
             )
             pendingCameraFile = file
             takePictureLauncher.launch(uri)
+        } else {
+            onMediaAccessBlocked(
+                "Camera permission is off. To take photos in chat, enable Camera for Click in Settings.",
+            )
         }
     }
 
     val recordPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) showVoiceDialog = true
+        if (granted) {
+            showVoiceDialog = true
+        } else {
+            onMediaAccessBlocked(
+                "Microphone permission is off. To send voice clips, enable Microphone for Click in Settings.",
+            )
+        }
     }
 
     fun openCamera() {

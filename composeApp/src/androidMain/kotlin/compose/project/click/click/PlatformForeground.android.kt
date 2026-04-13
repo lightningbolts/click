@@ -9,5 +9,5 @@ private val androidForegroundTicks = MutableStateFlow(0L)
 actual fun platformForegroundTickFlow(): StateFlow<Long> = androidForegroundTicks.asStateFlow()
 
 actual fun notifyPlatformApplicationForeground() {
-    // No-op: Android uses runtime permission callbacks / Activity resume.
+    androidForegroundTicks.value = androidForegroundTicks.value + 1L
 }

@@ -3,11 +3,9 @@
 -- 2. If the bucket is private, use signed URLs instead of publicUrl in SupabaseChatRepository.uploadChatMedia.
 -- 3. Add policies so authenticated users can upload and everyone with the URL can read (tune for your security model).
 
--- Example policies (run after bucket exists; syntax may vary by Supabase version):
--- CREATE POLICY "chat_media_insert_authenticated" ON storage.objects FOR INSERT TO authenticated
---   WITH CHECK (bucket_id = 'chat-media');
--- CREATE POLICY "chat_media_select_public" ON storage.objects FOR SELECT TO public
---   USING (bucket_id = 'chat-media');
+-- Production RLS: apply migration `click-web/supabase/migrations/20260417120000_chat_media_storage_bucket_and_rls.sql`
+-- (mirrored under `click/supabase/migrations/`). It enforces chat participation for native paths
+-- `{uploader_uid}/{chat_uuid}/…` and `web/{uploader_uid}/…` for web uploads.
 
 -- Profile avatars bucket `avatars` (see click-web/supabase/migrations/20260410200000_avatars_storage_bucket_and_rls.sql).
 -- Without storage.objects RLS policies, uploads fail with "new row violates row-level security policy".

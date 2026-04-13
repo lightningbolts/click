@@ -113,7 +113,11 @@ object AppDataManager {
     private const val PENDING_SYNC_RETRY_MS = 15_000L
     private const val STARTUP_TIMEOUT_MS = 15_000L
     private const val TOKEN_REFRESH_SKEW_MS = 60_000L
-    
+    private const val FOREGROUND_RECOVERY_DEBOUNCE_MS = 900L
+
+    private var loadAllDataJob: Job? = null
+    private var lastForegroundRecoveryMs: Long = 0L
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -134,6 +138,16 @@ object AppDataManager {
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     val transientUserMessages: SharedFlow<String> = _transientUserMessages.asSharedFlow()
+
+    /**
+     * Emitted after [handleApplicationForegrounded] refreshes the Supabase session and Realtime
+     * socket so [ChatViewModel] can re-attach Postgres channels without waiting for heartbeat timeouts.
+     */
+    private val _foregroundRealtimeRecovery = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val foregroundRealtimeRecovery: SharedFlow<Unit> = _foregroundRealtimeRecovery.asSharedFlow()
 
     /** Surfaces a one-shot message to UI collectors (e.g. onboarding before the main scaffold exists). */
     fun postTransientUserMessage(message: String) {
@@ -169,6 +183,35 @@ object AppDataManager {
         _ghostModeEnabled.value = newValue
         println("AppDataManager: Ghost Mode ${if (newValue) "ENABLED - halting background sync" else "DISABLED - resuming background sync"}")
     }
+
+    /**
+     * OS resumed the UI (foreground). Cancels any in-flight [loadAllData] work, drops stale Ktor /
+     * Realtime sockets, refreshes the GoTrue session, and starts a fresh load without waiting for
+     * [STARTUP_TIMEOUT_MS] on half-open connections (common after iOS backgrounding).
+     */
+    fun handleApplicationForegrounded() {
+        if (_ghostModeEnabled.value) return
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (now - lastForegroundRecoveryMs < FOREGROUND_RECOVERY_DEBOUNCE_MS) return
+        lastForegroundRecoveryMs = now
+        loadAllDataJob?.cancel()
+        scope.launch {
+            runCatching { SupabaseForegroundRecovery.recoverAfterBackground(SupabaseConfig.client) }
+                .onFailure { e ->
+                    println("AppDataManager: foreground Supabase recovery failed: ${e.message}")
+                }
+            _foregroundRealtimeRecovery.emit(Unit)
+            lastRefreshTime = 0L
+            startLoadAllDataJob()
+        }
+    }
+
+    private fun startLoadAllDataJob() {
+        loadAllDataJob?.cancel()
+        loadAllDataJob = scope.launch {
+            loadAllData()
+        }
+    }
     
     /**
      * Initialize app data - call this once when the app starts
@@ -180,9 +223,7 @@ object AppDataManager {
         }
         startPendingConnectionSync()
         
-        scope.launch {
-            loadAllData()
-        }
+        startLoadAllDataJob()
     }
     
     /**
@@ -394,15 +435,15 @@ object AppDataManager {
             return
         }
         
-        scope.launch {
-            loadAllData()
-        }
+        startLoadAllDataJob()
     }
     
     /**
      * Clear all data (on logout)
      */
     suspend fun clearData() {
+        loadAllDataJob?.cancel()
+        loadAllDataJob = null
         runCatching { chatRepository.stopGlobalPresence() }
             .onFailure { e -> println("AppDataManager: Global presence stop failed: ${e.message}") }
         presenceHeartbeatJob?.cancel()
@@ -429,7 +470,8 @@ object AppDataManager {
      * chats, and other data are fetched fresh.
      */
     fun resetAndReload() {
-        scope.launch {
+        loadAllDataJob?.cancel()
+        loadAllDataJob = scope.launch {
             clearData()
             loadAllData()
         }

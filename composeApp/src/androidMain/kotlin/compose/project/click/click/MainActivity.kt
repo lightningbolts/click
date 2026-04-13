@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(true)
+        onApplicationDidBecomeActive()
     }
 
     override fun onPause() {
