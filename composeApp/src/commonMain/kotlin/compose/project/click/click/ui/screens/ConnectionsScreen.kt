@@ -3960,7 +3960,7 @@ fun ChatMessageBubble(
                                         contentColor = Color.White,
                                         accentColor = Color.White,
                                         localFilePathForPlayback = secureSt?.audioLocalPath,
-                                        secureLoading = message.isEncryptedMedia() && secureSt?.loading == true,
+                                        secureLoading = message.isEncryptedMedia() && (secureSt == null || secureSt.loading),
                                         secureError = if (message.isEncryptedMedia()) secureSt?.error else null,
                                     )
                                     val cap = message.content.trim()
