@@ -97,6 +97,7 @@ kotlin {
 
             // Ktor client dependencies
             implementation("io.ktor:ktor-client-core:3.0.1")
+            implementation("io.ktor:ktor-client-auth:3.0.1")
             implementation("io.ktor:ktor-client-content-negotiation:3.0.1")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
 
