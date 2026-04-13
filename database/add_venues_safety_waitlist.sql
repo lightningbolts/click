@@ -74,6 +74,10 @@ CREATE POLICY IF NOT EXISTS "blocker_insert" ON user_blocks
 CREATE POLICY IF NOT EXISTS "blocker_delete" ON user_blocks
     FOR DELETE USING (auth.uid() = blocker_id);
 
+-- Blocked users cannot SELECT rows where they are blocked_id (RLS above is blocker-only).
+-- For client snapshots that must hide connections when the peer blocked you, apply
+-- add_blockers_for_blocked_user_rpc.sql (SECURITY DEFINER RPC blockers_for_blocked_user).
+
 -- 4) connection_reports — report system (Fix 6)
 CREATE TABLE IF NOT EXISTS connection_reports (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

@@ -15,6 +15,7 @@ import compose.project.click.click.data.models.UserInterests // pragma: allowlis
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -287,6 +288,7 @@ class SupabaseRepository {
 
     /**
      * Lazy-sweep then two-step fetch (active channel + archived channel), matching web API semantics.
+     * Also excludes connections where the other participant has blocked this user via [user_blocks].
      */
     suspend fun fetchUserConnectionsSnapshot(userId: String): UserConnectionsSnapshot {
         if (userId.isBlank()) {
@@ -295,6 +297,7 @@ class SupabaseRepository {
         sweepStaleConnectionsForUser(userId)
         val archivedIds = getArchivedConnectionIds(userId)
         val hiddenIds = getHiddenConnectionIds(userId)
+        val blockedByUserIds = getBlockedByUserIds(userId)
         val excludedForActive = archivedIds + hiddenIds
         val activeRows = fetchActiveChannelConnections(userId, excludedForActive)
         val validArchiveIds = archivedIds - hiddenIds
@@ -303,6 +306,11 @@ class SupabaseRepository {
         val merged = (activeRows + archivedRows + lifecycleArchivedRows)
             .distinctBy { it.id }
             .filter { it.normalizedConnectionStatus() != "removed" }
+            .filter { conn ->
+                // Exclude connections where the other participant has blocked this user
+                if (blockedByUserIds.isEmpty()) true
+                else conn.user_ids.none { it != userId && it in blockedByUserIds }
+            }
             .sortedByDescending { it.created }
         return UserConnectionsSnapshot(merged, archivedIds, hiddenIds)
     }
@@ -673,53 +681,32 @@ class SupabaseRepository {
      */
     suspend fun hideConnectionForUser(userId: String, connectionId: String): Boolean {
         if (userId.isBlank() || connectionId.isBlank()) return false
-        if (connectionHiddenTableMissing) return false
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) {
+            println("hideConnectionForUser: session user mismatch")
+            return false
+        }
         return try {
-            supabase.from("connection_hidden")
-                .upsert(buildJsonObject {
-                    put("user_id", userId)
-                    put("connection_id", connectionId)
-                }) {
-                    onConflict = "user_id,connection_id"
-                }
-            true
+            val result = clickWebApi.postConnectionHide(connectionId.trim())
+            if (result.isSuccess) return true
+            println("hideConnectionForUser (redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
+            false
         } catch (e: Exception) {
-            if (isConnectionHiddenUnavailableError(e)) {
-                connectionHiddenTableMissing = true
-            } else {
-                println("hideConnectionForUser (redacted): ${e.redactedRestMessage()}")
-            }
+            println("hideConnectionForUser (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
 
     /**
-     * Per-user hide for every participant in [userIds] (symmetric "Remove Connection").
+     * Hides the connection for the signed-in user only (`POST /api/connections/hide`).
+     * [userIds] must include the current session user (used to validate before calling the API).
      */
     suspend fun hideConnectionForUsers(userIds: List<String>, connectionId: String): Boolean {
         if (connectionId.isBlank() || userIds.isEmpty()) return false
-        if (connectionHiddenTableMissing) return false
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         val distinct = userIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        if (distinct.isEmpty()) return false
-        return try {
-            distinct.forEach { uid ->
-                supabase.from("connection_hidden")
-                    .upsert(buildJsonObject {
-                        put("user_id", uid)
-                        put("connection_id", connectionId)
-                    }) {
-                        onConflict = "user_id,connection_id"
-                    }
-            }
-            true
-        } catch (e: Exception) {
-            if (isConnectionHiddenUnavailableError(e)) {
-                connectionHiddenTableMissing = true
-            } else {
-                println("hideConnectionForUsers (redacted): ${e.redactedRestMessage()}")
-            }
-            false
-        }
+        if (distinct.isEmpty() || sessionUid !in distinct) return false
+        return hideConnectionForUser(sessionUid, connectionId)
     }
 
     /**
@@ -1186,6 +1173,34 @@ class SupabaseRepository {
         }
     }
 
+    /**
+     * User IDs that have blocked [userId] (rows in `user_blocks` where `blocked_id = userId`).
+     * Uses RPC `blockers_for_blocked_user` (SECURITY DEFINER): direct PostgREST SELECT on `user_blocks`
+     * is denied to the blocked party by RLS (`blocker_select` only allows `auth.uid() = blocker_id`).
+     */
+    suspend fun getBlockedByUserIds(userId: String): Set<String> {
+        if (userId.isBlank()) return emptySet()
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) {
+            println("getBlockedByUserIds: session user mismatch")
+            return emptySet()
+        }
+        return try {
+            @Serializable
+            data class BlockRow(
+                @SerialName("blocker_id") val blockerId: String,
+            )
+            val rows = supabase.postgrest.rpc(
+                "blockers_for_blocked_user",
+                buildJsonObject { },
+            ).decodeList<BlockRow>()
+            rows.map { it.blockerId }.toSet()
+        } catch (e: Exception) {
+            println("getBlockedByUserIds (non-fatal, redacted): ${e.redactedRestMessage()}")
+            emptySet()
+        }
+    }
+
     // ==================== Safety Methods ====================
 
     /**
@@ -1209,14 +1224,13 @@ class SupabaseRepository {
      * Report a connection for safety review.
      */
     suspend fun reportConnection(connectionId: String, reporterId: String, reason: String): Boolean {
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != reporterId.trim()) {
+            println("reportConnection: session user mismatch")
+            return false
+        }
         return try {
-            supabase.from("connection_reports")
-                .insert(buildJsonObject {
-                    put("connection_id", connectionId)
-                    put("reporter_id", reporterId)
-                    put("reason", reason)
-                })
-            true
+            clickWebApi.postSafetyReport(connectionId.trim(), reason).isSuccess
         } catch (e: Exception) {
             println("Error reporting connection (redacted): ${e.redactedRestMessage()}")
             false
@@ -1231,21 +1245,19 @@ class SupabaseRepository {
      * Silently no-ops if the table has not been provisioned yet.
      */
     suspend fun archiveConnection(userId: String, connectionId: String): Boolean {
-        if (connectionArchivesTableMissing) return false
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) {
+            println("archiveConnection: session user mismatch")
+            return false
+        }
         return try {
-            supabase.from("connection_archives")
-                .insert(buildJsonObject {
-                    put("user_id", userId)
-                    put("connection_id", connectionId)
-                })
-            true
+            val result = clickWebApi.postConnectionArchive(connectionId.trim())
+            if (result.isSuccess) return true
+            println("archiveConnection (non-fatal, redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
+            false
         } catch (e: Exception) {
-            if (isConnectionArchivesUnavailableError(e)) {
-                connectionArchivesTableMissing = true
-            } else {
-                println("archiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
-            }
-            false // table may not exist yet; in-memory fallback handles UI state
+            println("archiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
+            false
         }
     }
 
@@ -1253,31 +1265,18 @@ class SupabaseRepository {
      * Unarchive a connection, removing it from the user's archive list.
      */
     suspend fun unarchiveConnection(userId: String, connectionId: String): Boolean {
-        if (connectionArchivesTableMissing) return false
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) {
+            println("unarchiveConnection: session user mismatch")
+            return false
+        }
         return try {
-            supabase.from("connection_archives")
-                .delete {
-                    filter {
-                        eq("user_id", userId)
-                        eq("connection_id", connectionId)
-                    }
-                }
-            // `kept` is excluded from sweep_stale_connections_for_user (only pending/active are swept).
-            supabase.from("connections")
-                .update({
-                    set("status", "kept")
-                }) {
-                    filter {
-                        eq("id", connectionId)
-                    }
-                }
-            true
+            val result = clickWebApi.postConnectionUnarchive(connectionId.trim())
+            if (result.isSuccess) return true
+            println("unarchiveConnection (non-fatal, redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
+            false
         } catch (e: Exception) {
-            if (isConnectionArchivesUnavailableError(e)) {
-                connectionArchivesTableMissing = true
-            } else {
-                println("unarchiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
-            }
+            println("unarchiveConnection (non-fatal, redacted): ${e.redactedRestMessage()}")
             false
         }
     }

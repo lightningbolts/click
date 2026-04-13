@@ -1665,8 +1665,13 @@ class ConnectionRepository(
             if (uid !in pair) {
                 return Result.failure(Exception("Connection not found"))
             }
-            val ok = supabaseRepository.hideConnectionForUsers(pair, connectionId)
-            if (ok) Result.success(Unit) else Result.failure(Exception("Could not hide connection"))
+            val ok = supabaseRepository.hideConnectionForUser(uid, connectionId)
+            if (ok) {
+                AppDataManager.refresh(force = true)
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Could not hide connection"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
