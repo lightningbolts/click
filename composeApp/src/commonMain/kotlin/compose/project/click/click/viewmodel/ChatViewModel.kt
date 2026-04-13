@@ -2194,8 +2194,9 @@ class ChatViewModel(
             }
             AppDataManager.hideConnectionLocally(connectionId)
             reapplyChatListVisibility()
-            val success = supabaseRepository.hideConnectionForUsers(pair, connectionId)
+            val success = supabaseRepository.hideConnectionForUser(userId, connectionId)
             if (success) {
+                AppDataManager.refresh(force = true)
                 if (currentConnectionId == connectionId) {
                     leaveChatRoom()
                 }
@@ -2312,17 +2313,11 @@ class ChatViewModel(
         viewModelScope.launch {
             val success = supabaseRepository.blockUser(userId, otherUserId)
             if (success) {
-                val conn = AppDataManager.getConnection(connectionId)
-                val pair = conn?.user_ids
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotEmpty() }
-                    ?.distinct()
-                    ?.takeIf { it.size >= 2 && userId in it }
-                if (pair != null) {
-                    supabaseRepository.hideConnectionForUsers(pair, connectionId)
-                } else {
-                    supabaseRepository.hideConnectionForUser(userId, connectionId)
-                }
+                // POST /api/connections/hide is JWT-scoped and can only hide for the
+                // authenticated user. The blocked user's visibility is handled by the
+                // user_blocks row — fetchUserConnectionsSnapshot should exclude connections
+                // where the other participant has blocked the current user.
+                supabaseRepository.hideConnectionForUser(userId, connectionId)
                 AppDataManager.hideConnectionLocally(connectionId)
                 reapplyChatListVisibility()
                 if (currentConnectionId == connectionId) {

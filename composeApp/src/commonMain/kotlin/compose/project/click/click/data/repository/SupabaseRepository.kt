@@ -288,6 +288,7 @@ class SupabaseRepository {
 
     /**
      * Lazy-sweep then two-step fetch (active channel + archived channel), matching web API semantics.
+     * Also excludes connections where the other participant has blocked this user via [user_blocks].
      */
     suspend fun fetchUserConnectionsSnapshot(userId: String): UserConnectionsSnapshot {
         if (userId.isBlank()) {
@@ -296,6 +297,7 @@ class SupabaseRepository {
         sweepStaleConnectionsForUser(userId)
         val archivedIds = getArchivedConnectionIds(userId)
         val hiddenIds = getHiddenConnectionIds(userId)
+        val blockedByUserIds = getBlockedByUserIds(userId)
         val excludedForActive = archivedIds + hiddenIds
         val activeRows = fetchActiveChannelConnections(userId, excludedForActive)
         val validArchiveIds = archivedIds - hiddenIds
@@ -304,6 +306,11 @@ class SupabaseRepository {
         val merged = (activeRows + archivedRows + lifecycleArchivedRows)
             .distinctBy { it.id }
             .filter { it.normalizedConnectionStatus() != "removed" }
+            .filter { conn ->
+                // Exclude connections where the other participant has blocked this user
+                if (blockedByUserIds.isEmpty()) true
+                else conn.user_ids.none { it != userId && it in blockedByUserIds }
+            }
             .sortedByDescending { it.created }
         return UserConnectionsSnapshot(merged, archivedIds, hiddenIds)
     }
@@ -1163,6 +1170,30 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("Error updating location preferences (redacted): ${e.redactedRestMessage()}")
             false
+        }
+    }
+
+    /**
+     * User IDs that have blocked [userId] (i.e. rows where `blocked_id = userId`).
+     * Connections with these users should be excluded from the snapshot so the
+     * blocked user no longer sees the connection after the blocker hides it.
+     */
+    suspend fun getBlockedByUserIds(userId: String): Set<String> {
+        if (userId.isBlank()) return emptySet()
+        return try {
+            @Serializable
+            data class BlockRow(
+                @SerialName("blocker_id") val blockerId: String,
+            )
+            val rows = supabase.from("user_blocks")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("blocker_id")) {
+                    filter { eq("blocked_id", userId) }
+                }
+                .decodeList<BlockRow>()
+            rows.map { it.blockerId }.toSet()
+        } catch (e: Exception) {
+            println("getBlockedByUserIds (non-fatal, redacted): ${e.redactedRestMessage()}")
+            emptySet()
         }
     }
 
