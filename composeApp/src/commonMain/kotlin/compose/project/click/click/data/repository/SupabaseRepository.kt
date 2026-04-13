@@ -674,7 +674,6 @@ class SupabaseRepository {
      */
     suspend fun hideConnectionForUser(userId: String, connectionId: String): Boolean {
         if (userId.isBlank() || connectionId.isBlank()) return false
-        if (connectionHiddenTableMissing) return false
         val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("hideConnectionForUser: session user mismatch")
@@ -686,11 +685,7 @@ class SupabaseRepository {
             println("hideConnectionForUser (redacted): ${result.exceptionOrNull()?.redactedRestMessage()}")
             false
         } catch (e: Exception) {
-            if (isConnectionHiddenUnavailableError(e)) {
-                connectionHiddenTableMissing = true
-            } else {
-                println("hideConnectionForUser (redacted): ${e.redactedRestMessage()}")
-            }
+            println("hideConnectionForUser (redacted): ${e.redactedRestMessage()}")
             false
         }
     }
@@ -1215,7 +1210,6 @@ class SupabaseRepository {
      * Silently no-ops if the table has not been provisioned yet.
      */
     suspend fun archiveConnection(userId: String, connectionId: String): Boolean {
-        if (connectionArchivesTableMissing) return false
         val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("archiveConnection: session user mismatch")
@@ -1236,7 +1230,6 @@ class SupabaseRepository {
      * Unarchive a connection, removing it from the user's archive list.
      */
     suspend fun unarchiveConnection(userId: String, connectionId: String): Boolean {
-        if (connectionArchivesTableMissing) return false
         val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("unarchiveConnection: session user mismatch")
