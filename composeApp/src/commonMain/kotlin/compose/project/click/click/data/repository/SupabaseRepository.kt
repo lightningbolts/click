@@ -1,6 +1,7 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import io.github.jan.supabase.exceptions.RestException
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
@@ -59,6 +60,9 @@ data class UserConnectionsSnapshot(
 class SupabaseRepository {
     /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
+
+    /** Next.js click-web secure writes (JWT bearer). */
+    private val clickWebApi by lazy { ApiClient() }
 
     /**
      * When the remote `users.last_polled` column is missing, PostgREST rejects PATCHes; skip further writes
@@ -971,7 +975,7 @@ class SupabaseRepository {
     /**
      * Update user's name
      */
-    suspend fun updateUserName(userId: String, name: String): Boolean {
+    suspend fun updateUserName(userId: String, name: String): Result<Unit> {
         val trimmed = name.trim()
         val spaceIdx = trimmed.indexOf(' ')
         val first = if (spaceIdx < 0) trimmed else trimmed.take(spaceIdx).trim()
@@ -980,41 +984,18 @@ class SupabaseRepository {
     }
 
     /**
-     * Updates [public.users] display fields from explicit first/last name.
+     * Updates [public.users] display fields from explicit first/last name (via click-web PATCH).
      */
-    suspend fun updateUserProfileNames(userId: String, firstName: String, lastName: String): Boolean {
+    suspend fun updateUserProfileNames(userId: String, firstName: String, lastName: String): Result<Unit> {
         val f = firstName.trim()
         val l = lastName.trim()
-        if (f.isEmpty()) return false
-        val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
-        return try {
-            runCatching {
-                supabase.from("users")
-                    .update({
-                        set("name", display)
-                        set("full_name", display)
-                        set("first_name", f)
-                        set("last_name", l)
-                    }) {
-                        filter {
-                            eq("id", userId)
-                        }
-                    }
-            }.getOrElse {
-                supabase.from("users")
-                    .update({
-                        set("name", display)
-                    }) {
-                        filter {
-                            eq("id", userId)
-                        }
-                    }
-            }
-            true
-        } catch (e: Exception) {
-            println("Error updating user profile names (redacted): ${e.redactedRestMessage()}")
-            false
+        if (f.isEmpty()) {
+            return Result.failure(IllegalArgumentException("First name is required"))
         }
+        return clickWebApi.patchUserProfile(userId = userId, firstName = f, lastName = l).map { }
+            .onFailure { e ->
+                println("Error updating user profile names (redacted): ${e.redactedRestMessage()}")
+            }
     }
     
     /**
@@ -1108,15 +1089,6 @@ class SupabaseRepository {
         val updatedAt: Long = 0L,
     )
 
-    @Serializable
-    private data class UserInterestsInsertDto(
-        @SerialName("user_id")
-        val userId: String,
-        val tags: List<String>,
-        @SerialName("updated_at")
-        val updatedAt: Long,
-    )
-
     /**
      * Load the current user's row from [public.user_interests].
      *
@@ -1144,36 +1116,13 @@ class SupabaseRepository {
 
     /**
      * Insert or update interest tags for the user (canonical store for onboarding + Common Ground).
+     * Persisted through click-web so the mobile client does not write `user_interests` directly.
      */
-    suspend fun updateUserInterests(userId: String, tags: List<String>): Boolean {
-        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-        return try {
-            when (val existing = fetchUserInterests(userId).getOrNull()) {
-                null -> {
-                    supabase.from("user_interests")
-                        .insert(
-                            UserInterestsInsertDto(
-                                userId = userId,
-                                tags = tags,
-                                updatedAt = now,
-                            ),
-                        )
-                }
-                else -> {
-                    supabase.from("user_interests")
-                        .update({
-                            set("tags", tags)
-                            set("updated_at", now)
-                        }) {
-                            filter { eq("user_id", userId) }
-                        }
-                }
+    suspend fun updateUserInterests(userId: String, tags: List<String>): Result<Unit> {
+        return clickWebApi.patchUserProfile(userId = userId, tags = tags).map { }
+            .onFailure { e ->
+                println("Error updating user_interests (redacted): ${e.redactedRestMessage()}")
             }
-            true
-        } catch (e: Exception) {
-            println("Error updating user_interests (redacted): ${e.redactedRestMessage()}")
-            false
-        }
     }
 
     private suspend fun fetchUserInterestsMap(userIds: List<String>): Map<String, List<String>> {

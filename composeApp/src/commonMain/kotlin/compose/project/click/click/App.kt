@@ -486,6 +486,11 @@ fun App() {
                     AdaptiveCircularProgressIndicator(color = PrimaryBlue)
                 }
             } else if (onboardingStep != "complete") {
+                val onboardingSnackbarHostState = remember { SnackbarHostState() }
+                LaunchedEffect(Unit) {
+                    AppDataManager.transientUserMessages.collect { onboardingSnackbarHostState.showSnackbar(it) }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(
                     targetState = onboardingStep,
                     transitionSpec = {
@@ -562,9 +567,8 @@ fun App() {
                             InterestTaggingScreen(
                                 onTagsSelected = { tags ->
                                     onboardingScope.launch {
-                                        val saved = runCatching { supabaseRepo.updateUserInterests(currentUser.id, tags) }
-                                            .getOrDefault(false)
-                                        if (saved) {
+                                        val saveResult = supabaseRepo.updateUserInterests(currentUser.id, tags)
+                                        if (saveResult.isSuccess) {
                                             tokenStorage.saveTagsInitialized(true)
                                             val base = onboardingState ?: OnboardingState()
                                             persistOnboardingState(
@@ -579,6 +583,10 @@ fun App() {
                                                 ),
                                             )
                                             AppDataManager.refresh(force = true)
+                                        } else {
+                                            val msg = saveResult.exceptionOrNull()?.message?.trim().orEmpty()
+                                                .ifBlank { "Couldn't save interests. Check your connection and try again." }
+                                            AppDataManager.postTransientUserMessage(msg)
                                         }
                                     }
                                 },
@@ -586,6 +594,13 @@ fun App() {
                             )
                         }
                     }
+                }
+                SnackbarHost(
+                    hostState = onboardingSnackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp),
+                )
                 }
             } else {
             var currentRoute by remember { mutableStateOf("home") }
@@ -688,6 +703,12 @@ fun App() {
 
             LaunchedEffect(connectionViewModel) {
                 connectionViewModel.transientNotice.collect { message ->
+                    snackbarHostState.showSnackbar(message)
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                AppDataManager.transientUserMessages.collect { message ->
                     snackbarHostState.showSnackbar(message)
                 }
             }
