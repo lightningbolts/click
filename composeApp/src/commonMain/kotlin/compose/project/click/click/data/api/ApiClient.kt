@@ -53,6 +53,9 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
 
         private val clickWebAuthOrigin: String
             get() = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
+
+        private val clickWebAuthHost: String
+            get() = io.ktor.http.Url(clickWebAuthOrigin).host
     }
 
     private val json = Json {
@@ -60,7 +63,15 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         isLenient = true
     }
 
+    /** HTTP client for Flask backend calls — no bearer-auth plugin. */
     private val client = HttpClient {
+        install(ContentNegotiation) {
+            json(json)
+        }
+    }
+
+    /** HTTP client for click-web (Next.js) calls — attaches Supabase JWT automatically. */
+    private val clickWebClient = HttpClient {
         install(ContentNegotiation) {
             json(json)
         }
@@ -86,7 +97,7 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                     BearerTokens(access, session.refreshToken.orEmpty())
                 }
                 sendWithoutRequest { request ->
-                    request.url.toString().startsWith(clickWebAuthOrigin)
+                    request.url.host == clickWebAuthHost
                 }
             }
         }
@@ -243,7 +254,7 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
      */
     suspend fun testSecurePing(): Result<SecurePingResponse> {
         return try {
-            val response: HttpResponse = client.get("$clickWebAuthOrigin/api/ping")
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/ping")
             if (response.status.value in 200..299) {
                 val body = response.body<SecurePingResponse>()
                 println(
@@ -264,5 +275,6 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
 
     fun close() {
         client.close()
+        clickWebClient.close()
     }
 }
