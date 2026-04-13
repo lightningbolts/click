@@ -4143,7 +4143,7 @@ fun ChatMessageBubble(
                                             ChatLinkifyText(
                                                 text = cap,
                                                 color = onBody,
-                                                linkColor = linkC,
+                                        secureLoading = message.isEncryptedMedia() && (secureSt == null || secureSt.loading),
                                                 style = MaterialTheme.typography.bodyMedium,
                                             )
                                         }
