@@ -24,6 +24,7 @@ import android.os.ParcelUuid
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import compose.project.click.click.ui.utils.AppSystemSettings
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -274,5 +275,11 @@ class AndroidProximityManager(
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
     val context = LocalContext.current
-    return remember(context) { AndroidProximityManager(context) }
+    return remember(context, AppSystemSettings.isDebugMode) {
+        if (AppSystemSettings.isDebugMode && isSimulatorOrEmulatorRuntime()) {
+            MockProximityManager()
+        } else {
+            AndroidProximityManager(context)
+        }
+    }
 }

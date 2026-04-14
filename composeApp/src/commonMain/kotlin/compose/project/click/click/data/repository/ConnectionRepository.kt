@@ -126,6 +126,11 @@ data class BindProximityHandshakeOutcome(
      * the client should skip the post-confirm context-tagging sheet for this crossing.
      */
     val encounterLogged: Boolean,
+    /**
+     * When non-null, the edge clustered ≥3 users in one proximity component; clients may start a
+     * verified group flow with these ids (includes the caller).
+     */
+    val groupCliqueCandidateMemberIds: List<String>? = null,
 )
 
 private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
@@ -149,6 +154,11 @@ sealed class ProximityResult {
 }
 
 @Serializable
+private data class GroupCliqueCandidatePayload(
+    @SerialName("member_user_ids") val memberUserIds: List<String> = emptyList(),
+)
+
+@Serializable
 private data class BindProximityResponse(
     val success: Boolean? = true,
     @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
@@ -156,6 +166,7 @@ private data class BindProximityResponse(
     @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
     val matches: List<User>? = null,
     val error: String? = null,
+    @SerialName("group_clique_candidate") val groupCliqueCandidate: GroupCliqueCandidatePayload? = null,
 )
 
 @Serializable
@@ -318,10 +329,13 @@ class ConnectionRepository(
             val rows = parsed.matches.orEmpty()
             val aggregateEncounterLogged = parsed.encounterLogged
                 ?: rows.none { it.encounterLogged == false }
+            val groupCliqueCandidateMemberIds =
+                parsed.groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() }
             Result.success(
                 BindProximityHandshakeOutcome(
                     matches = rows,
                     encounterLogged = aggregateEncounterLogged,
+                    groupCliqueCandidateMemberIds = groupCliqueCandidateMemberIds,
                 ),
             )
         } catch (e: Exception) {

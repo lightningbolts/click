@@ -41,6 +41,7 @@ import platform.Foundation.create
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.UIKit.UIApplicationOpenSettingsURLString
+import compose.project.click.click.ui.utils.AppSystemSettings
 import compose.project.click.click.ui.utils.openIosUrlMain
 import platform.darwin.NSObject
 import platform.posix.SEEK_END
@@ -351,5 +352,11 @@ private fun extractPcm16MonoFromWav(file: ByteArray): ShortArray? {
 
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
-    return remember { IosProximityManager() }
+    return remember(AppSystemSettings.isDebugMode) {
+        if (AppSystemSettings.isDebugMode && isSimulatorOrEmulatorRuntime()) {
+            MockProximityManager()
+        } else {
+            IosProximityManager()
+        }
+    }
 }

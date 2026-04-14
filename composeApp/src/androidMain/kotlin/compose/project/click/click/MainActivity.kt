@@ -1,5 +1,6 @@
 package compose.project.click.click
 
+import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.Bundle
 import android.content.Context
@@ -18,6 +19,7 @@ import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
+import compose.project.click.click.ui.utils.AppSystemSettings
 import compose.project.click.click.ui.utils.initAppSystemSettings
 import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
 
@@ -36,6 +38,8 @@ class MainActivity : ComponentActivity() {
         // Initialize location service with application context
         initLocationService(applicationContext)
         initAppSystemSettings(applicationContext)
+        AppSystemSettings.isDebugMode =
+            (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
         initCallManager(applicationContext, this)
 

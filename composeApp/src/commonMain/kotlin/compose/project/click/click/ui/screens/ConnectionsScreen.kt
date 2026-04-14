@@ -522,6 +522,16 @@ fun ConnectionsListView(
             .sortedByDescending { connectionListActivityTs(it) }
     }
 
+    /** Verified-click picker: every non-group 1:1 edge still in the inbox, including pending and archived-tab rows. */
+    val verifiedCliquePickableOneToOneChats = remember(effectiveChats) {
+        effectiveChats
+            .filter {
+                it.groupClique == null &&
+                    it.connection.normalizedConnectionStatus() != "removed"
+            }
+            .sortedByDescending { connectionListActivityTs(it) }
+    }
+
     val chatListRefreshEpoch by AppDataManager.chatListRefreshEpoch.collectAsState()
     LaunchedEffect(chatListRefreshEpoch) {
         if (chatListRefreshEpoch > 0) {
@@ -538,7 +548,7 @@ fun ConnectionsListView(
         cliqueSheetVisible,
         selectedCliqueFriendIds,
         currentUserId,
-        activeOneToOneChats,
+        verifiedCliquePickableOneToOneChats,
     ) {
         val uid = currentUserId
         if (!cliqueSheetVisible || uid.isNullOrBlank()) {
@@ -548,7 +558,7 @@ fun ConnectionsListView(
             return@LaunchedEffect
         }
         cliqueSheetEligibilityReady = false
-        val others = activeOneToOneChats.map { it.otherUser.id }
+        val others = verifiedCliquePickableOneToOneChats.map { it.otherUser.id }
         coroutineScope {
             val maskEntries = others.map { oid ->
                 async {
@@ -1048,7 +1058,7 @@ fun ConnectionsListView(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Pick friends who are pairwise connected (active or kept). Friend–friend edges are checked on the server.",
+                    text = "Pick friends who are pairwise connected (pending, active, kept, or archived 1:1). Friend–friend edges are checked on the server.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1060,7 +1070,7 @@ fun ConnectionsListView(
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     val checkingVisible =
-                        !cliqueSheetEligibilityReady && activeOneToOneChats.isNotEmpty()
+                        !cliqueSheetEligibilityReady && verifiedCliquePickableOneToOneChats.isNotEmpty()
                     Text(
                         text = "Checking who can join…",
                         style = MaterialTheme.typography.bodySmall,
@@ -1077,9 +1087,9 @@ fun ConnectionsListView(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                if (activeOneToOneChats.isEmpty()) {
+                if (verifiedCliquePickableOneToOneChats.isEmpty()) {
                     Text(
-                        text = "No active 1:1 connections yet.",
+                        text = "No eligible 1:1 connections yet.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 } else {
@@ -1089,7 +1099,7 @@ fun ConnectionsListView(
                             .weight(1f, fill = true),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        items(activeOneToOneChats, key = { it.connection.id }) { chatDetails ->
+                        items(verifiedCliquePickableOneToOneChats, key = { it.connection.id }) { chatDetails ->
                             val friendId = chatDetails.otherUser.id
                             val checked = friendId in selectedCliqueFriendIds
                             val canSelect =
