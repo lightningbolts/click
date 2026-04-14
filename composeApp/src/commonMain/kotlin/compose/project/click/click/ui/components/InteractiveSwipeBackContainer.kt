@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,8 +35,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-/** Fraction of screen width the previous route sits left of its rest position while progress is 0. */
-private const val ParallaxBackgroundPeek = 0.3f
+/**
+ * Fraction of screen width the previous route sits left of its rest position while progress is 0.
+ * Exposed so external “persistent underlay” UIs can mirror layer-1 parallax in [graphicsLayer].
+ */
+internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
+
+private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
 
 /**
  * iOS-style interactive back container:
@@ -58,10 +66,20 @@ fun InteractiveSwipeBackContainer(
      * that surface instead of a duplicate subtree with fresh scroll state.
      */
     opaquePreviousBackground: Boolean = true,
+    /**
+     * When non-null, horizontal drag offset is stored in this ref (instead of an internal one).
+     * Pair with [onBehindLayersVisibleChanged] and apply the same parallax [graphicsLayer] on any
+     * content composed *outside* this container (e.g. a single persistent list) so it moves with
+     * layer 1 while [opaquePreviousBackground] is false and [previousContent] is empty.
+     */
+    externalDragOffsetPx: MutableFloatState? = null,
+    /** Invoked when layer 1/2 visibility (`isGestureActive || isSettling`) changes; also `false` on dispose. */
+    onBehindLayersVisibleChanged: (Boolean) -> Unit = {},
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit
 ) {
-    val offsetPx = remember { mutableFloatStateOf(0f) }
+    val internalOffsetPx = remember { mutableFloatStateOf(0f) }
+    val offsetPx = externalDragOffsetPx ?: internalOffsetPx
     var isGestureActive by remember { mutableStateOf(false) }
     var isSettling by remember { mutableStateOf(false) }
     var settleJob by remember { mutableStateOf<Job?>(null) }
@@ -72,6 +90,15 @@ fun InteractiveSwipeBackContainer(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val showPreviousLayer = isGestureActive || isSettling
+
+        SideEffect {
+            onBehindLayersVisibleChanged(showPreviousLayer)
+        }
+        DisposableEffect(Unit) {
+            onDispose {
+                onBehindLayersVisibleChanged(false)
+            }
+        }
 
         fun snapDragOffset(nextOffset: Float) {
             val clampedOffset = nextOffset.coerceIn(0f, widthPx)

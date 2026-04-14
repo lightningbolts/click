@@ -1049,9 +1049,15 @@ class SupabaseChatRepository(
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {
         if (chatId.isBlank() || userId.isBlank()) return
         try {
-            val jwt = tokenStorage.getJwt() ?: return
-            apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
-                println("Error marking messages as read: ${e.redactedRestMessage()}")
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            val gatekeeperResult = apiClient.markChatAsRead(chatId, jwt)
+            if (gatekeeperResult.isSuccess) return
+
+            gatekeeperResult.exceptionOrNull()?.let { e ->
+                println("markChatAsRead failed, falling back to legacy path: ${e.redactedRestMessage()}")
+            }
+            apiClient.markMessagesAsRead(chatId, userId, jwt).onFailure { e ->
+                println("Legacy markMessagesAsRead fallback failed: ${e.redactedRestMessage()}")
             }
         } catch (e: Exception) {
             println("Error marking messages as read: ${e.redactedRestMessage()}")

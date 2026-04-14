@@ -117,6 +117,7 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
@@ -213,6 +214,9 @@ fun ConnectionsScreen(
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
+    val iosChatSwipeDragPx = remember { mutableFloatStateOf(0f) }
+    var iosChatSwipeBehindLayers by remember { mutableStateOf(false) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
     var isTapCloseInFlight by remember { mutableStateOf(false) }
     val screenScope = rememberCoroutineScope()
@@ -270,6 +274,13 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(selectedChatId != null || isTapCloseInFlight)
     }
 
+    LaunchedEffect(selectedChatId, isIOS) {
+        if (isIOS && selectedChatId == null) {
+            iosChatSwipeDragPx.floatValue = 0f
+            iosChatSwipeBehindLayers = false
+        }
+    }
+
     PlatformBackHandler(
         enabled = selectedChatId != null && !isIOS,
         onBack = { closeActiveChat(ChatTransitionMode.Tap) }
@@ -286,19 +297,33 @@ fun ConnectionsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
     if (isIOS) {
         // Persistent base layer + chat overlay architecture.
-        // ConnectionsListView is always composed and never torn down, so the
-        // swipe-back gesture reveals it instantly without a recomposition gap.
+        // ConnectionsListView stays in this tree (not duplicated in swipe previousContent).
+        // [InteractiveSwipeBackContainer] uses an empty previousContent; drag offset + behind-layer
+        // visibility are mirrored onto this Box so the list receives the same parallax as layer 1.
         Box(modifier = Modifier.fillMaxSize()) {
-            ConnectionsListView(
-                viewModel = viewModel,
-                searchQuery = searchQuery,
-                onChatSelected = { chatId -> openChat(chatId) },
-                onNavigateToLocationSettings = onNavigateToLocationSettings,
-                onUserProfileClick = { profileUserId = it },
-                onGroupMembersPicker = { groupMemberPickerUsers = it },
-                verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
-                onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        if (!iosChatSwipeBehindLayers) return@graphicsLayer
+                        val w = size.width.coerceAtLeast(1f)
+                        val o = iosChatSwipeDragPx.floatValue.coerceIn(0f, w)
+                        val progress = (o / w).coerceIn(0f, 1f)
+                        translationX =
+                            -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
+                    },
+            ) {
+                ConnectionsListView(
+                    viewModel = viewModel,
+                    searchQuery = searchQuery,
+                    onChatSelected = { chatId -> openChat(chatId) },
+                    onNavigateToLocationSettings = onNavigateToLocationSettings,
+                    onUserProfileClick = { profileUserId = it },
+                    onGroupMembersPicker = { groupMemberPickerUsers = it },
+                    verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
+                    onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
+                )
+            }
 
             // Sits under the chat overlay; any pointer that misses the overlay (Compose "holes")
             // hits this layer first and is consumed so the persistent list never activates.
@@ -349,6 +374,8 @@ fun ConnectionsScreen(
                         // Persistent ConnectionsListView is composed below AnimatedContent; do not
                         // duplicate the list here (a second rememberLazyListState starts at index 0).
                         opaquePreviousBackground = false,
+                        externalDragOffsetPx = iosChatSwipeDragPx,
+                        onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },
                         previousContent = {},
                         currentContent = {
                             ChatView(

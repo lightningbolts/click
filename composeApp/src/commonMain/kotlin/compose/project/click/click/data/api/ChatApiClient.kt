@@ -426,7 +426,7 @@ class ChatApiClient(
     ): Result<Boolean> {
         return try {
             val response = client.post("$baseUrl/api/chats/$chatId/mark_read") {
-                header("Authorization", authToken)
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 contentType(ContentType.Application.Json)
                 setBody(MarkReadRequest(userId))
             }
