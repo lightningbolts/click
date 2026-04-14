@@ -192,6 +192,7 @@ import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 
 @Composable
@@ -1778,6 +1779,377 @@ private fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
     )
 }
 
+/**
+ * Isolates [ChatViewModel.messageInput] and IME padding reads so typing does not recompose the message list.
+ */
+@Composable
+private fun ConnectionChatMessageComposer(
+    viewModel: ChatViewModel,
+    chatDetails: ChatWithDetails,
+    isGroupChat: Boolean,
+    editingMessageId: String?,
+    replyingTo: MessageWithUser?,
+    mediaPickers: ChatMediaPickerHandles,
+) {
+    val messageInput by viewModel.messageInput.collectAsState()
+    val isSending by viewModel.isSending.collectAsState()
+    var attachmentMenuExpanded by remember { mutableStateOf(false) }
+    val sendButtonAbsorbInteraction = remember { MutableInteractionSource() }
+    val composerFocusRequester = remember { FocusRequester() }
+
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
+    val bottomBarPx = with(density) { 80.dp.roundToPx() }
+    val effectiveImePadding = with(density) {
+        (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
+    }
+
+    val composerStyle = LocalPlatformStyle.current
+    val replyBannerVisible = replyingTo != null && editingMessageId == null
+    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
+    val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
+    val composerRowHPad = 8.dp
+    val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
+    val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
+    val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
+    val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
+    val composerStripInteraction = remember { MutableInteractionSource() }
+    val composerStripBg = MaterialTheme.colorScheme.background
+    val composerInputTextStyle = MaterialTheme.typography.bodyMedium
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(composerStripBg)
+                .clickable(
+                    indication = null,
+                    interactionSource = composerStripInteraction,
+                ) {},
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .consumeWindowInsets(WindowInsets.ime)
+                .padding(bottom = effectiveImePadding)
+                .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
+        ) {
+            Crossfade(
+                targetState = replyBannerVisible,
+                animationSpec = tween(320, easing = FastOutSlowInEasing),
+                modifier = Modifier.fillMaxWidth(),
+                label = "replyComposerBanner",
+            ) { showBanner ->
+                if (!showBanner) {
+                    Spacer(Modifier.height(0.dp).fillMaxWidth())
+                } else {
+                    val rt = replyingTo
+                    if (rt == null) {
+                        Spacer(Modifier.height(0.dp).fillMaxWidth())
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = replyShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = if (composerStyle.isIOS) 0.45f else 0.55f,
+                            ),
+                            border = if (composerStyle.isIOS) {
+                                BorderStroke(
+                                    0.5.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+                                )
+                            } else {
+                                null
+                            },
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Reply,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Replying to ${rt.user.name ?: "message"}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        replySnippetForMetadata(rt.message.content, maxLen = 100),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.clearReplyTarget() },
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Cancel reply",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (replyBannerVisible) {
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
+            val fieldSideInset = auxButtonSize + composerGap
+            val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
+            val attachInteraction = remember { MutableInteractionSource() }
+            val canSend = messageInput.trim().isNotEmpty() && !isSending
+            val sendGradient = Brush.linearGradient(
+                colors = if (canSend) listOf(PrimaryBlue, LightBlue)
+                else listOf(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = auxButtonSize),
+            ) {
+                val composerFieldInteraction = remember { MutableInteractionSource() }
+                val fieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f),
+                )
+                val fieldShape = RoundedCornerShape(fieldCorner)
+                val composerTextStyleCentered = composerInputTextStyle.merge(
+                    TextStyle(
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Center,
+                            trim = LineHeightStyle.Trim.Both,
+                        ),
+                    ),
+                )
+                val approxLineBodyDp = 24.dp
+                val innerVerticalPad =
+                    ((auxButtonSize - approxLineBodyDp) / 2).coerceIn(6.dp, 12.dp)
+                val innerHorizontalPad = 12.dp
+                val fieldDecorPadding = PaddingValues(
+                    start = innerHorizontalPad,
+                    end = innerHorizontalPad,
+                    top = innerVerticalPad,
+                    bottom = innerVerticalPad,
+                )
+                BasicTextField(
+                    value = messageInput,
+                    onValueChange = { viewModel.updateMessageInput(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = fieldSideInset, end = fieldSideInset)
+                        .heightIn(min = auxButtonSize)
+                        .align(Alignment.BottomCenter)
+                        .focusRequester(composerFocusRequester),
+                    enabled = !isSending,
+                    textStyle = composerTextStyleCentered.merge(
+                        TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.None,
+                    ),
+                    singleLine = false,
+                    minLines = 1,
+                    maxLines = 10,
+                    interactionSource = composerFieldInteraction,
+                    cursorBrush = SolidColor(PrimaryBlue),
+                    decorationBox = { innerTextField ->
+                        OutlinedTextFieldDefaults.DecorationBox(
+                            value = messageInput,
+                            innerTextField = innerTextField,
+                            enabled = !isSending,
+                            singleLine = false,
+                            visualTransformation = VisualTransformation.None,
+                            interactionSource = composerFieldInteraction,
+                            placeholder = {
+                                Text(
+                                    when {
+                                        editingMessageId != null -> "Edit message…"
+                                        isGroupChat -> "Message the group…"
+                                        else -> "Message ${chatDetails.otherUser.name}…"
+                                    },
+                                    style = composerTextStyleCentered,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                )
+                            },
+                            colors = fieldColors,
+                            contentPadding = fieldDecorPadding,
+                            container = {
+                                OutlinedTextFieldDefaults.Container(
+                                    enabled = !isSending,
+                                    isError = false,
+                                    interactionSource = composerFieldInteraction,
+                                    modifier = Modifier,
+                                    colors = fieldColors,
+                                    shape = fieldShape,
+                                )
+                            },
+                        )
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .size(auxButtonSize)
+                        .zIndex(4f),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
+                            .clickable(
+                                interactionSource = attachInteraction,
+                                indication = if (composerStyle.useRipple) {
+                                    ripple(bounded = true)
+                                } else {
+                                    null
+                                },
+                                enabled = !isSending,
+                                onClick = { attachmentMenuExpanded = true },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = "Attach",
+                            tint = attachTint,
+                            modifier = Modifier.size(attachIconSize),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = attachmentMenuExpanded,
+                        onDismissRequest = { attachmentMenuExpanded = false },
+                        shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = if (composerStyle.isIOS) {
+                            BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            )
+                        } else {
+                            null
+                        },
+                        tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
+                        shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Photo library",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.Image,
+                                    contentDescription = null,
+                                    tint = PrimaryBlue.copy(alpha = 0.9f),
+                                )
+                            },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                mediaPickers.openPhotoLibrary()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Take photo",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.PhotoCamera,
+                                    contentDescription = null,
+                                    tint = PrimaryBlue.copy(alpha = 0.9f),
+                                )
+                            },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                mediaPickers.openCamera()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Voice message",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.Mic,
+                                    contentDescription = null,
+                                    tint = PrimaryBlue.copy(alpha = 0.9f),
+                                )
+                            },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                mediaPickers.openVoiceRecorder()
+                            },
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(auxButtonSize)
+                        .zIndex(4f)
+                        .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
+                        .background(sendGradient)
+                        .then(
+                            if (canSend) {
+                                Modifier.clickable {
+                                    viewModel.sendMessage()
+                                    composerFocusRequester.requestFocus()
+                                }
+                            } else {
+                                Modifier.clickable(
+                                    indication = null,
+                                    interactionSource = sendButtonAbsorbInteraction,
+                                ) { }
+                            }
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (editingMessageId != null) Icons.Filled.Check
+                        else Icons.AutoMirrored.Filled.Send,
+                        contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
+                        tint = if (canSend) Color.White
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.size(sendIconSize),
+                    )
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1789,8 +2161,6 @@ fun ChatView(
     onOpenGroupMembersPicker: (List<User>) -> Unit = {},
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
-    val messageInput by viewModel.messageInput.collectAsState()
-    val isSending by viewModel.isSending.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
@@ -1812,7 +2182,6 @@ fun ChatView(
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val sendButtonAbsorbInteraction = remember { MutableInteractionSource() }
 
     // Connection action sheet (archive, delete, report, block)
     var showConnectionSheet by remember { mutableStateOf(false) }
@@ -1999,7 +2368,6 @@ fun ChatView(
                             coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
                         },
                     )
-                    var attachmentMenuExpanded by remember { mutableStateOf(false) }
 
                     val messageContentModifier = Modifier
                         .weight(1f)
@@ -2502,368 +2870,14 @@ fun ChatView(
                         }
                     }
 
-                    // Calculate keyboard padding accounting for the Scaffold bottom bar
-                    val density = LocalDensity.current
-                    val imeBottomPx = WindowInsets.ime.getBottom(density)
-                    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
-                    // Subtract system nav bar + approximate Scaffold NavigationBar (~80dp)
-                    val bottomBarPx = with(density) { 80.dp.roundToPx() }
-                    val effectiveImePadding = with(density) {
-                        (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
-                    }
-
-                    val composerStyle = LocalPlatformStyle.current
-                    val replyBannerVisible = replyingTo != null && editingMessageId == null
-                    // iOS: ~44dp matches comfortable body text + cursor; Android unchanged.
-                    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
-                    val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
-                    val composerRowHPad = 8.dp
-                    val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
-                    val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
-                    val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
-                    val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
-                    val composerStripInteraction = remember { MutableInteractionSource() }
-                    val composerFocusRequester = remember { FocusRequester() }
-                    val composerStripBg = MaterialTheme.colorScheme.background
-                    // Match ChatMessageBubble / ChatLinkifyText (bodyMedium).
-                    val composerInputTextStyle = MaterialTheme.typography.bodyMedium
-                    // Full-bleed hit target behind composer so gaps between + / field / send do not
-                    // pass touches through to ConnectionsListView (iOS overlay stack).
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(composerStripBg)
-                                .clickable(
-                                    indication = null,
-                                    interactionSource = composerStripInteraction,
-                                ) {},
-                        )
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = effectiveImePadding)
-                                .padding(horizontal = composerRowHPad, vertical = composerRowVPad)
-                        ) {
-                        Crossfade(
-                            targetState = replyBannerVisible,
-                            animationSpec = tween(320, easing = FastOutSlowInEasing),
-                            modifier = Modifier.fillMaxWidth(),
-                            label = "replyComposerBanner",
-                        ) { showBanner ->
-                            if (!showBanner) {
-                                Spacer(Modifier.height(0.dp).fillMaxWidth())
-                            } else {
-                                val rt = replyingTo
-                                if (rt == null) {
-                                    Spacer(Modifier.height(0.dp).fillMaxWidth())
-                                } else {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = replyShape,
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = if (composerStyle.isIOS) 0.45f else 0.55f,
-                                        ),
-                                        border = if (composerStyle.isIOS) {
-                                            BorderStroke(
-                                                0.5.dp,
-                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
-                                            )
-                                        } else {
-                                            null
-                                        },
-                                        tonalElevation = 0.dp,
-                                        shadowElevation = 0.dp,
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.Reply,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.primary,
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    "Replying to ${rt.user.name ?: "message"}",
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                )
-                                                Text(
-                                                    replySnippetForMetadata(rt.message.content, maxLen = 100),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = { viewModel.clearReplyTarget() },
-                                                modifier = Modifier.size(28.dp),
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.Close,
-                                                    contentDescription = "Cancel reply",
-                                                    modifier = Modifier.size(16.dp),
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (replyBannerVisible) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                        }
-                        val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
-                        val fieldSideInset = auxButtonSize + composerGap
-                        val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
-                        val attachInteraction = remember { MutableInteractionSource() }
-                        val canSend = messageInput.trim().isNotEmpty() && !isSending
-                        val sendGradient = Brush.linearGradient(
-                            colors = if (canSend) listOf(PrimaryBlue, LightBlue)
-                            else listOf(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        )
-                        // Box layout: outlined field is inset between buttons; overlay circles stay on top for hits.
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = auxButtonSize)
-                        ) {
-                            val composerFieldInteraction = remember { MutableInteractionSource() }
-                            val fieldColors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f)
-                            )
-                            val fieldShape = RoundedCornerShape(fieldCorner)
-                            // Vertically center single-line cap / placeholder within the fixed bar height.
-                            val composerTextStyleCentered = composerInputTextStyle.merge(
-                                TextStyle(
-                                    lineHeightStyle = LineHeightStyle(
-                                        alignment = LineHeightStyle.Alignment.Center,
-                                        trim = LineHeightStyle.Trim.Both,
-                                    ),
-                                ),
-                            )
-                            val approxLineBodyDp = 24.dp
-                            val innerVerticalPad =
-                                ((auxButtonSize - approxLineBodyDp) / 2).coerceIn(6.dp, 12.dp)
-                            val innerHorizontalPad = 12.dp
-                            val fieldDecorPadding = PaddingValues(
-                                start = innerHorizontalPad,
-                                end = innerHorizontalPad,
-                                top = innerVerticalPad,
-                                bottom = innerVerticalPad,
-                            )
-                            // Horizontal Modifier.padding shrinks the outlined region so it does not wrap the
-                            // attach/send buttons; DecorationBox contentPadding is inner text only.
-                            BasicTextField(
-                                value = messageInput,
-                                onValueChange = { viewModel.updateMessageInput(it) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = fieldSideInset, end = fieldSideInset)
-                                    .heightIn(min = auxButtonSize)
-                                    .align(Alignment.BottomCenter)
-                                    .focusRequester(composerFocusRequester),
-                                enabled = !isSending,
-                                textStyle = composerTextStyleCentered.merge(
-                                    TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                                ),
-                                keyboardOptions = KeyboardOptions(
-                                    capitalization = KeyboardCapitalization.Sentences,
-                                    keyboardType = KeyboardType.Text,
-                                    imeAction = ImeAction.None
-                                ),
-                                singleLine = false,
-                                minLines = 1,
-                                maxLines = 10,
-                                interactionSource = composerFieldInteraction,
-                                cursorBrush = SolidColor(PrimaryBlue),
-                                decorationBox = { innerTextField ->
-                                    OutlinedTextFieldDefaults.DecorationBox(
-                                        value = messageInput,
-                                        innerTextField = innerTextField,
-                                        enabled = !isSending,
-                                        singleLine = false,
-                                        visualTransformation = VisualTransformation.None,
-                                        interactionSource = composerFieldInteraction,
-                                        placeholder = {
-                                            Text(
-                                                when {
-                                                    editingMessageId != null -> "Edit message…"
-                                                    isGroupChat -> "Message the group…"
-                                                    else -> "Message ${chatDetails.otherUser.name}…"
-                                                },
-                                                style = composerTextStyleCentered,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                            )
-                                        },
-                                        colors = fieldColors,
-                                        contentPadding = fieldDecorPadding,
-                                        container = {
-                                            OutlinedTextFieldDefaults.Container(
-                                                enabled = !isSending,
-                                                isError = false,
-                                                interactionSource = composerFieldInteraction,
-                                                modifier = Modifier,
-                                                colors = fieldColors,
-                                                shape = fieldShape,
-                                            )
-                                        }
-                                    )
-                                }
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .size(auxButtonSize)
-                                    .zIndex(4f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape)
-                                        .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
-                                        .clickable(
-                                            interactionSource = attachInteraction,
-                                            indication = if (composerStyle.useRipple) {
-                                                ripple(bounded = true)
-                                            } else {
-                                                null
-                                            },
-                                            enabled = !isSending,
-                                            onClick = { attachmentMenuExpanded = true },
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Add,
-                                        contentDescription = "Attach",
-                                        tint = attachTint,
-                                        modifier = Modifier.size(attachIconSize),
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = attachmentMenuExpanded,
-                                    onDismissRequest = { attachmentMenuExpanded = false },
-                                    shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    border = if (composerStyle.isIOS) {
-                                        BorderStroke(
-                                            0.5.dp,
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                                        )
-                                    } else {
-                                        null
-                                    },
-                                    tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
-                                    shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
-                                ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Photo library",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Outlined.Image,
-                                                contentDescription = null,
-                                                tint = PrimaryBlue.copy(alpha = 0.9f),
-                                            )
-                                        },
-                                        onClick = {
-                                            attachmentMenuExpanded = false
-                                            mediaPickers.openPhotoLibrary()
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Take photo",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Outlined.PhotoCamera,
-                                                contentDescription = null,
-                                                tint = PrimaryBlue.copy(alpha = 0.9f),
-                                            )
-                                        },
-                                        onClick = {
-                                            attachmentMenuExpanded = false
-                                            mediaPickers.openCamera()
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Voice message",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Outlined.Mic,
-                                                contentDescription = null,
-                                                tint = PrimaryBlue.copy(alpha = 0.9f),
-                                            )
-                                        },
-                                        onClick = {
-                                            attachmentMenuExpanded = false
-                                            mediaPickers.openVoiceRecorder()
-                                        },
-                                    )
-                                }
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .size(auxButtonSize)
-                                    .zIndex(4f)
-                                    .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                                    .background(sendGradient)
-                                    .then(
-                                        if (canSend) {
-                                            Modifier.clickable {
-                                                viewModel.sendMessage()
-                                                composerFocusRequester.requestFocus()
-                                            }
-                                        } else {
-                                            Modifier.clickable(
-                                                indication = null,
-                                                interactionSource = sendButtonAbsorbInteraction
-                                            ) { }
-                                        }
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    if (editingMessageId != null) Icons.Filled.Check
-                                    else Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
-                                    tint = if (canSend) Color.White
-                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(sendIconSize)
-                                )
-                            }
-                        }
-                        }
-                    }
+                    ConnectionChatMessageComposer(
+                        viewModel = viewModel,
+                        chatDetails = chatDetails,
+                        isGroupChat = isGroupChat,
+                        editingMessageId = editingMessageId,
+                        replyingTo = replyingTo,
+                        mediaPickers = mediaPickers,
+                    )
                     }
                 }
             }

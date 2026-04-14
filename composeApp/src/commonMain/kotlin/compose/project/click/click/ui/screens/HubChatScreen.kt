@@ -1,15 +1,6 @@
 package compose.project.click.click.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,9 +21,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
@@ -73,10 +67,7 @@ fun HubChatScreen(
 
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
-    val draft by viewModel.draft.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
-    val isSending by viewModel.isSending.collectAsState()
-    val draftFocusRequester = remember { FocusRequester() }
 
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
@@ -129,6 +120,7 @@ fun HubChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .consumeWindowInsets(WindowInsets.ime)
                 .imePadding(),
         ) {
             Surface(
@@ -198,63 +190,86 @@ fun HubChatScreen(
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = viewModel::updateDraft,
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(draftFocusRequester),
-                    enabled = !inLobby && !isSending,
-                    placeholder = {
-                        Text(
-                            if (inLobby) "Chat unlocks when 3+ people are here"
-                            else "Message the hub…",
-                        )
-                    },
-                    singleLine = false,
-                    minLines = 1,
-                    maxLines = 10,
-                    shape = RoundedCornerShape(20.dp),
+            HubChatInputBar(
+                viewModel = viewModel,
+                inLobby = inLobby,
+                onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun HubChatInputBar(
+    viewModel: HubChatViewModel,
+    inLobby: Boolean,
+    onOpenPhotoLibrary: () -> Unit,
+) {
+    val draft by viewModel.draft.collectAsState()
+    val isSending by viewModel.isSending.collectAsState()
+    val focusRequester = remember { FocusRequester() }
+    var wasSending by remember { mutableStateOf(false) }
+    LaunchedEffect(isSending, draft) {
+        if (wasSending && !isSending && draft.isEmpty()) {
+            focusRequester.requestFocus()
+        }
+        wasSending = isSending
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = viewModel::updateDraft,
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+            enabled = !inLobby && !isSending,
+            placeholder = {
+                Text(
+                    if (inLobby) "Chat unlocks when 3+ people are here"
+                    else "Message the hub…",
                 )
-                IconButton(
-                    onClick = { mediaPickers.openPhotoLibrary() },
-                    enabled = !inLobby && !isSending,
-                ) {
-                    Icon(
-                        Icons.Outlined.Image,
-                        contentDescription = "Attach image",
-                        tint = if (!inLobby && !isSending) {
-                            PrimaryBlue
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        viewModel.sendMessage()
-                        draftFocusRequester.requestFocus()
-                    },
-                    enabled = !inLobby && draft.isNotBlank() && !isSending,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = if (!inLobby && draft.isNotBlank() && !isSending) {
-                            PrimaryBlue
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
-                    )
-                }
-            }
+            },
+            singleLine = false,
+            minLines = 1,
+            maxLines = 10,
+            shape = RoundedCornerShape(20.dp),
+        )
+        IconButton(
+            onClick = onOpenPhotoLibrary,
+            enabled = !inLobby && !isSending,
+        ) {
+            Icon(
+                Icons.Outlined.Image,
+                contentDescription = "Attach image",
+                tint = if (!inLobby && !isSending) {
+                    PrimaryBlue
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                },
+            )
+        }
+        IconButton(
+            onClick = {
+                viewModel.sendMessage()
+                focusRequester.requestFocus()
+            },
+            enabled = !inLobby && draft.isNotBlank() && !isSending,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.Send,
+                contentDescription = "Send",
+                tint = if (!inLobby && draft.isNotBlank() && !isSending) {
+                    PrimaryBlue
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                },
+            )
         }
     }
 }
