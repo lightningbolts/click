@@ -156,9 +156,6 @@ object AppDataManager {
         scope.launch { _transientUserMessages.emit(message.trim()) }
     }
 
-    private val _usingCachedData = MutableStateFlow(false)
-    val usingCachedData: StateFlow<Boolean> = _usingCachedData.asStateFlow()
-    
     // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
     private val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
@@ -233,8 +230,8 @@ object AppDataManager {
     private suspend fun loadAllData() {
         _isLoading.value = true
         _error.value = null
-        val restoredFromCache = restoreCachedSnapshot()
-        
+        restoreCachedSnapshot()
+
         try {
             // Get current user from auth
             val authUser = authRepository.getCurrentUser()
@@ -391,7 +388,6 @@ object AppDataManager {
                     refreshConnectedUsers(snapshot.connections, user.id)
 
                     _isDataLoaded.value = true
-                    _usingCachedData.value = false
                     lastRefreshTime = Clock.System.now().toEpochMilliseconds()
                     persistSnapshot()
 
@@ -416,9 +412,6 @@ object AppDataManager {
             // Do not printStackTrace() — RestException.message embeds Authorization/apikey headers.
             _error.value = mapStartupErrorMessage(e.redactedRestMessage())
             _isDataLoaded.value = true
-            if (restoredFromCache) {
-                _usingCachedData.value = true
-            }
         } finally {
             _isLoading.value = false
         }
@@ -465,7 +458,6 @@ object AppDataManager {
         _notificationPreferences.value = NotificationPreferences()
         _locationPreferences.value = LocationPreferences()
         _pendingConnectionsCount.value = 0
-        _usingCachedData.value = false
         NotificationRuntimeState.setNotificationPreferences(messageEnabled = true, callEnabled = true)
     }
 
@@ -1121,7 +1113,6 @@ object AppDataManager {
             _archivedConnectionIds.value = snapshot.archivedConnectionIds
             _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
             _isDataLoaded.value = snapshot.currentUser != null || snapshot.connections.isNotEmpty()
-            _usingCachedData.value = _isDataLoaded.value
             snapshot
         }.onFailure {
             println("AppDataManager: Failed to restore cached snapshot: ${it.message}")

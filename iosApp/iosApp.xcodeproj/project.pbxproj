@@ -281,6 +281,7 @@
 			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.1;
@@ -315,6 +316,7 @@
 			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.1;
 				DEVELOPMENT_TEAM = W4C3V9Z2N4;
@@ -431,8 +433,8 @@
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -471,8 +473,8 @@
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

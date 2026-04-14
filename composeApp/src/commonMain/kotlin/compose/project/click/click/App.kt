@@ -155,7 +155,6 @@ fun App() {
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val pendingConnectionsCount by AppDataManager.pendingConnectionsCount.collectAsState()
-    val usingCachedData by AppDataManager.usingCachedData.collectAsState()
     val isInitialLoading by AppDataManager.isLoading.collectAsState()
     val appError by AppDataManager.error.collectAsState()
 
@@ -1277,7 +1276,7 @@ fun App() {
                             }
                         }
 
-                        if (!isInitialLoading && (usingCachedData || pendingConnectionsCount > 0 || appError != null)) {
+                        if (!isInitialLoading && (pendingConnectionsCount > 0 || appError != null)) {
                             Card(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
@@ -1295,13 +1294,6 @@ fun App() {
                                         .padding(horizontal = 16.dp, vertical = 12.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    if (usingCachedData) {
-                                        Text(
-                                            text = "Offline mode: showing saved data until sync succeeds.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
                                     if (pendingConnectionsCount > 0) {
                                         Text(
                                             text = "$pendingConnectionsCount connection${if (pendingConnectionsCount == 1) "" else "s"} queued for sync.",
