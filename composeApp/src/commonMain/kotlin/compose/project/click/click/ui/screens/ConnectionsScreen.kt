@@ -269,7 +269,6 @@ fun ConnectionsScreen(
         if (initialChatId != null) {
             selectedChatId = initialChatId
             viewModel.loadChats(isForced = true)
-            viewModel.loadChatMessages(initialChatId)
         }
     }
 

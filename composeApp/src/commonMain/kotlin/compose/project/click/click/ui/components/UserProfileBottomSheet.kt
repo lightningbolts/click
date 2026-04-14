@@ -315,9 +315,11 @@ private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             color = muted,
                         )
                         Text(
-                            text = enc.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: enc.locationName?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: "Unknown place",
+                            text = formatEncounterPlaceLine(
+                                locationName = enc.locationName,
+                                displayLocation = enc.displayLocation,
+                                semanticLocationJson = enc.semanticLocation,
+                            ) ?: "Unknown place",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = body,
