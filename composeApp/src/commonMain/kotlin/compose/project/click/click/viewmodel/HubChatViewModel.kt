@@ -20,6 +20,7 @@ import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.util.LruMemoryCache
+import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.utils.LocationResult
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
@@ -393,7 +394,7 @@ class HubChatViewModel(
         }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.imageBytes != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
                 val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
@@ -434,7 +435,7 @@ class HubChatViewModel(
         }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.audioLocalPath != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
                 val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }

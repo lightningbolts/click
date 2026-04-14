@@ -50,6 +50,7 @@ import compose.project.click.click.util.redactedRestMessage // pragma: allowlist
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
+import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -1127,7 +1128,7 @@ class ChatViewModel(
         }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.imageBytes != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
@@ -1162,7 +1163,7 @@ class ChatViewModel(
         }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.audioLocalPath != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
@@ -1201,7 +1202,7 @@ class ChatViewModel(
         val uid = _currentUserId.value ?: return null
         val url = message.mediaUrlOrNull() ?: return null
         if (!message.isEncryptedMedia()) return null
-        val bytes = withContext(Dispatchers.IO) {
+        val bytes = withContext(chatMediaDispatcher) {
             chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
         }
         if (bytes != null && bytes.isNotEmpty()) {
