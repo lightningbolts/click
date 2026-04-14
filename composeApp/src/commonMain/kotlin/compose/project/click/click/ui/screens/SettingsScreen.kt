@@ -106,7 +106,7 @@ fun SettingsScreen(
     var avatarUploading by remember { mutableStateOf(false) }
     val authRepoForAvatar = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
     val mediaPickers = rememberChatMediaPickers(
-        onImagePicked = { bytes, _ ->
+        onImagePicked = { bytes, mime ->
             settingsScope.launch {
                 if (bytes.size > 2_000_000) {
                     snackbarHostState.showSnackbar("Image must be under 2 MB")
@@ -114,7 +114,7 @@ fun SettingsScreen(
                 }
                 avatarUploading = true
                 try {
-                    authRepoForAvatar.uploadProfilePicture(bytes).fold(
+                    authRepoForAvatar.uploadProfilePicture(bytes, mime).fold(
                         onSuccess = { url ->
                             AppDataManager.applyProfilePictureUrl(url)
                             snackbarHostState.showSnackbar("Profile photo updated")

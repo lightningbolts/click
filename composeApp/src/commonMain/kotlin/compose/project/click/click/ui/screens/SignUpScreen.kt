@@ -1,6 +1,9 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,10 +20,12 @@ import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -31,8 +36,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.utils.toImageBitmap
 import androidx.compose.ui.zIndex
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -57,7 +64,15 @@ private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
 fun SignUpScreen(
     onSignUpSuccess: () -> Unit,
     onLoginClick: () -> Unit,
-    onEmailSignUp: (firstName: String, lastName: String, birthdayIso: String, email: String, password: String) -> Unit,
+    onEmailSignUp: (
+        firstName: String,
+        lastName: String,
+        birthdayIso: String,
+        email: String,
+        password: String,
+        avatarBytes: ByteArray?,
+        avatarMime: String?,
+    ) -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -69,6 +84,22 @@ fun SignUpScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var pendingAvatarBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingAvatarMime by remember { mutableStateOf<String?>(null) }
+    var localAvatarError by remember { mutableStateOf<String?>(null) }
+    val mediaPickers = rememberChatMediaPickers(
+        onImagePicked = { bytes, mime ->
+            localAvatarError = null
+            if (bytes.size > 2_000_000) {
+                localAvatarError = "Image must be under 2 MB"
+                return@rememberChatMediaPickers
+            }
+            pendingAvatarBytes = bytes
+            pendingAvatarMime = mime
+        },
+        onAudioPicked = { _, _, _ -> },
+        onMediaAccessBlocked = { msg -> localAvatarError = msg },
+    )
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
 
@@ -165,7 +196,66 @@ fun SignUpScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Profile photo (optional)",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(112.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clickable(enabled = !isLoading) { mediaPickers.openPhotoLibrary() },
+                contentAlignment = Alignment.Center,
+            ) {
+                val bytes = pendingAvatarBytes
+                if (bytes != null) {
+                    Image(
+                        bitmap = bytes.toImageBitmap(),
+                        contentDescription = "Profile photo preview",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.AddAPhoto,
+                        contentDescription = "Choose profile photo",
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            if (pendingAvatarBytes != null) {
+                TextButton(
+                    onClick = {
+                        pendingAvatarBytes = null
+                        pendingAvatarMime = null
+                        localAvatarError = null
+                    },
+                    enabled = !isLoading,
+                ) {
+                    Text("Remove photo")
+                }
+            }
+            val avErr = localAvatarError
+            if (avErr != null) {
+                Text(
+                    text = avErr,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -341,7 +431,15 @@ fun SignUpScreen(
                     onDone = {
                         focusManager.clearFocus()
                         if (canSignUp) {
-                            onEmailSignUp(firstName.trim(), lastName.trim(), birthdayIso.trim(), email, password)
+                            onEmailSignUp(
+                                firstName.trim(),
+                                lastName.trim(),
+                                birthdayIso.trim(),
+                                email,
+                                password,
+                                pendingAvatarBytes,
+                                pendingAvatarMime,
+                            )
                         }
                     }
                 ),
@@ -372,7 +470,15 @@ fun SignUpScreen(
                 onClick = {
                     focusManager.clearFocus()
                     if (canSignUp) {
-                        onEmailSignUp(firstName.trim(), lastName.trim(), birthdayIso.trim(), email, password)
+                        onEmailSignUp(
+                            firstName.trim(),
+                            lastName.trim(),
+                            birthdayIso.trim(),
+                            email,
+                            password,
+                            pendingAvatarBytes,
+                            pendingAvatarMime,
+                        )
                     }
                 },
                 modifier = Modifier

@@ -15,6 +15,8 @@ import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -23,6 +25,8 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.SerialName
@@ -47,6 +51,12 @@ data class SecurePingResponse(
 @Serializable
 private data class UserProfilePatchResponseDto(
     val user: UserCore,
+)
+
+@Serializable
+private data class AvatarUploadResponseDto(
+    val image: String,
+    val user: UserCore? = null,
 )
 
 @Serializable
@@ -348,6 +358,57 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
      * PATCH `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
      * Provide at least one of [firstName], [lastName], [image], [tags].
      */
+    /**
+     * POST `/api/user/avatar` on click-web (multipart `file` + JWT bearer).
+     * Returns the new public image URL.
+     */
+    suspend fun uploadAvatar(imageBytes: ByteArray, mimeType: String): Result<String> {
+        if (imageBytes.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Empty image"))
+        }
+        val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
+        val filename = when {
+            normalizedMime.contains("png", ignoreCase = true) -> "avatar.png"
+            normalizedMime.contains("webp", ignoreCase = true) -> "avatar.webp"
+            normalizedMime.contains("gif", ignoreCase = true) -> "avatar.gif"
+            else -> "avatar.jpg"
+        }
+        return try {
+            val multipart = MultiPartFormDataContent(
+                formData {
+                    append(
+                        key = "file",
+                        value = imageBytes,
+                        headers = Headers.build {
+                            append(
+                                HttpHeaders.ContentDisposition,
+                                "form-data; name=\"file\"; filename=\"$filename\"",
+                            )
+                            append(HttpHeaders.ContentType, normalizedMime)
+                        },
+                    )
+                    append(key = "mime_type", value = normalizedMime)
+                },
+            )
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
+                setBody(multipart)
+            }
+            if (response.status.value in 200..299) {
+                val dto = response.body<AvatarUploadResponseDto>()
+                val url = dto.image.trim()
+                if (url.isEmpty()) {
+                    Result.failure(Exception("Avatar upload returned an empty URL"))
+                } else {
+                    Result.success(url)
+                }
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun patchUserProfile(
         userId: String,
         firstName: String? = null,

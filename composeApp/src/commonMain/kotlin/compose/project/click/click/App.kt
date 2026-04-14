@@ -427,8 +427,16 @@ fun App() {
                         showSignUp = false
                         authViewModel.resetAuthState()
                     },
-                    onEmailSignUp = { firstName, lastName, birthdayIso, email, password ->
-                        authViewModel.signUpWithEmail(firstName, lastName, birthdayIso, email, password)
+                    onEmailSignUp = { firstName, lastName, birthdayIso, email, password, avatarBytes, avatarMime ->
+                        authViewModel.signUpWithEmail(
+                            firstName,
+                            lastName,
+                            birthdayIso,
+                            email,
+                            password,
+                            avatarBytes,
+                            avatarMime,
+                        )
                     },
                     isLoading = authViewModel.authState is AuthState.Loading,
                     errorMessage = if (authViewModel.authState is AuthState.Error) {

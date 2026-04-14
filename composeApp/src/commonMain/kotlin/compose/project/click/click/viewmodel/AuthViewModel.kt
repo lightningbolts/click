@@ -133,7 +133,15 @@ class AuthViewModel(
         }
     }
 
-    fun signUpWithEmail(firstName: String, lastName: String, birthdayIso: String, email: String, password: String) {
+    fun signUpWithEmail(
+        firstName: String,
+        lastName: String,
+        birthdayIso: String,
+        email: String,
+        password: String,
+        avatarBytes: ByteArray? = null,
+        avatarMime: String? = null,
+    ) {
         viewModelScope.launch {
             try {
                 authState = AuthState.Loading
@@ -148,14 +156,32 @@ class AuthViewModel(
 
                 result.fold(
                     onSuccess = { user ->
-                        isAuthenticated = true
-                        authState = AuthState.Success(
-                            userId = user.id,
-                            email = user.email ?: email,
-                            name = user.displayNameFromMetadata()
-                        )
-                        // Trigger data load for the newly signed-up user
-                        AppDataManager.resetAndReload()
+                        fun finishSuccess() {
+                            isAuthenticated = true
+                            authState = AuthState.Success(
+                                userId = user.id,
+                                email = user.email ?: email,
+                                name = user.displayNameFromMetadata()
+                            )
+                            AppDataManager.resetAndReload()
+                        }
+
+                        val bytes = avatarBytes
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            val mime = avatarMime?.trim()?.takeIf { it.isNotEmpty() } ?: "image/jpeg"
+                            authRepository.uploadProfilePicture(bytes, mime).fold(
+                                onSuccess = { finishSuccess() },
+                                onFailure = { uploadErr ->
+                                    finishSuccess()
+                                    AppDataManager.postTransientUserMessage(
+                                        uploadErr.message?.lines()?.firstOrNull()?.take(200)
+                                            ?: "Could not upload profile photo. You can add one later in Settings.",
+                                    )
+                                },
+                            )
+                        } else {
+                            finishSuccess()
+                        }
                     },
                     onFailure = { error ->
                         authState = AuthState.Error(error.message ?: "Failed to create account")

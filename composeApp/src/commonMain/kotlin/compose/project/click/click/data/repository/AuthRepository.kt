@@ -1,6 +1,5 @@
 package compose.project.click.click.data.repository
 
-import compose.project.click.click.data.AVATARS_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -13,9 +12,7 @@ import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
-import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.withTimeout
-import kotlinx.datetime.Clock
 
 class AuthRepository(
     private val tokenStorage: TokenStorage = createTokenStorage()
@@ -280,27 +277,19 @@ class AuthRepository(
     }
 
     /**
-     * Uploads a JPEG (or other image) to the `avatars` bucket and sets [public.users.image] to the public URL.
+     * Uploads a profile image via click-web [POST /api/user/avatar] (thin client); updates [public.users.image] server-side.
      */
-    suspend fun uploadProfilePicture(imageBytes: ByteArray): Result<String> {
+    suspend fun uploadProfilePicture(imageBytes: ByteArray, mimeType: String = "image/jpeg"): Result<String> {
         if (imageBytes.isEmpty()) {
             return Result.failure(IllegalArgumentException("Empty image"))
         }
         if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
             return Result.failure(IllegalArgumentException("Image must be under 2 MB"))
         }
-        val user = supabase.auth.currentUserOrNull()
-            ?: return Result.failure(Exception("Not signed in"))
-        val path = "${user.id}/${Clock.System.now().toEpochMilliseconds()}.jpg"
+        supabase.auth.currentUserOrNull() ?: return Result.failure(Exception("Not signed in"))
+        val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
         return try {
-            supabase.storage.from(AVATARS_BUCKET).upload(path, imageBytes) {
-                upsert = true
-            }
-            val publicUrl = supabase.storage.from(AVATARS_BUCKET).publicUrl(path)
-            clickWebApi.patchUserProfile(userId = user.id, image = publicUrl).getOrElse { e ->
-                return Result.failure(e)
-            }
-            Result.success(publicUrl)
+            clickWebApi.uploadAvatar(imageBytes, normalizedMime)
         } catch (e: Exception) {
             println("AuthRepository: uploadProfilePicture failed: ${e.redactedRestMessage()}")
             Result.failure(e)
