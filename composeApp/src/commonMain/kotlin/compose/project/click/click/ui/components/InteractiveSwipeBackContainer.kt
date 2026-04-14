@@ -21,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -30,20 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.pow
 
-/**
- * Scales how far left the previous screen starts (as a fraction of width); paired with [ParallaxEaseExponent].
- */
-private const val ParallaxFollowRatio = 0.62f
-
-/**
- * >1: previous layer moves slower at the start of the swipe (lags the top sheet), then catches up — reads as a distinct “slide in” vs only dimming.
- */
-private const val ParallaxEaseExponent = 1.22f
-
-/** Peak scrim alpha over the previous layer; keep moderate so parallax motion stays visible. */
-private const val ParallaxScrimAlphaMax = 0.24f
+/** Fraction of screen width the previous route sits left of its rest position while progress is 0. */
+private const val ParallaxBackgroundPeek = 0.3f
 
 /**
  * iOS-style interactive back container:
@@ -157,7 +147,7 @@ fun InteractiveSwipeBackContainer(
             Modifier
         }
 
-        val slideTransform = Modifier.graphicsLayer {
+        val foregroundSlide = Modifier.graphicsLayer {
             translationX = offsetPx.floatValue
         }
 
@@ -168,7 +158,9 @@ fun InteractiveSwipeBackContainer(
                 if (enabled && useFullWidthHorizontalDrag) dragModifier else Modifier
             )
 
+        // Strict 3-layer stack: (1) previous route + parallax, (2) scrim (opacity only), (3) current route + finger offset.
         if (showPreviousLayer) {
+            // Layer 1 — background / previous route: parallax translation only on this Box.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -179,36 +171,32 @@ fun InteractiveSwipeBackContainer(
                             Modifier
                         }
                     )
+                    .graphicsLayer {
+                        val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, widthPx)
+                        val progress = (currentSwipeOffset / widthPx).coerceIn(0f, 1f)
+                        translationX = -(size.width * ParallaxBackgroundPeek) * (1f - progress)
+                    },
             ) {
-                // Previous screen: starts left of frame, moves right slower than the top sheet (ease on progress).
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val o = offsetPx.floatValue.coerceIn(0f, widthPx)
-                            val p = (o / widthPx).coerceIn(0f, 1f)
-                            val shaped = p.toDouble().pow(ParallaxEaseExponent.toDouble()).toFloat()
-                            translationX = ParallaxFollowRatio * widthPx * (shaped - 1f)
-                        },
-                ) {
-                    previousContent()
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val p = (offsetPx.floatValue / widthPx).coerceIn(0f, 1f)
-                            alpha = (ParallaxScrimAlphaMax * p).coerceIn(0f, 1f)
-                        }
-                        .background(Color.Black),
-                )
+                previousContent()
             }
+            // Layer 2 — scrim over background, under foreground: no translation, opacity only (draw-phase progress).
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawBehind {
+                        val w = size.width.coerceAtLeast(1f)
+                        val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, w)
+                        val progress = (currentSwipeOffset / w).coerceIn(0f, 1f)
+                        drawRect(Color.Black.copy(alpha = 0.5f * (1f - progress)))
+                    },
+            )
         }
 
+        // Layer 3 — foreground: follows the finger; drawn above layers 1–2 when they are present.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(slideTransform)
+                .then(foregroundSlide)
         ) {
             Box(modifier = contentChrome) {
                 currentContent()
