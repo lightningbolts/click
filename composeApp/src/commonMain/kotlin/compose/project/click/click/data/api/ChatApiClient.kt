@@ -23,6 +23,18 @@ class ChatApiClient(
     private val clickWebBaseUrl: String = CLICK_WEB_BASE_URL.trimEnd('/'),
     private val httpClient: HttpClient? = null
 ) {
+    /**
+     * Next.js / undici treat multipart parts without a proper `filename=` as plain fields; ciphertext
+     * must be a binary file part. Keep this aligned with `POST /api/chat/media` (click-web).
+     */
+    private fun encryptedUploadFileHeaders(): Headers = Headers.build {
+        append(
+            HttpHeaders.ContentDisposition,
+            "form-data; name=\"file\"; filename=\"encrypted_media.bin\"",
+        )
+        append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+    }
+
     private val client = httpClient ?: HttpClient {
         install(ContentNegotiation) {
             json(Json {
@@ -478,15 +490,8 @@ class ChatApiClient(
                         formData {
                             append("chat_id", chatId)
                             append("object_path", objectPath)
-                            append("mime_type", mimeType)
-                            append(
-                                "file",
-                                fileBytes,
-                                Headers.build {
-                                    append(HttpHeaders.ContentDisposition, "filename=\"blob\"")
-                                    append(HttpHeaders.ContentType, mimeType.ifBlank { "application/octet-stream" })
-                                },
-                            )
+                            append("mime_type", mimeType.ifBlank { "application/octet-stream" })
+                            append("file", fileBytes, encryptedUploadFileHeaders())
                         },
                     ),
                 )
@@ -560,17 +565,10 @@ class ChatApiClient(
                         formData {
                             append("hub_id", hubId)
                             append("object_path", objectPath)
-                            append("mime_type", mimeType)
+                            append("mime_type", mimeType.ifBlank { "application/octet-stream" })
                             append("user_lat", userLat.toString())
                             append("user_long", userLong.toString())
-                            append(
-                                "file",
-                                fileBytes,
-                                Headers.build {
-                                    append(HttpHeaders.ContentDisposition, "filename=\"blob\"")
-                                    append(HttpHeaders.ContentType, mimeType.ifBlank { "application/octet-stream" })
-                                },
-                            )
+                            append("file", fileBytes, encryptedUploadFileHeaders())
                         },
                     ),
                 )
