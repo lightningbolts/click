@@ -15,8 +15,9 @@ data class ConnectionEncounter(
     val locationName: String? = null,
     @SerialName("display_location")
     val displayLocation: String? = null,
-    /** Stringified JSON with structured place data (e.g. `address.neighbourhood`). */
+    /** Structured place payload from PostgREST as JSON and/or string — see [SemanticLocationWireSerializer]. */
     @SerialName("semantic_location")
+    @Serializable(with = SemanticLocationWireSerializer::class)
     val semanticLocation: String? = null,
     @SerialName("gps_lat")
     val gpsLat: Double? = null,
