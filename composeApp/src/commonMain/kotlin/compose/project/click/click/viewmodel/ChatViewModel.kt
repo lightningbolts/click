@@ -1200,9 +1200,52 @@ class ChatViewModel(
         activeChatSyncJob?.cancel()
         activeChatSyncJob = viewModelScope.launch {
             while (currentApiChatId == chatId) {
-                delay(ACTIVE_CHAT_SYNC_INTERVAL_MS)
+                // Re-fetch reactions on an interval: Supabase Realtime delivery for message_reactions
+                // is still flaky on some mobile builds; leaving/re-entering the chat only refetched via REST.
+                syncActiveChatReactions(chatId)
                 syncActiveChatMessages(chatId, userId)
+                delay(ACTIVE_CHAT_SYNC_INTERVAL_MS)
             }
+        }
+    }
+
+    /**
+     * Merges server-fetched reactions with in-flight optimistic rows (`temp-…` ids) so polling does not
+     * wipe the UI while a toggle is in flight.
+     */
+    private fun mergeReactionMapsPreserveOptimistic(
+        local: Map<String, List<MessageReaction>>,
+        server: Map<String, List<MessageReaction>>,
+    ): Map<String, List<MessageReaction>> {
+        val out = server.toMutableMap()
+        for ((msgId, localList) in local) {
+            val optimistic = localList.filter { it.id.startsWith("temp-") }
+            if (optimistic.isEmpty()) continue
+            val base = out[msgId].orEmpty()
+            val additions = optimistic.filter { opt ->
+                base.none { it.userId == opt.userId && it.reactionType == opt.reactionType }
+            }
+            if (additions.isNotEmpty()) {
+                out[msgId] = base + additions
+            }
+        }
+        for ((msgId, localList) in local) {
+            if (out.containsKey(msgId)) continue
+            val onlyTemp = localList.filter { it.id.startsWith("temp-") }
+            if (onlyTemp.isNotEmpty()) {
+                out[msgId] = onlyTemp
+            }
+        }
+        return out
+    }
+
+    private suspend fun syncActiveChatReactions(chatId: String) {
+        if ((_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id != chatId) return
+        val server = runCatching { chatRepository.fetchReactionsForChat(chatId).groupBy { it.messageId } }
+            .getOrElse { return }
+        val merged = mergeReactionMapsPreserveOptimistic(_messageReactions.value, server)
+        if (merged != _messageReactions.value) {
+            _messageReactions.value = merged
         }
     }
 
@@ -2477,5 +2520,5 @@ class ChatViewModel(
 private const val CHAT_MESSAGE_INPUT_MAX_LENGTH = 1000
 private const val MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS = 3
 private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
-private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 1500L
+private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 800L
 private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L

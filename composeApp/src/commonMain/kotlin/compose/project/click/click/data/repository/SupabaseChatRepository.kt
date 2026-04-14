@@ -1723,7 +1723,7 @@ class SupabaseChatRepository(
 }
 
 private class SupabaseMessageSubscription(private val channel: RealtimeChannel) : ChatMessageSubscription {
-    override suspend fun attach() = channel.subscribe()
+    override suspend fun attach() = channel.subscribe(blockUntilSubscribed = true)
     override suspend fun detach() = channel.unsubscribe()
 }
 
