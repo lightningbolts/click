@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -1064,26 +1065,21 @@ class SupabaseChatRepository(
     }
 
     /**
-     * Subscribe to messages in a chat using Supabase Realtime.
-     * Returns a [Pair] of the [RealtimeChannel] (for cleanup) and a [Flow] of change events.
-     * The caller MUST call `channel.subscribe()` after collecting the flow, or use the
-     * convenience wrapper that does it automatically.
-     *
-     * Keys are eagerly resolved on the caller's coroutine context and captured in the
-     * flow closure so that realtime callbacks (which may execute on background I/O
-     * threads) never read the shared [chatCryptoCache] directly — avoiding
-     * thread-visibility issues in Kotlin/Native release builds.
+     * Subscribe to [messages] and [message_reactions] on a **single** Realtime channel, then
+     * merge both Postgres change streams. This mirrors the web client (one `subscribe()` after
+     * registering all `postgres_changes` listeners) and avoids missing peer reaction events that
+     * can occur when reactions use a separate channel on mobile.
      */
     override suspend fun subscribeToMessages(
         chatId: String,
         viewerUserId: String,
-    ): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> {
+    ): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> {
         val preloaded = resolveChatCrypto(chatId, viewerUserId)
 
         val channel = supabase.channel("messages:$chatId")
         var resolvedCrypto = preloaded
 
-        val changeFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val messageFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
         }.mapNotNull { action ->
             val crypto = resolvedCrypto
@@ -1107,9 +1103,39 @@ class SupabaseChatRepository(
                 }
                 else -> null
             }
+        }.map { ChatRealtimeEvent.Message(it) }
+
+        val reactionFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "message_reactions"
+        }.mapNotNull { action ->
+            when (action) {
+                is PostgresAction.Insert -> {
+                    try {
+                        val row = action.decodeRecord<ReactionRow>()
+                        ChatRealtimeEvent.Reaction(ReactionChangeEvent.Insert(row.toMessageReaction()))
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                is PostgresAction.Delete -> {
+                    try {
+                        val id = action.oldRecord["id"]?.toString()?.trim('"')
+                        val msgId = action.oldRecord["message_id"]?.toString()?.trim('"')
+                        if (id != null && msgId != null) {
+                            ChatRealtimeEvent.Reaction(ReactionChangeEvent.Delete(id, msgId))
+                        } else {
+                            null
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                else -> null
+            }
         }
 
-        return SupabaseMessageSubscription(channel) to changeFlow
+        val merged = merge(messageFlow, reactionFlow)
+        return SupabaseMessageSubscription(channel) to merged
     }
 
     override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> {
@@ -1374,39 +1400,6 @@ class SupabaseChatRepository(
             println("Error removing reaction: ${e.redactedRestMessage()}")
             false
         }
-    }
-
-    // ── Realtime subscription for reactions ────────────────────────────────────
-
-    /**
-     * Subscribe to reaction changes via Supabase Realtime.
-     * Returns a [Pair] of the channel (for cleanup) and a [Flow] of change events.
-     */
-    override fun subscribeToReactions(chatId: String): Pair<ChatReactionSubscription, Flow<ReactionChangeEvent>> {
-        val channel = supabase.channel("reactions:$chatId")
-
-        val changeFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-            table = "message_reactions"
-        }.mapNotNull { action ->
-            when (action) {
-                is PostgresAction.Insert -> {
-                    try {
-                        val row = action.decodeRecord<ReactionRow>()
-                        ReactionChangeEvent.Insert(row.toMessageReaction())
-                    } catch (_: Exception) { null }
-                }
-                is PostgresAction.Delete -> {
-                    try {
-                        val id = action.oldRecord["id"]?.toString()?.trim('"')
-                        val msgId = action.oldRecord["message_id"]?.toString()?.trim('"')
-                        if (id != null && msgId != null) ReactionChangeEvent.Delete(id, msgId) else null
-                    } catch (_: Exception) { null }
-                }
-                else -> null
-            }
-        }
-
-        return SupabaseReactionSubscription(channel) to changeFlow
     }
 
     override suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean) {
@@ -1730,11 +1723,6 @@ class SupabaseChatRepository(
 }
 
 private class SupabaseMessageSubscription(private val channel: RealtimeChannel) : ChatMessageSubscription {
-    override suspend fun attach() = channel.subscribe()
-    override suspend fun detach() = channel.unsubscribe()
-}
-
-private class SupabaseReactionSubscription(private val channel: RealtimeChannel) : ChatReactionSubscription {
     override suspend fun attach() = channel.subscribe()
     override suspend fun detach() = channel.unsubscribe()
 }

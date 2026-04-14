@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatMessageSubscription
+import compose.project.click.click.data.repository.ChatRealtimeEvent
 import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.FakeTokenStorage
@@ -218,7 +219,7 @@ class ChatViewModelTest {
             unreadCount = 0
         )
 
-        val messageEvents = MutableSharedFlow<MessageChangeEvent>(extraBufferCapacity = 16)
+        val messageEvents = MutableSharedFlow<ChatRealtimeEvent>(extraBufferCapacity = 16)
 
         val fake = FakeChatRepository(
             onFetchChatWithDetails = { _, uid ->
@@ -258,7 +259,7 @@ class ChatViewModelTest {
             timeCreated = now + 50,
             isRead = false
         )
-        messageEvents.emit(MessageChangeEvent.Insert(incoming))
+        messageEvents.emit(ChatRealtimeEvent.Message(MessageChangeEvent.Insert(incoming)))
         advanceUntilIdle()
 
         val messagesState = vm.chatMessagesState.value

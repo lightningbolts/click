@@ -15,12 +15,6 @@ interface ChatMessageSubscription {
     suspend fun detach()
 }
 
-/** Handle for attaching/detaching a Supabase realtime reactions channel. */
-interface ChatReactionSubscription {
-    suspend fun attach()
-    suspend fun detach()
-}
-
 /**
  * Abstraction for chat data and realtime subscriptions (implemented by [SupabaseChatRepository]).
  */
@@ -72,7 +66,7 @@ interface ChatRepository {
     /**
      * @param viewerUserId Required to unwrap group master keys from the database when not already cached.
      */
-    suspend fun subscribeToMessages(chatId: String, viewerUserId: String): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>>
+    suspend fun subscribeToMessages(chatId: String, viewerUserId: String): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>>
 
     /**
      * Creates a verified clique server-side; returns the new **group** id on success.
@@ -122,8 +116,6 @@ interface ChatRepository {
     suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean
 
     suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean
-
-    fun subscribeToReactions(chatId: String): Pair<ChatReactionSubscription, Flow<ReactionChangeEvent>>
 
     suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean)
 

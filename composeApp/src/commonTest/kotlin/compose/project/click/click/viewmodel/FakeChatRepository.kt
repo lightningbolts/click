@@ -6,11 +6,10 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatMessageSubscription
-import compose.project.click.click.data.repository.ChatReactionSubscription
+import compose.project.click.click.data.repository.ChatRealtimeEvent
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.MessageListInsertEvent
-import compose.project.click.click.data.repository.ReactionChangeEvent
 import compose.project.click.click.data.repository.TypingStatus
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
@@ -27,11 +26,6 @@ private object NoopMessageSubscription : ChatMessageSubscription {
     override suspend fun detach() {}
 }
 
-private object NoopReactionSubscription : ChatReactionSubscription {
-    override suspend fun attach() {}
-    override suspend fun detach() {}
-}
-
 /**
  * Test double for [ChatRepository]. Defaults are inert; override lambdas to drive behavior.
  */
@@ -44,14 +38,11 @@ class FakeChatRepository(
     var onFetchMessagesForChat: suspend (String, String?) -> List<Message> = { _, _ -> emptyList() },
     var onFetchChatParticipants: suspend (String) -> List<User> = { emptyList() },
     var onFetchReactionsForChat: suspend (String) -> List<MessageReaction> = { emptyList() },
-    var onSubscribeToMessages: suspend (String, String) -> Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> = { _, _ ->
+    var onSubscribeToMessages: suspend (String, String) -> Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> = { _, _ ->
         NoopMessageSubscription to emptyFlow()
     },
     var onSubscribeToMessageInserts: suspend () -> Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> = {
         NoopMessageSubscription to emptyFlow()
-    },
-    var onSubscribeToReactions: (String) -> Pair<ChatReactionSubscription, Flow<ReactionChangeEvent>> = {
-        NoopReactionSubscription to emptyFlow()
     },
     var onObserveTypingStatus: (String) -> Flow<TypingStatus> = {
         flow { awaitCancellation() }
@@ -119,7 +110,7 @@ class FakeChatRepository(
     override suspend fun subscribeToMessages(
         chatId: String,
         viewerUserId: String,
-    ): Pair<ChatMessageSubscription, Flow<MessageChangeEvent>> =
+    ): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> =
         onSubscribeToMessages(chatId, viewerUserId)
 
     override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> =
@@ -146,9 +137,6 @@ class FakeChatRepository(
     override suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean = false
 
     override suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean = false
-
-    override fun subscribeToReactions(chatId: String): Pair<ChatReactionSubscription, Flow<ReactionChangeEvent>> =
-        onSubscribeToReactions(chatId)
 
     override suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean) {}
 

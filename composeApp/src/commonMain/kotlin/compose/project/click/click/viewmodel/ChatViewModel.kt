@@ -42,7 +42,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
-import compose.project.click.click.data.repository.ChatReactionSubscription // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -223,8 +223,6 @@ class ChatViewModel(
     private var currentConnectionId: String? = null
     private var currentApiChatId: String? = null
     private var activeMessageSubscription: ChatMessageSubscription? = null
-    private var activeReactionSubscription: ChatReactionSubscription? = null
-    private var reactionsJob: Job? = null
     private var realtimeJob: Job? = null
     private var activeChatSyncJob: Job? = null
     private var typingPollingJob: Job? = null
@@ -792,8 +790,6 @@ class ChatViewModel(
             currentApiChatId == activeApiChatId &&
                 activeMessageSubscription != null &&
                 realtimeJob?.isActive == true &&
-                activeReactionSubscription != null &&
-                reactionsJob?.isActive == true &&
                 typingPollingJob?.isActive == true &&
                 peerOnlineJob?.isActive == true
 
@@ -926,12 +922,9 @@ class ChatViewModel(
                     hydratedChatDetails.otherUser.id
                 )
 
-                // Subscribe to new messages
+                // Subscribe to new messages (merged stream includes message_reactions realtime)
                 subscribeToNewMessages(apiChatId, userId)
 
-                // Load initial reactions & subscribe to changes via Realtime
-                loadAndSubscribeReactions(apiChatId, payload.reactionsByMessageId)
-                
                 // Monitor typing status (Realtime Broadcast) and peer presence
                 startTypingMonitoring(apiChatId)
                 startPeerOnlineMonitoring(apiChatId, hydratedChatDetails.otherUser.id)
@@ -1113,41 +1106,46 @@ class ChatViewModel(
                     activeMessageSubscription = subscription
 
                     changeFlow
-                        .onEach { event ->
-                            when (event) {
-                                is MessageChangeEvent.Insert -> {
-                                    val user = resolveMessageUser(event.message.user_id, chatId)
-                                        ?: User(id = event.message.user_id, name = null, createdAt = 0L)
-                                    applyInsertedMessage(event.message, user, userId)
-                                    if (event.message.user_id != userId) {
-                                        chatRepository.markMessagesAsRead(chatId, userId)
-                                    }
-                                }
-                                is MessageChangeEvent.Update -> {
-                                    val currentState = _chatMessagesState.value
-                                    if (currentState is ChatMessagesState.Success) {
-                                        val updatedMessages = currentState.messages.map { mwu ->
-                                            if (mwu.message.id == event.message.id) {
-                                                mwu.copy(message = event.message)
-                                            } else mwu
+                        .onEach { envelope ->
+                            when (envelope) {
+                                is ChatRealtimeEvent.Message -> when (val event = envelope.event) {
+                                    is MessageChangeEvent.Insert -> {
+                                        val user = resolveMessageUser(event.message.user_id, chatId)
+                                            ?: User(id = event.message.user_id, name = null, createdAt = 0L)
+                                        applyInsertedMessage(event.message, user, userId)
+                                        if (event.message.user_id != userId) {
+                                            chatRepository.markMessagesAsRead(chatId, userId)
                                         }
-                                        _chatMessagesState.value = currentState.copy(messages = updatedMessages)
-                                        // Refresh the Connections preview when the latest row is edited.
-                                        updatedMessages
-                                            .maxByOrNull { it.message.timeCreated }
-                                            ?.message
-                                            ?.takeIf { it.id == event.message.id }
-                                            ?.let { newest ->
-                                                bumpConnectionInChatList(currentState.chatDetails.connection.id, newest)
+                                    }
+                                    is MessageChangeEvent.Update -> {
+                                        val currentState = _chatMessagesState.value
+                                        if (currentState is ChatMessagesState.Success) {
+                                            val updatedMessages = currentState.messages.map { mwu ->
+                                                if (mwu.message.id == event.message.id) {
+                                                    mwu.copy(message = event.message)
+                                                } else mwu
                                             }
+                                            _chatMessagesState.value = currentState.copy(messages = updatedMessages)
+                                            // Refresh the Connections preview when the latest row is edited.
+                                            updatedMessages
+                                                .maxByOrNull { it.message.timeCreated }
+                                                ?.message
+                                                ?.takeIf { it.id == event.message.id }
+                                                ?.let { newest ->
+                                                    bumpConnectionInChatList(currentState.chatDetails.connection.id, newest)
+                                                }
+                                        }
+                                    }
+                                    is MessageChangeEvent.Delete -> {
+                                        val currentState = _chatMessagesState.value
+                                        if (currentState is ChatMessagesState.Success) {
+                                            val filtered = currentState.messages.filter { it.message.id != event.messageId }
+                                            _chatMessagesState.value = currentState.copy(messages = filtered)
+                                        }
                                     }
                                 }
-                                is MessageChangeEvent.Delete -> {
-                                    val currentState = _chatMessagesState.value
-                                    if (currentState is ChatMessagesState.Success) {
-                                        val filtered = currentState.messages.filter { it.message.id != event.messageId }
-                                        _chatMessagesState.value = currentState.copy(messages = filtered)
-                                    }
+                                is ChatRealtimeEvent.Reaction -> {
+                                    applyReactionChangeEvent(envelope.event)
                                 }
                             }
                         }
@@ -1176,7 +1174,6 @@ class ChatViewModel(
         val apiChatId = currentState.chatDetails.chat.id ?: return
         val peerUserId = currentState.chatDetails.otherUser.id
         val needsMessageSubscription = currentApiChatId != apiChatId || activeMessageSubscription == null || realtimeJob?.isActive != true
-        val needsReactionSubscription = activeReactionSubscription == null || reactionsJob?.isActive != true
         val needsTypingSubscription = typingPollingJob?.isActive != true
         val needsPeerPresence = peerOnlineJob?.isActive != true
 
@@ -1188,9 +1185,6 @@ class ChatViewModel(
             }
             if (needsMessageSubscription) {
                 subscribeToNewMessages(apiChatId, userId)
-            }
-            if (needsReactionSubscription) {
-                loadAndSubscribeReactions(apiChatId, _messageReactions.value)
             }
             if (needsTypingSubscription) {
                 startTypingMonitoring(apiChatId)
@@ -1627,16 +1621,8 @@ class ChatViewModel(
             }
         }
         activeMessageSubscription = null
-        reactionsJob?.cancel()
-        reactionsJob = null
         activeChatSyncJob?.cancel()
         activeChatSyncJob = null
-        activeReactionSubscription?.let { sub ->
-            viewModelScope.launch {
-                try { sub.detach() } catch (_: Exception) {}
-            }
-        }
-        activeReactionSubscription = null
         _messageReactions.value = emptyMap()
         typingPollingJob?.cancel()
         typingPollingJob = null
@@ -1704,60 +1690,25 @@ class ChatViewModel(
 
     // ── Reactions ──────────────────────────────────────────────────────────────
 
-    /** Load existing reactions from DB, then subscribe to Realtime changes. */
-    private fun loadAndSubscribeReactions(
-        chatId: String,
-        initialReactionsByMessageId: Map<String, List<MessageReaction>> = emptyMap()
-    ) {
-        reactionsJob?.cancel()
-        activeReactionSubscription?.let { sub ->
-            viewModelScope.launch { try { sub.detach() } catch (_: Exception) {} }
-        }
-        activeReactionSubscription = null
-
-        reactionsJob = viewModelScope.launch {
-            // 1. Fetch existing reactions
-            if (initialReactionsByMessageId.isNotEmpty()) {
-                _messageReactions.value = initialReactionsByMessageId
-            } else {
-                val initial = chatRepository.fetchReactionsForChat(chatId)
-                _messageReactions.value = initial.groupBy { it.messageId }
+    private fun applyReactionChangeEvent(event: ReactionChangeEvent) {
+        val current = _messageReactions.value.toMutableMap()
+        when (event) {
+            is ReactionChangeEvent.Insert -> {
+                val list = current.getOrElse(event.reaction.messageId) { emptyList() }
+                val withoutDuplicates = list.filterNot {
+                    it.id == event.reaction.id ||
+                        (it.userId == event.reaction.userId &&
+                            it.reactionType == event.reaction.reactionType)
+                }
+                current[event.reaction.messageId] = withoutDuplicates + event.reaction
+                _messageReactions.value = current
             }
-
-            // 2. Subscribe to Realtime inserts/deletes
-            try {
-                val (reactionSub, changeFlow) = chatRepository.subscribeToReactions(chatId)
-                activeReactionSubscription = reactionSub
-
-                changeFlow
-                    .onEach { event ->
-                        val current = _messageReactions.value.toMutableMap()
-                        when (event) {
-                            is ReactionChangeEvent.Insert -> {
-                                val list = current.getOrElse(event.reaction.messageId) { emptyList() }
-                                // Deduplicate against both optimistic and persisted rows
-                                val withoutDuplicates = list.filterNot {
-                                    it.id == event.reaction.id ||
-                                        (it.userId == event.reaction.userId &&
-                                            it.reactionType == event.reaction.reactionType)
-                                }
-                                current[event.reaction.messageId] = withoutDuplicates + event.reaction
-                                _messageReactions.value = current
-                            }
-                            is ReactionChangeEvent.Delete -> {
-                                val list = current[event.messageId]
-                                if (list != null) {
-                                    current[event.messageId] = list.filter { it.id != event.reactionId }
-                                    _messageReactions.value = current
-                                }
-                            }
-                        }
-                    }
-                    .launchIn(this)
-
-                reactionSub.attach()
-            } catch (e: Exception) {
-                println("Error subscribing to reactions: ${e.message}")
+            is ReactionChangeEvent.Delete -> {
+                val list = current[event.messageId]
+                if (list != null) {
+                    current[event.messageId] = list.filter { it.id != event.reactionId }
+                    _messageReactions.value = current
+                }
             }
         }
     }
@@ -2488,7 +2439,6 @@ class ChatViewModel(
         }
         connectionsRealtimeChannel = null
         realtimeJob?.cancel()
-        reactionsJob?.cancel()
         typingPollingJob?.cancel()
         peerTypingTimeoutJob?.cancel()
         peerOnlineJob?.cancel()
@@ -2506,12 +2456,6 @@ class ChatViewModel(
             }
         }
         activeMessageSubscription = null
-        activeReactionSubscription?.let { sub ->
-            viewModelScope.launch {
-                try { sub.detach() } catch (_: Exception) {}
-            }
-        }
-        activeReactionSubscription = null
     }
 
     private fun extensionForChatMedia(mime: String, isImage: Boolean): String {
