@@ -139,6 +139,10 @@ fun InteractiveSwipeBackContainer(
 
                 if (shouldComplete) {
                     onBack()
+                    // Reset immediately so a shared [externalDragOffsetPx] is not left at full width
+                    // for a frame when this composable (and its settle coroutine) is torn down
+                    // right after [onBack] closes the overlay route.
+                    offsetPx.floatValue = 0f
                     kotlinx.coroutines.delay(34)
                 } else {
                     offsetPx.floatValue = 0f

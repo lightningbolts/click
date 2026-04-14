@@ -236,6 +236,14 @@ fun ConnectionsScreen(
             chatTransitionMode = mode
             isTapCloseInFlight = mode == ChatTransitionMode.Tap
             selectedChatId = null
+            // Clear swipe mirror state in the same snapshot as closing the chat so there is no
+            // frame where [InteractiveSwipeBackContainer] is disposed (cancelling its settle
+            // coroutine) while [iosChatSwipeDragPx] is still stuck at full width — that produced
+            // a brief flicker on the connections list after an iOS gesture back.
+            if (isIOS) {
+                iosChatSwipeDragPx.floatValue = 0f
+                iosChatSwipeBehindLayers = false
+            }
             if (mode == ChatTransitionMode.Tap) {
                 closeCleanupJob = screenScope.launch {
                     delay(CHAT_TRANSITION_DURATION_MS)
@@ -305,7 +313,10 @@ fun ConnectionsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        if (!iosChatSwipeBehindLayers) return@graphicsLayer
+                        if (!iosChatSwipeBehindLayers) {
+                            translationX = 0f
+                            return@graphicsLayer
+                        }
                         val w = size.width.coerceAtLeast(1f)
                         val o = iosChatSwipeDragPx.floatValue.coerceIn(0f, w)
                         val progress = (o / w).coerceIn(0f, 1f)
