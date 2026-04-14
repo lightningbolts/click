@@ -844,6 +844,11 @@ class ChatViewModel(
         }
     }
 
+    private fun cachedChatRowForThreadId(threadId: String): ChatWithDetails? =
+        (_chatListState.value as? ChatListState.Success)?.chats?.firstOrNull {
+            it.connection.id == threadId || it.chat.id == threadId
+        }
+
     // Load messages for a specific chat
     fun loadChatMessages(chatId: String) {
         val cachedChat = (_chatListState.value as? ChatListState.Success)
@@ -930,8 +935,18 @@ class ChatViewModel(
         loadChatMessagesJob = viewModelScope.launch {
             try {
                 val previousApiChatId = currentApiChatId
-                // Resolve chat details (use cached if available)
-                val chatDetails = cachedChat ?: chatRepository.fetchChatWithDetails(chatId, userId)
+                // Resolve chat details (use cached if available). Cold start + deep link often races
+                // the inbox fetch; retry briefly while staying on Loading / Success(isLoadingMessages).
+                val chatResolveBackoffMs = longArrayOf(0L, 120L, 280L, 520L, 900L, 1400L)
+                var chatDetails: ChatWithDetails? = cachedChat ?: chatRepository.fetchChatWithDetails(chatId, userId)
+                var resolveAttempt = 0
+                while (chatDetails == null && resolveAttempt < chatResolveBackoffMs.size - 1) {
+                    delay(chatResolveBackoffMs[resolveAttempt + 1])
+                    ensureActive()
+                    chatDetails =
+                        cachedChatRowForThreadId(chatId) ?: chatRepository.fetchChatWithDetails(chatId, userId)
+                    resolveAttempt++
+                }
                 if (chatDetails == null) {
                     _chatMessagesState.value = ChatMessagesState.Error("Chat not found")
                     return@launch
@@ -939,7 +954,14 @@ class ChatViewModel(
 
                 val resolvedConnectionId = chatDetails.connection.id
 
-                val apiChatId = chatDetails.chat.id ?: resolveOrCreateApiChatId(resolvedConnectionId)
+                var apiChatId = chatDetails.chat.id ?: resolveOrCreateApiChatId(resolvedConnectionId)
+                var ensureAttempt = 0
+                while (apiChatId.isNullOrBlank() && ensureAttempt < 4) {
+                    delay(120L * (ensureAttempt + 1))
+                    ensureActive()
+                    apiChatId = chatDetails.chat.id ?: resolveOrCreateApiChatId(resolvedConnectionId)
+                    ensureAttempt++
+                }
                 if (apiChatId.isNullOrBlank()) {
                     _chatMessagesState.value = ChatMessagesState.Error("Unable to start chat")
                     return@launch
@@ -985,8 +1007,21 @@ class ChatViewModel(
                 }
 
                 ensureActive()
-                val payload = buildChatPayload(hydratedChatDetails, apiChatId, userId)
-                prefetchedChatPayloads[resolvedConnectionId] = payload
+                var payload: PrefetchedChatPayload? = null
+                var payloadAttempt = 0
+                while (payload == null && payloadAttempt < 4) {
+                    try {
+                        payload = buildChatPayload(hydratedChatDetails, apiChatId, userId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        payloadAttempt++
+                        if (payloadAttempt >= 4) throw e
+                        delay(180L * payloadAttempt)
+                        ensureActive()
+                    }
+                }
+                prefetchedChatPayloads[resolvedConnectionId] = payload!!
 
                 _messageReactions.value = payload.reactionsByMessageId
                 _showIcebreakerPanel.value = payload.showIcebreakerPanel

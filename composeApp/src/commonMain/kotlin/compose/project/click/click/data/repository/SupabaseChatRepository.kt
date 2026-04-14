@@ -1188,27 +1188,48 @@ class SupabaseChatRepository(
 
     // Fetch chat with details by chat ID via API
     override suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? {
-        return try {
-            val fromList = fetchUserChatsWithDetails(currentUserId)
+        val fromList = runCatching {
+            fetchUserChatsWithDetails(currentUserId)
                 .firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-            if (fromList != null) {
+        }.onFailure { e ->
+            println(
+                "ChatRepository: inbox lookup failed for chat details " +
+                    "(${e.redactedRestMessage()}); trying direct id paths",
+            )
+        }.getOrNull()
+
+        if (fromList != null) {
+            return runCatching {
                 if (!fromList.chat.id.isNullOrBlank() || fromList.groupClique != null) {
-                    return fromList
+                    fromList
+                } else {
+                    val ensured = ensureChatForConnection(fromList.connection.id) ?: return@runCatching fromList
+                    fromList.copy(
+                        chat = fromList.chat.copy(
+                            id = ensured.id,
+                            connectionId = fromList.connection.id,
+                        ),
+                    )
                 }
-                val ensured = ensureChatForConnection(fromList.connection.id) ?: return fromList
-                return fromList.copy(
-                    chat = fromList.chat.copy(
-                        id = ensured.id,
-                        connectionId = fromList.connection.id,
-                    ),
-                )
+            }.getOrElse { e ->
+                println("ChatRepository: normalize inbox chat row failed: ${e.redactedRestMessage()}")
+                fromList
             }
-            loadChatWithDetailsByRawId(chatId, currentUserId)
-                ?: loadChatWithDetailsByConnectionId(chatId, currentUserId)
-        } catch (e: Exception) {
-            println("Error fetching chat with details: ${e.redactedRestMessage()}")
-            null
         }
+
+        val byChatRow = runCatching {
+            loadChatWithDetailsByRawId(chatId, currentUserId)
+        }.onFailure { e ->
+            println("ChatRepository: loadChatWithDetailsByRawId failed: ${e.redactedRestMessage()}")
+        }.getOrNull()
+
+        if (byChatRow != null) return byChatRow
+
+        return runCatching {
+            loadChatWithDetailsByConnectionId(chatId, currentUserId)
+        }.onFailure { e ->
+            println("ChatRepository: loadChatWithDetailsByConnectionId failed: ${e.redactedRestMessage()}")
+        }.getOrNull()
     }
 
     /**
