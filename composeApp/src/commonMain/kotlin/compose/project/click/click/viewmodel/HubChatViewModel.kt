@@ -12,12 +12,14 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.audioCacheFileExtension
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
+import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
+import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.utils.LocationResult
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
@@ -108,6 +110,10 @@ class HubChatViewModel(
     private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
         _secureChatMediaLoadState.asStateFlow()
+    private val secureImageBytesCache =
+        LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
+    private val secureAudioPathCache =
+        LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
     val title: String get() = hubTitle
 
@@ -171,11 +177,15 @@ class HubChatViewModel(
         _messages.value = ui
     }
 
-    private fun clearHubSecureMediaCache() {
-        _secureChatMediaLoadState.value.values.forEach { st ->
-            deleteSecureChatAudioTempFile(st.audioLocalPath)
-        }
+    private fun clearHubSecureMediaCache(purgePersistentCache: Boolean = false) {
         _secureChatMediaLoadState.value = emptyMap()
+        if (purgePersistentCache) {
+            secureAudioPathCache.valuesSnapshot().forEach { path ->
+                deleteSecureChatAudioTempFile(path)
+            }
+            secureAudioPathCache.clear()
+            secureImageBytesCache.clear()
+        }
     }
 
     private fun startSession() {
@@ -374,19 +384,34 @@ class HubChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
+        val cachedBytes = secureImageBytesCache.get(message.id)
+        if (cachedBytes != null && cachedBytes.isNotEmpty()) {
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = cachedBytes))
+            }
+            return
+        }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.imageBytes != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
                 val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
-                MessageCrypto.decryptMediaBytes(raw, MessageCrypto.deriveKeysForHub(hubId))
+                val normalized = normalizeEncryptedMediaPayload(raw)
+                if (normalized !== raw) {
+                    println("HubChatViewModel: decoded base64-wrapped encrypted image payload for message=${message.id}")
+                }
+                MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
+            }.onFailure { e ->
+                println("HubChatViewModel: secure image decrypt failed for message=${message.id}: ${e.message}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
+                println("HubChatViewModel: secure image bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
                 }
             } else {
+                secureImageBytesCache.put(message.id, bytes)
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
                 }
@@ -400,15 +425,29 @@ class HubChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
+        val cachedPath = secureAudioPathCache.get(message.id)
+        if (!cachedPath.isNullOrBlank()) {
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = cachedPath))
+            }
+            return
+        }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.audioLocalPath != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
                 val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
-                MessageCrypto.decryptMediaBytes(raw, MessageCrypto.deriveKeysForHub(hubId))
+                val normalized = normalizeEncryptedMediaPayload(raw)
+                if (normalized !== raw) {
+                    println("HubChatViewModel: decoded base64-wrapped encrypted audio payload for message=${message.id}")
+                }
+                MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
+            }.onFailure { e ->
+                println("HubChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.message}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
+                println("HubChatViewModel: secure audio bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
                 }
@@ -416,10 +455,15 @@ class HubChatViewModel(
             }
             val path = writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
             if (path.isNullOrBlank()) {
+                println("HubChatViewModel: secure audio cache write failed for message=${message.id}")
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
                 }
             } else {
+                val evictedPath = secureAudioPathCache.put(message.id, path)
+                if (!evictedPath.isNullOrBlank() && evictedPath != path) {
+                    deleteSecureChatAudioTempFile(evictedPath)
+                }
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
                 }
@@ -430,7 +474,7 @@ class HubChatViewModel(
     override fun onCleared() {
         sessionJob?.cancel()
         sessionJob = null
-        clearHubSecureMediaCache()
+        clearHubSecureMediaCache(purgePersistentCache = true)
         val ch = hubChannel
         hubChannel = null
         if (ch != null) {
@@ -442,3 +486,6 @@ class HubChatViewModel(
         super.onCleared()
     }
 }
+
+private const val SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES = 160
+private const val SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES = 80

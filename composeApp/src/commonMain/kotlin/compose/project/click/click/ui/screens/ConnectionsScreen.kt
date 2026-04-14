@@ -83,6 +83,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
@@ -196,6 +197,7 @@ import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allo
 import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 
 @Composable
 fun ConnectionsScreen(
@@ -3604,23 +3606,41 @@ private fun ChatBubblePhotoContent(
                 )
             }
             isEncrypted && secureState?.imageBytes != null -> {
-                val bmp = remember(secureState.imageBytes) { secureState.imageBytes!!.toImageBitmap() }
-                Image(
-                    bitmap = bmp,
-                    contentDescription = "Photo",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 220.dp)
-                        .then(
-                            if (borderIfReceived) {
-                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .clip(RoundedCornerShape(16.dp)),
-                )
+                val cachedBitmap = remember(message.id, secureState.imageBytes) {
+                    secureChatImageBitmapCache.get(message.id) ?: run {
+                        runCatching { secureState.imageBytes!!.toImageBitmap() }
+                            .onFailure { e ->
+                                println("ChatBubblePhotoContent: failed to decode decrypted image for message=${message.id}: ${e.message}")
+                            }
+                            .getOrNull()
+                            ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
+                    }
+                }
+                if (cachedBitmap != null) {
+                    Image(
+                        bitmap = cachedBitmap,
+                        contentDescription = "Photo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .then(
+                                if (borderIfReceived) {
+                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clip(RoundedCornerShape(16.dp)),
+                    )
+                } else {
+                    Text(
+                        text = "Could not render image",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
             }
             isEncrypted -> {
                 Box(
@@ -3674,6 +3694,11 @@ private fun ChatBubblePhotoContent(
         }
     }
 }
+
+private val secureChatImageBitmapCache =
+    LruMemoryCache<String, ImageBitmap>(SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES)
+
+private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
 
 private fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
     val totalSec = when {

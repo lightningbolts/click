@@ -49,6 +49,7 @@ import compose.project.click.click.data.repository.ReactionChangeEvent // pragma
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
+import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -62,6 +63,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlin.random.Random
+import kotlinx.coroutines.withContext
 
 @Serializable
 private data class ConnectionRealtimeRow(
@@ -220,6 +222,10 @@ class ChatViewModel(
     private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
         _secureChatMediaLoadState.asStateFlow()
+    private val secureImageBytesCache =
+        LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
+    private val secureAudioPathCache =
+        LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
     private var currentConnectionId: String? = null
     private var currentApiChatId: String? = null
@@ -348,6 +354,7 @@ class ChatViewModel(
         val userUnchanged = _currentUserId.value == userId
         if (!userUnchanged) {
             prefetchedChatPayloads.clear()
+            clearSecureChatMediaCache(purgePersistentCache = true)
         }
         _currentUserId.value = userId
         startGlobalConnectionsRealtime(userId)
@@ -1095,11 +1102,15 @@ class ChatViewModel(
         )
     }
 
-    private fun clearSecureChatMediaCache() {
-        _secureChatMediaLoadState.value.values.forEach { st ->
-            deleteSecureChatAudioTempFile(st.audioLocalPath)
-        }
+    private fun clearSecureChatMediaCache(purgePersistentCache: Boolean = false) {
         _secureChatMediaLoadState.value = emptyMap()
+        if (purgePersistentCache) {
+            secureAudioPathCache.valuesSnapshot().forEach { path ->
+                deleteSecureChatAudioTempFile(path)
+            }
+            secureAudioPathCache.clear()
+            secureImageBytesCache.clear()
+        }
     }
 
     override fun ensureSecureChatImageLoaded(scopeId: String, viewerUserId: String, message: Message) {
@@ -1107,16 +1118,29 @@ class ChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
+        val cachedBytes = secureImageBytesCache.get(message.id)
+        if (cachedBytes != null && cachedBytes.isNotEmpty()) {
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = cachedBytes))
+            }
+            return
+        }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.imageBytes != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
-            val bytes = chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+            val bytes = runCatching {
+                chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+            }.onFailure { e ->
+                println("ChatViewModel: secure image decrypt failed for message=${message.id}: ${e.message}")
+            }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
+                println("ChatViewModel: secure image bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
                 }
             } else {
+                secureImageBytesCache.put(message.id, bytes)
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
                 }
@@ -1129,12 +1153,24 @@ class ChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
+        val cachedPath = secureAudioPathCache.get(message.id)
+        if (!cachedPath.isNullOrBlank()) {
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = cachedPath))
+            }
+            return
+        }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.audioLocalPath != null || cur?.loading == true) return
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
-            val bytes = chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+            val bytes = runCatching {
+                chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+            }.onFailure { e ->
+                println("ChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.message}")
+            }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
+                println("ChatViewModel: secure audio bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
                 }
@@ -1142,10 +1178,15 @@ class ChatViewModel(
             }
             val path = writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
             if (path.isNullOrBlank()) {
+                println("ChatViewModel: secure audio cache write failed for message=${message.id}")
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
                 }
             } else {
+                val evictedPath = secureAudioPathCache.put(message.id, path)
+                if (!evictedPath.isNullOrBlank() && evictedPath != path) {
+                    deleteSecureChatAudioTempFile(evictedPath)
+                }
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
                 }
@@ -1154,12 +1195,19 @@ class ChatViewModel(
     }
 
     suspend fun fetchDecryptedChatMediaBytes(message: Message): ByteArray? {
+        secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
         val s = _chatMessagesState.value as? ChatMessagesState.Success ?: return null
         val cid = s.chatDetails.chat.id ?: return null
         val uid = _currentUserId.value ?: return null
         val url = message.mediaUrlOrNull() ?: return null
         if (!message.isEncryptedMedia()) return null
-        return chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
+        val bytes = withContext(Dispatchers.IO) {
+            chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
+        }
+        if (bytes != null && bytes.isNotEmpty()) {
+            secureImageBytesCache.put(message.id, bytes)
+        }
+        return bytes
     }
 
     // Subscribe to real-time message updates
@@ -2563,6 +2611,7 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        clearSecureChatMediaCache(purgePersistentCache = true)
         connectionsRealtimeJob?.cancel()
         connectionsRealtimeJob = null
         globalMessageListJob?.cancel()
@@ -2616,3 +2665,5 @@ private const val MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS = 3
 private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
 private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 800L
 private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L
+private const val SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES = 160
+private const val SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES = 80

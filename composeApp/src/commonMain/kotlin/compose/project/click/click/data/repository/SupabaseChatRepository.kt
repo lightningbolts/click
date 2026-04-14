@@ -1717,11 +1717,22 @@ class SupabaseChatRepository(
     ): ByteArray? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId) ?: return null
-            val raw = apiClient.downloadUrlBytes(mediaUrl).getOrElse { return null }
-            when (crypto) {
-                is ResolvedChatCrypto.GroupMaster -> MessageCrypto.decryptMediaBytes(raw, crypto.masterKey)
-                is ResolvedChatCrypto.Pairwise -> MessageCrypto.decryptMediaBytes(raw, crypto.keys)
+            val raw = apiClient.downloadUrlBytes(mediaUrl).getOrElse { err ->
+                println("ChatRepository: media download failed: ${err.redactedRestMessage()}")
+                return null
             }
+            val normalized = normalizeEncryptedMediaPayload(raw)
+            if (normalized !== raw) {
+                println("ChatRepository: decoded base64-wrapped encrypted media payload for chat=$chatId")
+            }
+            runCatching {
+                when (crypto) {
+                    is ResolvedChatCrypto.GroupMaster -> MessageCrypto.decryptMediaBytes(normalized, crypto.masterKey)
+                    is ResolvedChatCrypto.Pairwise -> MessageCrypto.decryptMediaBytes(normalized, crypto.keys)
+                }
+            }.onFailure { err ->
+                println("ChatRepository: media decrypt failed for chat=$chatId: ${err.redactedRestMessage()}")
+            }.getOrNull()
         } catch (e: Exception) {
             println("ChatRepository: downloadAndDecryptChatMedia failed: ${e.redactedRestMessage()}")
             null

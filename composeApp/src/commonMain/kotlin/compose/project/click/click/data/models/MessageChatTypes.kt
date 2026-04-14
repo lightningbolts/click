@@ -38,7 +38,9 @@ fun Message.mediaUrlOrNull(): String? = parsedMediaMetadata()?.mediaUrl
 fun Message.isEncryptedMedia(): Boolean {
     val root = metadata as? JsonObject ?: return false
     return root["is_encrypted_media"]?.jsonPrimitive?.booleanOrNull == true ||
-        root["is_encrypted_media"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true
+    root["is_encrypted_media"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true ||
+    root["isEncryptedMedia"]?.jsonPrimitive?.booleanOrNull == true ||
+    root["isEncryptedMedia"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true
 }
 
 fun Message.originalMimeTypeOrNull(): String? {
