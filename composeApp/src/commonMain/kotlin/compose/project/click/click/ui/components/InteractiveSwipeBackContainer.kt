@@ -21,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -154,6 +155,7 @@ fun InteractiveSwipeBackContainer(
             )
 
         if (showPreviousLayer) {
+            val progress = offsetPx.floatValue / widthPx
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -165,7 +167,23 @@ fun InteractiveSwipeBackContainer(
                         }
                     )
             ) {
-                previousContent()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = -widthPx * 0.3f * (1f - progress.coerceIn(0f, 1f))
+                        },
+                ) {
+                    previousContent()
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = (0.42f * progress.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+                        }
+                        .background(Color.Black),
+                )
             }
         }
 

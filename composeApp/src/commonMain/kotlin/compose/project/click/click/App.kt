@@ -385,6 +385,7 @@ fun App() {
     }
 
     MaterialTheme(colorScheme = scheme) {
+        BindPlatformHapticsToViewHierarchy()
         compose.project.click.click.ui.theme.PlatformThemeProvider {
         ConnectionSensorMonitorsProvider(
             ambientNoiseMonitor = ambientNoiseMonitor,

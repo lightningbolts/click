@@ -107,6 +107,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.AnnotatedString
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -1567,11 +1568,22 @@ fun ConnectionItem(
     }
 
     val rowTapModifier = if (isIOS) {
-        Modifier.clickable(onClick = onClick)
+        Modifier.pointerInput(onClick, onLongPress) {
+            detectTapGestures(
+                onTap = { onClick() },
+                onLongPress = {
+                    PlatformHapticsPolicy.heavyImpact()
+                    onLongPress()
+                },
+            )
+        }
     } else {
         Modifier.combinedClickable(
             onClick = onClick,
-            onLongClick = onLongPress
+            onLongClick = {
+                PlatformHapticsPolicy.heavyImpact()
+                onLongPress()
+            },
         )
     }
 
@@ -3818,6 +3830,8 @@ fun ChatMessageBubble(
     showPeerAvatarInGroup: Boolean = false,
     secureMediaHost: SecureChatMediaHost? = null,
     activeChatId: String? = null,
+    /** When false, long-press context and its haptics are disabled (e.g. read-only hub preview). */
+    enableMessageContextMenu: Boolean = true,
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -3858,7 +3872,7 @@ fun ChatMessageBubble(
         .sortedByDescending { it.value }
 
     val density = LocalDensity.current
-    val swipeThresholdPx = remember(density) { with(density) { 52.dp.toPx() } }
+    val swipeThresholdPx = remember(density) { with(density) { 60.dp.toPx() } }
     val maxSwipeVisualPx = remember(density) { with(density) { 42.dp.toPx() } }
     val swipeSoftKneePx = remember(density) { with(density) { 5.dp.toPx() } }
     val swipeTrackGain = remember { 0.56f }
@@ -3870,6 +3884,7 @@ fun ChatMessageBubble(
     val messageWithUserState = rememberUpdatedState(messageWithUser)
     val scope = rememberCoroutineScope()
     var swipeSettleJob by remember(message.id) { mutableStateOf<Job?>(null) }
+    var replyThresholdHapticFired by remember(message.id) { mutableStateOf(false) }
 
     val draggableState = rememberDraggableState { delta ->
         swipeSettleJob?.cancel()
@@ -3883,6 +3898,11 @@ fun ChatMessageBubble(
             trackGain = swipeTrackGain,
             overflowRubberGain = swipeOverflowRubberGain,
         )
+        val directed = if (isSent) (-rawSwipeTravelPx).coerceAtLeast(0f) else rawSwipeTravelPx.coerceAtLeast(0f)
+        if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
+            replyThresholdHapticFired = true
+            PlatformHapticsPolicy.lightImpact()
+        }
     }
 
     val swipeDragModifier = Modifier.draggable(
@@ -3891,6 +3911,7 @@ fun ChatMessageBubble(
         onDragStarted = {
             swipeSettleJob?.cancel()
             swipeSettleJob = null
+            replyThresholdHapticFired = false
             swipeDragging = true
             if (displayVisualPx != 0f) {
                 rawSwipeTravelPx = swipeRawTravelFromVisual(
@@ -3929,6 +3950,20 @@ fun ChatMessageBubble(
             }
         },
     )
+
+    val messageLongPressModifier =
+        if (enableMessageContextMenu) {
+            Modifier.pointerInput(message.id, onLongPress) {
+                detectTapGestures(
+                    onLongPress = {
+                        PlatformHapticsPolicy.heavyImpact()
+                        onLongPress(messageWithUser)
+                    },
+                )
+            }
+        } else {
+            Modifier
+        }
 
     val dragging = swipeDragging
     val rawHintP = replyDragHintProgress(rawSwipeTravelPx, isSent, swipeThresholdPx)
@@ -4003,7 +4038,8 @@ fun ChatMessageBubble(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
                         modifier = Modifier
                             .graphicsLayer { translationX = displayVisualPx }
-                            .then(swipeDragModifier),
+                            .then(swipeDragModifier)
+                            .then(messageLongPressModifier),
                     ) {
                 if (isSent) {
                     if (isImageMessage) {
@@ -4368,7 +4404,10 @@ fun ChatMessageBubble(
                                         else Color.White.copy(alpha = 0.12f),
                                         shape = RoundedCornerShape(12.dp),
                                     )
-                                    .clickable { onToggleReaction(emoji) }
+                                    .clickable {
+                                        PlatformHapticsPolicy.lightImpact()
+                                        onToggleReaction(emoji)
+                                    }
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                             ) {
                                 Text(
@@ -4431,6 +4470,9 @@ private fun MessageActionSheet(
         scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
+        LaunchedEffect(Unit) {
+            PlatformHapticsPolicy.lightImpact()
+        }
         val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
         val onSurface = MaterialTheme.colorScheme.onSurface
         val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
@@ -4477,6 +4519,7 @@ private fun MessageActionSheet(
                             fontSize = 24.sp,
                             modifier = Modifier
                                 .clickable {
+                                    PlatformHapticsPolicy.lightImpact()
                                     viewModel.addReaction(message.id, em)
                                     dismiss()
                                 }
@@ -4520,6 +4563,7 @@ private fun MessageActionSheet(
                         fontSize = 28.sp,
                         modifier = Modifier
                             .clickable {
+                                PlatformHapticsPolicy.lightImpact()
                                 viewModel.addReaction(message.id, emoji)
                                 dismiss()
                             }

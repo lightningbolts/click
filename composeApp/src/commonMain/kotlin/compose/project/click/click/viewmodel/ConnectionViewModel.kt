@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
@@ -287,6 +288,7 @@ class ConnectionViewModel : ViewModel() {
                         _connectionState.value = ConnectionState.Idle
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                     } else {
+                        PlatformHapticsPolicy.successNotification()
                         val groupIds = outcome.groupCliqueCandidateMemberIds
                         val others =
                             groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
@@ -350,6 +352,7 @@ class ConnectionViewModel : ViewModel() {
         val groupIds = payload.groupCliqueCandidateMemberIds
         val others = groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
         if (currentUserId.isNotBlank() && groupIds != null && others.size >= 2) {
+            PlatformHapticsPolicy.successNotification()
             viewModelScope.launch {
                 _verifiedCliqueFromProximity.emit(
                     VerifiedCliqueProximityIntent(
@@ -362,6 +365,7 @@ class ConnectionViewModel : ViewModel() {
         }
         val cur = _connectionState.value
         if (cur is ConnectionState.ProximityCapturedOfflineSyncing || cur is ConnectionState.Idle) {
+            PlatformHapticsPolicy.successNotification()
             _connectionState.value = ConnectionState.PendingConfirmation(users)
         }
     }
@@ -384,6 +388,7 @@ class ConnectionViewModel : ViewModel() {
                         _connectionState.value = ConnectionState.Idle
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                     } else {
+                        PlatformHapticsPolicy.successNotification()
                         val g = r.groupCliqueCandidateMemberIds
                         val others = g?.filter { it != currentUserId }?.distinct().orEmpty()
                         if (currentUserId.isNotBlank() && g != null && others.size >= 2) {

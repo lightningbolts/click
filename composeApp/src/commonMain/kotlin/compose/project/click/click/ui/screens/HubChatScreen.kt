@@ -177,6 +177,7 @@ fun HubChatScreen(
                         showPeerAvatarInGroup = true,
                         secureMediaHost = viewModel,
                         activeChatId = hubIdForSecureMedia,
+                        enableMessageContextMenu = false,
                     )
                 }
             }
