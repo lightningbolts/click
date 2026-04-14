@@ -542,9 +542,9 @@ object CallSessionManager {
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
         val tokenResult = coordinator.fetchCallToken(
+            connectionId = invite.connectionId,
             roomName = invite.roomName,
             participantName = participantName,
-            userId = userId,
         )
 
         tokenResult.onSuccess { response ->
@@ -566,9 +566,9 @@ object CallSessionManager {
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
         val tokenResult = coordinator.fetchCallToken(
+            connectionId = invite.connectionId,
             roomName = invite.roomName,
             participantName = participantName,
-            userId = userId,
         )
 
         tokenResult.onSuccess { response ->

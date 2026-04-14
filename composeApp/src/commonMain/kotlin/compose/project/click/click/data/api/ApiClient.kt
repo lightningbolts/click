@@ -73,6 +73,33 @@ private data class SafetyReportPostBody(
     val reason: String,
 )
 
+/** POST `/api/livekit/token` — matches [click-web/app/api/livekit/token/route.ts]. */
+@Serializable
+data class LiveKitTokenPostBody(
+    @SerialName("connection_id") val connectionId: String,
+    @SerialName("room_name") val roomName: String,
+    @SerialName("participant_name") val participantName: String,
+)
+
+@Serializable
+data class LiveKitTokenResponse(
+    val token: String,
+    @SerialName("ws_url") val wsUrl: String,
+)
+
+/** POST `/api/user/push-tokens` — matches [click-web/app/api/user/push-tokens/route.ts]. */
+@Serializable
+data class PushTokenRegisterBody(
+    val token: String,
+    val platform: String,
+    @SerialName("token_type") val tokenType: String,
+)
+
+@Serializable
+data class PushTokenRegisterResponse(
+    val ok: Boolean,
+)
+
 class ApiClient(private val baseUrl: String = BASE_URL) {
 
     companion object {
@@ -425,6 +452,43 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * POST `/api/livekit/token` on click-web (JWT via Ktor Auth bearer).
+     * [roomName] must be `click-{connectionId}-…` as issued for the in-flight call invite.
+     */
+    suspend fun postLiveKitToken(body: LiveKitTokenPostBody): Result<LiveKitTokenResponse> {
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/livekit/token") {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<LiveKitTokenResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/user/push-tokens` — upserts the device token for the signed-in user. */
+    suspend fun postPushToken(body: PushTokenRegisterBody): Result<PushTokenRegisterResponse> {
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/user/push-tokens") {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<PushTokenRegisterResponse>())
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }

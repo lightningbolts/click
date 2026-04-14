@@ -1,131 +1,48 @@
 package compose.project.click.click.data.repository
 
-import compose.project.click.click.data.SupabaseConfig
-import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.Columns
-import kotlinx.datetime.Clock
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.api.PushTokenRegisterBody
 
 /**
- * Persists FCM / APNs tokens to [public.push_tokens].
+ * Persists FCM / APNs tokens via click-web `POST /api/user/push-tokens` (JWT + server upsert).
  *
  * **Archive-warning pushes:** the scheduled Edge Function `expire-connections` loads tokens
- * from this table and calls `send-push-notification` with `data.type = archive_warning`
+ * from `push_tokens` and calls `send-push-notification` with `data.type = archive_warning`
  * (12h before auto-archive). No extra client hook is required after registration.
  */
-class PushTokenRepository {
-    private val supabase by lazy { SupabaseConfig.client }
-
+class PushTokenRepository(
+    private val apiClient: ApiClient = ApiClient(),
+) {
     suspend fun savePushToken(
         userId: String,
         token: String,
         platform: String,
         tokenType: String = "standard",
-        updatedAt: Long = Clock.System.now().toEpochMilliseconds()
     ): Boolean {
-        val existing = runCatching {
-            supabase.from("push_tokens")
-                .select(columns = Columns.list("id")) {
-                    filter {
-                        eq("token", token)
-                    }
-                }
-                .decodeList<ExistingPushTokenRow>()
-        }.getOrElse {
-            println("Error loading push token state: ${it.message}")
-            return false
+        if (userId.isBlank()) return false
+        val normalizedPlatform = when (platform.lowercase()) {
+            "android" -> "android"
+            "ios" -> "ios"
+            else -> return false
         }
-
-        return try {
-            if (existing.isNotEmpty()) {
-                supabase.from("push_tokens")
-                    .update({
-                        set("user_id", userId)
-                        set("platform", platform)
-                        set("token_type", tokenType)
-                        set("updated_at", updatedAt)
-                    }) {
-                        filter {
-                            eq("token", token)
-                        }
-                    }
-            } else {
-                supabase.from("push_tokens")
-                    .insert(
-                        PushTokenInsert(
-                            userId = userId,
-                            token = token,
-                            platform = platform,
-                            tokenType = tokenType,
-                            updatedAt = updatedAt
-                        )
-                    )
-            }
-
-            true
-        } catch (e: Exception) {
-            if (!e.message.orEmpty().contains("token_type", ignoreCase = true)) {
-                println("Error saving push token: ${e.message}")
-                return false
-            }
-
-            runCatching {
-                if (existing.isNotEmpty()) {
-                    supabase.from("push_tokens")
-                        .update({
-                            set("user_id", userId)
-                            set("platform", platform)
-                            set("updated_at", updatedAt)
-                        }) {
-                            filter {
-                                eq("token", token)
-                            }
-                        }
-                } else {
-                    supabase.from("push_tokens")
-                        .insert(
-                            LegacyPushTokenInsert(
-                                userId = userId,
-                                token = token,
-                                platform = platform,
-                                updatedAt = updatedAt
-                            )
-                        )
-                }
-            }.onFailure {
-                println("Error saving push token: ${it.message}")
-                return false
-            }
-
-            true
+        val normalizedType = when (tokenType.lowercase()) {
+            "voip" -> "voip"
+            else -> "standard"
         }
+        return apiClient
+            .postPushToken(
+                PushTokenRegisterBody(
+                    token = token,
+                    platform = normalizedPlatform,
+                    tokenType = normalizedType,
+                ),
+            )
+            .fold(
+                onSuccess = { it.ok },
+                onFailure = {
+                    println("Error saving push token: ${it.message}")
+                    false
+                },
+            )
     }
-
-    @Serializable
-    private data class ExistingPushTokenRow(
-        val id: String
-    )
-
-    @Serializable
-    private data class PushTokenInsert(
-        @SerialName("user_id")
-        val userId: String,
-        val token: String,
-        val platform: String,
-        @SerialName("token_type")
-        val tokenType: String,
-        @SerialName("updated_at")
-        val updatedAt: Long
-    )
-
-    @Serializable
-    private data class LegacyPushTokenInsert(
-        @SerialName("user_id")
-        val userId: String,
-        val token: String,
-        val platform: String,
-        @SerialName("updated_at")
-        val updatedAt: Long
-    )
 }

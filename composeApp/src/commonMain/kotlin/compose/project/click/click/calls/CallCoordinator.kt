@@ -1,25 +1,23 @@
 package compose.project.click.click.calls
 
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.api.LiveKitTokenPostBody
+import compose.project.click.click.data.api.LiveKitTokenResponse
 
 class CallCoordinator(
-    private val callApiClient: CallApiClient = CallApiClient(),
-    private val tokenStorage: TokenStorage = createTokenStorage()
+    private val apiClient: ApiClient = ApiClient(),
 ) {
     suspend fun fetchCallToken(
+        connectionId: String,
         roomName: String,
         participantName: String,
-        userId: String
-    ): Result<CallApiClient.LiveKitTokenResponse> {
-        val authToken = tokenStorage.getJwt()
-            ?: return Result.failure(IllegalStateException("Missing auth token"))
-
-        return callApiClient.fetchToken(
-            authToken = authToken,
-            roomName = roomName,
-            participantName = participantName,
-            userId = userId
+    ): Result<LiveKitTokenResponse> {
+        return apiClient.postLiveKitToken(
+            LiveKitTokenPostBody(
+                connectionId = connectionId,
+                roomName = roomName,
+                participantName = participantName,
+            ),
         )
     }
 }
