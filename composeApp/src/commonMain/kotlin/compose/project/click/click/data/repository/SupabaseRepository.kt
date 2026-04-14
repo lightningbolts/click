@@ -22,6 +22,7 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.postgrest.rpc
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
@@ -280,6 +281,8 @@ class SupabaseRepository {
                 (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
             }
             best
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error fetchSharedConnectionBetween (redacted): ${e.redactedRestMessage()}")
             null

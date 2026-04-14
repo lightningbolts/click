@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -406,6 +407,10 @@ object AppDataManager {
                 }
             }
             
+        } catch (e: CancellationException) {
+            // Replacing an in-flight load (foreground recovery, refresh) cancels this job; must not
+            // treat that as an offline / sync failure or the banner shows until the next full load.
+            throw e
         } catch (e: Exception) {
             println("Error loading app data: ${e.redactedRestMessage()}")
             // Do not printStackTrace() — RestException.message embeds Authorization/apikey headers.
