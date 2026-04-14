@@ -29,6 +29,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -465,19 +466,35 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
      * [roomName] must be `click-{connectionId}-…` as issued for the in-flight call invite.
      */
     suspend fun postLiveKitToken(body: LiveKitTokenPostBody): Result<LiveKitTokenResponse> {
-        return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/livekit/token") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
+        repeat(3) { attempt ->
+            try {
+                val response = clickWebClient.post("$clickWebAuthOrigin/api/livekit/token") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+                when {
+                    response.status.value in 200..299 -> {
+                        return Result.success(response.body<LiveKitTokenResponse>())
+                    }
+                    response.status.value in 500..599 -> {
+                        if (attempt == 2) {
+                            return Result.failure(
+                                Exception("Failed to create call token (${response.status.value})"),
+                            )
+                        }
+                    }
+                    else -> {
+                        return Result.failure(Exception(readClickWebErrorMessage(response)))
+                    }
+                }
+            } catch (e: Exception) {
+                if (attempt == 2) {
+                    return Result.failure(e)
+                }
             }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<LiveKitTokenResponse>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
+            delay(350L * (attempt + 1))
         }
+        return Result.failure(Exception("Failed to create call token"))
     }
 
     /** POST `/api/user/push-tokens` — upserts the device token for the signed-in user. */
