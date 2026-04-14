@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
@@ -46,6 +48,7 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val uriHandler = LocalUriHandler.current
     val scrollState = rememberScrollState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -179,9 +182,12 @@ fun LoginScreen(
                 )
             }
 
-            // Forgot Password
+            // Forgot Password — opens web dashboard reset flow in the system browser
             TextButton(
-                onClick = { /* TODO: Implement forgot password */ },
+                onClick = {
+                    val url = "${ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')}/reset-password"
+                    uriHandler.openUri(url)
+                },
                 modifier = Modifier.align(Alignment.End),
                 enabled = !isLoading
             ) {
