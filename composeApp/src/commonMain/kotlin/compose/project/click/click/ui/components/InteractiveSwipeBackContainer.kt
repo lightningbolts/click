@@ -30,6 +30,20 @@ import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.pow
+
+/**
+ * Scales how far left the previous screen starts (as a fraction of width); paired with [ParallaxEaseExponent].
+ */
+private const val ParallaxFollowRatio = 0.62f
+
+/**
+ * >1: previous layer moves slower at the start of the swipe (lags the top sheet), then catches up — reads as a distinct “slide in” vs only dimming.
+ */
+private const val ParallaxEaseExponent = 1.22f
+
+/** Peak scrim alpha over the previous layer; keep moderate so parallax motion stays visible. */
+private const val ParallaxScrimAlphaMax = 0.24f
 
 /**
  * iOS-style interactive back container:
@@ -155,7 +169,6 @@ fun InteractiveSwipeBackContainer(
             )
 
         if (showPreviousLayer) {
-            val progress = offsetPx.floatValue / widthPx
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -167,11 +180,15 @@ fun InteractiveSwipeBackContainer(
                         }
                     )
             ) {
+                // Previous screen: starts left of frame, moves right slower than the top sheet (ease on progress).
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            translationX = -widthPx * 0.3f * (1f - progress.coerceIn(0f, 1f))
+                            val o = offsetPx.floatValue.coerceIn(0f, widthPx)
+                            val p = (o / widthPx).coerceIn(0f, 1f)
+                            val shaped = p.toDouble().pow(ParallaxEaseExponent.toDouble()).toFloat()
+                            translationX = ParallaxFollowRatio * widthPx * (shaped - 1f)
                         },
                 ) {
                     previousContent()
@@ -180,7 +197,8 @@ fun InteractiveSwipeBackContainer(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            alpha = (0.42f * progress.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+                            val p = (offsetPx.floatValue / widthPx).coerceIn(0f, 1f)
+                            alpha = (ParallaxScrimAlphaMax * p).coerceIn(0f, 1f)
                         }
                         .background(Color.Black),
                 )
