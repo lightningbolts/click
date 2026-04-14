@@ -24,14 +24,12 @@ class ChatApiClient(
     private val httpClient: HttpClient? = null
 ) {
     /**
-     * Next.js / undici treat multipart parts without a proper `filename=` as plain fields; ciphertext
-     * must be a binary file part. Keep this aligned with `POST /api/chat/media` (click-web).
+     * Ktor already emits `form-data; name="<append key>"` for this part — only add `filename=` here.
+     * A full `form-data; name=...` string duplicates `name` (Ktor merges header values with `; `) and
+     * produces multipart that undici/Node cannot parse (`Failed to parse body as FormData`).
      */
     private fun encryptedUploadFileHeaders(): Headers = Headers.build {
-        append(
-            HttpHeaders.ContentDisposition,
-            "form-data; name=\"file\"; filename=\"encrypted_media.bin\"",
-        )
+        append(HttpHeaders.ContentDisposition, "filename=\"encrypted_media.bin\"")
         append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
     }
 
