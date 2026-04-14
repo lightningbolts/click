@@ -106,6 +106,9 @@ class ChatApiClient(
     )
 
     @Serializable
+    private data class ClickWebMarkChatReadBody(@SerialName("chat_id") val chat_id: String)
+
+    @Serializable
     private data class ClickWebReactionEnvelope(
         val action: String,
         val reaction: ReactionApiModel? = null,
@@ -470,7 +473,33 @@ class ChatApiClient(
     ): Result<Message> = editMessage(chatId, messageId, userId, content, authToken)
 
     /**
+     * Marks messages from other participants as read for [chat_id] (JWT identifies the reader).
+     */
+    suspend fun markChatAsRead(chatId: String, authToken: String): Result<Unit> {
+        if (chatId.isBlank()) return Result.failure(IllegalArgumentException("chatId is blank"))
+        return try {
+            val response = client.patch("$clickWebBaseUrl/api/chat/messages/read") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ClickWebMarkChatReadBody(chat_id = chatId))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to mark chat as read: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            println("Error marking chat as read: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Upload ciphertext bytes to chat-media via gatekeeper; returns the storage object path.
+     *
+     * Do **not** call [contentType] with [ContentType.MultiPart.FormData] on this [HttpRequestBuilder]:
+     * Ktor must set `multipart/form-data` together with the generated `boundary=…` from the body.
+     * A bare `multipart/form-data` header breaks Next.js / undici FormData parsing.
      */
     suspend fun uploadMedia(
         fileBytes: ByteArray,
@@ -544,6 +573,7 @@ class ChatApiClient(
 
     /**
      * Upload hub ciphertext to chat-media; [objectPath] must be `{userId}/hub/{hubId}/...`.
+     * Same rule as [uploadMedia]: never set request-level `multipart/form-data` without boundary.
      */
     suspend fun uploadHubMedia(
         fileBytes: ByteArray,

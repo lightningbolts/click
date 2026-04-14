@@ -1045,21 +1045,14 @@ class SupabaseChatRepository(
         return sendMessage(chat.id ?: return null, userId, content, messageType, metadata)
     }
 
-    // Mark messages as read via API
+    // Mark messages as read via click-web (service role); direct PostgREST updates hit RLS on mobile.
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {
+        if (chatId.isBlank() || userId.isBlank()) return
         try {
-            supabase.from("messages")
-                .update(
-                    buildJsonObject {
-                        put("is_read", true)
-                    }
-                ) {
-                    filter {
-                        eq("chat_id", chatId)
-                        neq("user_id", userId)
-                        eq("is_read", false)
-                    }
-                }
+            val jwt = tokenStorage.getJwt() ?: return
+            apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
+                println("Error marking messages as read: ${e.redactedRestMessage()}")
+            }
         } catch (e: Exception) {
             println("Error marking messages as read: ${e.redactedRestMessage()}")
         }
