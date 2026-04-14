@@ -1214,7 +1214,6 @@ class ChatViewModel(
     // Subscribe to real-time message updates
     private fun subscribeToNewMessages(chatId: String, userId: String) {
         realtimeJob?.cancel()
-        clearSecureChatMediaCache()
         currentApiChatId = chatId
         viewModelScope.launch {
             // Clean up previous channel

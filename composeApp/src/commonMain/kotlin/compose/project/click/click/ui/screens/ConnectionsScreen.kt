@@ -3869,13 +3869,14 @@ fun ChatMessageBubble(
     val mediaUrl = message.mediaUrlOrNull()
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
     val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
+    val encryptedMedia = message.isEncryptedMedia()
 
     val secureMediaStates = secureMediaHost?.secureChatMediaLoadState?.collectAsState()
     val secureSt = secureMediaStates?.value?.get(message.id)
-    LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, message.metadata) {
+    LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, encryptedMedia) {
         val chatId = activeChatId
         val viewer = currentUserId
-        if (message.isEncryptedMedia() && secureMediaHost != null && chatId != null && viewer != null) {
+        if (encryptedMedia && secureMediaHost != null && chatId != null && viewer != null) {
             when (mt) {
                 ChatMessageType.IMAGE -> secureMediaHost.ensureSecureChatImageLoaded(chatId, viewer, message)
                 ChatMessageType.AUDIO -> secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
@@ -4098,7 +4099,7 @@ fun ChatMessageBubble(
                             ChatBubblePhotoContent(
                                 mediaUrl = mediaUrl,
                                 message = message,
-                                isEncrypted = message.isEncryptedMedia(),
+                                isEncrypted = encryptedMedia,
                                 secureState = secureSt,
                                 overflowTint = Color.White.copy(alpha = 0.92f),
                                 onOverflow = { onLongPress(messageWithUser) },
@@ -4186,8 +4187,8 @@ fun ChatMessageBubble(
                                         contentColor = Color.White,
                                         accentColor = Color.White,
                                         localFilePathForPlayback = secureSt?.audioLocalPath,
-                                        secureLoading = message.isEncryptedMedia() && (secureSt == null || secureSt.loading),
-                                        secureError = if (message.isEncryptedMedia()) secureSt?.error else null,
+                                        secureLoading = encryptedMedia && (secureSt == null || secureSt.loading),
+                                        secureError = if (encryptedMedia) secureSt?.error else null,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
@@ -4274,7 +4275,7 @@ fun ChatMessageBubble(
                             ChatBubblePhotoContent(
                                 mediaUrl = mediaUrl,
                                 message = message,
-                                isEncrypted = message.isEncryptedMedia(),
+                                isEncrypted = encryptedMedia,
                                 secureState = secureSt,
                                 overflowTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.95f),
                                 onOverflow = { onLongPress(messageWithUser) },
@@ -4359,8 +4360,8 @@ fun ChatMessageBubble(
                                         contentColor = onBody,
                                         accentColor = linkC,
                                         localFilePathForPlayback = secureSt?.audioLocalPath,
-                                        secureLoading = message.isEncryptedMedia() && secureSt?.loading == true,
-                                        secureError = if (message.isEncryptedMedia()) secureSt?.error else null,
+                                        secureLoading = encryptedMedia && secureSt?.loading == true,
+                                        secureError = if (encryptedMedia) secureSt?.error else null,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {

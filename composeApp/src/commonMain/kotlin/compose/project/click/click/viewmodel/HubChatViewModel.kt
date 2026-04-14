@@ -193,7 +193,6 @@ class HubChatViewModel(
         sessionJob?.cancel()
         sessionJob = viewModelScope.launch {
             try {
-                clearHubSecureMediaCache()
                 loadInitialMessages()
                 val channel = supabase.channel(realtimeChannelName) {
                     presence {
