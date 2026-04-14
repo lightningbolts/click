@@ -846,10 +846,21 @@ class ChatViewModel(
 
     // Load messages for a specific chat
     fun loadChatMessages(chatId: String) {
-        val userId = _currentUserId.value ?: return
         val cachedChat = (_chatListState.value as? ChatListState.Success)
             ?.chats?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
         val connectionId = cachedChat?.connection?.id ?: chatId
+
+        val userId = _currentUserId.value
+        if (userId == null) {
+            val successMatchesTarget = (_chatMessagesState.value as? ChatMessagesState.Success)?.let { s ->
+                s.chatDetails.connection.id == connectionId ||
+                    (!s.chatDetails.chat.id.isNullOrBlank() && s.chatDetails.chat.id == chatId)
+            } == true
+            if (!successMatchesTarget) {
+                _chatMessagesState.value = ChatMessagesState.Loading
+            }
+            return
+        }
 
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success
         val currentConnectionStateId = currentState?.chatDetails?.connection?.id
@@ -867,6 +878,10 @@ class ChatViewModel(
                 peerOnlineJob?.isActive == true
 
         if (currentConnectionId == connectionId && currentState != null && hasLiveSubscriptions) return
+
+        if (_chatMessagesState.value is ChatMessagesState.Error) {
+            _chatMessagesState.value = ChatMessagesState.Loading
+        }
 
         val switchingConnection = currentConnectionId != null && currentConnectionId != connectionId
         if (switchingConnection) {

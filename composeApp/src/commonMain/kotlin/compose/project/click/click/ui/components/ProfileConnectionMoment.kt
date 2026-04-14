@@ -29,6 +29,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionEncounter
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.WeatherSnapshot
@@ -94,6 +98,51 @@ fun Connection.profileContextLine(): String? {
     return id
 }
 
+private val encounterSemanticLocationJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
+
+/**
+ * Parses `connection_encounters.semantic_location` string JSON and returns
+ * `address.neighbourhood` / `address.neighborhood` when present.
+ */
+internal fun neighbourhoodFromEncounterSemanticLocation(raw: String?): String? {
+    val s = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching {
+        val root = encounterSemanticLocationJson.parseToJsonElement(s).jsonObject
+        val addr = root["address"]?.jsonObject ?: return@runCatching null
+        (addr["neighbourhood"] ?: addr["neighborhood"])?.jsonPrimitive?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+}
+
+/** Place line for profile timeline when [Connection.originEncounter] is populated. */
+internal fun formatEncounterPlaceLine(
+    locationName: String?,
+    displayLocation: String?,
+    semanticLocationJson: String?,
+): String? {
+    val display = displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+    val locName = locationName?.trim()?.takeIf { it.isNotEmpty() }
+    val neighbourhood = neighbourhoodFromEncounterSemanticLocation(semanticLocationJson)
+    return when {
+        locName != null && neighbourhood != null && display != null ->
+            "$locName • $neighbourhood, $display"
+        locName != null && neighbourhood != null ->
+            "$locName • $neighbourhood"
+        neighbourhood != null && display != null ->
+            "$neighbourhood, $display"
+        locName != null && display != null && locName != display ->
+            "$locName · $display"
+        display != null -> display
+        locName != null -> locName
+        neighbourhood != null -> neighbourhood
+        else -> null
+    }
+}
+
 private fun structuredAddressFromFull(m: Map<String, String>?): String? {
     if (m.isNullOrEmpty()) return null
     val dn = m["display_name"]?.trim()?.takeIf { it.isNotEmpty() }
@@ -107,13 +156,12 @@ private fun structuredAddressFromFull(m: Map<String, String>?): String? {
 
 fun Connection.profilePlaceLine(): String? {
     val origin = originEncounter
-    val display = origin?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
-    val locName = origin?.locationName?.trim()?.takeIf { it.isNotEmpty() }
-    val fromEncounter = when {
-        locName != null && display != null && locName != display -> "$locName · $display"
-        display != null -> display
-        locName != null -> locName
-        else -> null
+    val fromEncounter = origin?.let { enc ->
+        formatEncounterPlaceLine(
+            locationName = enc.locationName,
+            displayLocation = enc.displayLocation,
+            semanticLocationJson = enc.semanticLocation,
+        )
     }
     val sem = fromEncounter
         ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }

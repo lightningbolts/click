@@ -15,6 +15,9 @@ data class ConnectionEncounter(
     val locationName: String? = null,
     @SerialName("display_location")
     val displayLocation: String? = null,
+    /** Stringified JSON with structured place data (e.g. `address.neighbourhood`). */
+    @SerialName("semantic_location")
+    val semanticLocation: String? = null,
     @SerialName("gps_lat")
     val gpsLat: Double? = null,
     @SerialName("gps_lon")

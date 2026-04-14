@@ -103,7 +103,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -2011,7 +2013,8 @@ private fun ConnectionChatMessageComposer(
                         .heightIn(min = auxButtonSize)
                         .align(Alignment.BottomCenter)
                         .focusRequester(composerFocusRequester),
-                    enabled = !isSending,
+                    enabled = true,
+                    readOnly = isSending,
                     textStyle = composerTextStyleCentered.merge(
                         TextStyle(color = MaterialTheme.colorScheme.onSurface),
                     ),
@@ -2029,7 +2032,7 @@ private fun ConnectionChatMessageComposer(
                         OutlinedTextFieldDefaults.DecorationBox(
                             value = messageInput,
                             innerTextField = innerTextField,
-                            enabled = !isSending,
+                            enabled = true,
                             singleLine = false,
                             visualTransformation = VisualTransformation.None,
                             interactionSource = composerFieldInteraction,
@@ -2048,7 +2051,7 @@ private fun ConnectionChatMessageComposer(
                             contentPadding = fieldDecorPadding,
                             container = {
                                 OutlinedTextFieldDefaults.Container(
-                                    enabled = !isSending,
+                                    enabled = true,
                                     isError = false,
                                     interactionSource = composerFieldInteraction,
                                     modifier = Modifier,
@@ -2254,7 +2257,8 @@ fun ChatView(
         }
     }
 
-    LaunchedEffect(chatId) {
+    LaunchedEffect(chatId, currentUserId) {
+        if (currentUserId.isNullOrBlank()) return@LaunchedEffect
         viewModel.loadChatMessages(chatId)
     }
 
@@ -3908,6 +3912,7 @@ fun ChatMessageBubble(
 
     val secureMediaStates = secureMediaHost?.secureChatMediaLoadState?.collectAsState()
     val secureSt = secureMediaStates?.value?.get(message.id)
+    val hapticFeedback = LocalHapticFeedback.current
     LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, encryptedMedia) {
         val chatId = activeChatId
         val viewer = currentUserId
@@ -3962,7 +3967,7 @@ fun ChatMessageBubble(
         val directed = if (isSent) (-rawSwipeTravelPx).coerceAtLeast(0f) else rawSwipeTravelPx.coerceAtLeast(0f)
         if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
             replyThresholdHapticFired = true
-            PlatformHapticsPolicy.lightImpact()
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
 

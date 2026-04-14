@@ -26,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import compose.project.click.click.PlatformHapticsPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -53,6 +55,11 @@ fun ConnectionRevealOverlay(
     state: ConnectionRevealUiState,
     modifier: Modifier = Modifier
 ) {
+    LaunchedEffect(Unit) {
+        if (state.phase == ConnectionRevealPhase.Connecting) {
+            PlatformHapticsPolicy.successNotification()
+        }
+    }
     val infiniteTransition = rememberInfiniteTransition(label = "connection_reveal")
     val ringScale = infiniteTransition.animateFloat(
         initialValue = 0.72f,
