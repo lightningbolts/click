@@ -1,6 +1,5 @@
 package compose.project.click.click
 
-import platform.Foundation.NSProcessInfo
 import platform.UIKit.UIDevice
 
 class IOSPlatform : Platform {
@@ -8,6 +7,3 @@ class IOSPlatform : Platform {
 }
 
 actual fun getPlatform(): Platform = IOSPlatform()
-
-actual fun shouldUseNoOpComposeHaptics(): Boolean =
-    NSProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != null

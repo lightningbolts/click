@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,19 +24,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * iOS-style interactive back container:
- * - Uses [Modifier.graphicsLayer] for the slide transform by default (draw phase; avoids layout
- *   thrash). Use [useLayoutOffsetForSwipeReveal] on screens with UIKit camera/map previews that
- *   can render black when flattened through a graphics layer.
+ * - Slide transform uses [Modifier.graphicsLayer] so [translationX] is read only during draw;
+ *   the drag offset is never observed during composition (avoids full-tree recompositions per frame).
  * - Full-width drag is applied on the **same** [Box] that wraps [currentContent] so nested
  *   composables (e.g. message bubbles) receive pointer input first and can own horizontal gestures.
  * - When [useFullWidthHorizontalDrag] is false, a start-edge strip handles drag (drawn above
@@ -50,7 +45,6 @@ fun InteractiveSwipeBackContainer(
     enabled: Boolean,
     edgeSwipeWidth: Dp = 24.dp,
     useFullWidthHorizontalDrag: Boolean = true,
-    useLayoutOffsetForSwipeReveal: Boolean = false,
     onBack: () -> Unit,
     /**
      * When false, the layer behind the sliding [currentContent] does not paint a solid
@@ -62,16 +56,13 @@ fun InteractiveSwipeBackContainer(
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit
 ) {
-    val dragOffset = remember { mutableFloatStateOf(0f) }
+    val offsetPx = remember { mutableFloatStateOf(0f) }
     var isGestureActive by remember { mutableStateOf(false) }
     var isSettling by remember { mutableStateOf(false) }
     var settleJob by remember { mutableStateOf<Job?>(null) }
     val settleScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val dragJitterThresholdPx = remember(density) { with(density) { 0.75.dp.toPx() } }
-    val dragTranslationX by remember {
-        derivedStateOf { dragOffset.floatValue }
-    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
@@ -79,16 +70,16 @@ fun InteractiveSwipeBackContainer(
 
         fun snapDragOffset(nextOffset: Float) {
             val clampedOffset = nextOffset.coerceIn(0f, widthPx)
-            val movedEnough = abs(clampedOffset - dragOffset.floatValue) >= dragJitterThresholdPx
+            val movedEnough = abs(clampedOffset - offsetPx.floatValue) >= dragJitterThresholdPx
             if (movedEnough || clampedOffset == 0f || clampedOffset == widthPx) {
-                dragOffset.floatValue = clampedOffset
+                offsetPx.floatValue = clampedOffset
             }
         }
 
         fun finishGesture(velocityX: Float) {
-            val currentOffset = dragOffset.floatValue
+            val currentOffset = offsetPx.floatValue
             if (currentOffset <= 0f) {
-                dragOffset.floatValue = 0f
+                offsetPx.floatValue = 0f
                 isGestureActive = false
                 isSettling = false
                 settleJob = null
@@ -111,14 +102,14 @@ fun InteractiveSwipeBackContainer(
                         stiffness = Spring.StiffnessMedium
                     )
                 ) { value, _ ->
-                    dragOffset.floatValue = value
+                    offsetPx.floatValue = value
                 }
 
                 if (shouldComplete) {
                     onBack()
                     kotlinx.coroutines.delay(34)
                 } else {
-                    dragOffset.floatValue = 0f
+                    offsetPx.floatValue = 0f
                 }
                 isGestureActive = false
                 isSettling = false
@@ -128,7 +119,7 @@ fun InteractiveSwipeBackContainer(
 
         val dragState = rememberDraggableState { delta ->
             if (!isGestureActive || isSettling) return@rememberDraggableState
-            snapDragOffset(dragOffset.floatValue + delta)
+            snapDragOffset(offsetPx.floatValue + delta)
         }
 
         val dragModifier = if (enabled) {
@@ -151,14 +142,8 @@ fun InteractiveSwipeBackContainer(
             Modifier
         }
 
-        val slideTransform = if (useLayoutOffsetForSwipeReveal) {
-            Modifier.offset {
-                IntOffset(dragTranslationX.roundToInt(), 0)
-            }
-        } else {
-            Modifier.graphicsLayer {
-                translationX = dragTranslationX
-            }
+        val slideTransform = Modifier.graphicsLayer {
+            translationX = offsetPx.floatValue
         }
 
         val contentChrome = Modifier

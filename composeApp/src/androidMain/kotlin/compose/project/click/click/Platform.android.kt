@@ -7,5 +7,3 @@ class AndroidPlatform : Platform {
 }
 
 actual fun getPlatform(): Platform = AndroidPlatform()
-
-actual fun shouldUseNoOpComposeHaptics(): Boolean = false

@@ -1055,7 +1055,6 @@ fun App() {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
                                             edgeSwipeWidth = 44.dp,
-                                            useLayoutOffsetForSwipeReveal = true,
                                             onBack = {
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 showQRScanner = false
@@ -1224,7 +1223,6 @@ fun App() {
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
                                             edgeSwipeWidth = 44.dp,
-                                            useLayoutOffsetForSwipeReveal = animatedScreen == NavigationItem.Map.route,
                                             onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
                                             previousContent = { renderScreen(previousKey, false) },
                                             currentContent = { renderPrimaryScreen(animatedScreen) }
