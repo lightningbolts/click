@@ -1679,44 +1679,35 @@ class SupabaseChatRepository(
             val senderUserId = parts.getOrNull(0) ?: return null
             val crypto = resolveChatCrypto(chatId, senderUserId) ?: return null
             val ct = contentType.ifBlank { "application/octet-stream" }
-            val (plainBytes, uploadMime, storagePath) =
+            val (plainBytes, uploadMime) =
                 if (ct.lowercase().startsWith("image/")) {
                     val compressed = compressOutgoingChatImageForUpload(bytes, ct)
                     if (compressed.size >= 2 &&
                         compressed[0] == 0xFF.toByte() &&
                         compressed[1] == 0xD8.toByte()
                     ) {
-                        Triple(compressed, "image/jpeg", objectPathWithJpegExtension(objectPath))
+                        compressed to "image/jpeg"
                     } else {
-                        Triple(compressed, ct, objectPath)
+                        compressed to ct
                     }
                 } else {
-                    Triple(bytes, ct, objectPath)
+                    bytes to ct
                 }
             val cipher = when (crypto) {
                 is ResolvedChatCrypto.GroupMaster -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.masterKey)
                 is ResolvedChatCrypto.Pairwise -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.keys)
             }
             val jwt = tokenStorage.getJwt() ?: return null
-            val path = apiClient.uploadMedia(
+            apiClient.uploadMedia(
                 fileBytes = cipher,
                 chatId = chatId,
                 mimeType = uploadMime,
-                objectPath = storagePath,
                 authToken = jwt,
             ).getOrElse { return null }
-            supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(path)
         } catch (e: Exception) {
             println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
             null
         }
-    }
-
-    /** After [compressOutgoingChatImageForUpload], storage key should end in `.jpg` so MIME matches bytes. */
-    private fun objectPathWithJpegExtension(path: String): String {
-        val slash = path.lastIndexOf('/')
-        val dot = path.lastIndexOf('.')
-        return if (dot > slash) path.substring(0, dot) + ".jpg" else "$path.jpg"
     }
 
     override suspend fun downloadAndDecryptChatMedia(

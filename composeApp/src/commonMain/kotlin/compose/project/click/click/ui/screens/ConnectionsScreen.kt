@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1794,7 +1795,6 @@ private fun ConnectionChatMessageComposer(
     val messageInput by viewModel.messageInput.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
-    val sendButtonAbsorbInteraction = remember { MutableInteractionSource() }
     val composerFocusRequester = remember { FocusRequester() }
 
     val density = LocalDensity.current
@@ -2122,19 +2122,14 @@ private fun ConnectionChatMessageComposer(
                         .zIndex(4f)
                         .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
                         .background(sendGradient)
-                        .then(
-                            if (canSend) {
-                                Modifier.clickable {
+                        .pointerInput(canSend) {
+                            detectTapGestures {
+                                if (canSend) {
                                     viewModel.sendMessage()
                                     composerFocusRequester.requestFocus()
                                 }
-                            } else {
-                                Modifier.clickable(
-                                    indication = null,
-                                    interactionSource = sendButtonAbsorbInteraction,
-                                ) { }
                             }
-                        ),
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

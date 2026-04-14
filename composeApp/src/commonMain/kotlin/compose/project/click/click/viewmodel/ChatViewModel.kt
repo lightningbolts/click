@@ -697,6 +697,13 @@ class ChatViewModel(
         )
     }
 
+    private fun markMessagesReadOptimistically(connectionId: String, chatId: String, userId: String) {
+        markInboxReadOptimistically(connectionId)
+        viewModelScope.launch {
+            chatRepository.markMessagesAsRead(chatId, userId)
+        }
+    }
+
     private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
         chat.connection.last_message_at
             ?: chat.lastMessage?.timeCreated
@@ -975,8 +982,11 @@ class ChatViewModel(
                 )
 
                 // Mark messages as read (optimistic inbox badge first so the Clicks list updates immediately).
-                markInboxReadOptimistically(resolvedConnectionId)
-                chatRepository.markMessagesAsRead(apiChatId, userId)
+                markMessagesReadOptimistically(
+                    connectionId = resolvedConnectionId,
+                    chatId = apiChatId,
+                    userId = userId,
+                )
 
                 chatRepository.joinChatEphemeralChannel(
                     apiChatId,
@@ -1183,9 +1193,16 @@ class ChatViewModel(
                                             val active = _chatMessagesState.value as? ChatMessagesState.Success
                                             val activeApiChatId = active?.chatDetails?.chat?.id
                                             if (active != null && activeApiChatId == chatId) {
-                                                markInboxReadOptimistically(active.chatDetails.connection.id)
+                                                markMessagesReadOptimistically(
+                                                    connectionId = active.chatDetails.connection.id,
+                                                    chatId = chatId,
+                                                    userId = userId,
+                                                )
+                                            } else {
+                                                viewModelScope.launch {
+                                                    chatRepository.markMessagesAsRead(chatId, userId)
+                                                }
                                             }
-                                            chatRepository.markMessagesAsRead(chatId, userId)
                                         }
                                     }
                                     is MessageChangeEvent.Update -> {
@@ -1369,8 +1386,11 @@ class ChatViewModel(
         }
 
         if (latestMessages.any { it.user_id != userId && !it.isRead }) {
-            markInboxReadOptimistically(currentState.chatDetails.connection.id)
-            chatRepository.markMessagesAsRead(chatId, userId)
+            markMessagesReadOptimistically(
+                connectionId = currentState.chatDetails.connection.id,
+                chatId = chatId,
+                userId = userId,
+            )
         }
     }
 

@@ -10,6 +10,8 @@ import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -127,7 +129,17 @@ class ChatApiClient(
     )
 
     @Serializable
-    private data class ChatMediaUploadResponse(val path: String)
+    private data class ChatMediaUploadPathResponse(val path: String)
+
+    @Serializable
+    private data class ChatMediaUploadUrlResponse(val url: String? = null, val path: String? = null)
+
+    @Serializable
+    private data class ChatMediaUploadJsonBody(
+        @SerialName("chat_id") val chatId: String,
+        @SerialName("mime_type") val mimeType: String,
+        @SerialName("file_b64") val fileBase64: String,
+    )
 
     @Serializable
     private data class ClickWebHubMessageEnvelope(val message: HubMessageApiDto)
@@ -494,37 +506,36 @@ class ChatApiClient(
         }
     }
 
-    /**
-     * Upload ciphertext bytes to chat-media via gatekeeper; returns the storage object path.
-     *
-     * Do **not** call [contentType] with [ContentType.MultiPart.FormData] on this [HttpRequestBuilder]:
-     * Ktor must set `multipart/form-data` together with the generated `boundary=…` from the body.
-     * A bare `multipart/form-data` header breaks Next.js / undici FormData parsing.
-     */
+    /** Upload ciphertext bytes to chat-media via gatekeeper; returns the public media URL. */
+    @OptIn(ExperimentalEncodingApi::class)
     suspend fun uploadMedia(
         fileBytes: ByteArray,
         chatId: String,
         mimeType: String,
-        objectPath: String,
         authToken: String,
     ): Result<String> {
         if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
         return try {
+            val encoded = Base64.encode(fileBytes)
             val response = client.post("$clickWebBaseUrl/api/chat/media") {
                 headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
                 setBody(
-                    MultiPartFormDataContent(
-                        formData {
-                            append("chat_id", chatId)
-                            append("object_path", objectPath)
-                            append("mime_type", mimeType.ifBlank { "application/octet-stream" })
-                            append("file", fileBytes, encryptedUploadFileHeaders())
-                        },
+                    ChatMediaUploadJsonBody(
+                        chatId = chatId,
+                        mimeType = mimeType.ifBlank { "application/octet-stream" },
+                        fileBase64 = encoded,
                     ),
                 )
             }
             if (response.status.value in 200..299) {
-                Result.success(response.body<ChatMediaUploadResponse>().path)
+                val payload = response.body<ChatMediaUploadUrlResponse>()
+                val url = payload.url?.trim().orEmpty()
+                if (url.isNotEmpty()) {
+                    Result.success(url)
+                } else {
+                    Result.failure(Exception("Upload response missing media url"))
+                }
             } else {
                 Result.failure(Exception("Failed to upload media: ${response.status}"))
             }
@@ -602,7 +613,7 @@ class ChatApiClient(
                 )
             }
             if (response.status.value in 200..299) {
-                Result.success(response.body<ChatMediaUploadResponse>().path)
+                Result.success(response.body<ChatMediaUploadPathResponse>().path)
             } else {
                 Result.failure(Exception("Failed to upload hub media: ${response.status}"))
             }
