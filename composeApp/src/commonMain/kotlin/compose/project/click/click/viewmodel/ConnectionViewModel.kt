@@ -143,7 +143,8 @@ class ConnectionViewModel : ViewModel() {
     /**
      * Shared connection rows from [AppDataManager] (`MutableStateFlow` backed).
      * Screens such as [compose.project.click.click.ui.screens.ConnectionsScreen] use [ChatViewModel.chatListState]
-     * for chat previews; use this flow when you only need raw [Connection] rows.
+     * for chat previews and **inbox unread badges**; those counts live on `ChatWithDetails.unreadCount` in
+     * [ChatViewModel.chatListState], not on [Connection]. Use this flow when you only need raw [Connection] rows.
      * Excludes server-archived and removed rows so counts match the active map/home surfaces.
      */
     val userConnections: StateFlow<List<Connection>> = combine(

@@ -35,7 +35,7 @@ class FakeChatRepository(
     var onFetchGroupUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchArchivedUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchChatWithDetails: suspend (String, String) -> ChatWithDetails? = { _, _ -> null },
-    var onFetchMessagesForChat: suspend (String, String?) -> List<Message> = { _, _ -> emptyList() },
+    var onFetchMessagesForChat: suspend (String, String?) -> List<Message>? = { _, _ -> emptyList() },
     var onFetchChatParticipants: suspend (String) -> List<User> = { emptyList() },
     var onFetchReactionsForChat: suspend (String) -> List<MessageReaction> = { emptyList() },
     var onSubscribeToMessages: suspend (String, String) -> Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> = { _, _ ->
@@ -78,7 +78,7 @@ class FakeChatRepository(
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message> =
+    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? =
         onFetchMessagesForChat(chatId, viewerUserId)
 
     override suspend fun sendMessage(

@@ -198,6 +198,9 @@ private data class BindProximityRequest(
  * **QR (token) flows** must use the Next.js companion host only:
  * `POST {CLICK_WEB_BASE_URL}/api/qr` for redemption — never Supabase Edge `bind-proximity-connection`.
  * Proximity tap / deferred replay is the sole caller of [bindProximityHandshake].
+ *
+ * Chat **read receipts / inbox unread badges** are handled by the chat layer
+ * (`ChatViewModel` + `SupabaseChatRepository.markMessagesAsRead`), not this repository.
  */
 class ConnectionRepository(
     private val weatherService: WeatherService = OpenMeteoWeatherService(),

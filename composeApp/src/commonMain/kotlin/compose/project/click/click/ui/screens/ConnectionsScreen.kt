@@ -73,6 +73,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
@@ -1870,10 +1872,25 @@ fun ChatView(
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
-                    ChatChannelLoadingView(
-                        topInset = topInset,
-                        onBackPressed = onBackPressed
-                    )
+                    val hintedRow = (chatListState as? ChatListState.Success)
+                        ?.chats
+                        ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+                    if (hintedRow != null && (
+                            hintedRow.lastMessage != null ||
+                                hintedRow.chat.messages.isNotEmpty()
+                            )
+                    ) {
+                        ChatWarmLoadingView(
+                            topInset = topInset,
+                            onBackPressed = onBackPressed,
+                            chatRow = hintedRow,
+                        )
+                    } else {
+                        ChatChannelLoadingView(
+                            topInset = topInset,
+                            onBackPressed = onBackPressed,
+                        )
+                    }
                 }
                 is ChatMessagesState.Error -> {
                     Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
@@ -2246,7 +2263,7 @@ fun ChatView(
                     }
 
                     // Messages
-                    if (state.isLoadingMessages && messages.isEmpty() && chatDetails.lastMessage != null) {
+                    if (state.isLoadingMessages && messages.isEmpty()) {
                         Box(
                             modifier = messageContentModifier
                                 .fillMaxWidth()
@@ -2506,6 +2523,7 @@ fun ChatView(
                     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
                     val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
                     val composerStripInteraction = remember { MutableInteractionSource() }
+                    val composerFocusRequester = remember { FocusRequester() }
                     val composerStripBg = MaterialTheme.colorScheme.background
                     // Match ChatMessageBubble / ChatLinkifyText (bodyMedium).
                     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
@@ -2619,7 +2637,7 @@ fun ChatView(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(auxButtonSize)
+                                .heightIn(min = auxButtonSize)
                         ) {
                             val composerFieldInteraction = remember { MutableInteractionSource() }
                             val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -2656,8 +2674,9 @@ fun ChatView(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(start = fieldSideInset, end = fieldSideInset)
-                                    .height(auxButtonSize)
-                                    .align(Alignment.Center),
+                                    .heightIn(min = auxButtonSize)
+                                    .align(Alignment.BottomCenter)
+                                    .focusRequester(composerFocusRequester),
                                 enabled = !isSending,
                                 textStyle = composerTextStyleCentered.merge(
                                     TextStyle(color = MaterialTheme.colorScheme.onSurface),
@@ -2668,7 +2687,8 @@ fun ChatView(
                                     imeAction = ImeAction.None
                                 ),
                                 singleLine = false,
-                                maxLines = 5,
+                                minLines = 1,
+                                maxLines = 10,
                                 interactionSource = composerFieldInteraction,
                                 cursorBrush = SolidColor(PrimaryBlue),
                                 decorationBox = { innerTextField ->
@@ -2707,7 +2727,7 @@ fun ChatView(
                             )
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterStart)
+                                    .align(Alignment.BottomStart)
                                     .size(auxButtonSize)
                                     .zIndex(4f)
                             ) {
@@ -2812,14 +2832,17 @@ fun ChatView(
                             }
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
+                                    .align(Alignment.BottomEnd)
                                     .size(auxButtonSize)
                                     .zIndex(4f)
                                     .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
                                     .background(sendGradient)
                                     .then(
                                         if (canSend) {
-                                            Modifier.clickable { viewModel.sendMessage() }
+                                            Modifier.clickable {
+                                                viewModel.sendMessage()
+                                                composerFocusRequester.requestFocus()
+                                            }
                                         } else {
                                             Modifier.clickable(
                                                 indication = null,
@@ -3101,6 +3124,63 @@ private fun ChatTypingDots() {
                     .size(5.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
+            )
+        }
+    }
+}
+
+/**
+ * Shown when [ChatMessagesState.Loading] but the chat list already has a row for this thread,
+ * so we avoid a blank full-screen spinner while the ViewModel resolves details.
+ */
+@Composable
+private fun ChatWarmLoadingView(
+    topInset: Dp,
+    onBackPressed: () -> Unit,
+    chatRow: ChatWithDetails,
+) {
+    val title = chatRow.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() }
+        ?: chatRow.otherUser.name?.trim()?.takeIf { it.isNotEmpty() }
+        ?: "Chat"
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, top = topInset, end = 20.dp)
+                .height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBackPressed) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AdaptiveCircularProgressIndicator(
+                modifier = Modifier.size(36.dp),
+                strokeWidth = 3.dp,
+                color = PrimaryBlue,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Loading conversation…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

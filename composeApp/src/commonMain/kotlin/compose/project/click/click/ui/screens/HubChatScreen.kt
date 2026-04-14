@@ -33,6 +33,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -74,6 +76,7 @@ fun HubChatScreen(
     val draft by viewModel.draft.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
+    val draftFocusRequester = remember { FocusRequester() }
 
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
@@ -205,7 +208,9 @@ fun HubChatScreen(
                 OutlinedTextField(
                     value = draft,
                     onValueChange = viewModel::updateDraft,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(draftFocusRequester),
                     enabled = !inLobby && !isSending,
                     placeholder = {
                         Text(
@@ -213,8 +218,9 @@ fun HubChatScreen(
                             else "Message the hub…",
                         )
                     },
+                    singleLine = false,
                     minLines = 1,
-                    maxLines = 4,
+                    maxLines = 10,
                     shape = RoundedCornerShape(20.dp),
                 )
                 IconButton(
@@ -232,7 +238,10 @@ fun HubChatScreen(
                     )
                 }
                 IconButton(
-                    onClick = { viewModel.sendMessage() },
+                    onClick = {
+                        viewModel.sendMessage()
+                        draftFocusRequester.requestFocus()
+                    },
                     enabled = !inLobby && draft.isNotBlank() && !isSending,
                 ) {
                     Icon(

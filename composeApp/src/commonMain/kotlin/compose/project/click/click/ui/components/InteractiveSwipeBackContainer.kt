@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +69,9 @@ fun InteractiveSwipeBackContainer(
     val settleScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val dragJitterThresholdPx = remember(density) { with(density) { 0.75.dp.toPx() } }
+    val dragTranslationX by remember {
+        derivedStateOf { dragOffset.floatValue }
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
@@ -149,11 +153,11 @@ fun InteractiveSwipeBackContainer(
 
         val slideTransform = if (useLayoutOffsetForSwipeReveal) {
             Modifier.offset {
-                IntOffset(dragOffset.floatValue.roundToInt(), 0)
+                IntOffset(dragTranslationX.roundToInt(), 0)
             }
         } else {
             Modifier.graphicsLayer {
-                translationX = dragOffset.floatValue
+                translationX = dragTranslationX
             }
         }
 

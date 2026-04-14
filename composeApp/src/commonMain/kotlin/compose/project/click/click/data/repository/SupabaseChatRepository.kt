@@ -894,7 +894,7 @@ class SupabaseChatRepository(
         return Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
     }
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message> {
+    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId)
             supabase.from("messages")
@@ -908,7 +908,7 @@ class SupabaseChatRepository(
                 .map { decryptMessage(it, crypto) }
         } catch (e: Exception) {
             println("Error fetching messages: ${e.redactedRestMessage()}")
-            emptyList()
+            null
         }
     }
 
@@ -1543,7 +1543,7 @@ class SupabaseChatRepository(
 
     override suspend fun searchMessages(chatId: String, query: String): List<Message> {
         return try {
-            val allMessages = fetchMessagesForChat(chatId)
+            val allMessages = fetchMessagesForChat(chatId, null) ?: return emptyList()
             allMessages.filter { it.content.contains(query, ignoreCase = true) }
         } catch (e: Exception) {
             println("Error searching messages: ${e.redactedRestMessage()}")

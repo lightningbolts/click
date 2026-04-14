@@ -41,7 +41,11 @@ interface ChatRepository {
 
     suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
-    suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String? = null): List<Message>
+    /**
+     * Loads all messages for [chatId].
+     * @return `null` if the request failed (network/RLS/decoding); empty list means the chat has no rows.
+     */
+    suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String? = null): List<Message>?
 
     suspend fun sendMessage(
         chatId: String,

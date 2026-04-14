@@ -36,6 +36,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
@@ -234,9 +235,21 @@ class ChatViewModel(
     private var globalMessageListJob: Job? = null
     private var debouncedChatListRefreshJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
+    private var loadChatMessagesJob: Job? = null
     private var lastTypingSent: Long = 0L
     private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
     private val prefetchedChatLimit = 3
+
+    /**
+     * Connection ids for which the inbox row should show zero unread immediately after
+     * [chatRepository.markMessagesAsRead] (or while the active thread is open). Prevents stale
+     * counts from sticking until the next cold start when server-driven list refreshes lag.
+     */
+    private val _readClearedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** List rows may omit prefetch; still reuse any [prefetchedChatPayloads] so refresh never blanks the thread. */
+    private fun bootstrapMessagesFromPrefetch(connectionId: String): List<MessageWithUser> =
+        prefetchedChatPayloads[connectionId]?.messages.orEmpty()
 
     init {
         viewModelScope.launch {
@@ -279,11 +292,13 @@ class ChatViewModel(
                         .filter { it.connection.id !in currentConnectionIds }
                         .sortedByDescending { chatListActivityTimestamp(it) }
 
-                    val reconciledChats = applyChatListVisibility(
+                    val reconciledBase = applyChatListVisibility(
                         (missingChats + mergedChats)
                             .distinctBy { it.connection.id }
                             .sortedByDescending { chatListActivityTimestamp(it) }
                     )
+                    pruneStaleReadClearedHints(reconciledBase)
+                    val reconciledChats = applyUnreadClearHintsToInboxRows(reconciledBase)
 
                     if (reconciledChats != currentListState.chats) {
                         _chatListState.value = ChatListState.Success(reconciledChats)
@@ -454,7 +469,9 @@ class ChatViewModel(
     private fun reapplyChatListVisibilityFromAppData() {
         val cur = _chatListState.value
         if (cur !is ChatListState.Success) return
-        _chatListState.value = ChatListState.Success(applyChatListVisibility(cur.chats))
+        val filtered = applyChatListVisibility(cur.chats)
+        pruneStaleReadClearedHints(filtered)
+        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(filtered))
     }
 
     /**
@@ -506,7 +523,9 @@ class ChatViewModel(
             )
             if (!alreadyHasRealData) {
                 if (cachedSeedChats.isNotEmpty()) {
-                    _chatListState.value = ChatListState.Success(cachedSeedChats)
+                    _chatListState.value = ChatListState.Success(
+                        applyUnreadClearHintsToInboxRows(cachedSeedChats),
+                    )
                 } else {
                     _chatListState.value = ChatListState.Loading
                 }
@@ -580,8 +599,11 @@ class ChatViewModel(
                             }
                             mergeChatRowWithCache(apiChat, cachedRow, freshUser)
                         }
-                        _chatListState.value =
-                            ChatListState.Success(applyChatListVisibility(mergedWithLocalPreview))
+                        val visibilityFiltered = applyChatListVisibility(mergedWithLocalPreview)
+                        pruneStaleReadClearedHints(visibilityFiltered)
+                        _chatListState.value = ChatListState.Success(
+                            applyUnreadClearHintsToInboxRows(visibilityFiltered),
+                        )
 
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
                             prefetchChatPayloads(userId, enriched)
@@ -637,6 +659,42 @@ class ChatViewModel(
                 else -> false
             }
         }
+    }
+
+    private fun pruneStaleReadClearedHints(rows: List<ChatWithDetails>) {
+        if (_readClearedConnectionIds.value.isEmpty()) return
+        _readClearedConnectionIds.update { ids ->
+            ids.filterNot { id ->
+                rows.any { it.connection.id == id && it.unreadCount == 0 }
+            }.toSet()
+        }
+    }
+
+    private fun applyUnreadClearHintsToInboxRows(rows: List<ChatWithDetails>): List<ChatWithDetails> {
+        val cleared = _readClearedConnectionIds.value
+        val openConnectionId =
+            (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.connection?.id
+        if (cleared.isEmpty() && openConnectionId.isNullOrBlank()) return rows
+        return rows.map { c ->
+            val shouldZero =
+                c.connection.id in cleared || (!openConnectionId.isNullOrBlank() && c.connection.id == openConnectionId)
+            if (shouldZero && c.unreadCount != 0) {
+                c.copy(unreadCount = 0)
+            } else {
+                c
+            }
+        }
+    }
+
+    private fun markInboxReadOptimistically(connectionId: String) {
+        if (connectionId.isBlank()) return
+        _readClearedConnectionIds.update { it + connectionId }
+        val cur = _chatListState.value as? ChatListState.Success ?: return
+        _chatListState.value = ChatListState.Success(
+            cur.chats.map { chat ->
+                if (chat.connection.id == connectionId) chat.copy(unreadCount = 0) else chat
+            },
+        )
     }
 
     private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
@@ -830,7 +888,7 @@ class ChatViewModel(
         } else if (cachedChat != null) {
             // Show header, composer, and conversation starters immediately instead of a blank loading screen.
             _chatMessagesState.value = ChatMessagesState.Success(
-                messages = emptyList(),
+                messages = bootstrapMessagesFromPrefetch(connectionId),
                 chatDetails = cachedChat,
                 isLoadingMessages = true
             )
@@ -838,7 +896,8 @@ class ChatViewModel(
             _chatMessagesState.value = ChatMessagesState.Loading
         }
 
-        viewModelScope.launch {
+        loadChatMessagesJob?.cancel()
+        loadChatMessagesJob = viewModelScope.launch {
             try {
                 val previousApiChatId = currentApiChatId
                 // Resolve chat details (use cached if available)
@@ -889,12 +948,13 @@ class ChatViewModel(
                         )
                     _showIcebreakerPanel.value = true
                     _chatMessagesState.value = ChatMessagesState.Success(
-                        messages = emptyList(),
+                        messages = bootstrapMessagesFromPrefetch(resolvedConnectionId),
                         chatDetails = hydratedChatDetails,
                         isLoadingMessages = true,
                     )
                 }
 
+                ensureActive()
                 val payload = buildChatPayload(hydratedChatDetails, apiChatId, userId)
                 prefetchedChatPayloads[resolvedConnectionId] = payload
 
@@ -907,13 +967,15 @@ class ChatViewModel(
                 } else {
                     _icebreakerPrompts.value = emptyList()
                 }
+                ensureActive()
                 _chatMessagesState.value = ChatMessagesState.Success(
                     messages = payload.messages,
                     chatDetails = hydratedChatDetails,
                     isLoadingMessages = false
                 )
 
-                // Mark messages as read
+                // Mark messages as read (optimistic inbox badge first so the Clicks list updates immediately).
+                markInboxReadOptimistically(resolvedConnectionId)
                 chatRepository.markMessagesAsRead(apiChatId, userId)
 
                 chatRepository.joinChatEphemeralChannel(
@@ -942,6 +1004,8 @@ class ChatViewModel(
                 }
                 
                 // Icebreaker state is already prepared in payload before UI render.
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val latestState = _chatMessagesState.value as? ChatMessagesState.Success
                 val sameChatStillVisible =
@@ -991,7 +1055,9 @@ class ChatViewModel(
         val reactionsDeferred = async { chatRepository.fetchReactionsForChat(apiChatId) }
 
         val participants = participantsDeferred.await().associateBy { it.id }
-        val messagesWithUsers = messagesDeferred.await().map { message ->
+        val rawMessages = messagesDeferred.await()
+            ?: error("Failed to load messages for chat")
+        val messagesWithUsers = rawMessages.map { message ->
             val user = participants[message.user_id] ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
             MessageWithUser(
                 message = message,
@@ -1114,6 +1180,11 @@ class ChatViewModel(
                                             ?: User(id = event.message.user_id, name = null, createdAt = 0L)
                                         applyInsertedMessage(event.message, user, userId)
                                         if (event.message.user_id != userId) {
+                                            val active = _chatMessagesState.value as? ChatMessagesState.Success
+                                            val activeApiChatId = active?.chatDetails?.chat?.id
+                                            if (active != null && activeApiChatId == chatId) {
+                                                markInboxReadOptimistically(active.chatDetails.connection.id)
+                                            }
                                             chatRepository.markMessagesAsRead(chatId, userId)
                                         }
                                     }
@@ -1253,7 +1324,7 @@ class ChatViewModel(
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         if (currentState.chatDetails.chat.id != chatId) return
 
-        val latestMessages = chatRepository.fetchMessagesForChat(chatId, userId)
+        val latestMessages = chatRepository.fetchMessagesForChat(chatId, userId) ?: return
         val currentMessages = currentState.messages.map { it.message }
         if (latestMessages == currentMessages) return
 
@@ -1298,6 +1369,7 @@ class ChatViewModel(
         }
 
         if (latestMessages.any { it.user_id != userId && !it.isRead }) {
+            markInboxReadOptimistically(currentState.chatDetails.connection.id)
             chatRepository.markMessagesAsRead(chatId, userId)
         }
     }
@@ -1358,7 +1430,9 @@ class ChatViewModel(
             }
         }
         val sorted = updated.sortedByDescending { chatListActivityTimestamp(it) }
-        _chatListState.value = ChatListState.Success(applyChatListVisibility(sorted))
+        val filtered = applyChatListVisibility(sorted)
+        pruneStaleReadClearedHints(filtered)
+        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(filtered))
     }
 
     private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {
