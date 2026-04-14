@@ -139,10 +139,10 @@ fun InteractiveSwipeBackContainer(
 
                 if (shouldComplete) {
                     onBack()
-                    // Reset immediately so a shared [externalDragOffsetPx] is not left at full width
-                    // for a frame when this composable (and its settle coroutine) is torn down
-                    // right after [onBack] closes the overlay route.
-                    offsetPx.floatValue = 0f
+                    // Do not zero [offsetPx] here: while this composable is still composed until the
+                    // next frame, resetting would snap the foreground (translationX) back to 0 and
+                    // flash the chat full-screen. External mirrors are cleared after removal via
+                    // [LaunchedEffect] in the parent.
                     kotlinx.coroutines.delay(34)
                 } else {
                     offsetPx.floatValue = 0f

@@ -1790,7 +1790,12 @@ class ChatViewModel(
         }
     }
 
-    fun leaveChatRoom() {
+    /**
+     * @param clearMessageSurface When false, skips forcing [ChatMessagesState.Loading] after teardown.
+     * Use when the chat composable may still be attached for a frame (e.g. iOS interactive back)
+     * so the UI does not flash a full-screen loading state over the list.
+     */
+    fun leaveChatRoom(clearMessageSurface: Boolean = true) {
         val chatId = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id
         val userId = _currentUserId.value
         if (chatId != null && userId != null) {
@@ -1826,7 +1831,9 @@ class ChatViewModel(
         _isPeerOnline.value = false
         _isLocalTypingActive.value = false
         _isMessageSubmitInProgress.value = false
-        _chatMessagesState.value = ChatMessagesState.Loading
+        if (clearMessageSurface) {
+            _chatMessagesState.value = ChatMessagesState.Loading
+        }
         resetVibeCheckState()
         resetIcebreakerState()
     }

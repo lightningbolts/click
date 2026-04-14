@@ -224,9 +224,15 @@ fun ConnectionsScreen(
     var profileUserId by remember { mutableStateOf<String?>(null) }
     var groupMemberPickerUsers by remember { mutableStateOf<List<User>?>(null) }
 
-    fun finalizeChatClose() {
-        viewModel.leaveChatRoom()
-        viewModel.loadChats()
+    fun finalizeChatClose(leaveChatClearsMessageSurface: Boolean = true) {
+        viewModel.leaveChatRoom(clearMessageSurface = leaveChatClearsMessageSurface)
+        // Forced reload clears local inbox caches and can repaint the list; skip that on the iOS
+        // gesture-dismiss path where we already avoided flashing the message surface.
+        if (leaveChatClearsMessageSurface) {
+            viewModel.loadChats()
+        } else {
+            viewModel.loadChats(isForced = false)
+        }
         onChatDismissed?.invoke()
     }
 
@@ -236,14 +242,6 @@ fun ConnectionsScreen(
             chatTransitionMode = mode
             isTapCloseInFlight = mode == ChatTransitionMode.Tap
             selectedChatId = null
-            // Clear swipe mirror state in the same snapshot as closing the chat so there is no
-            // frame where [InteractiveSwipeBackContainer] is disposed (cancelling its settle
-            // coroutine) while [iosChatSwipeDragPx] is still stuck at full width — that produced
-            // a brief flicker on the connections list after an iOS gesture back.
-            if (isIOS) {
-                iosChatSwipeDragPx.floatValue = 0f
-                iosChatSwipeBehindLayers = false
-            }
             if (mode == ChatTransitionMode.Tap) {
                 closeCleanupJob = screenScope.launch {
                     delay(CHAT_TRANSITION_DURATION_MS)
@@ -255,7 +253,11 @@ fun ConnectionsScreen(
                 }
             } else {
                 isTapCloseInFlight = false
-                finalizeChatClose()
+                // iOS gesture: avoid forcing ChatMessagesState.Loading while ChatView can still
+                // paint for a frame (causes a full-screen spinner flash over the list).
+                finalizeChatClose(
+                    leaveChatClearsMessageSurface = !(isIOS && mode == ChatTransitionMode.Gesture),
+                )
             }
         }
     }
@@ -282,6 +284,8 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(selectedChatId != null || isTapCloseInFlight)
     }
 
+    // Runs after recomposition when the overlay is gone — never clear swipe offset while the
+    // chat sheet can still draw (that would snap translationX to 0 and flash the chat full-screen).
     LaunchedEffect(selectedChatId, isIOS) {
         if (isIOS && selectedChatId == null) {
             iosChatSwipeDragPx.floatValue = 0f
@@ -353,37 +357,30 @@ fun ConnectionsScreen(
                 )
             }
 
-            AnimatedContent(
-                targetState = selectedChatId,
-                transitionSpec = {
-                    val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-                    val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-                    when {
-                        initialState == null && targetState != null -> {
-                            (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
-                                fadeIn(animationSpec = fadeSpec))
-                                .togetherWith(ExitTransition.None)
-                        }
-                        initialState != null && targetState == null && chatTransitionMode == ChatTransitionMode.Tap -> {
-                            EnterTransition.None
-                                .togetherWith(
-                                    slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
-                                        fadeOut(animationSpec = fadeSpec)
-                                )
-                        }
-                        else -> {
-                            EnterTransition.None togetherWith ExitTransition.None
-                        }
-                    }
+            // AnimatedVisibility (not AnimatedContent) so a gesture dismiss can use ExitTransition.None:
+            // the chat is already slid off-screen; an AnimatedContent "target null" transition can
+            // still insert an extra layout pass. Tap-close keeps a horizontal slide + fade out.
+            val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+            val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+            AnimatedVisibility(
+                visible = selectedChatId != null,
+                modifier = Modifier.fillMaxSize(),
+                enter = slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                    fadeIn(animationSpec = fadeSpec),
+                exit = if (chatTransitionMode == ChatTransitionMode.Tap) {
+                    slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                        fadeOut(animationSpec = fadeSpec)
+                } else {
+                    ExitTransition.None
                 },
-                label = "ios_chat_open_transition"
-            ) { activeChatId ->
+                label = "ios_chat_overlay",
+            ) {
+                val activeChatId = selectedChatId
                 if (activeChatId != null) {
                     InteractiveSwipeBackContainer(
                         enabled = true,
                         onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
-                        // Persistent ConnectionsListView is composed below AnimatedContent; do not
-                        // duplicate the list here (a second rememberLazyListState starts at index 0).
+                        // Persistent ConnectionsListView is composed below; do not duplicate the list.
                         opaquePreviousBackground = false,
                         externalDragOffsetPx = iosChatSwipeDragPx,
                         onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },
