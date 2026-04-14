@@ -112,11 +112,14 @@ data class PendingProximityHandshakeSyncResult(
     val recoveredEncounterLogged: Boolean = true,
     /** True when the last bind attempt failed due to an auth/session issue (401/403/invalid JWT). */
     val authorizationFailed: Boolean = false,
+    /** From [bind-proximity-connection] when the replayed bind was a multi-user cluster (includes self). */
+    val groupCliqueCandidateMemberIds: List<String>? = null,
 )
 
 data class ProximityHandshakeRecoveryPayload(
     val users: List<User>,
     val encounterLogged: Boolean = true,
+    val groupCliqueCandidateMemberIds: List<String>? = null,
 )
 
 data class BindProximityHandshakeOutcome(
@@ -446,6 +449,7 @@ class ConnectionRepository(
                         recoveredUsers = users,
                         remainingInQueue = rest.size,
                         recoveredEncounterLogged = outcome.encounterLogged,
+                        groupCliqueCandidateMemberIds = outcome.groupCliqueCandidateMemberIds,
                     )
                 }
                 continue

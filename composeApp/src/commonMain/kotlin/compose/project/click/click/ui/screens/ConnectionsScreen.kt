@@ -69,6 +69,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -154,6 +155,7 @@ import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -170,8 +172,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -195,7 +199,9 @@ fun ConnectionsScreen(
     onChatDismissed: (() -> Unit)? = null,
     onChatOpenStateChanged: (Boolean) -> Unit = {},
     onNavigateToLocationSettings: (() -> Unit)? = null,
-    viewModel: ChatViewModel = viewModel { ChatViewModel() }
+    viewModel: ChatViewModel = viewModel { ChatViewModel() },
+    verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
+    onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
@@ -282,6 +288,8 @@ fun ConnectionsScreen(
                 onNavigateToLocationSettings = onNavigateToLocationSettings,
                 onUserProfileClick = { profileUserId = it },
                 onGroupMembersPicker = { groupMemberPickerUsers = it },
+                verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
+                onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
             )
 
             // Sits under the chat overlay; any pointer that misses the overlay (Compose "holes")
@@ -373,6 +381,8 @@ fun ConnectionsScreen(
                     onNavigateToLocationSettings = onNavigateToLocationSettings,
                     onUserProfileClick = { profileUserId = it },
                     onGroupMembersPicker = { groupMemberPickerUsers = it },
+                    verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
+                    onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
                 )
             } else {
                 ChatView(
@@ -425,6 +435,8 @@ fun ConnectionsListView(
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onUserProfileClick: (String) -> Unit = {},
     onGroupMembersPicker: (List<User>) -> Unit = {},
+    verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
+    onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
@@ -481,6 +493,37 @@ fun ConnectionsListView(
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
     val cliqueSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val listScope = rememberCoroutineScope()
+    var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
+    var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(verifiedCliqueProximityAutofill) {
+        val intent = verifiedCliqueProximityAutofill ?: run {
+            cliqueProximityAutofillLoading = false
+            return@LaunchedEffect
+        }
+        cliqueProximityAutofillLoading = true
+        proximityCliqueHintUsers =
+            intent.matchedUsers.filter { it.id in intent.preselectFriendIds.toSet() }
+        selectedCliqueFriendIds = intent.preselectFriendIds.toSet()
+        selectedTabIndex = 0
+        cliqueSheetVisible = true
+        viewModel.loadChats(isForced = true)
+        withTimeoutOrNull(4_500L) {
+            snapshotFlow {
+                val chats = when (val s = chatListState) {
+                    is ChatListState.Success -> s.chats
+                    else -> emptyList()
+                }
+                val pickable = chats.filter {
+                    it.groupClique == null &&
+                        it.connection.normalizedConnectionStatus() != "removed"
+                }
+                intent.preselectFriendIds.all { pid -> pickable.any { it.otherUser.id == pid } }
+            }.first { it }
+        }
+        cliqueProximityAutofillLoading = false
+        onVerifiedCliqueProximityAutofillConsumed()
+    }
 
     LaunchedEffect(cliqueSheetVisible) {
         if (cliqueSheetVisible) {
@@ -499,6 +542,7 @@ fun ConnectionsListView(
             }
         }.invokeOnCompletion {
             cliqueSheetVisible = false
+            proximityCliqueHintUsers = emptyList()
             onAfterHide()
         }
     }
@@ -1063,6 +1107,61 @@ fun ConnectionsListView(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+                if (cliqueProximityAutofillLoading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        AdaptiveCircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = "Loading your tap group in Clicks…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                val pickableIdsForHint =
+                    remember(verifiedCliquePickableOneToOneChats) {
+                        verifiedCliquePickableOneToOneChats.map { it.otherUser.id }.toSet()
+                    }
+                val supplementalHintUsers = remember(proximityCliqueHintUsers, pickableIdsForHint) {
+                    proximityCliqueHintUsers.filter { it.id !in pickableIdsForHint }
+                }
+                if (supplementalHintUsers.isNotEmpty()) {
+                    Text(
+                        text = "People from your tap (profiles may still sync)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        supplementalHintUsers.forEach { u ->
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            ) {
+                                Text(
+                                    u.name?.trim()?.ifBlank { null } ?: "Friend",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

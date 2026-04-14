@@ -243,7 +243,10 @@ fun NfcScreen(
                             ProximityOfflineCapturedContent(
                                 message = state.message,
                                 onTryNow = {
-                                    connectionViewModel.tryFlushPendingProximityHandshakes(authToken)
+                                    connectionViewModel.tryFlushPendingProximityHandshakes(
+                                        jwt = authToken,
+                                        currentUserId = userId,
+                                    )
                                 },
                                 onDismiss = { connectionViewModel.resetConnectionState() },
                             )

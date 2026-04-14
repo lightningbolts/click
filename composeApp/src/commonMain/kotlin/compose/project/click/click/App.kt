@@ -96,6 +96,7 @@ import kotlin.coroutines.resume
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.viewmodel.ConnectionState
+import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
 import compose.project.click.click.data.hub.HubConnectionManager
 import compose.project.click.click.data.hub.HubVerifyResult
 
@@ -127,12 +128,6 @@ fun App() {
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
     val openMeteoWeather = remember { OpenMeteoWeatherService() }
 
-    LaunchedEffect(connectionViewModel) {
-        AppDataManager.proximityHandshakeRecovered.collect { payload ->
-            connectionViewModel.onProximityHandshakeRecoveredFromBackground(payload)
-        }
-    }
-
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
@@ -142,6 +137,13 @@ fun App() {
     val currentUser = when (val state = authViewModel.authState) {
         is AuthState.Success -> User(id = state.userId, name = state.name ?: state.email, createdAt = 0L)
         else -> User(id = "", name = "", createdAt = 0L)
+    }
+
+    LaunchedEffect(connectionViewModel, currentUser.id) {
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        AppDataManager.proximityHandshakeRecovered.collect { payload ->
+            connectionViewModel.onProximityHandshakeRecoveredFromBackground(payload, currentUser.id)
+        }
     }
 
     var ambientNoiseOptIn by remember { mutableStateOf(true) }
@@ -610,6 +612,7 @@ fun App() {
             var showNfcScreen by remember { mutableStateOf(false) }
             var pendingChatId by remember { mutableStateOf<String?>(null) }
             var isConnectionsChatOpen by remember { mutableStateOf(false) }
+            var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
 
             // Helper: navigate to a route, pushing onto history stack
             fun navigateTo(route: String) {
@@ -657,6 +660,20 @@ fun App() {
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
+
+            LaunchedEffect(connectionViewModel, currentUser.id) {
+                if (currentUser.id.isBlank()) return@LaunchedEffect
+                connectionViewModel.verifiedCliqueFromProximity.collect { intent ->
+                    verifiedCliqueProximityAutofillIntent = intent
+                    navigateTo(NavigationItem.Connections.route)
+                    showNfcScreen = false
+                    showQRScanner = false
+                    showMyQRCode = false
+                    hubChatArgs = null
+                    connectionRevealState = null
+                    pendingChatId = null
+                }
+            }
             val activeScreenKey = when {
                 hubChatArgs != null -> "hub_chat"
                 showMyQRCode -> "my_qr"
@@ -914,7 +931,11 @@ fun App() {
                                                     }
                                                 },
                                                 onNavigateToLocationSettings = { navigateTo(NavigationItem.Settings.route) },
-                                                viewModel = chatViewModel
+                                                viewModel = chatViewModel,
+                                                verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofillIntent,
+                                                onVerifiedCliqueProximityAutofillConsumed = {
+                                                    verifiedCliqueProximityAutofillIntent = null
+                                                },
                                             )
                                         } else {
                                             Box(

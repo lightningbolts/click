@@ -48,6 +48,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
+/** Emitted when a proximity bind returns a multi-user verified-clique cluster from the edge function. */
+data class VerifiedCliqueProximityIntent(
+    val preselectFriendIds: List<String>,
+    val matchedUsers: List<User>,
+)
+
 sealed class ConnectionState {
     object Idle : ConnectionState()
     object Loading : ConnectionState()
@@ -99,6 +105,10 @@ class ConnectionViewModel : ViewModel() {
 
     private val _transientNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val transientNotice: SharedFlow<String> = _transientNotice.asSharedFlow()
+
+    private val _verifiedCliqueFromProximity = MutableSharedFlow<VerifiedCliqueProximityIntent>(extraBufferCapacity = 1)
+    val verifiedCliqueFromProximity: SharedFlow<VerifiedCliqueProximityIntent> =
+        _verifiedCliqueFromProximity.asSharedFlow()
 
     /**
      * Aggregate from the last [bind-proximity-connection] response (or deferred sync recovery).
@@ -265,42 +275,55 @@ class ConnectionViewModel : ViewModel() {
                     }
                 }
 
-                bindResult.fold(
-                    onSuccess = { outcome ->
-                        lastProximityEncounterLoggedAggregate = outcome.encounterLogged
-                        val users = outcome.matches
-                        if (users.isEmpty()) {
-                            _connectionState.value = ConnectionState.Error("No nearby tap detected. Try again closer together.")
-                        } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
+                if (bindResult.isSuccess) {
+                    val outcome = bindResult.getOrNull()!!
+                    lastProximityEncounterLoggedAggregate = outcome.encounterLogged
+                    val users = outcome.matches
+                    if (users.isEmpty()) {
+                        _connectionState.value =
+                            ConnectionState.Error("No nearby tap detected. Try again closer together.")
+                    } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
+                        _connectionState.value = ConnectionState.Idle
+                        _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                    } else {
+                        val groupIds = outcome.groupCliqueCandidateMemberIds
+                        val others =
+                            groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
+                        if (groupIds != null && others.size >= 2) {
+                            _verifiedCliqueFromProximity.emit(
+                                VerifiedCliqueProximityIntent(
+                                    preselectFriendIds = others,
+                                    matchedUsers = users,
+                                ),
+                            )
                             _connectionState.value = ConnectionState.Idle
-                            _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                         } else {
                             _connectionState.value = ConnectionState.PendingConfirmation(users)
                         }
-                    },
-                    onFailure = { e ->
-                        if (e.isRetryableForProximityBind()) {
-                            repository.enqueuePendingProximityHandshake(
-                                myToken = myToken,
-                                heardTokens = tokensOnly,
-                                latitude = lastProximityLat,
-                                longitude = lastProximityLng,
-                                altitudeMeters = lastProximityAltitudeMeters,
-                                hardwareVibe = lastProximityHardwareVibe,
-                                noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
-                                exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
-                                heightCategory = proximitySensorContext?.heightCategory?.name,
-                                exactBarometricElevationM = proximitySensorContext
-                                    ?.exactBarometricElevationMeters
-                                    ?.takeIf { it.isFinite() },
-                            )
-                            scheduleProximityHandshakeSync()
-                            _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
-                        } else {
-                            _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
-                        }
-                    },
-                )
+                    }
+                } else {
+                    val e = bindResult.exceptionOrNull()!!
+                    if (e.isRetryableForProximityBind()) {
+                        repository.enqueuePendingProximityHandshake(
+                            myToken = myToken,
+                            heardTokens = tokensOnly,
+                            latitude = lastProximityLat,
+                            longitude = lastProximityLng,
+                            altitudeMeters = lastProximityAltitudeMeters,
+                            hardwareVibe = lastProximityHardwareVibe,
+                            noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
+                            exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                            heightCategory = proximitySensorContext?.heightCategory?.name,
+                            exactBarometricElevationM = proximitySensorContext
+                                ?.exactBarometricElevationMeters
+                                ?.takeIf { it.isFinite() },
+                        )
+                        scheduleProximityHandshakeSync()
+                        _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing()
+                    } else {
+                        _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
+                    }
+                }
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
             }
@@ -308,15 +331,32 @@ class ConnectionViewModel : ViewModel() {
     }
 
     /**
-     * When [AppDataManager] / WorkManager finishes a deferred bind, resume the confirm step.
+     * When [AppDataManager] / WorkManager finishes a deferred bind, resume the confirm step or
+     * emit [verifiedCliqueFromProximity] for a multi-user cluster.
      */
-    fun onProximityHandshakeRecoveredFromBackground(payload: ProximityHandshakeRecoveryPayload) {
+    fun onProximityHandshakeRecoveredFromBackground(
+        payload: ProximityHandshakeRecoveryPayload,
+        currentUserId: String,
+    ) {
         val users = payload.users
         if (users.isEmpty()) return
         lastProximityEncounterLoggedAggregate = payload.encounterLogged
         if (shouldBlockForRateLimit(users, payload.encounterLogged)) {
             _connectionState.value = ConnectionState.Idle
             _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+            return
+        }
+        val groupIds = payload.groupCliqueCandidateMemberIds
+        val others = groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
+        if (currentUserId.isNotBlank() && groupIds != null && others.size >= 2) {
+            viewModelScope.launch {
+                _verifiedCliqueFromProximity.emit(
+                    VerifiedCliqueProximityIntent(
+                        preselectFriendIds = others,
+                        matchedUsers = users,
+                    ),
+                )
+            }
             return
         }
         val cur = _connectionState.value
@@ -326,7 +366,7 @@ class ConnectionViewModel : ViewModel() {
     }
 
     /** Manual retry from the offline-captured UI. */
-    fun tryFlushPendingProximityHandshakes(jwt: String) {
+    fun tryFlushPendingProximityHandshakes(jwt: String, currentUserId: String) {
         if (jwt.isBlank()) {
             _connectionState.value = ConnectionState.Error("Please sign in again.")
             return
@@ -343,7 +383,19 @@ class ConnectionViewModel : ViewModel() {
                         _connectionState.value = ConnectionState.Idle
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                     } else {
-                        _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                        val g = r.groupCliqueCandidateMemberIds
+                        val others = g?.filter { it != currentUserId }?.distinct().orEmpty()
+                        if (currentUserId.isNotBlank() && g != null && others.size >= 2) {
+                            _verifiedCliqueFromProximity.emit(
+                                VerifiedCliqueProximityIntent(
+                                    preselectFriendIds = others,
+                                    matchedUsers = r.recoveredUsers,
+                                ),
+                            )
+                            _connectionState.value = ConnectionState.Idle
+                        } else {
+                            _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                        }
                     }
                 }
                 r.remainingInQueue > 0 ->

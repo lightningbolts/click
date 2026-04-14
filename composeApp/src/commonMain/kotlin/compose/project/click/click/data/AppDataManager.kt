@@ -1050,6 +1050,7 @@ object AppDataManager {
                             ProximityHandshakeRecoveryPayload(
                                 users = recovered,
                                 encounterLogged = proximity.recoveredEncounterLogged,
+                                groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
                             ),
                         )
                     }
@@ -1095,6 +1096,7 @@ object AppDataManager {
                 ProximityHandshakeRecoveryPayload(
                     users = recovered,
                     encounterLogged = proximity.recoveredEncounterLogged,
+                    groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
                 ),
             )
         }
