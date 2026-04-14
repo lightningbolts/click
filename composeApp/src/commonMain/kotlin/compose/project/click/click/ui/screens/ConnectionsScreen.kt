@@ -121,6 +121,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material3.ripple
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
@@ -1240,25 +1241,14 @@ fun ConnectionsListView(
                                     isOnline = chatDetails.otherUser.id in onlineUsers,
                                     modifier = Modifier.size(44.dp),
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(22.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    colors = listOf(PrimaryBlue, LightBlue),
-                                                ),
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text(
-                                            chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase()
-                                                ?: "?",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    }
+                                    ConnectionListUserAvatarFace(
+                                        displayName = chatDetails.otherUser.name,
+                                        email = chatDetails.otherUser.email,
+                                        avatarUrl = chatDetails.otherUser.image,
+                                        userId = chatDetails.otherUser.id,
+                                        modifier = Modifier.fillMaxSize(),
+                                        useCompactTypography = false,
+                                    )
                                 }
                                 Text(
                                     text = chatDetails.otherUser.name?.trim()?.ifBlank { null } ?: "Friend",
@@ -1634,22 +1624,14 @@ fun ConnectionItem(
                         onClick = onAvatarClick,
                     )
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(
-                            Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        user.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+                ConnectionListUserAvatarFace(
+                    displayName = user.name,
+                    email = user.email,
+                    avatarUrl = user.image,
+                    userId = user.id,
+                    modifier = Modifier.fillMaxSize(),
+                    useCompactTypography = false,
+                )
             }
         }
 
@@ -2060,29 +2042,14 @@ fun ChatView(
                                         indicatorSize = 9.dp,
                                         indicatorBorder = 1.25.dp
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .clip(RoundedCornerShape(18.dp))
-                                                .background(
-                                                    Brush.linearGradient(
-                                                        colors = listOf(PrimaryBlue, LightBlue)
-                                                    )
-                                                )
-                                                .border(
-                                                    width = 1.dp,
-                                                    color = PrimaryBlue.copy(alpha = 0.4f),
-                                                    shape = RoundedCornerShape(18.dp)
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                chatDetails.otherUser.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                                color = LightBlue.copy(alpha = 0.96f),
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                        }
+                                        ConnectionListUserAvatarFace(
+                                            displayName = chatDetails.otherUser.name,
+                                            email = chatDetails.otherUser.email,
+                                            avatarUrl = chatDetails.otherUser.image,
+                                            userId = chatDetails.otherUser.id,
+                                            modifier = Modifier.fillMaxSize(),
+                                            useCompactTypography = true,
+                                        )
                                     }
                                 }
 
