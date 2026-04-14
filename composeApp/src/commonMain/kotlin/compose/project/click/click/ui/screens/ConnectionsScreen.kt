@@ -75,6 +75,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
@@ -105,6 +106,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.input.pointer.pointerInput
@@ -225,6 +227,14 @@ fun ConnectionsScreen(
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
     var profileUserId by remember { mutableStateOf<String?>(null) }
     var groupMemberPickerUsers by remember { mutableStateOf<List<User>?>(null) }
+    /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
+    var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
+
+    LaunchedEffect(selectedChatId) {
+        if (selectedChatId != null) {
+            lastOpenChatIdForIosOverlay = selectedChatId
+        }
+    }
 
     fun finalizeChatClose(leaveChatClearsMessageSurface: Boolean = true) {
         viewModel.leaveChatRoom(clearMessageSurface = leaveChatClearsMessageSurface)
@@ -376,7 +386,7 @@ fun ConnectionsScreen(
                 },
                 label = "ios_chat_overlay",
             ) {
-                val activeChatId = selectedChatId
+                val activeChatId = lastOpenChatIdForIosOverlay
                 if (activeChatId != null) {
                     InteractiveSwipeBackContainer(
                         enabled = true,
@@ -1846,6 +1856,20 @@ private fun ConnectionChatMessageComposer(
     val isSending by viewModel.isSending.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val composerFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var hadSubmitInFlight by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSending) {
+        if (isSending) {
+            hadSubmitInFlight = true
+            return@LaunchedEffect
+        }
+        if (!hadSubmitInFlight) return@LaunchedEffect
+        hadSubmitInFlight = false
+        delay(48)
+        composerFocusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
@@ -2013,7 +2037,6 @@ private fun ConnectionChatMessageComposer(
                         .align(Alignment.BottomCenter)
                         .focusRequester(composerFocusRequester),
                     enabled = true,
-                    readOnly = isSending,
                     textStyle = composerTextStyleCentered.merge(
                         TextStyle(color = MaterialTheme.colorScheme.onSurface),
                     ),
@@ -2065,7 +2088,8 @@ private fun ConnectionChatMessageComposer(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .size(auxButtonSize)
-                        .zIndex(4f),
+                        .zIndex(4f)
+                        .focusProperties { canFocus = false },
                 ) {
                     Box(
                         modifier = Modifier
@@ -2171,13 +2195,13 @@ private fun ConnectionChatMessageComposer(
                         .align(Alignment.BottomEnd)
                         .size(auxButtonSize)
                         .zIndex(4f)
+                        .focusProperties { canFocus = false }
                         .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
                         .background(sendGradient)
                         .pointerInput(canSend) {
                             detectTapGestures {
                                 if (canSend) {
                                     viewModel.sendMessage()
-                                    composerFocusRequester.requestFocus()
                                 }
                             }
                         },

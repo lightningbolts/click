@@ -1204,10 +1204,39 @@ class SupabaseChatRepository(
                 )
             }
             loadChatWithDetailsByRawId(chatId, currentUserId)
+                ?: loadChatWithDetailsByConnectionId(chatId, currentUserId)
         } catch (e: Exception) {
             println("Error fetching chat with details: ${e.redactedRestMessage()}")
             null
         }
+    }
+
+    /**
+     * Resolves a thread when [chatId] is a **connection id** (deep links / push) rather than a `chats.id` row.
+     * Inbox list fetch can still be empty on cold start, so this path must not depend on [fetchUserChatsWithDetails].
+     */
+    private suspend fun loadChatWithDetailsByConnectionId(
+        connectionId: String,
+        currentUserId: String,
+    ): ChatWithDetails? {
+        val conn = supabase.from("connections")
+            .select(columns = connectionsSelectWithEncounters) {
+                filter { eq("id", connectionId) }
+                limit(1)
+            }
+            .decodeList<Connection>()
+            .map { it.withEncountersSortedNewestFirst() }
+            .firstOrNull() ?: return null
+        if (!conn.user_ids.contains(currentUserId)) return null
+        val built = buildChatsWithDetailsForConnections(currentUserId, listOf(conn))
+            .firstOrNull { it.connection.id == connectionId } ?: return null
+        val ensured = ensureChatForConnection(connectionId) ?: return built
+        return built.copy(
+            chat = built.chat.copy(
+                id = ensured.id,
+                connectionId = connectionId,
+            ),
+        )
     }
 
     private suspend fun loadChatWithDetailsByRawId(chatId: String, currentUserId: String): ChatWithDetails? {
