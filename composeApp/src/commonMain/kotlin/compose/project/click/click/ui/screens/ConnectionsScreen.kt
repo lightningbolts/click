@@ -154,6 +154,13 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.ui.chat.callLogLabel
+import compose.project.click.click.ui.chat.formatCallDurationForLog
+import compose.project.click.click.ui.chat.formatConnectionListTimestamp
+import compose.project.click.click.ui.chat.formatConversationDayLabel
+import compose.project.click.click.ui.chat.formatMessageTime
+import compose.project.click.click.ui.chat.formatVibeCheckTime
+import compose.project.click.click.ui.chat.messageDayKey
 import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
@@ -1584,7 +1591,7 @@ fun ConnectionItem(
     val lastMessage = chatDetails.lastMessage
     val unreadCount = chatDetails.unreadCount
     val activityTs = lastMessage?.timeCreated ?: connection.last_message_at
-    val timeText = activityTs?.let { formatTimestamp(it) } ?: "No messages"
+    val timeText = activityTs?.let { formatConnectionListTimestamp(it) } ?: "No messages"
     val showLoadingSubtitle =
         lastMessage == null && user.name == "Connection" && connection.last_message_at == null
     val previewNeedsRefresh = connection.last_message_at?.let { latestAt ->
@@ -3160,34 +3167,6 @@ private fun ConversationDaySeparator(label: String) {
     }
 }
 
-private fun messageDayKey(timestamp: Long): String {
-    val dateTime = Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(TimeZone.currentSystemDefault())
-    return "${dateTime.year}-${dateTime.monthNumber}-${dateTime.dayOfMonth}"
-}
-
-private fun formatConversationDayLabel(timestamp: Long, nowMs: Long = Clock.System.now().toEpochMilliseconds()): String {
-    val zone = TimeZone.currentSystemDefault()
-    val dateTime = Instant.fromEpochMilliseconds(timestamp).toLocalDateTime(zone)
-    val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone)
-
-    val dayDifference = (now.date.toEpochDays() - dateTime.date.toEpochDays())
-    return when {
-        dayDifference == 0L -> "Today"
-        dayDifference == 1L -> "Yesterday"
-        dayDifference < 7L -> {
-            dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
-        }
-        else -> {
-            val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
-            if (dateTime.year == now.year) {
-                "$month ${dateTime.dayOfMonth}"
-            } else {
-                "$month ${dateTime.dayOfMonth}, ${dateTime.year}"
-            }
-        }
-    }
-}
-
 @Composable
 private fun ChatTypingDots() {
     val transition = rememberInfiniteTransition(label = "typing_dots")
@@ -3420,25 +3399,6 @@ private fun AnimatedVisibilityChatBubble(
             scaleOut(animationSpec = tween(200), targetScale = 0.96f)
     ) {
         content()
-    }
-}
-
-private fun formatCallDurationForLog(totalSeconds: Int): String {
-    val s = totalSeconds.coerceAtLeast(0)
-    val m = s / 60
-    val r = s % 60
-    return if (m > 0) "${m}m ${r.toString().padStart(2, '0')}s" else "${r}s"
-}
-
-private fun callLogLabel(message: Message): Pair<String, Boolean> {
-    val meta = message.metadata as? JsonObject ?: return "Call" to false
-    val state = (meta["call_state"] as? JsonPrimitive)?.content ?: return "Call" to false
-    val dur = (meta["duration_seconds"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
-    return when (state) {
-        "missed" -> "Missed Voice Call" to true
-        "declined" -> "Declined Call" to false
-        "completed" -> ("Call Ended • ${formatCallDurationForLog(dur)}") to false
-        else -> "Call" to false
     }
 }
 
@@ -5306,45 +5266,6 @@ private fun ConnectionActionSheet(
 }
 
 // Utility function to format timestamps
-private fun formatTimestamp(timestamp: Long): String {
-    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-    val diff = now - timestamp
-
-    return when {
-        diff < 60_000 -> "Just now"
-        diff < 3600_000 -> "${diff / 60_000}m ago"
-        diff < 86400_000 -> "${diff / 3600_000}h ago"
-        diff < 604800_000 -> "${diff / 86400_000}d ago"
-        else -> "${diff / 604800_000}w ago"
-    }
-}
-
-private fun formatMessageTime(timestamp: Long): String {
-    val instant = Instant.fromEpochMilliseconds(timestamp)
-    val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-
-    val hour = dateTime.hour
-    val minute = dateTime.minute.toString().padStart(2, '0')
-    val amPm = if (hour < 12) "AM" else "PM"
-    val displayHour = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
-
-    return "$displayHour:$minute $amPm"
-}
-
-/**
- * Format remaining milliseconds as MM:SS for the Vibe Check timer.
- */
-private fun formatVibeCheckTime(remainingMs: Long): String {
-    val totalSeconds = remainingMs / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
-}
-
 /**
  * Vibe Check Banner - Shows the countdown timer, context tag, and keep button.
  * Displays different states based on timer status and user decisions.
