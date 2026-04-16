@@ -1,248 +1,47 @@
 package compose.project.click.click.ui.screens
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.text.AnnotatedString
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
-import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
-import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
-import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material3.ripple
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
-import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
-import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
-import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
-import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
-import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
-import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.Message // pragma: allowlist secret
-import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
-import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
-import compose.project.click.click.ui.chat.CallLogSystemRow
-import compose.project.click.click.ui.chat.ChatAudioBubbleRow
-import compose.project.click.click.ui.chat.ChatBubblePhotoContent
-import compose.project.click.click.ui.chat.ChatChannelLoadingView
-import compose.project.click.click.ui.chat.ChatWarmLoadingView
-import compose.project.click.click.ui.chat.ConnectionItem
-import compose.project.click.click.ui.chat.ForwardDialog
-import compose.project.click.click.ui.chat.IcebreakerPanel
-import compose.project.click.click.ui.chat.VibeCheckBanner
+import compose.project.click.click.data.models.User
+import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet
-import compose.project.click.click.ui.chat.LocationGapNudge
-import compose.project.click.click.ui.chat.MessageActionSheet
-import compose.project.click.click.ui.chat.orderedGroupMembersForPicker
-import compose.project.click.click.ui.chat.connectionHasNoGeo
-import compose.project.click.click.ui.chat.connectionListActivityTs
-import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
-import compose.project.click.click.ui.chat.ConnectionActionSheet
-import compose.project.click.click.ui.chat.ChatMessageOverflowButton
-import compose.project.click.click.ui.chat.ConnectionChatMessageComposer
-import compose.project.click.click.ui.chat.ChatTimelineEntry
-import compose.project.click.click.ui.chat.ChatTypingDots
-import compose.project.click.click.ui.chat.ConversationDaySeparator
-import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder
-import compose.project.click.click.ui.chat.ReplySwipeSideIcon
-import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
-import compose.project.click.click.ui.chat.callLogLabel
-import compose.project.click.click.ui.chat.formatCallDurationForLog
-import compose.project.click.click.ui.chat.formatChatAudioDuration
-import compose.project.click.click.ui.chat.formatChatAudioPositionMs
-import compose.project.click.click.ui.chat.formatConnectionListTimestamp
-import compose.project.click.click.ui.chat.formatConversationDayLabel
-import compose.project.click.click.ui.chat.formatMessageTime
-import compose.project.click.click.ui.chat.formatVibeCheckTime
-import compose.project.click.click.ui.chat.messageDayKey
-import compose.project.click.click.ui.chat.replyDragHintProgress
-import compose.project.click.click.ui.chat.swipeRawTravelFromVisual
-import compose.project.click.click.ui.chat.swipeVisualFromRawTravel
-import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
-import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
-import compose.project.click.click.data.models.parsedMediaMetadata // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
-import coil3.compose.AsyncImage // pragma: allowlist secret
-import androidx.compose.foundation.layout.offset // pragma: allowlist secret
-import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
-import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
-import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
-import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
-import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
-import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
-import kotlinx.coroutines.withContext // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
-import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
-import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
+import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
+import compose.project.click.click.ui.components.PlatformBackHandler
+import compose.project.click.click.ui.components.UserProfileBottomSheet
+import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlin.math.absoluteValue
-import kotlin.math.abs
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageBubble
-import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
-import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
-import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 
 @Composable
 fun ConnectionsScreen(
@@ -507,16 +306,9 @@ fun ConnectionsScreen(
     }
 }
 
-private enum class ChatTransitionMode {
+internal enum class ChatTransitionMode {
     Tap,
     Gesture
 }
 
-private const val CHAT_TRANSITION_DURATION_MS = 300L
-
-
-
-
-
-
-
+internal const val CHAT_TRANSITION_DURATION_MS = 300L
