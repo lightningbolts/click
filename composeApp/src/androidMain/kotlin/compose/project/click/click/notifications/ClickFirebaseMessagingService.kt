@@ -17,6 +17,7 @@ import compose.project.click.click.MainActivity
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.PlatformIncomingCallUi
+import compose.project.click.click.calls.parseIncomingCallPayload
 import compose.project.click.click.crypto.MessageCrypto
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
@@ -146,27 +147,8 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     }
 }
 
-private fun RemoteMessage.toIncomingCallInvite(): CallInvite? {
-    val callId = data["call_id"] ?: return null
-    val connectionId = data["connection_id"] ?: return null
-    val roomName = data["room_name"] ?: return null
-    val callerId = data["caller_id"] ?: return null
-    val callerName = data["caller_name"] ?: return null
-    val calleeId = data["callee_id"] ?: return null
-    val calleeName = data["callee_name"] ?: return null
-
-    return CallInvite(
-        callId = callId,
-        connectionId = connectionId,
-        roomName = roomName,
-        callerId = callerId,
-        callerName = callerName,
-        calleeId = calleeId,
-        calleeName = calleeName,
-        videoEnabled = data["video_enabled"]?.toBooleanStrictOrNull() ?: false,
-        createdAt = data["created_at"]?.toLongOrNull() ?: 0L,
-    )
-}
+private fun RemoteMessage.toIncomingCallInvite(): CallInvite? =
+    parseIncomingCallPayload(data)
 
 private fun ensureNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
