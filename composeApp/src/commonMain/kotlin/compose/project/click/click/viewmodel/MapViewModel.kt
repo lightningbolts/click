@@ -12,6 +12,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository // pra
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -507,13 +508,13 @@ class MapViewModel : ViewModel() {
     }
     
     override fun onCleared() {
-        super.onCleared()
-        connectionsChannel?.let { channel ->
-            viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
-            }
-        }
+        // Grab the channel ref before super.onCleared() kills viewModelScope.
+        val channel = connectionsChannel
         connectionsChannel = null
+        super.onCleared()
+        if (channel != null) {
+            teardownBlocking { channel.unsubscribe() }
+        }
     }
 
     /**

@@ -21,6 +21,7 @@ import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.chatMediaDispatcher
+import compose.project.click.click.util.teardownBlocking
 import compose.project.click.click.utils.LocationResult
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
@@ -42,7 +43,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
@@ -477,13 +477,15 @@ class HubChatViewModel(
         clearHubSecureMediaCache(purgePersistentCache = true)
         val ch = hubChannel
         hubChannel = null
+        super.onCleared()
         if (ch != null) {
-            runBlocking {
+            // Bounded, off-main teardown: viewModelScope is dead, main-thread
+            // blocking is an ANR risk — use the shared helper (≤500 ms, Default).
+            teardownBlocking {
                 runCatching { ch.untrack() }
                 runCatching { ch.unsubscribe() }
             }
         }
-        super.onCleared()
     }
 }
 

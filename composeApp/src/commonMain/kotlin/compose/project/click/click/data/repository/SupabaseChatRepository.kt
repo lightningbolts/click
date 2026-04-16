@@ -22,6 +22,7 @@ import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.track
 import io.github.jan.supabase.realtime.RealtimeChannel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -186,7 +187,13 @@ class SupabaseChatRepository(
                         }
                         _onlineUsers.value = presenceKeysOnline.toSet()
                     }
-                } catch (_: Exception) {
+                } catch (e: CancellationException) {
+                    // Session torn down — propagate so the outer scope finishes cleanly.
+                    throw e
+                } catch (e: Exception) {
+                    // Don't silently swallow: broken presence flow needs visibility in logs
+                    // (redacted) so on-call can correlate with transport errors.
+                    println("ChatRepository: presence flow collection failed: ${e.redactedRestMessage()}")
                 }
             }
 
@@ -1516,7 +1523,10 @@ class SupabaseChatRepository(
                         }
                         peerOnline.value = peerUserId in presenceKeysOnline
                     }
-                } catch (_: Exception) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    println("ChatRepository: ephemeral presence flow failed: ${e.redactedRestMessage()}")
                 }
             }
 
@@ -1537,7 +1547,10 @@ class SupabaseChatRepository(
                             typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
                         }
                     }
-                } catch (_: Exception) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    println("ChatRepository: typing broadcast flow failed: ${e.redactedRestMessage()}")
                 }
             }
 

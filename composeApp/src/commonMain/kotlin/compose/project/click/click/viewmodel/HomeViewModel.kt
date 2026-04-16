@@ -21,6 +21,7 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
+import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -527,17 +528,19 @@ class HomeViewModel(
     }
     
     override fun onCleared() {
-        super.onCleared()
-        connectionsChannel?.let { channel ->
-            viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
-            }
-        }
+        // Capture channel ref before super.onCleared() cancels viewModelScope, then
+        // use the bounded teardown helper so the unsubscribe actually runs even
+        // though the scope is already dead.
+        val channel = connectionsChannel
         connectionsChannel = null
         availabilityIntentRefreshJob?.cancel()
         availabilityIntentRefreshJob = null
         homeOverlapJob?.cancel()
         homeOverlapJob = null
+        super.onCleared()
+        if (channel != null) {
+            teardownBlocking { channel.unsubscribe() }
+        }
     }
 }
 

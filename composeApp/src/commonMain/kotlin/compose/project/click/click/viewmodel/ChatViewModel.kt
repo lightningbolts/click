@@ -29,7 +29,6 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -37,7 +36,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -51,6 +49,7 @@ import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // prag
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
+import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -1261,18 +1260,50 @@ class ChatViewModel(
         return bytes
     }
 
-    // Subscribe to real-time message updates
+    // Subscribe to real-time message updates.
+    //
+    // Contract (post-R0.2 refactor):
+    // - previous `realtimeJob` is cancelled and **awaited** before a new
+    //   subscription is opened. Without this, detach() and a new subscribe()
+    //   can run concurrently on the same topic, producing duplicate realtime
+    //   events and racing echo dedupe (see audit §1 #3).
+    // - `CancellationException` is never swallowed; the retry loop exits
+    //   cleanly on scope cancellation (R0.3).
+    // - the retry loop is bounded by `MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS`
+    //   (NASA P10: every loop has a fixed upper bound).
     private fun subscribeToNewMessages(chatId: String, userId: String) {
-        realtimeJob?.cancel()
+        val previousJob = realtimeJob
+        val previousSubscription = activeMessageSubscription
+        activeMessageSubscription = null
         currentApiChatId = chatId
-        viewModelScope.launch {
-            // Clean up previous channel
-            activeMessageSubscription?.let {
-                try { it.detach() } catch (_: Exception) {}
-            }
-            activeMessageSubscription = null
-        }
+
         realtimeJob = viewModelScope.launch {
+            // 1) Await previous job cancellation + detach previous subscription
+            //    *before* opening a new channel. Serializing here is what
+            //    prevents the brief overlap where two channels are subscribed
+            //    to the same topic simultaneously.
+            if (previousJob != null) {
+                previousJob.cancel()
+                try {
+                    previousJob.join()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // join() of a cancelled job surfaces the cancellation
+                    // cause on some platforms; ignore non-cancellation errors.
+                }
+            }
+            if (previousSubscription != null) {
+                try {
+                    previousSubscription.detach()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // best-effort teardown
+                }
+            }
+
+            // 2) Open the new subscription with bounded retry.
             var attempt = 0
             while (attempt < MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS && currentApiChatId == chatId) {
                 try {
@@ -1298,7 +1329,7 @@ class ChatViewModel(
                                                 )
                                             } else {
                                                 viewModelScope.launch {
-                                                    chatRepository.markMessagesAsRead(chatId, userId)
+                                                    runCatching { chatRepository.markMessagesAsRead(chatId, userId) }
                                                 }
                                             }
                                         }
@@ -1312,7 +1343,6 @@ class ChatViewModel(
                                                 } else mwu
                                             }
                                             _chatMessagesState.value = currentState.copy(messages = updatedMessages)
-                                            // Refresh the Connections preview when the latest row is edited.
                                             updatedMessages
                                                 .maxByOrNull { it.message.timeCreated }
                                                 ?.message
@@ -1339,13 +1369,22 @@ class ChatViewModel(
 
                     subscription.attach()
                     return@launch
+                } catch (e: CancellationException) {
+                    // Scope was cancelled (chat closed / VM cleared). Do NOT retry.
+                    throw e
                 } catch (e: Exception) {
                     attempt += 1
                     activeMessageSubscription?.let { sub ->
-                        try { sub.detach() } catch (_: Exception) {}
+                        try {
+                            sub.detach()
+                        } catch (ce: CancellationException) {
+                            throw ce
+                        } catch (_: Exception) {
+                            // best effort
+                        }
                     }
                     activeMessageSubscription = null
-                    println("Error subscribing to messages (attempt $attempt): ${e.message}")
+                    println("Error subscribing to messages (attempt $attempt): ${e.redactedRestMessage()}")
                     if (attempt < MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS && currentApiChatId == chatId) {
                         delay(MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS * attempt)
                     }
@@ -2667,7 +2706,11 @@ class ChatViewModel(
     }
 
     override fun onCleared() {
-        super.onCleared()
+        // Cancel jobs first, capture teardown refs, then call super().
+        // super.onCleared() cancels viewModelScope — after that point, any
+        // viewModelScope.launch here becomes a silent no-op, which is why
+        // every remote-side cleanup goes through teardownBlocking (bounded,
+        // off-main, NonCancellable) instead.
         clearSecureChatMediaCache(purgePersistentCache = true)
         connectionsRealtimeJob?.cancel()
         connectionsRealtimeJob = null
@@ -2675,30 +2718,30 @@ class ChatViewModel(
         globalMessageListJob = null
         debouncedChatListRefreshJob?.cancel()
         debouncedChatListRefreshJob = null
-        connectionsRealtimeChannel?.let { ch ->
-            runBlocking(Dispatchers.Default) {
-                runCatching { ch.unsubscribe() }
-            }
-        }
-        connectionsRealtimeChannel = null
         realtimeJob?.cancel()
         typingPollingJob?.cancel()
         peerTypingTimeoutJob?.cancel()
         peerOnlineJob?.cancel()
         localTypingIdleJob?.cancel()
         vibeCheckTimerJob?.cancel()
+
+        val connectionsChannel = connectionsRealtimeChannel
+        connectionsRealtimeChannel = null
         val apiIdToLeave = currentApiChatId
-        if (apiIdToLeave != null) {
-            runBlocking(Dispatchers.Default) {
-                chatRepository.leaveChatEphemeralChannel(apiIdToLeave)
-            }
-        }
-        activeMessageSubscription?.let { sub ->
-            viewModelScope.launch {
-                try { sub.detach() } catch (_: Exception) {}
-            }
-        }
+        val messageSub = activeMessageSubscription
         activeMessageSubscription = null
+
+        super.onCleared()
+
+        if (connectionsChannel != null) {
+            teardownBlocking { runCatching { connectionsChannel.unsubscribe() } }
+        }
+        if (apiIdToLeave != null) {
+            teardownBlocking { runCatching { chatRepository.leaveChatEphemeralChannel(apiIdToLeave) } }
+        }
+        if (messageSub != null) {
+            teardownBlocking { runCatching { messageSub.detach() } }
+        }
     }
 
     private fun extensionForChatMedia(mime: String, isImage: Boolean): String {
