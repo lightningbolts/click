@@ -155,6 +155,8 @@ import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma:
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTimelineEntry
+import compose.project.click.click.ui.chat.ChatTypingDots
+import compose.project.click.click.ui.chat.ConversationDaySeparator
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
 import compose.project.click.click.ui.chat.callLogLabel
 import compose.project.click.click.ui.chat.formatCallDurationForLog
@@ -3070,61 +3072,6 @@ fun ChatView(
         )
     }
     } // End outer Box
-}
-
-@Composable
-private fun ConversationDaySeparator(label: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-        )
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 12.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-        )
-    }
-}
-
-@Composable
-private fun ChatTypingDots() {
-    val transition = rememberInfiniteTransition(label = "typing_dots")
-    val delays = listOf(0, 140, 280)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        delays.forEachIndexed { index, delayMs ->
-            val offsetY by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(520, delayMillis = delayMs, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "dot_$index"
-            )
-            Box(
-                modifier = Modifier
-                    .offset(y = (-4f * offsetY).dp)
-                    .size(5.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
-            )
-        }
-    }
 }
 
 /**
