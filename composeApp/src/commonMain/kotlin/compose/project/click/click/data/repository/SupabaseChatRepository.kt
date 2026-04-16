@@ -91,6 +91,10 @@ class SupabaseChatRepository(
         data class GroupMaster(val masterKey: ByteArray) : ResolvedChatCrypto()
     }
 
+    // Guarded by chatCryptoMutex. Contains derived pairwise keys and unwrapped
+    // group master keys; every entry is session-scoped PII and MUST be cleared
+    // on sign-out via clearSessionCaches() — see R0.4 / R0.5 in audit report.
+    private val chatCryptoMutex = Mutex()
     private val chatCryptoCache = mutableMapOf<String, ResolvedChatCrypto>()
 
     private val chatConnectionRouteMutex = Mutex()
@@ -338,7 +342,7 @@ class SupabaseChatRepository(
     }
 
     private suspend fun resolveChatCrypto(chatId: String, viewerUserId: String?): ResolvedChatCrypto? {
-        chatCryptoCache[chatId]?.let { return it }
+        chatCryptoMutex.withLock { chatCryptoCache[chatId] }?.let { return it }
         return try {
             val row = supabase.from("chats")
                 .select(columns = Columns.list("id", "connection_id", "group_id")) {
@@ -353,7 +357,9 @@ class SupabaseChatRepository(
                     rememberChatGroupRouting(chatId, row.groupId)
                     val uid = viewerUserId ?: return null
                     val master = unwrapGroupMasterKeyFromDb(row.groupId, uid) ?: return null
-                    ResolvedChatCrypto.GroupMaster(master).also { chatCryptoCache[chatId] = it }
+                    val resolved = ResolvedChatCrypto.GroupMaster(master)
+                    chatCryptoMutex.withLock { chatCryptoCache[chatId] = resolved }
+                    resolved
                 }
                 !row.connectionId.isNullOrBlank() -> {
                     rememberChatConnectionRouting(chatId, row.connectionId)
@@ -365,7 +371,9 @@ class SupabaseChatRepository(
                         .decodeList<ConnectionUserIdsRow>()
                         .firstOrNull() ?: return null
                     val keys = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
-                    ResolvedChatCrypto.Pairwise(keys).also { chatCryptoCache[chatId] = it }
+                    val resolved = ResolvedChatCrypto.Pairwise(keys)
+                    chatCryptoMutex.withLock { chatCryptoCache[chatId] = resolved }
+                    resolved
                 }
                 else -> null
             }
@@ -392,13 +400,40 @@ class SupabaseChatRepository(
         }
     }
 
-    override fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {
+    override suspend fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {
         val keys = MessageCrypto.deriveKeysForConnection(connectionId, userIds)
-        chatCryptoCache[chatId] = ResolvedChatCrypto.Pairwise(keys)
+        chatCryptoMutex.withLock { chatCryptoCache[chatId] = ResolvedChatCrypto.Pairwise(keys) }
     }
 
-    override fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray) {
-        chatCryptoCache[chatId] = ResolvedChatCrypto.GroupMaster(masterKey.copyOf())
+    override suspend fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray) {
+        val copy = masterKey.copyOf()
+        chatCryptoMutex.withLock { chatCryptoCache[chatId] = ResolvedChatCrypto.GroupMaster(copy) }
+    }
+
+    override suspend fun clearSessionCaches() {
+        // Stop long-lived realtime sessions first so callbacks can't re-populate
+        // the cache mid-clear.
+        runCatching { stopGlobalPresence() }
+        ephemeralMutex.withLock {
+            val sessions = ephemeralSessions.values.toList()
+            ephemeralSessions.clear()
+            for (session in sessions) {
+                disposeEphemeralSession(session)
+            }
+        }
+        chatCryptoMutex.withLock {
+            // Best-effort scrub of group master key material before dropping the map.
+            for (entry in chatCryptoCache.values) {
+                if (entry is ResolvedChatCrypto.GroupMaster) {
+                    entry.masterKey.fill(0)
+                }
+            }
+            chatCryptoCache.clear()
+        }
+        chatConnectionRouteMutex.withLock {
+            chatIdToConnectionId.clear()
+            chatIdToGroupId.clear()
+        }
     }
 
     private fun decryptMessage(message: Message, crypto: ResolvedChatCrypto?): Message {
@@ -655,6 +690,19 @@ class SupabaseChatRepository(
         }
         val unreadByChatId = unreadRows.groupingBy { it.chatId }.eachCount()
 
+        // Batch pairwise-key derivations so the crypto cache is written to once
+        // under a single withLock instead of per-iteration inside mapNotNull
+        // (which is a non-suspending lambda). Keeps NASA-P10 bounded-loop OK.
+        val derivedPairwise = HashMap<String, ResolvedChatCrypto.Pairwise>(connections.size)
+        for (connection in connections) {
+            val chatRow = chatByConnectionId[connection.id] ?: continue
+            val keys = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
+            derivedPairwise[chatRow.id] = ResolvedChatCrypto.Pairwise(keys)
+        }
+        if (derivedPairwise.isNotEmpty()) {
+            chatCryptoMutex.withLock { chatCryptoCache.putAll(derivedPairwise) }
+        }
+
         return connections.mapNotNull { connection ->
             val chatRow = chatByConnectionId[connection.id]
             val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
@@ -667,11 +715,7 @@ class SupabaseChatRepository(
             )
 
             val rawLastMessage = chatRow?.let { latestByChatId[it.id]?.toMessage() }
-            val pairwise = if (chatRow != null) {
-                val k = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
-                chatCryptoCache[chatRow.id] = ResolvedChatCrypto.Pairwise(k)
-                ResolvedChatCrypto.Pairwise(k)
-            } else null
+            val pairwise = chatRow?.let { derivedPairwise[it.id] }
             val lastMessage = rawLastMessage?.let { decryptMessage(it, pairwise) }
             val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
 
@@ -1157,7 +1201,7 @@ class SupabaseChatRepository(
                     else -> null
                 } ?: return@collect
                 val listKey = resolveListKeyForChat(row.chatId) ?: return@collect
-                val cached = chatCryptoCache[row.chatId]
+                val cached = chatCryptoMutex.withLock { chatCryptoCache[row.chatId] }
                 val crypto = cached
                     ?: getEncryptionKeysForConnection(listKey)?.let { ResolvedChatCrypto.Pairwise(it) }
                 val rawMessage = row.toMessage()

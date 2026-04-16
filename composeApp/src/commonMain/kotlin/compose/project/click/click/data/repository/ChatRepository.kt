@@ -26,10 +26,18 @@ interface ChatRepository {
 
     suspend fun stopGlobalPresence()
 
-    fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>)
+    suspend fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>)
 
     /** Caches the 32-byte group master key for [chatId] after local unwrap or creation. */
-    fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray)
+    suspend fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray)
+
+    /**
+     * Clears all in-memory crypto state and disposes any active ephemeral
+     * channel / presence sessions for the current signed-in user. Call on
+     * sign-out BEFORE [compose.project.click.click.data.storage.TokenStorage.clearSessionData]
+     * so no derived keys or group masters leak across accounts on the same device.
+     */
+    suspend fun clearSessionCaches()
 
     suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails>
 

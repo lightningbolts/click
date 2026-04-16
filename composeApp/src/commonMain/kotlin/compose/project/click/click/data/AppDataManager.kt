@@ -442,8 +442,12 @@ object AppDataManager {
     suspend fun clearData() {
         loadAllDataJob?.cancel()
         loadAllDataJob = null
-        runCatching { chatRepository.stopGlobalPresence() }
-            .onFailure { e -> println("AppDataManager: Global presence stop failed: ${e.message}") }
+        // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
+        // group master keys AND stops global presence, so this single call
+        // replaces the old stopGlobalPresence() + leaks derived keys into the
+        // next signed-in user of the same device.
+        runCatching { chatRepository.clearSessionCaches() }
+            .onFailure { e -> println("AppDataManager: chat session cache clear failed: ${e.message}") }
         presenceHeartbeatJob?.cancel()
         presenceHeartbeatJob = null
         _currentUser.value = null

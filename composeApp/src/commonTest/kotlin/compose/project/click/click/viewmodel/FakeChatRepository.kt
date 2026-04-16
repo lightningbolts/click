@@ -62,9 +62,11 @@ class FakeChatRepository(
 
     override suspend fun stopGlobalPresence() = onStopGlobalPresence()
 
-    override fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {}
+    override suspend fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {}
 
-    override fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray) {}
+    override suspend fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray) {}
+
+    override suspend fun clearSessionCaches() {}
 
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchUserChatsWithDetails(userId)
