@@ -2380,6 +2380,9 @@ fun ChatView(
                     val chatDetails = state.chatDetails
                     val messages = state.messages
                     val reactionsMap by viewModel.messageReactions.collectAsState()
+                    // R1.1: hoist secure media load state above the LazyColumn so each item doesn't
+                    // subscribe to the full map.
+                    val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
                     val isGroupChat = chatDetails.groupClique != null
                     val overlapRepo = remember { SupabaseRepository() }
                     val chatPeerId = chatDetails.otherUser.id
@@ -2810,7 +2813,7 @@ fun ChatView(
                                                 val bubble: @Composable () -> Unit = {
                                                     ChatMessageBubble(
                                                         messageWithUser = messageWithUser,
-                                                        currentUserId = viewModel.currentUserId.collectAsState().value,
+                                                        currentUserId = currentUserId,
                                                         reactions = msgReactions,
                                                         onToggleReaction = { reaction ->
                                                             viewModel.toggleReaction(messageWithUser.message.id, reaction)
@@ -2824,6 +2827,7 @@ fun ChatView(
                                                         },
                                                         showPeerAvatarInGroup = isGroupChat,
                                                         secureMediaHost = viewModel,
+                                                        secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
                                                         activeChatId = activeApiChatId,
                                                     )
                                                 }
@@ -3917,6 +3921,12 @@ fun ChatMessageBubble(
     /** Verified group / multi-member chat: show the sender’s face on incoming bubbles. */
     showPeerAvatarInGroup: Boolean = false,
     secureMediaHost: SecureChatMediaHost? = null,
+    /**
+     * Pre-resolved secure media load state for this message. Hoist the [SecureChatMediaHost.secureChatMediaLoadState]
+     * collector out of LazyColumn items and pass only the relevant entry here to avoid every row observing the full map.
+     * If null, falls back to collecting from [secureMediaHost] internally (legacy path).
+     */
+    secureMediaState: SecureChatMediaLoadState? = null,
     activeChatId: String? = null,
     /** When false, long-press context and its haptics are disabled (e.g. read-only hub preview). */
     enableMessageContextMenu: Boolean = true,
@@ -3934,8 +3944,9 @@ fun ChatMessageBubble(
     val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
     val encryptedMedia = message.isEncryptedMedia()
 
-    val secureMediaStates = secureMediaHost?.secureChatMediaLoadState?.collectAsState()
-    val secureSt = secureMediaStates?.value?.get(message.id)
+    // Prefer the hoisted per-message state from the caller. Fallback: legacy path that collects the full map here.
+    val secureSt = secureMediaState
+        ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
     val hapticFeedback = LocalHapticFeedback.current
     LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, encryptedMedia) {
         val chatId = activeChatId

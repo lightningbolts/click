@@ -68,6 +68,7 @@ fun HubChatScreen(
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
+    val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
 
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
@@ -176,6 +177,7 @@ fun HubChatScreen(
                         onSwipeReply = {},
                         showPeerAvatarInGroup = true,
                         secureMediaHost = viewModel,
+                        secureMediaState = secureMediaLoadMap[mwu.message.id],
                         activeChatId = hubIdForSecureMedia,
                         enableMessageContextMenu = false,
                     )
