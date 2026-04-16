@@ -69,6 +69,10 @@ private data class HubMessageRow(
     val metadata: JsonElement? = null,
 )
 
+/** Extract the `id` column out of a realtime `oldRecord` JsonObject (DELETE payloads carry PKs only). */
+private fun JsonObject.hubMessageRowId(): String? =
+    (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
 private fun hubCreatedAtToEpoch(iso: String): Long {
     val t = iso.trim().replace(" ", "T")
     return runCatching { Instant.parse(t) }.getOrNull()?.toEpochMilliseconds()
@@ -254,6 +258,27 @@ class HubChatViewModel(
                                 val ui = rowToMessageWithUser(row)
                                 if (_messages.value.none { it.message.id == ui.message.id }) {
                                     _messages.value = _messages.value + ui
+                                }
+                            }
+                            is PostgresAction.Update -> {
+                                // Edits/soft-mutations propagate via UPDATE. Decode the full row
+                                // and replace in place; ignore rows that belong to a different hub
+                                // or that predate our initial snapshot (not yet in the list).
+                                val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
+                                if (row.hubId != hubId) return@collect
+                                val current = _messages.value
+                                val idx = current.indexOfFirst { it.message.id == row.id }
+                                if (idx >= 0) {
+                                    val refreshed = rowToMessageWithUser(row)
+                                    _messages.value = current.toMutableList().also { it[idx] = refreshed }
+                                }
+                            }
+                            is PostgresAction.Delete -> {
+                                // `record` is empty on DELETE; pull the PK from `oldRecord`.
+                                val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
+                                val current = _messages.value
+                                if (current.any { it.message.id == deletedId }) {
+                                    _messages.value = current.filterNot { it.message.id == deletedId }
                                 }
                             }
                             else -> Unit
