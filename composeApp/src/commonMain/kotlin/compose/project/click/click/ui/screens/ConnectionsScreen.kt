@@ -156,6 +156,7 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
 import compose.project.click.click.ui.chat.CallLogSystemRow
+import compose.project.click.click.ui.chat.ChatAudioBubbleRow
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent
 import compose.project.click.click.ui.chat.ChatChannelLoadingView
 import compose.project.click.click.ui.chat.ChatWarmLoadingView
@@ -2921,110 +2922,6 @@ fun ChatView(
         )
     }
     } // End outer Box
-}
-
-@Composable
-private fun ChatAudioBubbleRow(
-    mediaUrl: String,
-    durationSeconds: Int?,
-    contentColor: Color,
-    accentColor: Color,
-    localFilePathForPlayback: String? = null,
-    secureLoading: Boolean = false,
-    secureError: String? = null,
-) {
-    val hintMs = remember(durationSeconds) {
-        durationSeconds?.takeIf { it > 0 }?.times(1000L) ?: 0L
-    }
-    if (secureLoading) {
-        Box(
-            modifier = Modifier
-                .widthIn(min = 0.dp, max = 280.dp)
-                .height(56.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator(color = accentColor)
-        }
-        return
-    }
-    if (!secureError.isNullOrBlank()) {
-        Text(
-            text = secureError,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.widthIn(max = 280.dp),
-        )
-        return
-    }
-    val player = rememberChatAudioPlayer(
-        mediaUrl = mediaUrl,
-        durationHintMs = hintMs,
-        localFilePathForPlayback = localFilePathForPlayback,
-    )
-    val durationMs = remember(player.durationMs, hintMs) {
-        when {
-            player.durationMs > 0 -> player.durationMs
-            hintMs > 0 -> hintMs
-            else -> 1L
-        }
-    }
-    var draggingSlider by remember(mediaUrl) { mutableStateOf(false) }
-    var sliderValue by remember(mediaUrl) { mutableFloatStateOf(0f) }
-    LaunchedEffect(player.positionMs, durationMs, player.isPlaying, draggingSlider) {
-        if (!draggingSlider && durationMs > 0) {
-            sliderValue = (player.positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-        }
-    }
-    val positionDisplayMs = if (draggingSlider) {
-        (sliderValue * durationMs).toLong()
-    } else {
-        player.positionMs
-    }
-    val timeLabel = "${formatChatAudioPositionMs(positionDisplayMs)} / ${formatChatAudioDuration(durationMs, durationSeconds)}"
-    Row(
-        modifier = Modifier.widthIn(min = 0.dp, max = 280.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        IconButton(
-            onClick = { player.togglePlayPause() },
-            modifier = Modifier.size(40.dp),
-        ) {
-            Icon(
-                imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (player.isPlaying) "Pause" else "Play",
-                tint = accentColor,
-            )
-        }
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Slider(
-                value = sliderValue,
-                onValueChange = {
-                    draggingSlider = true
-                    sliderValue = it
-                },
-                onValueChangeFinished = {
-                    player.seekTo((sliderValue * durationMs).toLong().coerceIn(0L, durationMs))
-                    draggingSlider = false
-                },
-                valueRange = 0f..1f,
-                modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(
-                    thumbColor = accentColor,
-                    activeTrackColor = accentColor,
-                    inactiveTrackColor = contentColor.copy(alpha = 0.28f),
-                ),
-            )
-            Text(
-                text = timeLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.9f),
-            )
-        }
-    }
 }
 
 @Composable
