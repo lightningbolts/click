@@ -157,6 +157,11 @@ import compose.project.click.click.data.models.MessageWithUser // pragma: allowl
 import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
 import compose.project.click.click.ui.chat.CallLogSystemRow
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent
+import compose.project.click.click.ui.chat.ChatChannelLoadingView
+import compose.project.click.click.ui.chat.ChatWarmLoadingView
+import compose.project.click.click.ui.chat.ForwardDialog
+import compose.project.click.click.ui.chat.connectionHasNoGeo
+import compose.project.click.click.ui.chat.connectionListActivityTs
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
 import compose.project.click.click.ui.chat.ChatMessageOverflowButton
 import compose.project.click.click.ui.chat.ChatTimelineEntry
@@ -497,12 +502,6 @@ private enum class ChatTransitionMode {
 }
 
 private const val CHAT_TRANSITION_DURATION_MS = 300L
-
-/** Sort key for Clicks list: prefer server `last_message_at`, then last message time, then connection created. */
-private fun connectionListActivityTs(chat: ChatWithDetails): Long =
-    chat.connection.last_message_at
-        ?: chat.lastMessage?.timeCreated
-        ?: chat.connection.created
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1442,11 +1441,6 @@ fun ConnectionsListView(
         )
     }
     } // End outer Box
-}
-
-private fun connectionHasNoGeo(connection: Connection): Boolean {
-    val g = connection.connectionMapGeo() ?: return true
-    return !g.lat.isFinite() || !g.lon.isFinite() || (g.lat == 0.0 && g.lon == 0.0)
 }
 
 @Composable
@@ -3059,187 +3053,6 @@ fun ChatView(
     }
     } // End outer Box
 }
-
-/**
- * Shown when [ChatMessagesState.Loading] but the chat list already has a row for this thread,
- * so we avoid a blank full-screen spinner while the ViewModel resolves details.
- */
-@Composable
-private fun ChatWarmLoadingView(
-    topInset: Dp,
-    onBackPressed: () -> Unit,
-    chatRow: ChatWithDetails,
-) {
-    val title = chatRow.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() }
-        ?: chatRow.otherUser.name?.trim()?.takeIf { it.isNotEmpty() }
-        ?: "Chat"
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, top = topInset, end = 20.dp)
-                .height(56.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBackPressed) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AdaptiveCircularProgressIndicator(
-                modifier = Modifier.size(36.dp),
-                strokeWidth = 3.dp,
-                color = PrimaryBlue,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Loading conversation…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChatChannelLoadingView(
-    topInset: Dp,
-    onBackPressed: () -> Unit
-) {
-    val transition = rememberInfiniteTransition(label = "chat_loading_spinner")
-    val spinnerScale by transition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "chat_loading_scale"
-    )
-    val spinnerMix by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "chat_loading_mix"
-    )
-    val spinnerColor = lerp(PrimaryBlue, LightBlue, spinnerMix)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBackPressed) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Chat",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = topInset + 56.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            AdaptiveCircularProgressIndicator(
-                modifier = Modifier.size((34f * spinnerScale).dp),
-                strokeWidth = 3.dp,
-                color = spinnerColor
-            )
-        }
-    }
-}
-
-@Composable
-private fun ForwardDialog(
-    chatListState: ChatListState,
-    currentChatId: String,
-    archivedConnectionIds: Set<String>,
-    hiddenConnectionIds: Set<String>,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        title = { Text("Forward to...") },
-        text = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .wrapContentHeight()
-            ) {
-                when (chatListState) {
-                    is ChatListState.Success -> {
-                        val options = chatListState.chats
-                            .filter {
-                                it.connection.id != currentChatId &&
-                                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                            }
-                            .sortedByDescending { connectionListActivityTs(it) }
-                        if (options.isEmpty()) Text("No other chats available")
-                        else LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                            items(options, key = { it.connection.id }) { item ->
-                                ListItem(
-                                    headlineContent = { Text(item.otherUser.name ?: "Unknown") },
-                                    supportingContent = { Text(item.otherUser.email ?: "") },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .padding(8.dp)
-                                        .clickable {
-                                            onSelect(item.connection.id)
-                                        }
-                                )
-                            }
-                        }
-                    }
-                    is ChatListState.Loading -> { AdaptiveCircularProgressIndicator() }
-                    is ChatListState.Error -> { Text("Failed to load chats") }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        }
-    )
-}
-
 
 @Composable
 private fun ChatAudioBubbleRow(
