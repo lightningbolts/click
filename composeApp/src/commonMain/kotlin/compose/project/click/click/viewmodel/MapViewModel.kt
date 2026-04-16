@@ -12,6 +12,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository // pra
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -502,7 +503,7 @@ class MapViewModel : ViewModel() {
 
                 channel.subscribe()
             } catch (e: Exception) {
-                println("MapViewModel: Error subscribing to connections: ${e.message}")
+                println("MapViewModel: Error subscribing to connections: ${e.redactedRestMessage()}")
             }
         }
     }

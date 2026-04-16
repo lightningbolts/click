@@ -22,6 +22,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.utils.LocationService
 import compose.project.click.click.utils.toImageBitmap
 import io.github.jan.supabase.auth.auth
@@ -122,7 +123,7 @@ fun UserQrCode(
                 if (hasEverFetched) fetchError = true
             }
         } catch (e: Exception) {
-            println("UserQrCode: Failed to fetch token: ${e.message}")
+            println("UserQrCode: Failed to fetch token: ${e.redactedRestMessage()}")
             if (hasEverFetched) fetchError = true
             // Keep showing the last valid QR rather than going blank
         } finally {

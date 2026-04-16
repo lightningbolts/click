@@ -175,7 +175,7 @@ class AuthRepository(
                     println("AuthRepository: Successfully refreshed session from TokenStorage")
                 } catch (e: Exception) {
                     refreshFailed = true
-                    println("AuthRepository: Failed to refresh session from TokenStorage: ${e.message}")
+                    println("AuthRepository: Failed to refresh session from TokenStorage: ${e.redactedRestMessage()}")
                 }
 
                 user = supabase.auth.currentUserOrNull()
@@ -206,7 +206,7 @@ class AuthRepository(
                 Result.failure(Exception("No saved session found"))
             }
         } catch (e: Exception) {
-            println("Error restoring session: ${e.message}")
+            println("Error restoring session: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }

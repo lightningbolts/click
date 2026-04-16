@@ -196,7 +196,7 @@ object AppDataManager {
         scope.launch {
             runCatching { SupabaseForegroundRecovery.recoverAfterBackground(SupabaseConfig.client) }
                 .onFailure { e ->
-                    println("AppDataManager: foreground Supabase recovery failed: ${e.message}")
+                    println("AppDataManager: foreground Supabase recovery failed: ${e.redactedRestMessage()}")
                 }
             _foregroundRealtimeRecovery.emit(Unit)
             lastRefreshTime = 0L
@@ -313,7 +313,7 @@ object AppDataManager {
                 _currentUser.value = user.copy(tags = interestTags)
                 println("AppDataManager: Current user set to: ${user.name}")
                 runCatching { chatRepository.startGlobalPresence(user.id) }
-                    .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.message}") }
+                    .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.redactedRestMessage()}") }
                 startPresenceHeartbeat(user.id)
 
                 // Load location preferences from Supabase
@@ -447,7 +447,7 @@ object AppDataManager {
         // replaces the old stopGlobalPresence() + leaks derived keys into the
         // next signed-in user of the same device.
         runCatching { chatRepository.clearSessionCaches() }
-            .onFailure { e -> println("AppDataManager: chat session cache clear failed: ${e.message}") }
+            .onFailure { e -> println("AppDataManager: chat session cache clear failed: ${e.redactedRestMessage()}") }
         presenceHeartbeatJob?.cancel()
         presenceHeartbeatJob = null
         _currentUser.value = null
@@ -720,7 +720,7 @@ object AppDataManager {
                 tokenStorage.saveFreeThisWeek(newStatus)
                 println("toggleFreeThisWeek: Saved to local storage: $newStatus")
             } catch (e: Exception) {
-                println("toggleFreeThisWeek: Error saving to local storage: ${e.message}")
+                println("toggleFreeThisWeek: Error saving to local storage: ${e.redactedRestMessage()}")
             }
         }
         
@@ -732,7 +732,7 @@ object AppDataManager {
                 // Note: We don't rollback on failure since local storage has the truth
                 // Next app launch will attempt to sync again
             } catch (e: Exception) {
-                println("toggleFreeThisWeek: Error updating Supabase: ${e.message}")
+                println("toggleFreeThisWeek: Error updating Supabase: ${e.redactedRestMessage()}")
                 e.printStackTrace()
                 // Don't rollback - keep local state as truth, will sync later
             }
@@ -926,7 +926,7 @@ object AppDataManager {
                     persistSnapshot()
                 }
             } catch (e: Exception) {
-                println("updateProfileName: Error updating profile: ${e.message}")
+                println("updateProfileName: Error updating profile: ${e.redactedRestMessage()}")
                 e.printStackTrace()
                 _currentUser.value = previousUser
                 _transientUserMessages.emit(

@@ -1,5 +1,6 @@
 package compose.project.click.click.crypto
 
+import compose.project.click.click.util.redactedRestMessage
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -116,7 +117,7 @@ object MessageCrypto {
 
             PlatformCrypto.aesCbcDecrypt(keys.encKey, iv, ciphertext).decodeToString()
         } catch (e: Exception) {
-            println("MessageCrypto: Decryption failed: ${e.message}")
+            println("MessageCrypto: Decryption failed: ${e.redactedRestMessage()}")
             content
         }
     }
@@ -152,7 +153,7 @@ object MessageCrypto {
 
             PlatformCrypto.aesCbcDecrypt(keys.encKey, iv, ciphertext).decodeToString()
         } catch (e: Exception) {
-            println("MessageCrypto: Decryption failed: ${e.message}")
+            println("MessageCrypto: Decryption failed: ${e.redactedRestMessage()}")
             content
         }
     }

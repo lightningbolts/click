@@ -10,6 +10,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.displayNameFromMetadata
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.util.redactedRestMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -98,7 +99,7 @@ class AuthViewModel(
                         authRepository.refreshSession()
                         println("AuthViewModel: Background token refresh successful")
                     } catch (e: Exception) {
-                        println("AuthViewModel: Background token refresh failed: ${e.message}")
+                        println("AuthViewModel: Background token refresh failed: ${e.redactedRestMessage()}")
                     }
                 }
             }

@@ -13,6 +13,7 @@ import compose.project.click.click.data.models.MutualAvailability // pragma: all
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -182,7 +183,7 @@ class AvailabilityViewModel(
                 AppDataManager.updateUserAvailability(updated)
                 supabaseRepository.updateUserAvailability(updated)
             } catch (e: Exception) {
-                println("Error updating days: ${e.message}")
+                println("Error updating days: ${e.redactedRestMessage()}")
                 _error.value = e.message
             }
         }
@@ -209,7 +210,7 @@ class AvailabilityViewModel(
                 AppDataManager.updateUserAvailability(updated)
                 supabaseRepository.updateUserAvailability(updated)
             } catch (e: Exception) {
-                println("Error updating activities: ${e.message}")
+                println("Error updating activities: ${e.redactedRestMessage()}")
                 _error.value = e.message
             }
         }
@@ -236,7 +237,7 @@ class AvailabilityViewModel(
                 AppDataManager.updateUserAvailability(updated)
                 supabaseRepository.updateUserAvailability(updated)
             } catch (e: Exception) {
-                println("Error updating status: ${e.message}")
+                println("Error updating status: ${e.redactedRestMessage()}")
                 _error.value = e.message
             }
         }
@@ -285,7 +286,7 @@ class AvailabilityViewModel(
                 
                 _mutualAvailabilities.value = mutuals
             } catch (e: Exception) {
-                println("Error loading mutual availabilities: ${e.message}")
+                println("Error loading mutual availabilities: ${e.redactedRestMessage()}")
                 _error.value = e.message
             }
         }

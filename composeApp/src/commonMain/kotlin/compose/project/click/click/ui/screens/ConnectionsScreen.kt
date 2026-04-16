@@ -203,6 +203,7 @@ import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist 
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 
 @Composable
 fun ConnectionsScreen(
@@ -3672,7 +3673,7 @@ private fun ChatBubblePhotoContent(
                     secureChatImageBitmapCache.get(message.id) ?: run {
                         runCatching { secureState.imageBytes!!.toImageBitmap() }
                             .onFailure { e ->
-                                println("ChatBubblePhotoContent: failed to decode decrypted image for message=${message.id}: ${e.message}")
+                                println("ChatBubblePhotoContent: failed to decode decrypted image for message=${message.id}: ${e.redactedRestMessage()}")
                             }
                             .getOrNull()
                             ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }

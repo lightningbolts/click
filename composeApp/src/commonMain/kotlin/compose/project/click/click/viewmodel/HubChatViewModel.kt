@@ -21,6 +21,7 @@ import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.chatMediaDispatcher
+import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.util.teardownBlocking
 import compose.project.click.click.utils.LocationResult
 import io.github.jan.supabase.postgrest.from
@@ -265,7 +266,7 @@ class HubChatViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                println("HubChatViewModel: session error: ${e.message}")
+                println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
             } finally {
                 val ch = hubChannel
                 hubChannel = null
@@ -289,7 +290,7 @@ class HubChatViewModel(
                 .decodeList<HubMessageRow>()
             mergeMessages(rows)
         } catch (e: Exception) {
-            println("HubChatViewModel: load messages failed: ${e.message}")
+            println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
         }
     }
 
@@ -403,7 +404,7 @@ class HubChatViewModel(
                 }
                 MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
             }.onFailure { e ->
-                println("HubChatViewModel: secure image decrypt failed for message=${message.id}: ${e.message}")
+                println("HubChatViewModel: secure image decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
                 println("HubChatViewModel: secure image bytes missing for message=${message.id}")
@@ -444,7 +445,7 @@ class HubChatViewModel(
                 }
                 MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
             }.onFailure { e ->
-                println("HubChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.message}")
+                println("HubChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
                 println("HubChatViewModel: secure audio bytes missing for message=${message.id}")

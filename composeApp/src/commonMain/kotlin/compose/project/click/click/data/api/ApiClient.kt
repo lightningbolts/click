@@ -8,6 +8,7 @@ import compose.project.click.click.data.models.SignUpRequest
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -342,7 +343,7 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                 Result.failure(Exception("Ping failed (${response.status.value}): $errText"))
             }
         } catch (e: Exception) {
-            println("ApiClient.testSecurePing: exception ${e.message}")
+            println("ApiClient.testSecurePing: exception ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }

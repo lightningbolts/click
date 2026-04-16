@@ -1189,7 +1189,7 @@ class ChatViewModel(
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             }.onFailure { e ->
-                println("ChatViewModel: secure image decrypt failed for message=${message.id}: ${e.message}")
+                println("ChatViewModel: secure image decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
                 println("ChatViewModel: secure image bytes missing for message=${message.id}")
@@ -1224,7 +1224,7 @@ class ChatViewModel(
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             }.onFailure { e ->
-                println("ChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.message}")
+                println("ChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
                 println("ChatViewModel: secure audio bytes missing for message=${message.id}")
@@ -1701,7 +1701,7 @@ class ChatViewModel(
                 _messageSendError.value = "Failed to send — ${e.message ?: "encryption or network error"}"
                 _messageInput.value = content
                 updateMessageInput(content)
-                println("Error sending message: ${e.message}")
+                println("Error sending message: ${e.redactedRestMessage()}")
             } finally {
                 _isMessageSubmitInProgress.value = false
             }
@@ -2068,7 +2068,7 @@ class ChatViewModel(
                     _chatMessagesState.value = ChatMessagesState.Success(messagesWithUsers, chatDetails)
                 }
             } catch (e: Exception) {
-                println("Search error: ${e.message}")
+                println("Search error: ${e.redactedRestMessage()}")
             }
         }
     }
@@ -2411,7 +2411,7 @@ class ChatViewModel(
                     loadChatMessages(connectionId)
                 }
             } catch (e: Exception) {
-                println("Error editing message: ${e.message}")
+                println("Error editing message: ${e.redactedRestMessage()}")
                 loadChatMessages(connectionId)
             } finally {
                 _isMessageSubmitInProgress.value = false
@@ -2444,7 +2444,7 @@ class ChatViewModel(
                     loadChatMessages(connectionId)
                 }
             } catch (e: Exception) {
-                println("Error deleting message: ${e.message}")
+                println("Error deleting message: ${e.redactedRestMessage()}")
                 // Revert optimistic removal on failure — reload full state
                 loadChatMessages(connectionId)
             }

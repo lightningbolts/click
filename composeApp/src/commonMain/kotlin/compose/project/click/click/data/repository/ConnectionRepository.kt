@@ -48,6 +48,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import compose.project.click.click.util.redactedRestMessage
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -906,7 +907,7 @@ class ConnectionRepository(
                         fullLocationMap = semanticResult.second
                     }
                 } catch (e: Exception) {
-                    println("ConnectionRepository: Failed to resolve semantic location: ${e.message}")
+                    println("ConnectionRepository: Failed to resolve semantic location: ${e.redactedRestMessage()}")
                 }
             }
 
@@ -942,7 +943,7 @@ class ConnectionRepository(
                         }
                     }
             } catch (e: Exception) {
-                println("ConnectionRepository: Failed to update connection metadata: ${e.message}")
+                println("ConnectionRepository: Failed to update connection metadata: ${e.redactedRestMessage()}")
             }
 
             val encounterAlreadyHandled = request.connectionMethod == "qr" &&
@@ -972,7 +973,7 @@ class ConnectionRepository(
                         weatherSnapshotLabel = clientWeatherLabel,
                     )
                 } catch (e: Exception) {
-                    println("ConnectionRepository: encounter insert: ${e.message}")
+                    println("ConnectionRepository: encounter insert: ${e.redactedRestMessage()}")
                     true
                 }
             }
@@ -1002,7 +1003,7 @@ class ConnectionRepository(
                         put("updated_at", now)
                     })
             } catch (e: Exception) {
-                println("ConnectionRepository: Failed to create chat: ${e.message}")
+                println("ConnectionRepository: Failed to create chat: ${e.redactedRestMessage()}")
                 // Non-fatal — connection was created
             }
 
@@ -1090,7 +1091,7 @@ class ConnectionRepository(
                         fullLocationMap = semanticResult.second
                     }
                 } catch (e: Exception) {
-                    println("ConnectionRepository: Failed to resolve semantic location: ${e.message}")
+                    println("ConnectionRepository: Failed to resolve semantic location: ${e.redactedRestMessage()}")
                 }
             }
 
@@ -1167,7 +1168,7 @@ class ConnectionRepository(
                         weatherSnapshotLabel = clientWeatherLabelRestore,
                     )
                 } catch (e: Exception) {
-                    println("ConnectionRepository: restore encounter insert: ${e.message}")
+                    println("ConnectionRepository: restore encounter insert: ${e.redactedRestMessage()}")
                     true
                 }
             }
@@ -1208,7 +1209,7 @@ class ConnectionRepository(
                         })
                 }
             } catch (e: Exception) {
-                println("ConnectionRepository: Failed to ensure chat on restore: ${e.message}")
+                println("ConnectionRepository: Failed to ensure chat on restore: ${e.redactedRestMessage()}")
             }
 
             AppDataManager.applyRestoredConnection(result)
@@ -1356,7 +1357,7 @@ class ConnectionRepository(
                 null
             }
         } catch (e: Exception) {
-            println("ConnectionRepository: Nominatim reverse geocode failed: ${e.message}")
+            println("ConnectionRepository: Nominatim reverse geocode failed: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1382,7 +1383,7 @@ class ConnectionRepository(
                     userId1 in conn.user_ids && userId2 in conn.user_ids
                 }
         } catch (e: Exception) {
-            println("Error checking connection: ${e.message}")
+            println("Error checking connection: ${e.redactedRestMessage()}")
             null
         }
     }
@@ -1401,7 +1402,7 @@ class ConnectionRepository(
                 .map { it.withEncountersSortedNewestFirst() }
                 .firstOrNull()
         } catch (e: Exception) {
-            println("ConnectionRepository: fetchConnectionById failed: ${e.message}")
+            println("ConnectionRepository: fetchConnectionById failed: ${e.redactedRestMessage()}")
             null
         }
     }

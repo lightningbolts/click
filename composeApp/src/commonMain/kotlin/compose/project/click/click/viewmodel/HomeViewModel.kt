@@ -21,6 +21,7 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -156,7 +157,7 @@ class HomeViewModel(
             }
             _homeAvailabilityOverlapMessages.value = lines.toList()
         } catch (e: Exception) {
-            println("HomeViewModel: availability overlap lines: ${e.message}")
+            println("HomeViewModel: availability overlap lines: ${e.redactedRestMessage()}")
             _homeAvailabilityOverlapMessages.value = emptyList()
         }
     }
@@ -268,7 +269,7 @@ class HomeViewModel(
                                 connectedUsers = connectedUsers
                             )
                         } catch (e: Exception) {
-                            println("HomeViewModel: Error computing poll pair suggestion: ${e.message}")
+                            println("HomeViewModel: Error computing poll pair suggestion: ${e.redactedRestMessage()}")
                             null
                         }
                         
@@ -314,7 +315,7 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
-            println("Error preloading home derived data: ${e.message}")
+            println("Error preloading home derived data: ${e.redactedRestMessage()}")
             _reconnectReminders.value = emptyList()
             _connectionInsights.value = null
         }
@@ -346,7 +347,7 @@ class HomeViewModel(
             
             _reconnectReminders.value = reminders
         } catch (e: Exception) {
-            println("Error loading reconnect reminders: ${e.message}")
+            println("Error loading reconnect reminders: ${e.redactedRestMessage()}")
             _reconnectReminders.value = emptyList()
         }
     }
@@ -371,7 +372,7 @@ class HomeViewModel(
             
             _connectionInsights.value = insights
         } catch (e: Exception) {
-            println("Error loading connection insights: ${e.message}")
+            println("Error loading connection insights: ${e.redactedRestMessage()}")
             _connectionInsights.value = null
         }
     }
@@ -522,7 +523,7 @@ class HomeViewModel(
 
                 channel.subscribe()
             } catch (e: Exception) {
-                println("HomeViewModel: Error subscribing to connections: ${e.message}")
+                println("HomeViewModel: Error subscribing to connections: ${e.redactedRestMessage()}")
             }
         }
     }

@@ -11,6 +11,7 @@ import compose.project.click.click.data.repository.ChatRepository // pragma: all
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -166,7 +167,7 @@ class GlobalSearchViewModel(
                     locations = locationResults
                 )
             } catch (e: Exception) {
-                println("GlobalSearch error: ${e.message}")
+                println("GlobalSearch error: ${e.redactedRestMessage()}")
             } finally {
                 _isSearching.value = false
             }

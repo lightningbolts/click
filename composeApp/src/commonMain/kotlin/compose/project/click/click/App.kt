@@ -61,6 +61,7 @@ import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
+import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
@@ -284,7 +285,7 @@ fun App() {
             val refreshed = locationService.getHighAccuracyLocation(4000L)
             if (hasUsableLocation(refreshed)) refreshed else initialLocation.takeIf(::hasUsableLocation)
         } catch (e: Exception) {
-            println("App: Failed to get high-accuracy location: ${e.message}")
+            println("App: Failed to get high-accuracy location: ${e.redactedRestMessage()}")
             initialLocation.takeIf(::hasUsableLocation)
         }
     }

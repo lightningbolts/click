@@ -2,6 +2,7 @@ package compose.project.click.click.data.api
 
 import compose.project.click.click.data.models.*
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import compose.project.click.click.util.redactedRestMessage
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -309,7 +310,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to fetch chats: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error fetching user chats: ${e.message}")
+            println("Error fetching user chats: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -330,7 +331,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to fetch user: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error fetching user: ${e.message}")
+            println("Error fetching user: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -351,7 +352,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to fetch chat: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error fetching chat: ${e.message}")
+            println("Error fetching chat: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -373,7 +374,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to fetch messages: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error fetching messages: ${e.message}")
+            println("Error fetching messages: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -411,7 +412,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to send message: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error sending message: ${e.message}")
+            println("Error sending message: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -433,7 +434,7 @@ class ChatApiClient(
 
             Result.success(response.status.value in 200..299)
         } catch (e: Exception) {
-            println("Error marking messages as read: ${e.message}")
+            println("Error marking messages as read: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -468,7 +469,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to update message: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error updating message: ${e.message}")
+            println("Error updating message: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -501,7 +502,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to mark chat as read: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error marking chat as read: ${e.message}")
+            println("Error marking chat as read: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -577,7 +578,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to send hub message: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error sending hub message: ${e.message}")
+            println("Error sending hub message: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -640,7 +641,7 @@ class ChatApiClient(
 
             Result.success(response.status.value in 200..299)
         } catch (e: Exception) {
-            println("Error deleting message: ${e.message}")
+            println("Error deleting message: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -664,7 +665,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to fetch chat for connection: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error fetching chat for connection: ${e.message}")
+            println("Error fetching chat for connection: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -689,7 +690,7 @@ class ChatApiClient(
                 Result.failure(Exception("Failed to fetch participants: ${response.status}"))
             }
         } catch (e: Exception) {
-            println("Error fetching participants: ${e.message}")
+            println("Error fetching participants: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
