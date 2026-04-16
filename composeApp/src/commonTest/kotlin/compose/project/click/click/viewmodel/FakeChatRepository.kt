@@ -8,6 +8,7 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatRealtimeEvent
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.PresenceHealth
 import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.MessageListInsertEvent
 import compose.project.click.click.data.repository.TypingStatus
@@ -57,6 +58,8 @@ class FakeChatRepository(
 
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
+    private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
+    override val presenceHealth: StateFlow<PresenceHealth> = _presenceHealth.asStateFlow()
 
     override suspend fun startGlobalPresence(userId: String) = onStartGlobalPresence(userId)
 

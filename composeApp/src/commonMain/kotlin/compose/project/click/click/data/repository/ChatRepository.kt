@@ -16,11 +16,35 @@ interface ChatMessageSubscription {
 }
 
 /**
+ * Coarse health signal for the shared-presence Realtime channel. Surfaced to the UI
+ * as a lightweight "everyone looks offline" indicator without leaking transport errors.
+ */
+enum class PresenceHealth {
+    /** No active presence subscription (signed out, paused, or never started). */
+    Idle,
+
+    /** `startGlobalPresence` is in flight; presence set may be empty but is not stale. */
+    Connecting,
+
+    /** Presence channel is subscribed and receiving joins/leaves. */
+    Online,
+
+    /**
+     * Either the initial `subscribe()` failed, or the presence collector crashed after
+     * being healthy. `_onlineUsers` is best-effort stale; UI may dim online dots.
+     */
+    Degraded,
+}
+
+/**
  * Abstraction for chat data and realtime subscriptions (implemented by [SupabaseChatRepository]).
  */
 interface ChatRepository {
     /** User IDs currently present on the shared Realtime channel `room:presence`. */
     val onlineUsers: StateFlow<Set<String>>
+
+    /** Health of the shared presence subscription; see [PresenceHealth]. */
+    val presenceHealth: StateFlow<PresenceHealth>
 
     suspend fun startGlobalPresence(userId: String)
 

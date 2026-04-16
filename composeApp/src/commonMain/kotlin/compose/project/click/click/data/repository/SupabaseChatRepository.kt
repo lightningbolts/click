@@ -108,6 +108,8 @@ class SupabaseChatRepository(
     private var globalPresenceSession: GlobalPresenceSession? = null
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
+    private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
+    override val presenceHealth: StateFlow<PresenceHealth> = _presenceHealth.asStateFlow()
 
     private data class GlobalPresenceSession(
         val channel: RealtimeChannel,
@@ -166,6 +168,7 @@ class SupabaseChatRepository(
                 disposeGlobalPresenceSession(existing)
                 globalPresenceSession = null
             }
+            _presenceHealth.value = PresenceHealth.Connecting
 
             val channel = supabase.channel(GLOBAL_PRESENCE_CHANNEL) {
                 presence {
@@ -196,16 +199,20 @@ class SupabaseChatRepository(
                     throw e
                 } catch (e: Exception) {
                     // Don't silently swallow: broken presence flow needs visibility in logs
-                    // (redacted) so on-call can correlate with transport errors.
+                    // (redacted) so on-call can correlate with transport errors. Flip the
+                    // health flag so the UI can dim online dots / show a subtle affordance.
                     println("ChatRepository: presence flow collection failed: ${e.redactedRestMessage()}")
+                    _presenceHealth.value = PresenceHealth.Degraded
                 }
             }
 
             try {
                 channel.subscribe(blockUntilSubscribed = true)
                 channel.track(buildJsonObject { put("userId", userId) })
+                _presenceHealth.value = PresenceHealth.Online
             } catch (e: Exception) {
                 println("ChatRepository: startGlobalPresence failed: ${e.redactedRestMessage()}")
+                _presenceHealth.value = PresenceHealth.Degraded
                 presenceJob.cancel()
                 scope.cancel()
                 return@withLock
@@ -235,6 +242,7 @@ class SupabaseChatRepository(
             globalPresenceSession = null
             disposeGlobalPresenceSession(session)
             _onlineUsers.value = emptySet()
+            _presenceHealth.value = PresenceHealth.Idle
         }
     }
 

@@ -59,6 +59,10 @@ object AppDataManager {
 
     /** Supabase Realtime Presence on channel `room:presence` (user IDs with an active app session). */
     val onlineUsers: StateFlow<Set<String>> get() = chatRepository.onlineUsers
+
+    /** Coarse health of the shared presence channel; see [compose.project.click.click.data.repository.PresenceHealth]. */
+    val presenceHealth: StateFlow<compose.project.click.click.data.repository.PresenceHealth>
+        get() = chatRepository.presenceHealth
     private val notificationPreferencesRepository by lazy { NotificationPreferencesRepository() }
     private val connectionRepository by lazy { ConnectionRepository() }
     private val pushNotificationService by lazy { createPushNotificationService() }
