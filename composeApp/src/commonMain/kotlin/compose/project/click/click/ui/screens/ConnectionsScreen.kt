@@ -158,6 +158,8 @@ import compose.project.click.click.ui.chat.ChatTimelineEntry
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
 import compose.project.click.click.ui.chat.callLogLabel
 import compose.project.click.click.ui.chat.formatCallDurationForLog
+import compose.project.click.click.ui.chat.formatChatAudioDuration
+import compose.project.click.click.ui.chat.formatChatAudioPositionMs
 import compose.project.click.click.ui.chat.formatConnectionListTimestamp
 import compose.project.click.click.ui.chat.formatConversationDayLabel
 import compose.project.click.click.ui.chat.formatMessageTime
@@ -3586,24 +3588,6 @@ private val secureChatImageBitmapCache =
     LruMemoryCache<String, ImageBitmap>(SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES)
 
 private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
-
-private fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
-    val totalSec = when {
-        durationMs > 0 -> (durationMs / 1000).toInt()
-        fallbackSec != null && fallbackSec > 0 -> fallbackSec
-        else -> 0
-    }
-    val m = totalSec / 60
-    val s = totalSec % 60
-    return "$m:${s.toString().padStart(2, '0')}"
-}
-
-private fun formatChatAudioPositionMs(ms: Long): String {
-    val totalSec = (ms / 1000).toInt().coerceAtLeast(0)
-    val m = totalSec / 60
-    val s = totalSec % 60
-    return "$m:${s.toString().padStart(2, '0')}"
-}
 
 @Composable
 private fun ChatAudioBubbleRow(

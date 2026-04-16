@@ -64,6 +64,30 @@ internal fun formatCallDurationForLog(totalSeconds: Int): String {
 }
 
 /**
+ * `M:SS` duration label for a voice message bubble. Prefers the live
+ * player duration (ms) when it's positive; falls back to the cached
+ * `duration_seconds` from message metadata; otherwise returns "0:00".
+ */
+internal fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
+    val totalSec = when {
+        durationMs > 0 -> (durationMs / 1000).toInt()
+        fallbackSec != null && fallbackSec > 0 -> fallbackSec
+        else -> 0
+    }
+    val m = totalSec / 60
+    val s = totalSec % 60
+    return "$m:${s.toString().padStart(2, '0')}"
+}
+
+/** `M:SS` playhead-position label for voice messages. Negative inputs are clamped to zero. */
+internal fun formatChatAudioPositionMs(ms: Long): String {
+    val totalSec = (ms / 1000).toInt().coerceAtLeast(0)
+    val m = totalSec / 60
+    val s = totalSec % 60
+    return "$m:${s.toString().padStart(2, '0')}"
+}
+
+/**
  * Resolves the human-readable label for an in-chat `call_log` system row
  * from the message metadata JSON, plus a flag for whether the label
  * should render in the missed-call accent color.

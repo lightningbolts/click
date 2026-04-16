@@ -50,6 +50,50 @@ class ChatFormattingTest {
 
     // endregion
 
+    // region formatChatAudioDuration / formatChatAudioPositionMs
+
+    @Test
+    fun audioDuration_prefersLiveMsOverFallbackSec() {
+        // 5 seconds live player time beats the stale fallback.
+        assertEquals("0:05", formatChatAudioDuration(durationMs = 5_000, fallbackSec = 99))
+    }
+
+    @Test
+    fun audioDuration_fallsBackToMetadataWhenLiveMsIsZero() {
+        assertEquals("0:30", formatChatAudioDuration(durationMs = 0, fallbackSec = 30))
+    }
+
+    @Test
+    fun audioDuration_returnsZeroWhenNoSourceAvailable() {
+        assertEquals("0:00", formatChatAudioDuration(durationMs = 0, fallbackSec = null))
+        assertEquals("0:00", formatChatAudioDuration(durationMs = -500, fallbackSec = 0))
+    }
+
+    @Test
+    fun audioDuration_padsSecondsAndRendersMinutes() {
+        assertEquals("1:05", formatChatAudioDuration(durationMs = 65_000, fallbackSec = null))
+        assertEquals("12:00", formatChatAudioDuration(durationMs = 720_000, fallbackSec = null))
+    }
+
+    @Test
+    fun audioPosition_dropsSubSecondRemainder() {
+        assertEquals("0:00", formatChatAudioPositionMs(0))
+        assertEquals("0:00", formatChatAudioPositionMs(999))
+        assertEquals("0:01", formatChatAudioPositionMs(1_500))
+    }
+
+    @Test
+    fun audioPosition_clampsNegativeToZero() {
+        assertEquals("0:00", formatChatAudioPositionMs(-5_000))
+    }
+
+    @Test
+    fun audioPosition_rendersMinutesAndPaddedSeconds() {
+        assertEquals("2:07", formatChatAudioPositionMs(2L * 60_000 + 7_500))
+    }
+
+    // endregion
+
     // region formatVibeCheckTime
 
     @Test
