@@ -1106,7 +1106,14 @@ class ChatViewModel(
                     runCatching {
                         buildChatPayload(chatDetails, apiChatId, userId)
                     }.onSuccess { payload ->
-                        prefetchedChatPayloads[connectionId] = payload
+                        // Re-check after suspension: another coroutine in
+                        // viewModelScope (e.g. startActiveChatSync) may have
+                        // populated the same connectionId while buildChatPayload
+                        // was awaiting IO. Prefer the fresher value over this
+                        // prefetch result to avoid clobbering read-state.
+                        if (!prefetchedChatPayloads.containsKey(connectionId)) {
+                            prefetchedChatPayloads[connectionId] = payload
+                        }
                     }
                 }
         }
