@@ -641,7 +641,10 @@ private fun ConnectionsList(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    items(sortedPoints) { point ->
+                    items(
+                        items = sortedPoints,
+                        key = { it.connection.id }
+                    ) { point ->
                         ConnectionLocationCard(
                             point = point,
                             onClick = { onConnectionClick(point) }

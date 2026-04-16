@@ -1049,12 +1049,10 @@ fun ConnectionsListView(
 
                             items(
                                 filteredChats,
-                                key = { chat ->
-                                    val lm = chat.lastMessage
-                                    val at = chat.connection.last_message_at
-                                    if (lm != null) "${chat.connection.id}\u0001${lm.id}\u0001${lm.timeCreated}\u0001$at"
-                                    else "${chat.connection.id}\u0001$at"
-                                }
+                                // R1.3: key must be stable across content mutations (last message changing,
+                                // typing indicator toggling, etc.) so LazyColumn can update in-place rather
+                                // than dispose/recreate the row. The chat identity is the connection.
+                                key = { it.connection.id }
                             ) { chatDetails ->
                                 Column(modifier = Modifier.fillMaxWidth()) {
                                     ConnectionItem(
