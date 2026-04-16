@@ -154,11 +154,16 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
+import compose.project.click.click.ui.chat.CallLogSystemRow
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent
+import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
 import compose.project.click.click.ui.chat.ChatMessageOverflowButton
 import compose.project.click.click.ui.chat.ChatTimelineEntry
 import compose.project.click.click.ui.chat.ChatTypingDots
 import compose.project.click.click.ui.chat.ConversationDaySeparator
+import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder
+import compose.project.click.click.ui.chat.ReplySwipeSideIcon
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
 import compose.project.click.click.ui.chat.callLogLabel
 import compose.project.click.click.ui.chat.formatCallDurationForLog
@@ -1835,27 +1840,6 @@ fun ConnectionItem(
     }
 }
 
-@Composable
-private fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "connection_subtitle_shimmer")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "connection_subtitle_shimmer_alpha"
-    )
-
-    Box(
-        modifier = modifier
-            .height(12.dp)
-            .width(120.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
-    )
-}
 
 /**
  * Isolates [ChatViewModel.messageInput] and IME padding reads so typing does not recompose the message list.
@@ -3256,160 +3240,6 @@ private fun ForwardDialog(
     )
 }
 
-@Composable
-private fun AnimatedVisibilityChatBubble(
-    messageId: String,
-    isSent: Boolean,
-    content: @Composable () -> Unit
-) {
-    var visible by remember(messageId) { mutableStateOf(false) }
-    LaunchedEffect(messageId) {
-        visible = true
-    }
-    val enterFade = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
-    val enterSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
-    val exitSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(enterFade) +
-            slideInVertically(animationSpec = enterSlide, initialOffsetY = { it / 10 }) +
-            scaleIn(enterFade, initialScale = 0.97f),
-        exit = fadeOut(animationSpec = tween(140)) +
-            slideOutVertically(animationSpec = exitSlide, targetOffsetY = { it / 12 }) +
-            scaleOut(animationSpec = tween(200), targetScale = 0.96f)
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun CallLogSystemRow(message: Message) {
-    val (label, isMissed) = remember(message.id, message.metadata) { callLogLabel(message) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
-            tonalElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Call,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = formatMessageTime(message.timeCreated),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            }
-        }
-    }
-}
-
-/** iOS: Material [DropdownMenu] uses a platform popup that can show white bands in dark mode; this is fully themed. */
-@Composable
-private fun ChatCallOptionsIosSurface(
-    onVoice: () -> Unit,
-    onVideo: () -> Unit,
-) {
-    val bg = MaterialTheme.colorScheme.surfaceContainerHigh
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    Surface(
-        modifier = Modifier.widthIn(min = 200.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = bg,
-        tonalElevation = 3.dp,
-        shadowElevation = 12.dp,
-        border = BorderStroke(0.5.dp, outline),
-    ) {
-        Column(Modifier.padding(vertical = 6.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true),
-                        onClick = onVoice,
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Call, contentDescription = null, tint = onSurface)
-                Spacer(Modifier.width(12.dp))
-                Text("Voice call", style = MaterialTheme.typography.bodyLarge, color = onSurface)
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true),
-                        onClick = onVideo,
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Videocam, contentDescription = null, tint = onSurface)
-                Spacer(Modifier.width(12.dp))
-                Text("Video call", style = MaterialTheme.typography.bodyLarge, color = onSurface)
-            }
-        }
-    }
-}
-
-/** Reply affordance drawn **behind** the bubble; uncovered as the bubble slides (no layout gutter). */
-@Composable
-private fun ReplySwipeSideIcon(
-    hintProgress: Float,
-    hintAlpha: Float,
-    modifier: Modifier = Modifier,
-) {
-    val t = hintProgress.coerceIn(0f, 1f)
-    val smooth = t * t * (3f - 2f * t)
-    val scale = 0.82f + 0.18f * smooth
-    val visibility = smooth * (0.28f + 0.72f * smooth).coerceIn(0f, 1f)
-    val a = (visibility * hintAlpha).coerceIn(0f, 1f)
-    Box(
-        modifier = modifier
-            .graphicsLayer {
-                alpha = a
-                scaleX = scale
-                scaleY = scale
-            }
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(LightBlue.copy(alpha = (0.18f + 0.22f * smooth) * a)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.Reply,
-            contentDescription = "Reply",
-            tint = LightBlue.copy(alpha = a),
-            modifier = Modifier.size(22.dp),
-        )
-    }
-}
 
 @Composable
 private fun ChatAudioBubbleRow(
