@@ -156,7 +156,12 @@ class ConnectionViewModel : ViewModel() {
         connections.filter { it.isActiveForUser(archived, hidden) }
     }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        // R1.5: SharingStarted.WhileSubscribed keeps the combine() alive only while a UI
+        // collector is active, with a 5s grace window to survive configuration changes and
+        // brief navigation transitions. This prevents this ViewModel from holding references
+        // to AppDataManager's realtime flows indefinitely after the user leaves screens that
+        // surface connections (reducing leaks during logout/login cycles).
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Alias for callers that expect a `connections` name (same backing flow as [userConnections]). */
     val connections: StateFlow<List<Connection>> = userConnections
