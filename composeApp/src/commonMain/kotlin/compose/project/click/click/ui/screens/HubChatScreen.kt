@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.ui.chat.ChatMessageBubble
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
