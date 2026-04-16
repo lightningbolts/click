@@ -154,6 +154,8 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatBubblePhotoContent
+import compose.project.click.click.ui.chat.ChatMessageOverflowButton
 import compose.project.click.click.ui.chat.ChatTimelineEntry
 import compose.project.click.click.ui.chat.ChatTypingDots
 import compose.project.click.click.ui.chat.ConversationDaySeparator
@@ -3410,133 +3412,6 @@ private fun ReplySwipeSideIcon(
 }
 
 @Composable
-private fun ChatBubblePhotoContent(
-    mediaUrl: String,
-    message: Message,
-    isEncrypted: Boolean,
-    secureState: SecureChatMediaLoadState?,
-    modifier: Modifier = Modifier,
-    overflowTint: Color,
-    onOverflow: () -> Unit,
-    useLightOverflowContrast: Boolean,
-    borderIfReceived: Boolean = false,
-) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        when {
-            isEncrypted && secureState?.loading == true -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 220.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            isEncrypted && secureState?.error?.isNotBlank() == true -> {
-                Text(
-                    text = secureState.error ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(12.dp),
-                )
-            }
-            isEncrypted && secureState?.imageBytes != null -> {
-                val cachedBitmap = remember(message.id, secureState.imageBytes) {
-                    secureChatImageBitmapCache.get(message.id) ?: run {
-                        runCatching { secureState.imageBytes!!.toImageBitmap() }
-                            .onFailure { e ->
-                                println("ChatBubblePhotoContent: failed to decode decrypted image for message=${message.id}: ${e.redactedRestMessage()}")
-                            }
-                            .getOrNull()
-                            ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
-                    }
-                }
-                if (cachedBitmap != null) {
-                    Image(
-                        bitmap = cachedBitmap,
-                        contentDescription = "Photo",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 220.dp)
-                            .then(
-                                if (borderIfReceived) {
-                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .clip(RoundedCornerShape(16.dp)),
-                    )
-                } else {
-                    Text(
-                        text = "Could not render image",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(12.dp),
-                    )
-                }
-            }
-            isEncrypted -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 220.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-            else -> {
-                AsyncImage(
-                    model = mediaUrl,
-                    contentDescription = "Photo",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 220.dp)
-                        .then(
-                            if (borderIfReceived) {
-                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .clip(RoundedCornerShape(16.dp)),
-                )
-            }
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(6.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (useLightOverflowContrast) Color.Black.copy(alpha = 0.35f)
-                        else Color.Black.copy(alpha = 0.22f),
-                    )
-                    .align(Alignment.Center),
-            )
-            ChatMessageOverflowButton(
-                onClick = onOverflow,
-                tint = overflowTint,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
-    }
-}
-
-private val secureChatImageBitmapCache =
-    LruMemoryCache<String, ImageBitmap>(SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES)
-
-private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
-
-@Composable
 private fun ChatAudioBubbleRow(
     mediaUrl: String,
     durationSeconds: Int?,
@@ -3637,25 +3512,6 @@ private fun ChatAudioBubbleRow(
                 color = contentColor.copy(alpha = 0.9f),
             )
         }
-    }
-}
-
-@Composable
-private fun ChatMessageOverflowButton(
-    onClick: () -> Unit,
-    tint: Color,
-    modifier: Modifier = Modifier,
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier.size(30.dp),
-    ) {
-        Icon(
-            Icons.Outlined.MoreVert,
-            contentDescription = "Message actions",
-            tint = tint,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 
