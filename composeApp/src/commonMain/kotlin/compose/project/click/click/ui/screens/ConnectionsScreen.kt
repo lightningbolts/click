@@ -160,6 +160,9 @@ import compose.project.click.click.ui.chat.ChatBubblePhotoContent
 import compose.project.click.click.ui.chat.ChatChannelLoadingView
 import compose.project.click.click.ui.chat.ChatWarmLoadingView
 import compose.project.click.click.ui.chat.ForwardDialog
+import compose.project.click.click.ui.chat.GroupMembersPickerSheet
+import compose.project.click.click.ui.chat.LocationGapNudge
+import compose.project.click.click.ui.chat.orderedGroupMembersForPicker
 import compose.project.click.click.ui.chat.connectionHasNoGeo
 import compose.project.click.click.ui.chat.connectionListActivityTs
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
@@ -1441,140 +1444,6 @@ fun ConnectionsListView(
         )
     }
     } // End outer Box
-}
-
-@Composable
-private fun LocationGapNudge(
-    otherName: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(start = 68.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.LocationOn,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = PrimaryBlue.copy(alpha = 0.9f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                "Enable location to remember where you met $otherName",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-private fun orderedGroupMembersForPicker(chatDetails: ChatWithDetails): List<User> {
-    val gc = chatDetails.groupClique ?: return emptyList()
-    val self = AppDataManager.currentUser.value
-    val byId = (chatDetails.groupMemberUsers + listOfNotNull(self))
-        .distinctBy { it.id }
-        .associateBy { it.id }
-    return gc.memberUserIds.sorted().map { id ->
-        byId[id] ?: User(id = id, name = "Member", createdAt = 0L)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GroupMembersPickerSheet(
-    members: List<User>,
-    onDismiss: () -> Unit,
-    onMemberClick: (String) -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-    fun dismissSheet() {
-        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
-    }
-    val scroll = rememberScrollState()
-    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = surface,
-        contentColor = onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(scroll)
-                .padding(bottom = 28.dp),
-        ) {
-            Text(
-                text = "People in this click",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = onSurface,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-            )
-            Text(
-                text = "Tap someone to open their profile.",
-                style = MaterialTheme.typography.bodySmall,
-                color = onVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 0.dp),
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
-            )
-            members.forEach { user ->
-                val label = user.name?.trim()?.ifBlank { null } ?: "Member"
-                ListItem(
-                    headlineContent = {
-                        Text(label, color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                    },
-                    leadingContent = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (!user.image.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = user.image,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape),
-                                )
-                            } else {
-                                Text(
-                                    text = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = onVariant,
-                                )
-                            }
-                        }
-                    },
-                    modifier = Modifier.clickable {
-                        onMemberClick(user.id)
-                        dismissSheet()
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                )
-            }
-        }
-    }
 }
 
 @Composable
