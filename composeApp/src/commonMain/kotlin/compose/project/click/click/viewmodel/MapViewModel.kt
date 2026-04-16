@@ -15,6 +15,8 @@ import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -173,20 +175,31 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * Update render data based on connections, zoom level, and active filter
+     * Update render data based on connections, zoom level, and active filter.
+     *
+     * R1.4: cluster/pin computation can iterate hundreds of `Connection`s and call
+     * `haversineDistance` across every pair below the cluster-threshold zoom. Keep this
+     * off the Main dispatcher so scrolling / pinch-to-zoom gestures never block the UI
+     * thread. The resulting [MapRenderData] is immutable and safe to publish to a
+     * [MutableStateFlow] from any dispatcher.
      */
     private fun updateRenderData(connections: List<Connection>, zoom: Double, filter: String = "All") {
-        val filtered = if (filter == "All") {
-            connections
-        } else {
-            connections.filter { conn ->
-                val location = conn.semanticLocation?.lowercase() ?: ""
-                val tag = conn.displayLocationLabel?.lowercase() ?: ""
-                val searchTerm = filter.lowercase()
-                location.contains(searchTerm) || tag.contains(searchTerm)
+        viewModelScope.launch {
+            val rendered = withContext(Dispatchers.Default) {
+                val filtered = if (filter == "All") {
+                    connections
+                } else {
+                    val searchTerm = filter.lowercase()
+                    connections.filter { conn ->
+                        val location = conn.semanticLocation?.lowercase() ?: ""
+                        val tag = conn.displayLocationLabel?.lowercase() ?: ""
+                        location.contains(searchTerm) || tag.contains(searchTerm)
+                    }
+                }
+                determineMapRenderData(filtered, zoom, clusterThreshold)
             }
+            _renderData.value = rendered
         }
-        _renderData.value = determineMapRenderData(filtered, zoom, clusterThreshold)
     }
 
     /**
