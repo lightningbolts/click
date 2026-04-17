@@ -36,8 +36,8 @@ import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -195,7 +195,7 @@ fun ProfileBottomSheet(
                 )
             }
         }
-        Divider(
+        HorizontalDivider(
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
             thickness = 1.dp,
         )
@@ -381,7 +381,7 @@ private fun TimelinePanel(
         if (showLegacy) {
             if (hasTimelineItems) {
                 Spacer(Modifier.height(6.dp))
-                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                 Spacer(Modifier.height(6.dp))
             }
             ProfileLegacyTimelineContent(

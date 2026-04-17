@@ -71,7 +71,6 @@ import compose.project.click.click.ui.components.AvailabilitySheet // pragma: al
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.viewmodel.AvailabilityViewModel
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.AvailabilityIntentRow
@@ -111,7 +110,6 @@ fun SettingsScreen(
     val ghostModeEnabled by AppDataManager.ghostModeEnabled.collectAsState()
 
     val tokenStorage = remember { createTokenStorage() }
-    val proximityManager = rememberProximityManager()
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
     val locationService = remember { LocationService() }
     val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
@@ -358,51 +356,6 @@ fun SettingsScreen(
                 }
 
                 item {
-                    SettingsSectionHeader("Nearby & Bluetooth")
-                }
-                item {
-                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.BluetoothSearching,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
-                                    tint = PrimaryBlue,
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Bluetooth for Connect",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text = "Nearby handshake uses Bluetooth Low Energy plus a short in-room audio cue. " +
-                                            "Keep Bluetooth on; the OS may still show a permission prompt the first time you connect.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                            Button(
-                                onClick = { proximityManager.openRadiosSettings() },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Text("Open Bluetooth & radios")
-                            }
-                        }
-                    }
-                }
-
-                item {
                     SettingsSectionHeader("Your Data")
                 }
                 item {
@@ -480,7 +433,6 @@ fun SettingsScreen(
                                     onRequestLocation = {
                                         requestLocationPermissionThen { locationPermissionBump++ }
                                     },
-                                    onOpenBluetoothRadios = { proximityManager.openRadiosSettings() },
                                     onOpenSystemSettings = {
                                         compose.project.click.click.ui.utils
                                             .openApplicationSystemSettings()
@@ -784,10 +736,9 @@ fun SettingsScreen(
 }
 
 /**
- * Phase 2 — Q4 regression fix: the Permissions Hub is now rendered **inline** inside the
- * "Privacy & permissions" card via [AnimatedVisibility] instead of pushing a dedicated
- * full-screen route. Behaviour parity with the old hub (request primitives, live status
- * badges, "Open system Settings" deep link, Bluetooth radios shortcut) is preserved.
+ * Inline permissions hub rendered inside the "Privacy & permissions" card via
+ * [AnimatedVisibility]. Shows live status badges for mic, location, and Bluetooth
+ * with a single "System Settings" deep link to the OS app settings page.
  */
 @Composable
 private fun InlinePermissionsPanel(
@@ -797,7 +748,6 @@ private fun InlinePermissionsPanel(
     isRequestingLocation: Boolean,
     onRequestMicrophone: () -> Unit,
     onRequestLocation: () -> Unit,
-    onOpenBluetoothRadios: () -> Unit,
     onOpenSystemSettings: () -> Unit,
 ) {
     Column(
@@ -813,7 +763,7 @@ private fun InlinePermissionsPanel(
         PermissionRow(
             icon = Icons.Default.Mic,
             title = "Microphone",
-            description = "Used during Click handshake for a short ambient sound sample. Never recorded.",
+            description = "Short ambient sample during handshake.",
             granted = microphoneGranted,
             primaryLabel = if (microphoneGranted) null else "Allow microphone",
             primaryEnabled = !isRequestingMic,
@@ -823,7 +773,7 @@ private fun InlinePermissionsPanel(
         PermissionRow(
             icon = Icons.Default.LocationOn,
             title = "Location",
-            description = "Used only at the moment of a connection to drop one pin on your private Memory Map.",
+            description = "One pin at the moment of a connection.",
             granted = locationGranted,
             primaryLabel = if (locationGranted) null else "Allow location",
             primaryEnabled = !isRequestingLocation,
@@ -833,13 +783,11 @@ private fun InlinePermissionsPanel(
         PermissionRow(
             icon = Icons.Default.BluetoothSearching,
             title = "Bluetooth",
-            description = "Nearby Tap handshake uses Bluetooth Low Energy. The OS prompts on first " +
-                "handshake; iOS cannot deep-link to the Bluetooth toggle, so the app's settings page " +
-                "opens instead.",
+            description = "Used for nearby tap handshake.",
             granted = null,
-            primaryLabel = "Open Bluetooth & radios",
+            primaryLabel = null,
             primaryEnabled = true,
-            onPrimaryClick = onOpenBluetoothRadios,
+            onPrimaryClick = {},
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -858,7 +806,7 @@ private fun InlinePermissionsPanel(
                 modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Open Click in system Settings", fontWeight = FontWeight.SemiBold)
+            Text("System Settings", fontWeight = FontWeight.SemiBold)
         }
     }
 }

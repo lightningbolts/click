@@ -36,8 +36,10 @@ import compose.project.click.click.ui.components.ProfileSheetTimelineItem
 import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.ui.utils.*
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.viewmodel.MapState
@@ -74,7 +76,10 @@ fun MapScreen(
         viewModel.onMapScreenEntered()
     }
 
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val safeInsets = WindowInsets.safeDrawing
+        .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+        .asPaddingValues()
+    val topInset = safeInsets.calculateTopPadding()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -175,14 +180,6 @@ fun MapScreen(
                             ghostMode = ghostModeEnabled,
                         )
                     }
-
-                    ZoomIndicator(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(end = 16.dp, top = topInset + 4.dp),
-                        zoomLevel = zoomLevel,
-                        showingClusters = renderData is MapRenderData.Clusters,
-                    )
 
                     ZoomControls(
                         modifier = Modifier
@@ -388,37 +385,6 @@ private fun ZoomControls(
         }
         AdaptiveButton(onClick = onZoomOut, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Filled.Remove, contentDescription = "Zoom out")
-        }
-    }
-}
-
-@Composable
-private fun ZoomIndicator(
-    modifier: Modifier = Modifier,
-    zoomLevel: Double,
-    showingClusters: Boolean,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                if (showingClusters) Icons.Filled.Hub else Icons.Filled.Person,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                if (showingClusters) "Hubs" else "People",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
