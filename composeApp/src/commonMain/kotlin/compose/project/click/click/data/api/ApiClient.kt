@@ -54,6 +54,46 @@ private data class UserProfilePatchResponseDto(
     val user: UserCore,
 )
 
+/**
+ * Response for `GET /api/users/{userId}/profile` — BFF-owned peer profile hydration
+ * (replaces the direct Supabase `users` + `user_interests` joins that used to live
+ * inside `SupabaseRepository.fetchUserPublicProfile`).
+ */
+@Serializable
+data class UserProfileGetResponse(
+    val user: UserCore,
+    val tags: List<String> = emptyList(),
+    @SerialName("viewerInterestTags") val viewerInterestTags: List<String> = emptyList(),
+    @SerialName("sharedInterestTags") val sharedInterestTags: List<String> = emptyList(),
+    /** Full legacy shape (availability, availability intents, sharedConnection) preserved as JSON. */
+    val availability: kotlinx.serialization.json.JsonElement? = null,
+    @SerialName("availabilityIntents") val availabilityIntents: kotlinx.serialization.json.JsonElement? = null,
+    @SerialName("sharedConnection") val sharedConnection: kotlinx.serialization.json.JsonElement? = null,
+)
+
+/**
+ * Response for `GET /api/connections/{connectionId}/tabs` — returns the Media / Files
+ * collections used by the profile sheet's Media and Files subtabs. Links are derived
+ * client-side from locally-decrypted text messages (content is E2EE on the wire).
+ */
+@Serializable
+data class ConnectionTabsGetResponse(
+    @SerialName("chatId") val chatId: String,
+    val media: List<ConnectionTabMessage> = emptyList(),
+    val files: List<ConnectionTabMessage> = emptyList(),
+)
+
+@Serializable
+data class ConnectionTabMessage(
+    val id: String,
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("user_id") val userId: String,
+    val content: String = "",
+    @SerialName("time_created") val timeCreated: Long,
+    @SerialName("message_type") val messageType: String,
+    val metadata: kotlinx.serialization.json.JsonElement? = null,
+)
+
 @Serializable
 private data class AvatarUploadResponseDto(
     val image: String,
@@ -402,6 +442,53 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                 } else {
                     Result.success(url)
                 }
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * GET `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
+     *
+     * BFF migration (Phase 3 — C15): replaces the direct `users` + `user_interests`
+     * Supabase PostgREST joins that used to live inside
+     * [SupabaseRepository.fetchUserPublicProfile]. The Next.js route owns the join so
+     * the mobile client never talks to Supabase directly for profile hydration.
+     */
+    suspend fun getUserProfile(userId: String): Result<UserProfileGetResponse> {
+        val id = userId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("userId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.get(
+                "$clickWebAuthOrigin/api/users/$id/profile",
+            )
+            if (response.status.value in 200..299) {
+                Result.success(response.body<UserProfileGetResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
+     * listings for the profile sheet. Links remain client-side because message
+     * [content] is E2EE on the wire; callers filter locally-decrypted state.
+     */
+    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.get(
+                "$clickWebAuthOrigin/api/connections/$id/tabs",
+            )
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ConnectionTabsGetResponse>())
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }

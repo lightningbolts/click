@@ -75,7 +75,9 @@ fun Message.previewLabel(): String {
         }
         ChatMessageType.CALL_LOG -> "Call"
         ChatMessageType.FILE -> "File"
-        else -> content
+        // Mask raw attachment envelopes (`ccx:v1:{...}`) so chat-list previews never
+        // leak the encrypted JSON before the client has a chance to decrypt it.
+        else -> maskAttachmentEnvelope(content)
     }
 }
 

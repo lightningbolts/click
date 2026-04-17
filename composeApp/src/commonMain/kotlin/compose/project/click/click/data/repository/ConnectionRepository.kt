@@ -218,6 +218,22 @@ class ConnectionRepository(
 
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
+    private val apiClient by lazy { compose.project.click.click.data.api.ApiClient() }
+
+    /**
+     * BFF read path (Phase 3 — C15) for the ProfileBottomSheet Media / Files subtabs.
+     *
+     * Calls `GET /api/connections/{connectionId}/tabs` on click-web, which queries the
+     * `public.messages` table for the chat row bound to [connectionId] and returns the
+     * `image`/`audio` (media) and `file` message rows. `Links` is deliberately *not*
+     * part of this payload: message `content` is E2EE on the wire, so link extraction
+     * has to run against the locally-decrypted chat state.
+     */
+    suspend fun fetchConnectionTabs(
+        connectionId: String,
+    ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
+        return apiClient.getConnectionTabs(connectionId)
+    }
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true

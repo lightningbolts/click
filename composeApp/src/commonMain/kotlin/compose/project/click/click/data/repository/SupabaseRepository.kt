@@ -63,6 +63,12 @@ class SupabaseRepository {
     /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
 
+    /**
+     * BFF client for Next.js profile / tabs endpoints. Constructed lazily so unit tests
+     * can still new up the repository without spinning up Ktor / Supabase auth plumbing.
+     */
+    private val apiClient by lazy { ApiClient() }
+
     /** Next.js click-web secure writes (JWT bearer). */
     private val clickWebApi by lazy { ApiClient() }
 
@@ -153,25 +159,68 @@ class SupabaseRepository {
     /**
      * Loads [User], [user_interests] tags, and [user_availability] for a profile sheet.
      * When [viewerUserId] is non-null, attaches the most relevant mutual [Connection] row.
-     * RLS must allow the current user to read the target (e.g. mutual connection).
+     *
+     * BFF migration (C15): primary path is now `GET /api/users/{id}/profile` on click-web
+     * which performs the `users` + `user_interests` + availability joins server-side. The
+     * direct Supabase PostgREST queries below remain as a fallback for offline / network
+     * failure scenarios (and for the availability-intent bubbles the BFF doesn't yet
+     * expose in a SDK-friendly shape), but the canonical read path is the Next.js route.
      */
     suspend fun fetchUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {
-        val user = fetchUserById(targetUserId) ?: return null
-        val tags = fetchUserInterests(targetUserId).getOrNull()?.tags.orEmpty()
-        val availability = fetchUserAvailability(targetUserId)
-        val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(targetUserId)
+        val trimmedTarget = targetUserId.trim()
+        if (trimmedTarget.isEmpty()) return null
+
+        // Primary BFF path — matches the app's other Next.js round-trips (archive,
+        // tags, safety). Falls through to the direct Supabase path on any failure so
+        // an offline client still renders whatever RLS happens to allow.
+        val bffProfile = runCatching { apiClient.getUserProfile(trimmedTarget).getOrNull() }.getOrNull()
+        if (bffProfile != null) {
+            val user = bffProfile.user.toUser()
+            val tags = bffProfile.tags
+            val viewerTagsFromBff = bffProfile.viewerInterestTags
+            // Availability + mutual connection still come through the Supabase client
+            // because the BFF returns them as opaque JSON — keeping the existing typed
+            // KMP models avoids a parallel deserialization path for Phase 3.
+            val availability = fetchUserAvailability(trimmedTarget)
+            val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(trimmedTarget)
+            val fromIntentsTable =
+                if (!viewerUserId.isNullOrBlank() && viewerUserId != trimmedTarget) {
+                    val mutual = fetchSharedConnectionBetween(viewerUserId, trimmedTarget)
+                    if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget) else emptyList()
+                } else {
+                    emptyList()
+                }
+            val profileIntents = if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
+            val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
+                fetchSharedConnectionBetween(v, trimmedTarget)
+            }
+            return UserPublicProfile(
+                user = user,
+                interestTags = tags,
+                availability = availability,
+                profileAvailabilityIntents = profileIntents,
+                viewerInterestTags = viewerTagsFromBff,
+                sharedConnection = shared,
+            )
+        }
+
+        // Fallback: legacy direct-Supabase path.
+        val user = fetchUserById(trimmedTarget) ?: return null
+        val tags = fetchUserInterests(trimmedTarget).getOrNull()?.tags.orEmpty()
+        val availability = fetchUserAvailability(trimmedTarget)
+        val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(trimmedTarget)
         val fromIntentsTable =
-            if (!viewerUserId.isNullOrBlank() && viewerUserId != targetUserId) {
-                val mutual = fetchSharedConnectionBetween(viewerUserId, targetUserId)
-                if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(targetUserId) else emptyList()
+            if (!viewerUserId.isNullOrBlank() && viewerUserId != trimmedTarget) {
+                val mutual = fetchSharedConnectionBetween(viewerUserId, trimmedTarget)
+                if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget) else emptyList()
             } else {
                 emptyList()
             }
         val profileIntents = if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
-        val shared = viewerUserId?.takeIf { it.isNotBlank() && it != targetUserId }?.let { v ->
-            fetchSharedConnectionBetween(v, targetUserId)
+        val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
+            fetchSharedConnectionBetween(v, trimmedTarget)
         }
-        val viewerTags = viewerUserId?.takeIf { it.isNotBlank() && it != targetUserId }?.let { v ->
+        val viewerTags = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
             fetchUserInterests(v).getOrNull()?.tags.orEmpty()
         }.orEmpty()
         return UserPublicProfile(

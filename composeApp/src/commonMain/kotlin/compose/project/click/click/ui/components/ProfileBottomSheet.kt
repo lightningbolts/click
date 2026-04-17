@@ -8,13 +8,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -69,9 +74,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import compose.project.click.click.data.api.ConnectionTabMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.Dispatchers
@@ -129,14 +140,62 @@ fun ProfileBottomSheet(
         legacyLoading = false
     }
 
+    // BFF hydration for Media + Files subtabs (C15). We call
+    // `ConnectionRepository.fetchConnectionTabs` whenever the caller supplies a
+    // connection id and merge the server-owned payload with any rows that were
+    // explicitly passed through state (so callers can still inject UI fixtures).
+    val connectionRepository = remember { ConnectionRepository() }
+    var tabMedia by remember(state.connectionId) { mutableStateOf<List<ProfileSheetMedia>>(emptyList()) }
+    var tabFiles by remember(state.connectionId) { mutableStateOf<List<ProfileSheetFile>>(emptyList()) }
+    LaunchedEffect(state.connectionId) {
+        val cid = state.connectionId?.takeIf { it.isNotBlank() } ?: run {
+            tabMedia = emptyList()
+            tabFiles = emptyList()
+            return@LaunchedEffect
+        }
+        val result = runCatching {
+            withContext(Dispatchers.Default) { connectionRepository.fetchConnectionTabs(cid) }
+        }.getOrNull()?.getOrNull()
+        if (result != null) {
+            tabMedia = result.media.mapNotNull { it.toProfileSheetMedia() }
+            tabFiles = result.files.mapNotNull { it.toProfileSheetFile() }
+        }
+    }
+
+    val effectiveMedia = remember(state.media, tabMedia) {
+        if (state.media.isNotEmpty()) state.media else tabMedia
+    }
+    val effectiveFiles = remember(state.files, tabFiles) {
+        if (state.files.isNotEmpty()) state.files else tabFiles
+    }
+    // Links are *always* derived client-side from locally-decrypted text because
+    // message `content` is E2EE on the wire. If the caller preseeded `state.links`
+    // (e.g. fixtures) we use those, otherwise we scan `decryptedTextMessages`.
+    val effectiveLinks = remember(state.links, state.decryptedTextMessages) {
+        if (state.links.isNotEmpty()) state.links else extractLinksFromDecrypted(state.decryptedTextMessages)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            // Honour the top safe-area inset so the "Profile" header never clips
+            // the iOS Dynamic Island / notch when the sheet expands to full height.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .padding(horizontal = 20.dp)
             .padding(top = 4.dp, bottom = 12.dp),
     ) {
+        Text(
+            text = "Profile",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+        )
         ProfileSheetHeader(
             displayName = state.displayName,
             subtitle = state.subtitle,
@@ -219,9 +278,9 @@ fun ProfileBottomSheet(
                     legacyError = legacyError,
                     showLegacy = !state.userId.isNullOrBlank(),
                 )
-                ProfileSheetTab.Media -> MediaPanel(items = state.media)
-                ProfileSheetTab.Links -> LinksPanel(items = state.links, onOpen = onOpenLink)
-                ProfileSheetTab.Files -> FilesPanel(items = state.files, onDownload = onDownloadFile)
+                ProfileSheetTab.Media -> MediaPanel(items = effectiveMedia)
+                ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = onOpenLink)
+                ProfileSheetTab.Files -> FilesPanel(items = effectiveFiles, onDownload = onDownloadFile)
             }
         }
     }
@@ -242,6 +301,28 @@ data class ProfileSheetState(
     val userId: String? = null,
     /** Viewer user id — needed to compute shared interests + mutual connection. */
     val viewerUserId: String? = null,
+    /**
+     * Connection / chat id — when non-blank, the sheet pulls the Media and Files
+     * subtab payloads from the click-web BFF (`GET /api/connections/{id}/tabs`) and
+     * merges them with any `media` / `files` explicitly passed via state.
+     */
+    val connectionId: String? = null,
+    /**
+     * Locally-decrypted text messages (plus timestamp) to scan client-side for
+     * http(s) URLs. Kept here because [content] is E2EE on the wire — the BFF
+     * intentionally doesn't parse links.
+     */
+    val decryptedTextMessages: List<ProfileSheetDecryptedMessage> = emptyList(),
+)
+
+/**
+ * A single locally-decrypted text message used as input for the Links subtab's
+ * client-side http(s) filter. Only the fields the sheet needs to render a link row.
+ */
+data class ProfileSheetDecryptedMessage(
+    val id: String,
+    val content: String,
+    val timestamp: String,
 )
 
 data class ProfileSheetBadge(
@@ -618,6 +699,90 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes < 1_024 -> "$bytes B"
     bytes < 1_024L * 1_024 -> "${bytes / 1_024} KB"
     else -> "${(bytes * 10 / (1_024L * 1_024)) / 10.0} MB"
+}
+
+/**
+ * Map a BFF `messages` row (`image` / `audio`) into the shape [MediaPanel] renders.
+ * The attachment URL is looked up through common metadata keys (`url`, `storage_url`,
+ * `image_url`) because the `messages.metadata` JSON shape is authored by a few
+ * different upload paths. Returns `null` when no renderable URL is present so the
+ * caller can filter the row out silently.
+ */
+private fun ConnectionTabMessage.toProfileSheetMedia(): ProfileSheetMedia? {
+    val meta = metadata as? JsonObject ?: return null
+    val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
+        meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    } ?: return null
+    return ProfileSheetMedia(
+        id = id,
+        imageUrl = url,
+        captionedAt = content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
+    )
+}
+
+/**
+ * Map a BFF `messages` row of type `file` into the shape [FilesPanel] renders. Falls
+ * back gracefully when metadata fields are absent so we still list the row rather
+ * than hiding it. Timestamp is intentionally the raw epoch ms / seconds as a string
+ * because higher-level formatting lives at the call site in the existing codebase.
+ */
+private fun ConnectionTabMessage.toProfileSheetFile(): ProfileSheetFile? {
+    val meta = metadata as? JsonObject
+    val fileName = meta?.get("file_name")?.jsonPrimitive?.contentOrNull
+        ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
+        ?: meta?.get("name")?.jsonPrimitive?.contentOrNull
+        ?: content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
+        ?: "Attachment"
+    val size = meta?.get("file_size")?.jsonPrimitive?.longOrNull
+        ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
+        ?: meta?.get("size")?.jsonPrimitive?.longOrNull
+        ?: 0L
+    val mime = meta?.get("mime_type")?.jsonPrimitive?.contentOrNull
+        ?: meta?.get("content_type")?.jsonPrimitive?.contentOrNull
+        ?: "application/octet-stream"
+    return ProfileSheetFile(
+        id = id,
+        fileName = fileName,
+        sizeBytes = size,
+        mimeType = mime,
+        timestamp = timeCreated.toString(),
+    )
+}
+
+private val METADATA_URL_KEYS = listOf("url", "storage_url", "image_url", "audio_url", "media_url")
+
+/**
+ * Regex matching bare `http://` / `https://` URLs in locally-decrypted text. Keep
+ * this simple + conservative — we don't try to resolve punctuation-adjacent URLs
+ * perfectly; the Links tab is a lightweight preview, not a full URL parser.
+ */
+private val URL_REGEX = Regex("https?://\\S+", RegexOption.IGNORE_CASE)
+
+/**
+ * Extract http(s) URLs from a list of already-decrypted text messages. Runs
+ * client-side because message `content` is E2EE on the server and the BFF
+ * intentionally does not parse links.
+ */
+private fun extractLinksFromDecrypted(
+    messages: List<ProfileSheetDecryptedMessage>,
+): List<ProfileSheetLink> {
+    if (messages.isEmpty()) return emptyList()
+    val seen = mutableSetOf<String>()
+    val out = mutableListOf<ProfileSheetLink>()
+    messages.forEach { msg ->
+        URL_REGEX.findAll(msg.content).forEach { match ->
+            val url = match.value.trimEnd('.', ',', ')', ']', '}', ';', ':')
+            if (url.isNotBlank() && seen.add(url)) {
+                out += ProfileSheetLink(
+                    id = "${msg.id}:$url",
+                    url = url,
+                    title = null,
+                    timestamp = msg.timestamp,
+                )
+            }
+        }
+    }
+    return out
 }
 
 /**

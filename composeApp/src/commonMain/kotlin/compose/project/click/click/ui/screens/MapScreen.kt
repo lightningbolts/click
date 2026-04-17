@@ -283,6 +283,9 @@ private fun buildProfileSheetState(
         files = emptyList(),
         userId = otherUser?.id,
         viewerUserId = viewerUserId,
+        // Drives the BFF-owned Media / Files hydration inside [ProfileBottomSheet]
+        // via `ConnectionRepository.fetchConnectionTabs`.
+        connectionId = point.connection.id,
     )
 }
 
