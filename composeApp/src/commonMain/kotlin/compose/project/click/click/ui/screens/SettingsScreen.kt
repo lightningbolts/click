@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.foundation.shape.CircleShape
@@ -162,6 +164,7 @@ fun SettingsScreen(
     var newLastName by remember { mutableStateOf("") }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
     var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
+    var showPermissionsHub by remember { mutableStateOf(false) }
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -404,6 +407,42 @@ fun SettingsScreen(
                             }
                         },
                     )
+                }
+
+                item {
+                    SettingsSectionHeader("Privacy & permissions")
+                }
+                item {
+                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showPermissionsHub = true }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.Shield,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                tint = PrimaryBlue,
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Permissions Hub", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Review & fix microphone, location, and Bluetooth access.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
 
                 item {
@@ -694,6 +733,19 @@ fun SettingsScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp),
         )
+
+        if (showPermissionsHub) {
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                PermissionsHubScreen(
+                    locationService = locationService,
+                    ambientNoiseMonitor = ambientNoiseMonitor,
+                    proximityManager = proximityManager,
+                    requestLocationPermissionThen = requestLocationPermissionThen,
+                    requestMicrophonePermissionThen = requestMicrophonePermissionThen,
+                    onBack = { showPermissionsHub = false },
+                )
+            }
+        }
     }
 }
 
