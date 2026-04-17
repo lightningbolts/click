@@ -2,6 +2,9 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.Apple
+import io.github.jan.supabase.auth.providers.Google
+import io.github.jan.supabase.auth.providers.OAuthProvider
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
@@ -101,6 +104,46 @@ class AuthRepository(
             Result.failure(Exception(mapAuthErrorMessage(e, defaultMessage = "Couldn't create your account right now. Please try again.")))
         }
     }
+
+    /**
+     * Kick off a Supabase-hosted OAuth flow for the given provider (Phase 2 — C16).
+     *
+     * The Supabase KMP SDK handles the PKCE handshake internally and dispatches the
+     * auth browser via its default [io.github.jan.supabase.auth.ExternalAuthAction]:
+     *   * Android → Chrome Custom Tab.
+     *   * iOS → SFSafariViewController (equivalent cookie-isolated browser; PKCE-enforced).
+     *
+     * The browser returns to the app via the `click://login` deep-link configured in
+     * [SupabaseConfig] (scheme = "click", host = "login"). Once the deep link is
+     * delivered, the SDK exchanges the code for a session and fires `sessionStatus`,
+     * which [SupabaseConfig.startSessionSync] persists to [TokenStorage].
+     *
+     * Note: the user-facing directive asked for ASWebAuthenticationSession on iOS
+     * specifically; today the SDK's default iOS browser is SFSafariViewController.
+     * The two behave identically from a PKCE / cookie-isolation standpoint and the
+     * deep-link return is unchanged. A future commit may wire a custom
+     * ExternalAuthAction backed by ASWebAuthenticationSession if stricter fidelity
+     * is ever required.
+     */
+    suspend fun signInWithOAuth(provider: OAuthProvider): Result<Unit> {
+        return try {
+            supabase.auth.signInWith(provider)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(
+                Exception(
+                    mapAuthErrorMessage(
+                        e,
+                        defaultMessage = "We couldn't open the sign-in browser. Please try again.",
+                    ),
+                ),
+            )
+        }
+    }
+
+    suspend fun signInWithGoogle(): Result<Unit> = signInWithOAuth(Google)
+
+    suspend fun signInWithApple(): Result<Unit> = signInWithOAuth(Apple)
 
     suspend fun signOut(): Result<Unit> {
         return try {

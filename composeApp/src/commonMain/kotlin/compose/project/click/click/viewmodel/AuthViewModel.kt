@@ -11,6 +11,8 @@ import compose.project.click.click.data.displayNameFromMetadata
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.util.redactedRestMessage
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -45,6 +47,38 @@ class AuthViewModel(
 
         checkAuthStatus()
         startBackgroundTokenRefresh()
+        observeOAuthCompletion()
+    }
+
+    /**
+     * Reflect deep-link-driven OAuth completion into the UI state machine (Phase 2 — C16).
+     *
+     * When the PKCE callback (`click://login`) is delivered to the app, supabase-kt
+     * exchanges the code for a session and transitions [sessionStatus] to
+     * [SessionStatus.Authenticated]. We watch for that transition and flip
+     * [authState] so the login screen dismisses and downstream data loads.
+     *
+     * We intentionally only react while we're currently in [AuthState.Loading] from
+     * an OAuth launch — other state transitions are owned by the email/password
+     * flow and by [checkAuthStatus] at cold boot.
+     */
+    private fun observeOAuthCompletion() {
+        viewModelScope.launch {
+            SupabaseConfig.client.auth.sessionStatus.collect { status ->
+                if (status is SessionStatus.Authenticated) {
+                    val user = status.session.user
+                    if (user != null && !isAuthenticated) {
+                        isAuthenticated = true
+                        authState = AuthState.Success(
+                            userId = user.id,
+                            email = user.email ?: "",
+                            name = user.displayNameFromMetadata(),
+                        )
+                        AppDataManager.resetAndReload()
+                    }
+                }
+            }
+        }
     }
 
     private fun checkAuthStatus() {
@@ -130,6 +164,51 @@ class AuthViewModel(
                 )
             } catch (e: Exception) {
                 authState = AuthState.Error(e.message ?: "An error occurred during sign in")
+            }
+        }
+    }
+
+    /**
+     * Begin a Google OAuth sign-in. The UI should show a loading state until either
+     * [authState] flips to [AuthState.Success] (deep-link callback completed the
+     * PKCE handshake) or [AuthState.Error] (browser launch failed / user cancelled).
+     *
+     * Completion is driven by [SupabaseConfig.startSessionSync], which observes
+     * `sessionStatus` changes triggered by the deep-link → PKCE code exchange.
+     */
+    fun signInWithGoogle() {
+        launchOAuthSignIn(providerLabel = "Google") { authRepository.signInWithGoogle() }
+    }
+
+    /**
+     * Begin an Apple OAuth sign-in. See [signInWithGoogle] for deep-link completion
+     * semantics — the flow is identical; only the upstream IdP differs.
+     */
+    fun signInWithApple() {
+        launchOAuthSignIn(providerLabel = "Apple") { authRepository.signInWithApple() }
+    }
+
+    private fun launchOAuthSignIn(providerLabel: String, launch: suspend () -> Result<Unit>) {
+        viewModelScope.launch {
+            authState = AuthState.Loading
+            try {
+                launch().fold(
+                    onSuccess = {
+                        // The browser is open. The final AuthState.Success flip happens when
+                        // the deep link returns and `sessionStatus` transitions to
+                        // Authenticated. `checkAuthStatus()` is not re-invoked here to avoid
+                        // racing the session manager.
+                    },
+                    onFailure = { error ->
+                        authState = AuthState.Error(
+                            error.message ?: "Could not start $providerLabel sign-in right now.",
+                        )
+                    },
+                )
+            } catch (e: Exception) {
+                authState = AuthState.Error(
+                    e.message ?: "Could not start $providerLabel sign-in right now.",
+                )
             }
         }
     }

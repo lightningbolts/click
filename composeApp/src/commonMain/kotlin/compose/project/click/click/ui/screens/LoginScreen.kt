@@ -41,6 +41,8 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onSignUpClick: () -> Unit,
     onEmailSignIn: (email: String, password: String) -> Unit,
+    onGoogleSignIn: (() -> Unit)? = null,
+    onAppleSignIn: (() -> Unit)? = null,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -233,6 +235,31 @@ fun LoginScreen(
                 }
             }
 
+            if (onGoogleSignIn != null || onAppleSignIn != null) {
+                Spacer(modifier = Modifier.height(24.dp))
+                OAuthDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+                if (onGoogleSignIn != null) {
+                    OAuthProviderButton(
+                        label = "Continue with Google",
+                        icon = null,
+                        onClick = onGoogleSignIn,
+                        enabled = !isLoading,
+                        isIOS = LocalPlatformStyle.current.isIOS,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                if (onAppleSignIn != null) {
+                    OAuthProviderButton(
+                        label = "Continue with Apple",
+                        icon = null,
+                        onClick = onAppleSignIn,
+                        enabled = !isLoading,
+                        isIOS = LocalPlatformStyle.current.isIOS,
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
 
             // Sign Up Link
@@ -257,6 +284,62 @@ fun LoginScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OAuthDivider() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+        Text(
+            "or",
+            modifier = Modifier.padding(horizontal = 12.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
+
+/**
+ * OAuth provider button used for Google / Apple sign-in (Phase 2 — C16).
+ *
+ * Visual language follows the platform — a soft-elevated outlined button on iOS and
+ * the default Material filled-tonal button on Android — so the action still reads as
+ * authenticated / trusted without hijacking the primary email sign-in button.
+ */
+@Composable
+private fun OAuthProviderButton(
+    label: String,
+    icon: ImageVector?,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    isIOS: Boolean,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        enabled = enabled,
+        shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+        Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 

@@ -457,6 +457,8 @@ fun App() {
                     onEmailSignIn = { email, password ->
                         authViewModel.signInWithEmail(email, password)
                     },
+                    onGoogleSignIn = { authViewModel.signInWithGoogle() },
+                    onAppleSignIn = { authViewModel.signInWithApple() },
                     isLoading = authViewModel.authState is AuthState.Loading,
                     errorMessage = if (authViewModel.authState is AuthState.Error) {
                         (authViewModel.authState as AuthState.Error).message
