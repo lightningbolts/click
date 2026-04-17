@@ -79,6 +79,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
