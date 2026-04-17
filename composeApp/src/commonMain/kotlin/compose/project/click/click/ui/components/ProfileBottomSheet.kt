@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -51,6 +52,7 @@ import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -69,6 +71,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,10 +79,14 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.chat.attachments.AttachmentCrypto
+import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
@@ -87,6 +94,7 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Instant
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -106,8 +114,8 @@ fun ProfileBottomSheet(
     state: ProfileSheetState,
     onMessage: () -> Unit,
     onNudge: () -> Unit,
-    onOpenLink: (String) -> Unit = {},
-    onDownloadFile: (ProfileSheetFile) -> Unit = {},
+    onOpenLink: ((String) -> Unit)? = null,
+    onDownloadFile: ((ProfileSheetFile) -> Unit)? = null,
 ) {
     val visibleTabs = remember {
         listOf(
@@ -119,6 +127,44 @@ fun ProfileBottomSheet(
     }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var selectedMediaForPreview by remember { mutableStateOf<ProfileSheetMedia?>(null) }
+    val selectedUserId = state.userId?.trim().orEmpty()
+    val connectionRepository = remember { ConnectionRepository() }
+    var connectionLocalMessages by remember(state.connectionId, selectedUserId, state.viewerUserId) {
+        mutableStateOf<List<ProfileSheetLocalMessage>>(emptyList())
+    }
+
+    LaunchedEffect(selectedUserId, state.connectionId, state.viewerUserId) {
+        val connectionId = state.connectionId?.trim().orEmpty()
+        if (connectionId.isBlank()) {
+            connectionLocalMessages = emptyList()
+            return@LaunchedEffect
+        }
+
+        val fetched = runCatching {
+            connectionRepository.fetchDecryptedMessagesForProfileConnection(
+                connectionId = connectionId,
+                viewerUserId = state.viewerUserId,
+            )
+        }.getOrDefault(emptyList())
+
+        connectionLocalMessages = fetched
+            .sortedBy { it.timeCreated }
+            .map { msg ->
+                ProfileSheetLocalMessage(
+                    id = msg.id,
+                    content = msg.content,
+                    messageType = msg.messageType,
+                    timestamp = Instant.fromEpochMilliseconds(msg.timeCreated).toString(),
+                    metadata = msg.metadata,
+                )
+            }
+    }
+
+    val profileLocalMessages = remember(state.localMessages, connectionLocalMessages) {
+        if (connectionLocalMessages.isNotEmpty()) connectionLocalMessages else state.localMessages
+    }
 
     // Hydrate legacy profile data for the Timeline subtab whenever both ids are known.
     val repository = remember { SupabaseRepository() }
@@ -165,14 +211,24 @@ fun ProfileBottomSheet(
         legacyLoading = false
     }
 
-    val localMediaMessages = remember(state.localMessages) {
-        state.localMessages.filter { it.messageType == "image" || it.messageType == "audio" }
+    val localMediaMessages = remember(profileLocalMessages) {
+        profileLocalMessages.filter {
+            val type = it.messageType.lowercase()
+            type == "image" ||
+                type == "audio" ||
+                it.hasMetadataMediaUrl()
+        }
     }
-    val localFileMessages = remember(state.localMessages) {
-        state.localMessages.filter { it.messageType == "file" || it.content.startsWith("ccx:v1:") }
+    val localFileMessages = remember(profileLocalMessages) {
+        profileLocalMessages.filter {
+            val type = it.messageType.lowercase()
+            type == "file" ||
+                it.hasMetadataAttachmentV1() ||
+                it.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)
+        }
     }
-    val localLinkMessages = remember(state.localMessages) {
-        state.localMessages.filter {
+    val localLinkMessages = remember(profileLocalMessages) {
+        profileLocalMessages.filter {
             it.messageType == "text" &&
                 (it.content.contains("http://") || it.content.contains("https://"))
         }
@@ -189,6 +245,50 @@ fun ProfileBottomSheet(
     val effectiveLinks = remember(localLinkMessages, state.links) {
         val fromLocal = extractLinksFromLocalMessages(localLinkMessages)
         if (fromLocal.isNotEmpty()) fromLocal else state.links
+    }
+
+    val handleOpenLink: (String) -> Unit = remember(onOpenLink, uriHandler) {
+        { url ->
+            runCatching { uriHandler.openUri(url) }
+            onOpenLink?.invoke(url)
+        }
+    }
+    val handleDownloadFile: (ProfileSheetFile) -> Unit = remember(onDownloadFile, connectionRepository) {
+        { file ->
+            scope.launch {
+                var handled = false
+                val path = file.attachmentPath?.trim().orEmpty()
+                val key = file.attachmentKeyBase64?.trim().orEmpty()
+                val sha = file.attachmentSha256Base64?.trim().orEmpty()
+
+                if (path.isNotBlank() && key.isNotBlank() && sha.isNotBlank()) {
+                    val plain = connectionRepository.downloadAttachmentPlaintext(
+                        path = path,
+                        fileMasterKeyBase64 = key,
+                        expectedSha256Base64 = sha,
+                    )
+                    if (plain != null) {
+                        handled = saveDecryptedAttachmentToDownloads(
+                            bytes = plain,
+                            fileName = file.fileName,
+                            mimeType = file.mimeType,
+                        ) != null
+                    }
+                }
+
+                if (!handled) {
+                    val directUrl = file.downloadUrl?.trim().orEmpty()
+                    if (directUrl.isNotBlank()) {
+                        runCatching { uriHandler.openUri(directUrl) }
+                        handled = true
+                    }
+                }
+
+                if (!handled) {
+                    onDownloadFile?.invoke(file)
+                }
+            }
+        }
     }
 
     Column(
@@ -293,10 +393,54 @@ fun ProfileBottomSheet(
                     legacyError = legacyError,
                     showLegacy = !state.userId.isNullOrBlank(),
                 )
-                ProfileSheetTab.Media -> MediaPanel(items = effectiveMedia)
-                ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = onOpenLink)
-                ProfileSheetTab.Files -> FilesPanel(items = effectiveFiles, onDownload = onDownloadFile)
+                ProfileSheetTab.Media -> MediaPanel(
+                    items = effectiveMedia,
+                    onOpenMedia = { selectedMediaForPreview = it },
+                )
+                ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
+                ProfileSheetTab.Files -> FilesPanel(items = effectiveFiles, onDownload = handleDownloadFile)
             }
+        }
+
+        selectedMediaForPreview?.let { media ->
+            AlertDialog(
+                onDismissRequest = { selectedMediaForPreview = null },
+                title = { Text("Media") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        AsyncImage(
+                            model = media.imageUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        )
+                        Text(
+                            text = media.captionedAt ?: "Open this image externally or keep browsing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            handleOpenLink(media.imageUrl)
+                            selectedMediaForPreview = null
+                        },
+                    ) {
+                        Text("Open")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { selectedMediaForPreview = null }) {
+                        Text("Close")
+                    }
+                },
+            )
         }
     }
 }
@@ -372,6 +516,14 @@ data class ProfileSheetFile(
     val sizeBytes: Long,
     val mimeType: String,
     val timestamp: String,
+    /** Signed/public URL fallback used when tuple decryption fields are unavailable. */
+    val downloadUrl: String? = null,
+    /** `chat-attachments` object path for encrypted file downloads. */
+    val attachmentPath: String? = null,
+    /** Base64 32-byte per-file master key from the `ccx:v1` envelope. */
+    val attachmentKeyBase64: String? = null,
+    /** Base64 SHA-256 checksum for plaintext integrity verification. */
+    val attachmentSha256Base64: String? = null,
 )
 
 enum class ProfileSheetTab(val label: String, val icon: ImageVector) {
@@ -538,7 +690,7 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
 }
 
 @Composable
-private fun MediaPanel(items: List<ProfileSheetMedia>) {
+private fun MediaPanel(items: List<ProfileSheetMedia>, onOpenMedia: (ProfileSheetMedia) -> Unit) {
     if (items.isEmpty()) {
         EmptyTabState(
             icon = Icons.Outlined.Image,
@@ -563,7 +715,8 @@ private fun MediaPanel(items: List<ProfileSheetMedia>) {
                     .fillMaxWidth()
                     .height(110.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onOpenMedia(media) },
             )
         }
     }
@@ -729,29 +882,71 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
 }
 
 private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
+    val envelope = AttachmentCrypto.tryDecodeEnvelope(content)
     val meta = metadata as? JsonObject
-    val fileName = meta?.get("file_name")?.jsonPrimitive?.contentOrNull
+    val fileName = envelope?.name?.takeIf { it.isNotBlank() }
+        ?: meta?.get("file_name")?.jsonPrimitive?.contentOrNull
         ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
         ?: meta?.get("name")?.jsonPrimitive?.contentOrNull
         ?: content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
         ?: "Attachment"
-    val size = meta?.get("file_size")?.jsonPrimitive?.longOrNull
+    val size = envelope?.size
+        ?: meta?.get("file_size")?.jsonPrimitive?.longOrNull
         ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
         ?: meta?.get("size")?.jsonPrimitive?.longOrNull
         ?: 0L
-    val mime = meta?.get("mime_type")?.jsonPrimitive?.contentOrNull
+    val mime = envelope?.mime?.takeIf { it.isNotBlank() }
+        ?: meta?.get("mime_type")?.jsonPrimitive?.contentOrNull
         ?: meta?.get("content_type")?.jsonPrimitive?.contentOrNull
         ?: "application/octet-stream"
+    val downloadUrl = meta?.stringAt("signed_url")
+        ?: meta?.stringAt("public_url")
+        ?: meta?.stringAt("url")
+        ?: meta?.stringAt("storage_url")
+        ?: meta?.stringAt("media_url")
+    val attachmentPath = envelope?.path?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("path")
+        ?: meta?.stringAt("storage_path")
+        ?: meta?.stringAt("object_path")
+    val attachmentKeyBase64 = envelope?.key?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("key")
+        ?: meta?.stringAt("file_key")
+        ?: meta?.stringAt("file_master_key")
+    val attachmentSha256Base64 = envelope?.sha256?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("sha256")
+        ?: meta?.stringAt("sha256_base64")
     return ProfileSheetFile(
         id = id,
         fileName = fileName,
         sizeBytes = size,
         mimeType = mime,
         timestamp = timestamp,
+        downloadUrl = downloadUrl,
+        attachmentPath = attachmentPath,
+        attachmentKeyBase64 = attachmentKeyBase64,
+        attachmentSha256Base64 = attachmentSha256Base64,
     )
 }
 
 private val METADATA_URL_KEYS = listOf("url", "storage_url", "image_url", "audio_url", "media_url")
+
+private fun ProfileSheetLocalMessage.hasMetadataMediaUrl(): Boolean {
+    val meta = metadata as? JsonObject ?: return false
+    return METADATA_URL_KEYS.any { key ->
+        meta[key]?.jsonPrimitive?.contentOrNull?.isNotBlank() == true
+    }
+}
+
+private fun ProfileSheetLocalMessage.hasMetadataAttachmentV1(): Boolean {
+    val meta = metadata as? JsonObject ?: return false
+    val raw = meta["attachment_v"]?.jsonPrimitive ?: return false
+    val asInt = raw.intOrNull ?: raw.contentOrNull?.toIntOrNull()
+    if (asInt == 1) return true
+    return raw.contentOrNull?.equals("true", ignoreCase = true) == true
+}
+
+private fun JsonObject.stringAt(key: String): String? =
+    this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
 /**
  * Regex matching bare `http://` / `https://` URLs in locally-decrypted text. Keep
@@ -816,7 +1011,14 @@ fun TabbedUserProfileSheet(
 
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val connections by AppDataManager.connections.collectAsState()
     val cached: User? = connectedUsers[userId]
+    val profileConnectionId = remember(connections, userId, viewerUserId) {
+        connections.firstOrNull { conn ->
+            userId in conn.user_ids &&
+                (viewerUserId.isNullOrBlank() || viewerUserId in conn.user_ids)
+        }?.id
+    }
 
     var resolved by remember(userId) { mutableStateOf<User?>(cached) }
     LaunchedEffect(userId, cached) {
@@ -850,6 +1052,7 @@ fun TabbedUserProfileSheet(
             files = emptyList(),
             userId = userId,
             viewerUserId = viewerUserId,
+            connectionId = profileConnectionId,
             localMessages = localMessages,
         )
     }

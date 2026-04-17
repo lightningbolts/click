@@ -25,6 +25,7 @@ import compose.project.click.click.data.models.newPendingConnectionId
 import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ConnectionActivityStatus
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.sensors.HardwareVibeSnapshot
@@ -219,6 +220,9 @@ class ConnectionRepository(
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val apiClient by lazy { compose.project.click.click.data.api.ApiClient() }
+    private val chatRepository: ChatRepository by lazy {
+        SupabaseChatRepository(tokenStorage = tokenStorage)
+    }
 
     /**
      * BFF read path (Phase 3 — C15) for the ProfileBottomSheet Media / Files subtabs.
@@ -237,6 +241,56 @@ class ConnectionRepository(
 
     suspend fun getProfileTabs(userId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
         return apiClient.getConnectionTabs(userId)
+    }
+
+    /**
+     * Loads decrypted chat messages for a profile sheet by [connectionId] without requiring the
+     * active ChatView state. Prefers repository fetch (full history) and falls back to the local
+     * in-memory connection snapshot when no route could be resolved.
+     */
+    suspend fun fetchDecryptedMessagesForProfileConnection(
+        connectionId: String,
+        viewerUserId: String?,
+    ): List<Message> {
+        val cid = connectionId.trim()
+        if (cid.isBlank()) return emptyList()
+
+        val cachedConnection = AppDataManager.connections.value.firstOrNull { it.id == cid }
+        val cachedMessages = cachedConnection?.chat?.messages.orEmpty()
+        val cachedChatId = cachedConnection?.chat?.id
+
+        val chatId = runCatching {
+            chatRepository.resolveChatIdForConnection(cid)
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: cachedChatId
+
+        if (chatId.isNullOrBlank()) return cachedMessages
+
+        val fetched = runCatching {
+            chatRepository.fetchMessagesForChat(chatId, viewerUserId).orEmpty()
+        }.getOrDefault(emptyList())
+
+        return if (fetched.isNotEmpty()) fetched else cachedMessages
+    }
+
+    /**
+     * Downloads and decrypts an attachment payload from a `ccx:v1` envelope tuple.
+     */
+    suspend fun downloadAttachmentPlaintext(
+        path: String,
+        fileMasterKeyBase64: String,
+        expectedSha256Base64: String,
+    ): ByteArray? {
+        val p = path.trim()
+        val k = fileMasterKeyBase64.trim()
+        val s = expectedSha256Base64.trim()
+        if (p.isBlank() || k.isBlank() || s.isBlank()) return null
+        return runCatching {
+            chatRepository.downloadAttachmentPlaintext(
+                path = p,
+                fileMasterKeyBase64 = k,
+                expectedSha256Base64 = s,
+            )
+        }.getOrNull()
     }
 
     private val json = Json {

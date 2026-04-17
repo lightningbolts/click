@@ -5,7 +5,13 @@ import compose.project.click.click.crypto.PlatformCrypto
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -106,5 +112,81 @@ object AttachmentCrypto {
         }
     }
 
+    /**
+     * Resolves an attachment envelope from encrypted [content] and optional [metadata].
+     * Metadata fields are used as a fallback for malformed/legacy envelopes and to fill
+     * missing display details safely.
+     */
+    fun resolveEnvelope(content: String, metadata: JsonElement?): Envelope? {
+        val base = tryDecodeEnvelope(content)
+        val meta = metadata as? JsonObject
+        if (base == null && meta == null) return null
+
+        val fileName = meta.stringAt("file_name")
+            ?: meta.stringAt("filename")
+            ?: meta.stringAt("name")
+        val mimeType = meta.stringAt("mime_type")
+            ?: meta.stringAt("content_type")
+        val size = meta.longAt("file_size")
+            ?: meta.longAt("size_bytes")
+            ?: meta.longAt("size")
+        val path = meta.stringAt("path")
+            ?: meta.stringAt("storage_path")
+            ?: meta.stringAt("object_path")
+        val key = meta.stringAt("key")
+            ?: meta.stringAt("file_key")
+            ?: meta.stringAt("file_master_key")
+        val sha = meta.stringAt("sha256")
+            ?: meta.stringAt("sha256_base64")
+
+        if (base != null) {
+            return base.copy(
+                name = fileName ?: base.name,
+                mime = mimeType ?: base.mime,
+                size = size ?: base.size,
+                path = path ?: base.path,
+                key = key ?: base.key,
+                sha256 = sha ?: base.sha256,
+            )
+        }
+
+        val attachmentVersion = meta.intAt("attachment_v")
+        if (attachmentVersion != 1) return null
+        if (
+            fileName.isNullOrBlank() ||
+            mimeType.isNullOrBlank() ||
+            size == null ||
+            path.isNullOrBlank() ||
+            key.isNullOrBlank() ||
+            sha.isNullOrBlank()
+        ) {
+            return null
+        }
+
+        return Envelope(
+            v = 1,
+            type = "file",
+            name = fileName,
+            mime = mimeType,
+            size = size,
+            path = path,
+            key = key,
+            sha256 = sha,
+        )
+    }
+
     fun isAttachmentEnvelope(content: String): Boolean = content.startsWith(ENVELOPE_PREFIX)
+
+    private fun JsonObject?.stringAt(key: String): String? =
+        this?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+
+    private fun JsonObject?.longAt(key: String): Long? {
+        val primitive = this?.get(key)?.jsonPrimitive ?: return null
+        return primitive.longOrNull ?: primitive.contentOrNull?.toLongOrNull()
+    }
+
+    private fun JsonObject?.intAt(key: String): Int? {
+        val primitive = this?.get(key)?.jsonPrimitive ?: return null
+        return primitive.intOrNull ?: primitive.contentOrNull?.toIntOrNull()
+    }
 }

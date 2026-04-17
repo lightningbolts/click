@@ -113,9 +113,9 @@ fun ChatMessageBubble(
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
     val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
     val encryptedMedia = message.isEncryptedMedia()
-    val attachmentEnvelope = remember(message.id, message.content) {
+    val attachmentEnvelope = remember(message.id, message.content, message.metadata) {
         if (mt == ChatMessageType.FILE || message.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)) {
-            AttachmentCrypto.tryDecodeEnvelope(message.content)
+            AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
         } else {
             null
         }
