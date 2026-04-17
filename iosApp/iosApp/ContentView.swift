@@ -33,7 +33,9 @@ struct ContentView: View {
         ComposeView()
             .ignoresSafeArea()
             .onOpenURL { url in
-                if let hubId = communityHubId(from: url) {
+                if url.scheme?.lowercased() == "click", url.host?.lowercased() == "login" {
+                    MainViewControllerKt.handleSupabaseAuthDeepLink(url: url as NSURL)
+                } else if let hubId = communityHubId(from: url) {
                     ClickKt.setCommunityHubDeepLink(hubId: hubId)
                 }
             }

@@ -191,6 +191,7 @@ class AuthViewModel(
     private fun launchOAuthSignIn(providerLabel: String, launch: suspend () -> Result<Unit>) {
         viewModelScope.launch {
             authState = AuthState.Loading
+            var browserOpenedAwaitingDeepLink = false
             try {
                 launch().fold(
                     onSuccess = {
@@ -198,6 +199,7 @@ class AuthViewModel(
                         // the deep link returns and `sessionStatus` transitions to
                         // Authenticated. `checkAuthStatus()` is not re-invoked here to avoid
                         // racing the session manager.
+                        browserOpenedAwaitingDeepLink = true
                     },
                     onFailure = { error ->
                         authState = AuthState.Error(
@@ -209,6 +211,12 @@ class AuthViewModel(
                 authState = AuthState.Error(
                     e.message ?: "Could not start $providerLabel sign-in right now.",
                 )
+            } finally {
+                // Never leave the login UI spinning if the flow failed to open the browser
+                // or threw before we are waiting on the OAuth deep link.
+                if (!browserOpenedAwaitingDeepLink && authState is AuthState.Loading) {
+                    authState = AuthState.Idle
+                }
             }
         }
     }

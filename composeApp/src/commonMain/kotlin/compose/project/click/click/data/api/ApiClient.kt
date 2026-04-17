@@ -425,26 +425,21 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             else -> "avatar.jpg"
         }
         return try {
-            // formData {} always prepends `Content-Disposition: form-data; name="file"`.
-            // Do not send a second full `form-data; name=...; filename=...` — Ktor joins
-            // duplicate header values with "; ", which breaks Node/undici multipart parsing
-            // and surfaces as 400 "Expected multipart/form-data" on click-web.
-            val multipart = MultiPartFormDataContent(
-                formData {
-                    append(
-                        key = "file",
-                        value = imageBytes,
-                        headers = Headers.build {
-                            append(HttpHeaders.ContentType, normalizedMime)
-                            append(HttpHeaders.ContentDisposition, "filename=\"$filename\"")
-                        },
-                    )
-                    append(key = "mime_type", value = normalizedMime)
-                },
-            )
+            // formData {} supplies `Content-Disposition: form-data; name="file"`.
+            // Add part `Content-Type` and `filename="..."` only via Headers.build — do not
+            // set the POST's top-level Content-Type: Ktor must emit the boundary on the main header.
             val response = clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
-                contentType(multipart.contentType)
-                setBody(multipart)
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append("file", imageBytes, Headers.build {
+                                append(HttpHeaders.ContentType, normalizedMime)
+                                append(HttpHeaders.ContentDisposition, "filename=\"$filename\"")
+                            })
+                            append(key = "mime_type", value = normalizedMime)
+                        },
+                    ),
+                )
             }
             if (response.status.value in 200..299) {
                 val dto = response.body<AvatarUploadResponseDto>()

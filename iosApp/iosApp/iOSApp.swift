@@ -88,6 +88,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
+        if url.scheme?.lowercased() == "click", url.host?.lowercased() == "login" {
+            MainViewControllerKt.handleSupabaseAuthDeepLink(url: url as NSURL)
+            return true
+        }
         if let hubId = Self.communityHubId(from: url) {
             ClickKt.setCommunityHubDeepLink(hubId: hubId)
             return true

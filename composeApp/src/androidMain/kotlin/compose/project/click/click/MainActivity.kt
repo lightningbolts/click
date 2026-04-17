@@ -22,6 +22,8 @@ import compose.project.click.click.utils.initLocationService
 import compose.project.click.click.ui.utils.AppSystemSettings
 import compose.project.click.click.ui.utils.initAppSystemSettings
 import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
+import compose.project.click.click.data.SupabaseConfig
+import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,6 +31,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         configureScreenWakeForCalls(intent)
+
+        passSupabaseAuthDeepLink(intent)
 
         AndroidChatImageSaveContext.applicationContext = applicationContext
 
@@ -69,6 +73,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         configureScreenWakeForCalls(intent)
+        passSupabaseAuthDeepLink(intent)
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
@@ -79,6 +84,12 @@ class MainActivity : ComponentActivity() {
         val uriString = intent.dataString ?: return
         val hubId = uriString.toHubIdFromClickHubUrl() ?: return
         ChatDeepLinkManager.setPendingCommunityHub(hubId)
+    }
+
+    /** Required by supabase-kt: forwards `click://login` OAuth callbacks into the Auth plugin. */
+    private fun passSupabaseAuthDeepLink(intent: Intent?) {
+        if (intent == null) return
+        runCatching { SupabaseConfig.client.handleDeeplinks(intent) }
     }
 
     private fun handleChatDeepLinkIntent(intent: Intent?) {
