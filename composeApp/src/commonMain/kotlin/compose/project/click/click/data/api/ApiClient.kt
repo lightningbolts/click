@@ -125,6 +125,16 @@ private data class SafetyReportPostBody(
     val reason: String,
 )
 
+@Serializable
+private data class SignAttachmentPostBody(
+    val path: String,
+)
+
+@Serializable
+private data class SignAttachmentResponse(
+    val url: String,
+)
+
 /** POST `/api/livekit/token` — matches [click-web/app/api/livekit/token/route.ts]. */
 @Serializable
 data class LiveKitTokenPostBody(
@@ -677,6 +687,31 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/chat/attachments/sign` — mint short-lived URL for a chat attachment path. */
+    suspend fun getSignedChatAttachmentUrl(path: String): Result<String> {
+        val p = path.trim()
+        if (p.isEmpty()) return Result.failure(IllegalArgumentException("path required"))
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/chat/attachments/sign") {
+                contentType(ContentType.Application.Json)
+                setBody(SignAttachmentPostBody(path = p))
+            }
+            if (response.status.value in 200..299) {
+                val payload = response.body<SignAttachmentResponse>()
+                val url = payload.url.trim()
+                if (url.isEmpty()) {
+                    Result.failure(Exception("Attachment sign response missing URL"))
+                } else {
+                    Result.success(url)
+                }
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }

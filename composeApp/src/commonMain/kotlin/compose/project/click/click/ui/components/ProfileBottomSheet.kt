@@ -2,6 +2,7 @@ package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
@@ -83,7 +85,9 @@ import compose.project.click.click.data.api.ConnectionTabMessage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.AttachmentCrypto
+import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
+import compose.project.click.click.utils.toImageBitmap
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -132,31 +136,50 @@ fun ProfileBottomSheet(
     var selectedMediaForPreview by remember { mutableStateOf<ProfileSheetMedia?>(null) }
     val selectedUserId = state.userId?.trim().orEmpty()
     val connectionRepository = remember { ConnectionRepository() }
-    var connectionLocalMessages by remember(state.connectionId, selectedUserId, state.viewerUserId) {
+    val appViewerUserId = AppDataManager.currentUser.collectAsState().value?.id?.trim()
+    val effectiveViewerUserId = state.viewerUserId?.trim().takeIf { !it.isNullOrBlank() } ?: appViewerUserId
+    var connectionLocalMessages by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<List<ProfileSheetLocalMessage>>(emptyList())
     }
-    var connectionTabMedia by remember(state.connectionId, selectedUserId, state.viewerUserId) {
+    var connectionChatId by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
+        mutableStateOf<String?>(null)
+    }
+    var connectionTabMedia by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<List<ProfileSheetMedia>>(emptyList())
     }
-    var connectionTabFiles by remember(state.connectionId, selectedUserId, state.viewerUserId) {
+    var connectionTabFiles by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<List<ProfileSheetFile>>(emptyList())
     }
+    var resolvedMediaUrls by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
+        mutableStateOf<Map<String, String>>(emptyMap())
+    }
+    var resolvedMediaBitmaps by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
+        mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
+    }
+    var resolvedAudioLocalPaths by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
+        mutableStateOf<Map<String, String>>(emptyMap())
+    }
 
-    LaunchedEffect(selectedUserId, state.connectionId, state.viewerUserId) {
+    LaunchedEffect(selectedUserId, state.connectionId, effectiveViewerUserId) {
         val connectionId = state.connectionId?.trim().orEmpty()
         if (connectionId.isBlank()) {
             connectionLocalMessages = emptyList()
+            connectionChatId = null
             connectionTabMedia = emptyList()
             connectionTabFiles = emptyList()
             return@LaunchedEffect
         }
 
-        val fetched = runCatching {
-            connectionRepository.fetchDecryptedMessagesForProfileConnection(
-                connectionId = connectionId,
-                viewerUserId = state.viewerUserId,
-            )
-        }.getOrDefault(emptyList())
+        val fetched = if (!effectiveViewerUserId.isNullOrBlank()) {
+            runCatching {
+                connectionRepository.fetchDecryptedMessagesForProfileConnection(
+                    connectionId = connectionId,
+                    viewerUserId = effectiveViewerUserId,
+                )
+            }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
 
         connectionLocalMessages = fetched
             .sortedBy { it.timeCreated }
@@ -173,6 +196,7 @@ fun ProfileBottomSheet(
         val tabsPayload = runCatching {
             connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
         }.getOrNull()
+        connectionChatId = tabsPayload?.chatId
 
         connectionTabMedia = tabsPayload?.media
             ?.mapNotNull { it.toProfileSheetMediaFromTab() }
@@ -183,7 +207,8 @@ fun ProfileBottomSheet(
     }
 
     val profileLocalMessages = remember(state.localMessages, connectionLocalMessages) {
-        if (connectionLocalMessages.isNotEmpty()) connectionLocalMessages else state.localMessages
+        val chosen = if (connectionLocalMessages.isNotEmpty()) connectionLocalMessages else state.localMessages
+        chosen.filterNot { it.content.isLikelyWireEncrypted() }
     }
 
     // Hydrate legacy profile data for the Timeline subtab whenever both ids are known.
@@ -268,10 +293,58 @@ fun ProfileBottomSheet(
         mergeProfileLinks(extractLinksFromLocalMessages(localLinkMessages) + state.links)
     }
 
+    LaunchedEffect(effectiveMedia, connectionChatId, effectiveViewerUserId) {
+        val resolvedUrls = mutableMapOf<String, String>()
+        val resolvedBitmaps = mutableMapOf<String, ImageBitmap>()
+        val resolvedAudioPaths = mutableMapOf<String, String>()
+
+        effectiveMedia.forEach { media ->
+            val direct = media.mediaUrl?.trim().orEmpty()
+            val fromPath = media.storagePath?.trim().orEmpty()
+            val url = when {
+                direct.isNotBlank() -> direct
+                fromPath.isNotBlank() -> connectionRepository.getSignedChatAttachmentUrl(fromPath).orEmpty()
+                else -> ""
+            }
+            if (url.isBlank()) return@forEach
+
+            if (media.isEncrypted && !connectionChatId.isNullOrBlank() && !effectiveViewerUserId.isNullOrBlank()) {
+                val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                    chatId = connectionChatId.orEmpty(),
+                    viewerUserId = effectiveViewerUserId,
+                    mediaUrl = url,
+                )
+                if (bytes != null && bytes.isNotEmpty()) {
+                    if (media.mediaType == ProfileSheetMediaType.Image) {
+                        val bitmap = runCatching { bytes.toImageBitmap() }.getOrNull()
+                        if (bitmap != null) {
+                            resolvedBitmaps[media.id] = bitmap
+                            return@forEach
+                        }
+                    } else {
+                        val ext = extensionFromMimeType(media.mimeType)
+                        val localPath = writeSecureChatAudioTempFile(media.id, bytes, ext)
+                        if (!localPath.isNullOrBlank()) {
+                            resolvedAudioPaths[media.id] = localPath
+                            return@forEach
+                        }
+                    }
+                }
+            }
+
+            resolvedUrls[media.id] = url
+        }
+
+        resolvedMediaUrls = resolvedUrls
+        resolvedMediaBitmaps = resolvedBitmaps
+        resolvedAudioLocalPaths = resolvedAudioPaths
+    }
+
     val handleOpenLink: (String) -> Unit = remember(onOpenLink, uriHandler) {
         { url ->
-            runCatching { uriHandler.openUri(url) }
-            onOpenLink?.invoke(url)
+            val normalized = normalizeExternalUri(url)
+            runCatching { uriHandler.openUri(normalized) }
+            onOpenLink?.invoke(normalized)
         }
     }
     val handleDownloadFile: (ProfileSheetFile) -> Unit = remember(onDownloadFile, connectionRepository) {
@@ -301,6 +374,14 @@ fun ProfileBottomSheet(
                     val directUrl = file.downloadUrl?.trim().orEmpty()
                     if (directUrl.isNotBlank()) {
                         runCatching { uriHandler.openUri(directUrl) }
+                        handled = true
+                    }
+                }
+
+                if (!handled && path.isNotBlank()) {
+                    val signed = connectionRepository.getSignedChatAttachmentUrl(path)
+                    if (!signed.isNullOrBlank()) {
+                        runCatching { uriHandler.openUri(signed) }
                         handled = true
                     }
                 }
@@ -416,6 +497,8 @@ fun ProfileBottomSheet(
                 )
                 ProfileSheetTab.Media -> MediaPanel(
                     items = effectiveMedia,
+                    resolvedUrls = resolvedMediaUrls,
+                    resolvedBitmaps = resolvedMediaBitmaps,
                     onOpenMedia = { selectedMediaForPreview = it },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
@@ -430,16 +513,31 @@ fun ProfileBottomSheet(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (media.mediaType == ProfileSheetMediaType.Image) {
-                            AsyncImage(
-                                model = media.mediaUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            )
+                            val bitmap = resolvedMediaBitmaps[media.id]
+                            val resolvedUrl = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(220.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                )
+                            } else {
+                                AsyncImage(
+                                    model = resolvedUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(220.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                )
+                            }
                         } else {
                             Surface(
                                 modifier = Modifier
@@ -475,7 +573,12 @@ fun ProfileBottomSheet(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            handleOpenLink(media.mediaUrl)
+                            val target = resolvedAudioLocalPaths[media.id]
+                                ?: resolvedMediaUrls[media.id]
+                                ?: media.mediaUrl
+                            if (!target.isNullOrBlank()) {
+                                handleOpenLink(target)
+                            }
                             selectedMediaForPreview = null
                         },
                     ) {
@@ -546,7 +649,10 @@ data class ProfileSheetTimelineItem(
 
 data class ProfileSheetMedia(
     val id: String,
-    val mediaUrl: String,
+    val mediaUrl: String? = null,
+    val storagePath: String? = null,
+    val mimeType: String? = null,
+    val isEncrypted: Boolean = false,
     val mediaType: ProfileSheetMediaType = ProfileSheetMediaType.Image,
     val captionedAt: String? = null,
 )
@@ -743,7 +849,12 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
 }
 
 @Composable
-private fun MediaPanel(items: List<ProfileSheetMedia>, onOpenMedia: (ProfileSheetMedia) -> Unit) {
+private fun MediaPanel(
+    items: List<ProfileSheetMedia>,
+    resolvedUrls: Map<String, String>,
+    resolvedBitmaps: Map<String, ImageBitmap>,
+    onOpenMedia: (ProfileSheetMedia) -> Unit,
+) {
     val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
     val audioItems = items.filter { it.mediaType == ProfileSheetMediaType.Audio }
     val imageRows = imageItems.chunked(3)
@@ -765,17 +876,33 @@ private fun MediaPanel(items: List<ProfileSheetMedia>, onOpenMedia: (ProfileShee
         items(imageRows, key = { row -> row.firstOrNull()?.id ?: "row" }) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { media ->
-                    AsyncImage(
-                        model = media.mediaUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(110.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onOpenMedia(media) },
-                    )
+                    val bitmap = resolvedBitmaps[media.id]
+                    val resolvedUrl = resolvedUrls[media.id] ?: media.mediaUrl
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(110.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { onOpenMedia(media) },
+                        )
+                    } else {
+                        AsyncImage(
+                            model = resolvedUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(110.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { onOpenMedia(media) },
+                        )
+                    }
                 }
                 repeat(3 - row.size) {
                     Spacer(
@@ -974,14 +1101,27 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
     val meta = metadata as? JsonObject ?: return null
     val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
         meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-    } ?: return null
+    }
+    val path = METADATA_PATH_KEYS.firstNotNullOfOrNull { key ->
+        meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    }
+    if (url == null && path == null) return null
     val lowerType = messageType.lowercase()
     val mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image
     return ProfileSheetMedia(
         id = id,
         mediaUrl = url,
+        storagePath = path,
+        mimeType = meta.stringAt("original_mime_type")
+            ?: meta.stringAt("mime_type")
+            ?: meta.stringAt("content_type"),
+        isEncrypted = meta.booleanAt("is_encrypted_media")
+            ?: meta.booleanAt("isEncryptedMedia")
+            ?: meta.booleanAt("encrypted_media")
+            ?: false,
         mediaType = mediaType,
-        captionedAt = content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
+        captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+            ?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -991,12 +1131,25 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
     val meta = metadata as? JsonObject
     val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
         meta?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-    } ?: return null
+    }
+    val path = METADATA_PATH_KEYS.firstNotNullOfOrNull { key ->
+        meta?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    }
+    if (url == null && path == null) return null
     return ProfileSheetMedia(
         id = id,
         mediaUrl = url,
+        storagePath = path,
+        mimeType = meta?.stringAt("original_mime_type")
+            ?: meta?.stringAt("mime_type")
+            ?: meta?.stringAt("content_type"),
+        isEncrypted = meta?.booleanAt("is_encrypted_media")
+            ?: meta?.booleanAt("isEncryptedMedia")
+            ?: meta?.booleanAt("encrypted_media")
+            ?: false,
         mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
-        captionedAt = content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
+        captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+            ?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -1007,7 +1160,8 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
         ?: meta?.get("file_name")?.jsonPrimitive?.contentOrNull
         ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
         ?: meta?.get("name")?.jsonPrimitive?.contentOrNull
-        ?: content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
+        ?: content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+            ?.takeIf { it.isNotBlank() }
         ?: "Attachment"
     val size = envelope?.size
         ?: meta?.get("file_size")?.jsonPrimitive?.longOrNull
@@ -1027,6 +1181,7 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
         ?: meta?.stringAt("path")
         ?: meta?.stringAt("storage_path")
         ?: meta?.stringAt("object_path")
+        ?: meta?.stringAt("media_path")
     val attachmentKeyBase64 = envelope?.key?.takeIf { it.isNotBlank() }
         ?: meta?.stringAt("key")
         ?: meta?.stringAt("file_key")
@@ -1052,7 +1207,8 @@ private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile {
     val fileName = meta?.stringAt("file_name")
         ?: meta?.stringAt("filename")
         ?: meta?.stringAt("name")
-        ?: content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
+        ?: content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+            ?.takeIf { it.isNotBlank() }
         ?: "Attachment"
     val size = meta?.get("file_size")?.jsonPrimitive?.longOrNull
         ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
@@ -1069,6 +1225,7 @@ private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile {
     val attachmentPath = meta?.stringAt("path")
         ?: meta?.stringAt("storage_path")
         ?: meta?.stringAt("object_path")
+        ?: meta?.stringAt("media_path")
     val attachmentKeyBase64 = meta?.stringAt("key")
         ?: meta?.stringAt("file_key")
         ?: meta?.stringAt("file_master_key")
@@ -1098,6 +1255,13 @@ private val METADATA_URL_KEYS = listOf(
     "media_url",
 )
 
+private val METADATA_PATH_KEYS = listOf(
+    "path",
+    "storage_path",
+    "object_path",
+    "media_path",
+)
+
 private fun ProfileSheetLocalMessage.hasMetadataMediaUrl(): Boolean {
     val meta = metadata as? JsonObject ?: return false
     return METADATA_URL_KEYS.any { key ->
@@ -1115,6 +1279,43 @@ private fun ProfileSheetLocalMessage.hasMetadataAttachmentV1(): Boolean {
 
 private fun JsonObject.stringAt(key: String): String? =
     this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+
+private fun JsonObject.booleanAt(key: String): Boolean? {
+    val raw = this[key]?.jsonPrimitive ?: return null
+    raw.contentOrNull?.trim()?.lowercase()?.let { text ->
+        if (text == "true" || text == "1") return true
+        if (text == "false" || text == "0") return false
+    }
+    return null
+}
+
+private fun String.isLikelyWireEncrypted(): Boolean {
+    val text = trim()
+    if (text.isBlank()) return false
+    return text.startsWith("e2e:", ignoreCase = true)
+}
+
+private fun extensionFromMimeType(mimeType: String?): String {
+    val mt = mimeType?.trim()?.lowercase().orEmpty()
+    return when {
+        "wav" in mt -> "wav"
+        "webm" in mt -> "webm"
+        "ogg" in mt -> "ogg"
+        "mpeg" in mt || "mp3" in mt -> "mp3"
+        "aac" in mt -> "aac"
+        else -> "m4a"
+    }
+}
+
+private fun normalizeExternalUri(raw: String): String {
+    val value = raw.trim()
+    if (value.isBlank()) return value
+    return when {
+        "://" in value -> value
+        value.startsWith("/") -> "file://$value"
+        else -> value
+    }
+}
 
 /**
  * Regex matching bare `http://` / `https://` URLs in locally-decrypted text. Keep
@@ -1163,7 +1364,10 @@ private fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileSheet
             return@forEach
         }
         merged[media.id] = prev.copy(
-            mediaUrl = if (media.mediaUrl.isNotBlank()) media.mediaUrl else prev.mediaUrl,
+            mediaUrl = media.mediaUrl ?: prev.mediaUrl,
+            storagePath = media.storagePath ?: prev.storagePath,
+            mimeType = media.mimeType ?: prev.mimeType,
+            isEncrypted = media.isEncrypted || prev.isEncrypted,
             mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
             captionedAt = media.captionedAt ?: prev.captionedAt,
         )

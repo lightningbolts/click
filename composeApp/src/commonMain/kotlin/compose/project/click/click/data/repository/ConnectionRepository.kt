@@ -293,6 +293,30 @@ class ConnectionRepository(
         }.getOrNull()
     }
 
+    /** Mint a short-lived signed URL for a chat attachment object [path]. */
+    suspend fun getSignedChatAttachmentUrl(path: String): String? {
+        val p = path.trim()
+        if (p.isBlank()) return null
+        return runCatching {
+            apiClient.getSignedChatAttachmentUrl(p).getOrNull()
+        }.getOrNull()
+    }
+
+    /** Download and decrypt encrypted media bytes for profile media tiles. */
+    suspend fun downloadAndDecryptChatMedia(
+        chatId: String,
+        viewerUserId: String,
+        mediaUrl: String,
+    ): ByteArray? {
+        val cid = chatId.trim()
+        val uid = viewerUserId.trim()
+        val url = mediaUrl.trim()
+        if (cid.isBlank() || uid.isBlank() || url.isBlank()) return null
+        return runCatching {
+            chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
+        }.getOrNull()
+    }
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
