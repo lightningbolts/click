@@ -29,6 +29,11 @@ import compose.project.click.click.ui.components.PlatformMap
 import compose.project.click.click.ui.components.MapPin
 import compose.project.click.click.ui.components.MapClusterPin
 import compose.project.click.click.ui.components.toClusterPin
+import compose.project.click.click.ui.components.ProfileBottomSheet
+import compose.project.click.click.ui.components.ProfileSheetBadge
+import compose.project.click.click.ui.components.ProfileSheetState
+import compose.project.click.click.ui.components.ProfileSheetTimelineItem
+import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.ui.utils.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -97,6 +102,16 @@ fun MapScreen(
         showBottomSheet = selection is MapSelection.ConnectionSelected
     }
 
+    // C14: Parallax — when the ProfileBottomSheet is revealed, drift the map surface
+    // upward a few dozen dp so the tapped pin remains visible above the sheet and the
+    // whole view gains a subtle depth effect. Kept intentionally small (-56.dp) to
+    // avoid fighting the map's own gesture handling.
+    val parallaxOffset by animateFloatAsState(
+        targetValue = if (showBottomSheet) -56f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "profile_sheet_map_parallax",
+    )
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { paddingValues ->
@@ -107,6 +122,7 @@ fun MapScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .then(grayscaleModifier)
+                .graphicsLayer { translationY = parallaxOffset }
                 .background(
                     if (ghostModeEnabled) Color.DarkGray.copy(alpha = 0.3f)
                     else MaterialTheme.colorScheme.surface,
@@ -180,6 +196,9 @@ fun MapScreen(
 
     if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
         val connectionSelection = selection as MapSelection.ConnectionSelected
+        val sheetData = remember(connectionSelection) {
+            buildProfileSheetState(connectionSelection)
+        }
         AdaptiveBottomSheet(
             onDismissRequest = {
                 showBottomSheet = false
@@ -190,13 +209,12 @@ fun MapScreen(
             contentColor = MaterialTheme.colorScheme.onSurface,
             dragHandle = { BottomSheetDefaults.DragHandle() },
         ) {
-            ConnectionMarkerSheet(
-                point = connectionSelection.point,
-                otherUser = connectionSelection.otherUser,
-                onMessage = { connectionId ->
+            ProfileBottomSheet(
+                state = sheetData,
+                onMessage = {
                     showBottomSheet = false
                     viewModel.clearSelection()
-                    onNavigateToChat?.invoke(connectionId)
+                    onNavigateToChat?.invoke(connectionSelection.point.connection.id)
                 },
                 onNudge = {
                     viewModel.sendNudge(
@@ -206,13 +224,48 @@ fun MapScreen(
                     showBottomSheet = false
                     viewModel.clearSelection()
                 },
-                onDismiss = {
-                    showBottomSheet = false
-                    viewModel.clearSelection()
-                },
             )
         }
     }
+}
+
+/**
+ * Shapes a [MapSelection.ConnectionSelected] into the data the shared
+ * [ProfileBottomSheet] renders. Media / Links / Files tabs are seeded empty — C15
+ * (not in this phase) plumbs the message-history query that populates them. The
+ * Timeline tab always has at least one row: the connection event itself.
+ */
+private fun buildProfileSheetState(
+    sel: MapSelection.ConnectionSelected,
+): ProfileSheetState {
+    val otherUser = sel.otherUser
+    val point = sel.point
+    val displayName = otherUser?.name?.takeIf { it.isNotBlank() }
+        ?: "Connection"
+    val status = when (point.timeState) {
+        TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
+        TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
+        TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
+    }
+    val timelineSeed = listOf(
+        ProfileSheetTimelineItem(
+            id = "conn-${point.connection.id}",
+            title = "Met at ${point.displayName}",
+            subtitle = point.connection.contextTagId,
+            timestamp = point.formattedDate,
+        ),
+    )
+    return ProfileSheetState(
+        displayName = displayName,
+        subtitle = point.displayName,
+        avatarUrl = otherUser?.image,
+        statusBadge = status,
+        canNudge = point.timeState == TimeState.LIVE || point.timeState == TimeState.RECENT,
+        timeline = timelineSeed,
+        media = emptyList(),
+        links = emptyList(),
+        files = emptyList(),
+    )
 }
 
 @Composable
