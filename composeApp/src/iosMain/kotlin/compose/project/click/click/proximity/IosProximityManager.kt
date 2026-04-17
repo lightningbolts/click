@@ -40,9 +40,6 @@ import platform.Foundation.NSString
 import platform.Foundation.create
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
-import platform.UIKit.UIApplicationOpenSettingsURLString
-import compose.project.click.click.ui.utils.AppSystemSettings
-import compose.project.click.click.ui.utils.openIosUrlMain
 import platform.darwin.NSObject
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
@@ -142,7 +139,10 @@ class IosProximityManager : ProximityManager {
         "Uses Bluetooth Low Energy and short-range audio tones (including 18.5 kHz) to find nearby taps."
 
     override fun openRadiosSettings() {
-        openIosUrlMain(NSURL.URLWithString(UIApplicationOpenSettingsURLString))
+        // iOS does not expose a public deep-link to the Bluetooth radio toggle —
+        // per directive Q4, fall back to the app's own Settings page via the shared
+        // helper (which bypasses the `canOpenURL` probe).
+        compose.project.click.click.ui.utils.openApplicationSystemSettings()
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
@@ -352,11 +352,8 @@ private fun extractPcm16MonoFromWav(file: ByteArray): ShortArray? {
 
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
-    return remember(AppSystemSettings.isDebugMode) {
-        if (AppSystemSettings.isDebugMode && isSimulatorOrEmulatorRuntime()) {
-            MockProximityManager()
-        } else {
-            IosProximityManager()
-        }
-    }
+    // Directive C11: do not inject [MockProximityManager] in the simulator build —
+    // simulators must show real (or empty) database state so the production UI graph
+    // isn't poisoned by mock pins. The mock impl still exists for unit tests only.
+    return remember { IosProximityManager() }
 }

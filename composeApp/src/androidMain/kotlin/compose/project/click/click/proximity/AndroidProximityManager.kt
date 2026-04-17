@@ -24,7 +24,6 @@ import android.os.ParcelUuid
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import compose.project.click.click.ui.utils.AppSystemSettings
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -275,11 +274,8 @@ class AndroidProximityManager(
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
     val context = LocalContext.current
-    return remember(context, AppSystemSettings.isDebugMode) {
-        if (AppSystemSettings.isDebugMode && isSimulatorOrEmulatorRuntime()) {
-            MockProximityManager()
-        } else {
-            AndroidProximityManager(context)
-        }
-    }
+    // Directive C11: do not inject [MockProximityManager] on emulators — the UI graph
+    // must reflect real (or empty) database state. [MockProximityManager] is still
+    // available for unit tests via direct instantiation.
+    return remember(context) { AndroidProximityManager(context) }
 }

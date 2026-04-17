@@ -87,13 +87,13 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
 import kotlin.math.roundToInt
 
-private fun sharedInterestTags(viewer: List<String>, other: List<String>): List<String> {
+internal fun sharedInterestTags(viewer: List<String>, other: List<String>): List<String> {
     if (viewer.isEmpty() || other.isEmpty()) return emptyList()
     val viewerNorm = viewer.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
     return other.map { it.trim() }.filter { it.isNotEmpty() && it.lowercase() in viewerNorm }.distinct()
 }
 
-private fun ProfileAvailabilityIntentBubble.displayLabel(): String {
+internal fun ProfileAvailabilityIntentBubble.displayLabel(): String {
     val tag = intentTag?.trim().orEmpty()
     val tf = timeframe?.trim().orEmpty()
     return when {
@@ -104,7 +104,7 @@ private fun ProfileAvailabilityIntentBubble.displayLabel(): String {
     }.trim()
 }
 
-private fun ProfileAvailabilityIntentBubble.activeUntilShort(): String {
+internal fun ProfileAvailabilityIntentBubble.activeUntilShort(): String {
     val iso = expiresAt ?: return ""
     val instant = runCatching { kotlinx.datetime.Instant.parse(iso) }.getOrNull() ?: return ""
     val tz = TimeZone.currentSystemDefault()
@@ -241,7 +241,7 @@ private fun TimelineMetricPill(
 }
 
 @Composable
-private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
+internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
     if (encounters.isEmpty()) {
         Text(
             text = "No crossing history on file yet.",
@@ -377,6 +377,339 @@ private fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                     }
                 }
             }
+    }
+}
+
+/**
+ * Phase 2 — C13 regression fix: legacy profile content (moment cards, interests, shared
+ * interests, availability intents, "Our timeline") lifted out of [UserProfileBottomSheet]
+ * so the same rendering is shared with the Timeline subtab of [ProfileBottomSheet].
+ *
+ * This composable only renders **below-header** sections; the enclosing sheet provides
+ * its own avatar / name / subtitle row. When [profile] is `null` we show a compact
+ * loading state so the Timeline subtab is never empty while fetch is in flight.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ProfileLegacyTimelineContent(
+    profile: UserPublicProfile?,
+    loading: Boolean,
+    error: String?,
+    modifier: Modifier = Modifier,
+) {
+    if (loading && profile == null) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(min = 160.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = PrimaryBlue)
+        }
+        return
+    }
+    if (profile == null) {
+        Box(
+            modifier = modifier.fillMaxWidth().padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = error ?: "Profile unavailable",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        val p = profile
+        val conn = p.sharedConnection
+        val hasMoment = conn != null && listOfNotNull(
+            conn.profileContextLine(),
+            conn.profilePlaceLine(),
+            conn.profileAddressDetailLine(),
+            conn.profileWhenLine(),
+            conn.profileWeatherLine(),
+            conn.profileNoiseLine(),
+            conn.profileBarometricLine(),
+        ).isNotEmpty()
+
+        if (hasMoment && conn != null) {
+            Text(
+                text = "When you connected",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val muted = MaterialTheme.colorScheme.onSurfaceVariant
+                val body = MaterialTheme.colorScheme.onSurface
+                val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+                val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+
+                conn.profileContextLine()?.let { line ->
+                    LegacyMomentCard(
+                        icon = Icons.Filled.AutoAwesome,
+                        iconTint = PrimaryBlue.copy(alpha = 0.9f),
+                        label = "Moment",
+                        value = line,
+                        cardBorder = cardBorder,
+                        cardBg = cardBg,
+                        muted = muted,
+                        body = body,
+                    )
+                }
+                val placeLine = listOfNotNull(
+                    conn.profilePlaceLine(),
+                    conn.profileAddressDetailLine(),
+                ).joinToString(" · ").takeIf { it.isNotEmpty() }
+                placeLine?.let { line ->
+                    LegacyMomentCard(
+                        icon = Icons.Outlined.LocationOn,
+                        iconTint = LightBlue.copy(alpha = 0.95f),
+                        label = "Place",
+                        value = line,
+                        cardBorder = cardBorder,
+                        cardBg = cardBg,
+                        muted = muted,
+                        body = body,
+                    )
+                }
+                conn.profileWhenLine()?.let { line ->
+                    LegacyMomentCard(
+                        icon = Icons.Outlined.Schedule,
+                        iconTint = Color(0xFFFFCC80).copy(alpha = 0.95f),
+                        label = "Time",
+                        value = line,
+                        cardBorder = cardBorder,
+                        cardBg = cardBg,
+                        muted = muted,
+                        body = body,
+                    )
+                }
+                conn.profileWeatherLine()?.let { line ->
+                    LegacyMomentCard(
+                        icon = Icons.Outlined.Cloud,
+                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                        label = "Weather",
+                        value = line,
+                        cardBorder = cardBorder,
+                        cardBg = cardBg,
+                        muted = muted,
+                        body = body,
+                    )
+                }
+                conn.profileNoiseLine()?.let { line ->
+                    LegacyMomentCard(
+                        icon = Icons.Outlined.GraphicEq,
+                        iconTint = Color(0xFF69F0AE).copy(alpha = 0.9f),
+                        label = "Ambience",
+                        value = line,
+                        cardBorder = cardBorder,
+                        cardBg = cardBg,
+                        muted = muted,
+                        body = body,
+                    )
+                }
+                conn.profileBarometricLine()?.let { line ->
+                    LegacyMomentCard(
+                        icon = Icons.Outlined.Terrain,
+                        iconTint = LightBlue.copy(alpha = 0.95f),
+                        label = "Elevation",
+                        value = line,
+                        cardBorder = cardBorder,
+                        cardBg = cardBg,
+                        muted = muted,
+                        body = body,
+                    )
+                }
+                ConnectionHardwareVibeBadgesRow(
+                    encounter = conn.originEncounter,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        Text(
+            text = "Interests",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        if (p.interestTags.isEmpty()) {
+            Text(
+                text = "No interests shared yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                p.interestTags.forEach { tag ->
+                    FilterChip(
+                        selected = false,
+                        onClick = { },
+                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        val sharedTags = sharedInterestTags(p.viewerInterestTags, p.interestTags)
+
+        Text(
+            text = "Shared interests",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        if (sharedTags.isEmpty()) {
+            Text(
+                text = "No overlap with your interests yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                sharedTags.forEach { tag ->
+                    FilterChip(
+                        selected = true,
+                        onClick = { },
+                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "Availability intents",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        val intentBubbles = p.profileAvailabilityIntents.filter { it.displayLabel().isNotEmpty() }
+        if (intentBubbles.isEmpty()) {
+            Text(
+                text = "No active availability intents",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                intentBubbles.forEach { bubble ->
+                    val until = bubble.activeUntilShort()
+                    FilterChip(
+                        selected = false,
+                        onClick = { },
+                        label = {
+                            Column {
+                                Text(
+                                    bubble.displayLabel(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (until.isNotEmpty()) {
+                                    Text(
+                                        until,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
+        if (conn != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Our timeline",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Every time and place you’ve crossed paths",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OurTimelineSection(conn.connectionEncounters)
+        }
+    }
+}
+
+@Composable
+private fun LegacyMomentCard(
+    icon: ImageVector,
+    iconTint: Color,
+    label: String,
+    value: String,
+    cardBorder: Color,
+    cardBg: Color,
+    muted: Color,
+    body: Color,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, cardBorder, RoundedCornerShape(14.dp))
+            .background(cardBg)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(20.dp).padding(top = 2.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = muted,
+                letterSpacing = 0.4.sp,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = body,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }
 
@@ -525,264 +858,11 @@ fun UserProfileBottomSheet(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    val conn = p.sharedConnection
-                    val hasMoment = conn != null && listOfNotNull(
-                        conn.profileContextLine(),
-                        conn.profilePlaceLine(),
-                        conn.profileAddressDetailLine(),
-                        conn.profileWhenLine(),
-                        conn.profileWeatherLine(),
-                        conn.profileNoiseLine(),
-                        conn.profileBarometricLine(),
-                    ).isNotEmpty()
-
-                    if (hasMoment && conn != null) {
-                        Text(
-                            text = "When you connected",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            val muted = MaterialTheme.colorScheme.onSurfaceVariant
-                            val body = MaterialTheme.colorScheme.onSurface
-                            val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
-                            val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-
-                            @Composable
-                            fun MomentCard(
-                                icon: ImageVector,
-                                iconTint: Color,
-                                label: String,
-                                value: String,
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .border(1.dp, cardBorder, RoundedCornerShape(14.dp))
-                                        .background(cardBg)
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint = iconTint,
-                                        modifier = Modifier.size(20.dp).padding(top = 2.dp),
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = label.uppercase(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = muted,
-                                            letterSpacing = 0.4.sp,
-                                        )
-                                        Text(
-                                            text = value,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = body,
-                                            modifier = Modifier.padding(top = 2.dp),
-                                        )
-                                    }
-                                }
-                            }
-
-                            conn.profileContextLine()?.let { line ->
-                                MomentCard(
-                                    icon = Icons.Filled.AutoAwesome,
-                                    iconTint = PrimaryBlue.copy(alpha = 0.9f),
-                                    label = "Moment",
-                                    value = line,
-                                )
-                            }
-                            val placeLine = listOfNotNull(
-                                conn.profilePlaceLine(),
-                                conn.profileAddressDetailLine(),
-                            ).joinToString(" · ").takeIf { it.isNotEmpty() }
-                            placeLine?.let { line ->
-                                MomentCard(
-                                    icon = Icons.Outlined.LocationOn,
-                                    iconTint = LightBlue.copy(alpha = 0.95f),
-                                    label = "Place",
-                                    value = line,
-                                )
-                            }
-                            conn.profileWhenLine()?.let { line ->
-                                MomentCard(
-                                    icon = Icons.Outlined.Schedule,
-                                    iconTint = Color(0xFFFFCC80).copy(alpha = 0.95f),
-                                    label = "Time",
-                                    value = line,
-                                )
-                            }
-                            conn.profileWeatherLine()?.let { line ->
-                                MomentCard(
-                                    icon = Icons.Outlined.Cloud,
-                                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-                                    label = "Weather",
-                                    value = line,
-                                )
-                            }
-                            conn.profileNoiseLine()?.let { line ->
-                                MomentCard(
-                                    icon = Icons.Outlined.GraphicEq,
-                                    iconTint = Color(0xFF69F0AE).copy(alpha = 0.9f),
-                                    label = "Ambience",
-                                    value = line,
-                                )
-                            }
-                            conn.profileBarometricLine()?.let { line ->
-                                MomentCard(
-                                    icon = Icons.Outlined.Terrain,
-                                    iconTint = LightBlue.copy(alpha = 0.95f),
-                                    label = "Elevation",
-                                    value = line,
-                                )
-                            }
-                            ConnectionHardwareVibeBadgesRow(
-                                encounter = conn.originEncounter,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    Text(
-                        text = "Interests",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                    ProfileLegacyTimelineContent(
+                        profile = p,
+                        loading = false,
+                        error = null,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (p.interestTags.isEmpty()) {
-                        Text(
-                            text = "No interests shared yet",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            p.interestTags.forEach { tag ->
-                                FilterChip(
-                                    selected = false,
-                                    onClick = { },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelMedium) }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val sharedTags = sharedInterestTags(p.viewerInterestTags, p.interestTags)
-
-                    Text(
-                        text = "Shared interests",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (sharedTags.isEmpty()) {
-                        Text(
-                            text = "No overlap with your interests yet",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            sharedTags.forEach { tag ->
-                                FilterChip(
-                                    selected = true,
-                                    onClick = { },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelMedium) }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "Availability intents",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    val intentBubbles = p.profileAvailabilityIntents.filter { it.displayLabel().isNotEmpty() }
-                    if (intentBubbles.isEmpty()) {
-                        Text(
-                            text = "No active availability intents",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            intentBubbles.forEach { bubble ->
-                                val until = bubble.activeUntilShort()
-                                FilterChip(
-                                    selected = false,
-                                    onClick = { },
-                                    label = {
-                                        Column {
-                                            Text(
-                                                bubble.displayLabel(),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                            if (until.isNotEmpty()) {
-                                                Text(
-                                                    until,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    if (conn != null) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Our timeline",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Every time and place you’ve crossed paths",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OurTimelineSection(conn.connectionEncounters)
-                    }
                 }
                 else -> {
                     Text("Profile unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)

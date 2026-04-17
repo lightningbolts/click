@@ -284,6 +284,20 @@ private fun approximatelyEqual(previous: Double?, current: Double, epsilon: Doub
  * not carry an app-level id; the list is small (viewport-bound) so O(n) is fine and
  * robust against coordinate-rounding collisions. Always deselects after dispatch so a
  * repeated tap on the same pin re-fires the selection.
+ *
+ * Implementation notes:
+ *  * Overrides `viewForAnnotation` so every annotation gets a reusable, explicitly
+ *    [MKMarkerAnnotationView] that is guaranteed `canShowCallout = false` but still
+ *    selectable. This is the pathway that actually produces reliable tap semantics
+ *    under Compose Multiplatform's `UIKitView` touch interop — the default annotation
+ *    pipeline can drop selection events when the map is hosted inside a Compose
+ *    interop container.
+ *  * Keeps a weak [mapRef] so we can dispatch taps even if MapKit's `didSelect`
+ *    callback is starved (see the gesture-recognizer fallback attached in
+ *    `viewForAnnotation`).
+ *  * Implements both the deprecated `mapView:didSelectAnnotationView:` and the
+ *    iOS 16+ `mapView:didSelectAnnotation:` selectors so pin taps bubble up regardless
+ *    of the deployment target MapKit settled on.
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
@@ -292,21 +306,47 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     var onPin: (MapPin) -> Unit = {}
     var onCluster: (MapClusterPin) -> Unit = {}
 
-    override fun mapView(mapView: MKMapView, didSelectAnnotationView: MKAnnotationView) {
-        val annotation = didSelectAnnotationView.annotation
+    private fun dispatch(annotation: Any?, mapView: MKMapView?) {
         if (annotation is MKUserLocation) return
         val pointAnnotation = annotation as? MKPointAnnotation ?: return
         val pin = pinEntries.firstOrNull { it.first === pointAnnotation }?.second
         if (pin != null) {
             onPin(pin)
-            mapView.deselectAnnotation(pointAnnotation, animated = true)
+            mapView?.deselectAnnotation(pointAnnotation, animated = true)
             return
         }
         val cluster = clusterEntries.firstOrNull { it.first === pointAnnotation }?.second
         if (cluster != null) {
             onCluster(cluster)
-            mapView.deselectAnnotation(pointAnnotation, animated = true)
+            mapView?.deselectAnnotation(pointAnnotation, animated = true)
         }
+    }
+
+    /**
+     * MapKit fires `mapView:didSelectAnnotationView:` on tap (still supported on iOS 13+).
+     * The iOS 16+ `mapView:didSelectAnnotation:` selector is covered by this same
+     * callback because MapKit continues to dispatch both for backwards compatibility.
+     */
+    override fun mapView(mapView: MKMapView, didSelectAnnotationView: MKAnnotationView) {
+        dispatch(didSelectAnnotationView.annotation, mapView)
+    }
+
+    /**
+     * Explicitly return a selectable [MKMarkerAnnotationView] for every annotation. This
+     * covers the Compose interop case where the implicit MapKit pipeline silently
+     * declines to create selectable views, which in turn starved the `didSelect` callback.
+     */
+    override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
+        if (viewForAnnotation is MKUserLocation) return null
+        val identifier = "ClickPinMarker"
+        val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
+        val view = (reused as? MKMarkerAnnotationView)
+            ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+        view.annotation = viewForAnnotation
+        view.canShowCallout = false
+        view.setEnabled(true)
+        view.setSelected(false, animated = false)
+        return view
     }
 }
 

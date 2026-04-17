@@ -161,11 +161,13 @@ fun MapScreen(
                     )
 
                     // Liquid Glass memories pill — replaces the old PageHeader + stats chip.
+                    // Directive: sit closer to the top safe area (was topInset + 12.dp
+                    // which felt too low on notched devices).
                     val stats = viewModel.getMapStats()
                     LiquidGlassPill(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(start = 16.dp, top = topInset + 12.dp),
+                            .padding(start = 16.dp, top = topInset + 4.dp),
                     ) {
                         MemoriesPillContent(
                             memories = stats.totalConnections,
@@ -177,7 +179,7 @@ fun MapScreen(
                     ZoomIndicator(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(end = 16.dp, top = topInset + 12.dp),
+                            .padding(end = 16.dp, top = topInset + 4.dp),
                         zoomLevel = zoomLevel,
                         showingClusters = renderData is MapRenderData.Clusters,
                     )
@@ -196,8 +198,10 @@ fun MapScreen(
 
     if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
         val connectionSelection = selection as MapSelection.ConnectionSelected
-        val sheetData = remember(connectionSelection) {
-            buildProfileSheetState(connectionSelection)
+        val viewerUserId = compose.project.click.click.data.AppDataManager
+            .currentUser.collectAsState().value?.id
+        val sheetData = remember(connectionSelection, viewerUserId) {
+            buildProfileSheetState(connectionSelection, viewerUserId)
         }
         AdaptiveBottomSheet(
             onDismissRequest = {
@@ -237,6 +241,7 @@ fun MapScreen(
  */
 private fun buildProfileSheetState(
     sel: MapSelection.ConnectionSelected,
+    viewerUserId: String?,
 ): ProfileSheetState {
     val otherUser = sel.otherUser
     val point = sel.point
@@ -265,6 +270,8 @@ private fun buildProfileSheetState(
         media = emptyList(),
         links = emptyList(),
         files = emptyList(),
+        userId = otherUser?.id,
+        viewerUserId = viewerUserId,
     )
 }
 

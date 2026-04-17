@@ -1,26 +1,38 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -413,34 +425,68 @@ fun SettingsScreen(
                     SettingsSectionHeader("Privacy & permissions")
                 }
                 item {
+                    val chevronRotation by animateFloatAsState(
+                        targetValue = if (showPermissionsHub) 180f else 0f,
+                        label = "permissions_hub_chevron",
+                    )
                     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showPermissionsHub = true }
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Default.Shield,
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = PrimaryBlue,
-                            )
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Permissions Hub", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                                Text(
-                                    "Review & fix microphone, location, and Bluetooth access.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showPermissionsHub = !showPermissionsHub }
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Default.Shield,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                    tint = PrimaryBlue,
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Permissions Hub",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        "Review & fix microphone, location, and Bluetooth access.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Icon(
+                                    Icons.Default.ExpandMore,
+                                    contentDescription = if (showPermissionsHub) "Collapse" else "Expand",
+                                    modifier = Modifier.rotate(chevronRotation),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            AnimatedVisibility(
+                                visible = showPermissionsHub,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut(),
+                            ) {
+                                InlinePermissionsPanel(
+                                    microphoneGranted = microphoneGranted,
+                                    locationGranted = locationSnapGranted,
+                                    isRequestingMic = false,
+                                    isRequestingLocation = false,
+                                    onRequestMicrophone = {
+                                        requestMicrophonePermissionThen { micPermissionBump++ }
+                                    },
+                                    onRequestLocation = {
+                                        requestLocationPermissionThen { locationPermissionBump++ }
+                                    },
+                                    onOpenBluetoothRadios = { proximityManager.openRadiosSettings() },
+                                    onOpenSystemSettings = {
+                                        compose.project.click.click.ui.utils
+                                            .openApplicationSystemSettings()
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -734,19 +780,171 @@ fun SettingsScreen(
                 .padding(bottom = 24.dp),
         )
 
-        if (showPermissionsHub) {
-            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-                PermissionsHubScreen(
-                    locationService = locationService,
-                    ambientNoiseMonitor = ambientNoiseMonitor,
-                    proximityManager = proximityManager,
-                    requestLocationPermissionThen = requestLocationPermissionThen,
-                    requestMicrophonePermissionThen = requestMicrophonePermissionThen,
-                    onBack = { showPermissionsHub = false },
+    }
+}
+
+/**
+ * Phase 2 — Q4 regression fix: the Permissions Hub is now rendered **inline** inside the
+ * "Privacy & permissions" card via [AnimatedVisibility] instead of pushing a dedicated
+ * full-screen route. Behaviour parity with the old hub (request primitives, live status
+ * badges, "Open system Settings" deep link, Bluetooth radios shortcut) is preserved.
+ */
+@Composable
+private fun InlinePermissionsPanel(
+    microphoneGranted: Boolean,
+    locationGranted: Boolean,
+    isRequestingMic: Boolean,
+    isRequestingLocation: Boolean,
+    onRequestMicrophone: () -> Unit,
+    onRequestLocation: () -> Unit,
+    onOpenBluetoothRadios: () -> Unit,
+    onOpenSystemSettings: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp),
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+        PermissionRow(
+            icon = Icons.Default.Mic,
+            title = "Microphone",
+            description = "Used during Click handshake for a short ambient sound sample. Never recorded.",
+            granted = microphoneGranted,
+            primaryLabel = if (microphoneGranted) null else "Allow microphone",
+            primaryEnabled = !isRequestingMic,
+            onPrimaryClick = onRequestMicrophone,
+        )
+        PermissionRowDivider()
+        PermissionRow(
+            icon = Icons.Default.LocationOn,
+            title = "Location",
+            description = "Used only at the moment of a connection to drop one pin on your private Memory Map.",
+            granted = locationGranted,
+            primaryLabel = if (locationGranted) null else "Allow location",
+            primaryEnabled = !isRequestingLocation,
+            onPrimaryClick = onRequestLocation,
+        )
+        PermissionRowDivider()
+        PermissionRow(
+            icon = Icons.Default.BluetoothSearching,
+            title = "Bluetooth",
+            description = "Nearby Tap handshake uses Bluetooth Low Energy. The OS prompts on first " +
+                "handshake; iOS cannot deep-link to the Bluetooth toggle, so the app's settings page " +
+                "opens instead.",
+            granted = null,
+            primaryLabel = "Open Bluetooth & radios",
+            primaryEnabled = true,
+            onPrimaryClick = onOpenBluetoothRadios,
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(
+            onClick = onOpenSystemSettings,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
+        ) {
+            Icon(
+                Icons.Default.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Open Click in system Settings", fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    granted: Boolean?,
+    primaryLabel: String?,
+    primaryEnabled: Boolean,
+    onPrimaryClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp).padding(top = 2.dp),
+            tint = PrimaryBlue,
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                PermissionStatusBadge(granted = granted)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (primaryLabel != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onPrimaryClick,
+                    enabled = primaryEnabled,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                ) {
+                    Text(primaryLabel, fontWeight = FontWeight.Medium)
+                }
             }
         }
     }
+}
+
+@Composable
+private fun PermissionStatusBadge(granted: Boolean?) {
+    val (color, label, icon) = when (granted) {
+        true -> Triple(Color(0xFF2E7D32), "Granted", Icons.Default.CheckCircle)
+        false -> Triple(MaterialTheme.colorScheme.error, "Denied", Icons.Default.WarningAmber)
+        null -> Triple(
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            "System-managed",
+            Icons.Default.WarningAmber,
+        )
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = color,
+        )
+    }
+}
+
+@Composable
+private fun PermissionRowDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+    )
 }
 
 private fun profileAvatarInitials(user: User?): String {

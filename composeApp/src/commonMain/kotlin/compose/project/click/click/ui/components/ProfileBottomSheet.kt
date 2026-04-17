@@ -1,7 +1,5 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,8 +20,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Description
@@ -35,15 +37,20 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,20 +63,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import compose.project.click.click.ui.theme.DeepBlue
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
  *
- * Four subtabs: **Timeline · Media · Links · Files**. The sheet is deliberately
- * rendering-only — data fetching and persistence are the caller's job. This keeps
- * the component trivially previewable and lets MapScreen + ConnectionsScreen reuse
- * the same sheet. Empty tabs render a polite empty state rather than a blank panel.
+ * Four subtabs backed by a [SecondaryTabRow] + [HorizontalPager]:
+ * **Timeline · Media · Links · Files**. When [ProfileSheetState.userId] and
+ * [ProfileSheetState.viewerUserId] are both provided, the Timeline subtab hydrates the
+ * legacy profile rendering (interests, shared interests, availability intents, "Our
+ * timeline" encounters) via [SupabaseRepository.fetchUserPublicProfile] — restoring the
+ * data that was previously only available through the standalone
+ * [UserProfileBottomSheet]. Media / Links / Files tabs remain empty-state placeholders
+ * until the per-conversation attachment query (C15) is plumbed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileBottomSheet(
     state: ProfileSheetState,
@@ -78,7 +93,35 @@ fun ProfileBottomSheet(
     onOpenLink: (String) -> Unit = {},
     onDownloadFile: (ProfileSheetFile) -> Unit = {},
 ) {
-    var selectedTab by remember { mutableStateOf(ProfileSheetTab.Timeline) }
+    val pagerState = rememberPagerState(pageCount = { ProfileSheetTab.entries.size })
+    val scope = rememberCoroutineScope()
+
+    // Hydrate legacy profile data for the Timeline subtab whenever both ids are known.
+    val repository = remember { SupabaseRepository() }
+    var legacyProfile by remember(state.userId, state.viewerUserId) {
+        mutableStateOf<UserPublicProfile?>(null)
+    }
+    var legacyLoading by remember(state.userId, state.viewerUserId) { mutableStateOf(false) }
+    var legacyError by remember(state.userId, state.viewerUserId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.userId, state.viewerUserId) {
+        val uid = state.userId
+        if (uid.isNullOrBlank()) {
+            legacyProfile = null
+            legacyLoading = false
+            legacyError = null
+            return@LaunchedEffect
+        }
+        legacyLoading = true
+        legacyError = null
+        val result = runCatching {
+            withContext(Dispatchers.Default) {
+                repository.fetchUserPublicProfile(state.viewerUserId, uid)
+            }
+        }
+        legacyProfile = result.getOrNull()
+        legacyError = result.exceptionOrNull()?.message
+        legacyLoading = false
+    }
 
     Column(
         modifier = Modifier
@@ -122,15 +165,54 @@ fun ProfileBottomSheet(
         }
 
         Spacer(Modifier.height(18.dp))
-        ProfileTabRow(selected = selectedTab, onSelect = { selectedTab = it })
+
+        SecondaryTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            ProfileSheetTab.entries.forEachIndexed { index, tab ->
+                val selected = pagerState.currentPage == index
+                Tab(
+                    selected = selected,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                    text = {
+                        Text(
+                            tab.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            tab.icon,
+                            contentDescription = tab.label,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    selectedContentColor = PrimaryBlue,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Divider(
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
             thickness = 1.dp,
         )
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            when (selectedTab) {
-                ProfileSheetTab.Timeline -> TimelinePanel(items = state.timeline)
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.Top,
+        ) { pageIndex ->
+            when (ProfileSheetTab.entries[pageIndex]) {
+                ProfileSheetTab.Timeline -> TimelinePanel(
+                    items = state.timeline,
+                    legacyProfile = legacyProfile,
+                    legacyLoading = legacyLoading,
+                    legacyError = legacyError,
+                    showLegacy = !state.userId.isNullOrBlank(),
+                )
                 ProfileSheetTab.Media -> MediaPanel(items = state.media)
                 ProfileSheetTab.Links -> LinksPanel(items = state.links, onOpen = onOpenLink)
                 ProfileSheetTab.Files -> FilesPanel(items = state.files, onDownload = onDownloadFile)
@@ -150,6 +232,10 @@ data class ProfileSheetState(
     val media: List<ProfileSheetMedia> = emptyList(),
     val links: List<ProfileSheetLink> = emptyList(),
     val files: List<ProfileSheetFile> = emptyList(),
+    /** Peer user id — when non-blank, Timeline subtab hydrates interests / encounters. */
+    val userId: String? = null,
+    /** Viewer user id — needed to compute shared interests + mutual connection. */
+    val viewerUserId: String? = null,
 )
 
 data class ProfileSheetBadge(
@@ -266,60 +352,15 @@ private fun ProfileSheetHeader(
 }
 
 @Composable
-private fun ProfileTabRow(
-    selected: ProfileSheetTab,
-    onSelect: (ProfileSheetTab) -> Unit,
+private fun TimelinePanel(
+    items: List<ProfileSheetTimelineItem>,
+    legacyProfile: UserPublicProfile?,
+    legacyLoading: Boolean,
+    legacyError: String?,
+    showLegacy: Boolean,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        ProfileSheetTab.entries.forEach { tab ->
-            val isSelected = tab == selected
-            val tint by animateFloatAsState(
-                targetValue = if (isSelected) 1f else 0.55f,
-                animationSpec = tween(180),
-                label = "tab_tint_${tab.name}",
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelect(tab) }
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(
-                    tab.icon,
-                    contentDescription = tab.label,
-                    modifier = Modifier.size(20.dp),
-                    tint = (if (isSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant)
-                        .copy(alpha = tint),
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    tab.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = (if (isSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant)
-                        .copy(alpha = tint),
-                )
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .height(2.dp)
-                        .width(if (isSelected) 26.dp else 0.dp)
-                        .background(PrimaryBlue, RoundedCornerShape(1.dp)),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimelinePanel(items: List<ProfileSheetTimelineItem>) {
-    if (items.isEmpty()) {
+    val hasTimelineItems = items.isNotEmpty()
+    if (!showLegacy && !hasTimelineItems) {
         EmptyTabState(
             icon = Icons.Outlined.History,
             title = "No timeline yet",
@@ -327,12 +368,28 @@ private fun TimelinePanel(items: List<ProfileSheetTimelineItem>) {
         )
         return
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(items, key = { it.id }) { TimelineRow(item = it) }
+        if (hasTimelineItems) {
+            items.forEach { TimelineRow(item = it) }
+        }
+        if (showLegacy) {
+            if (hasTimelineItems) {
+                Spacer(Modifier.height(6.dp))
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                Spacer(Modifier.height(6.dp))
+            }
+            ProfileLegacyTimelineContent(
+                profile = legacyProfile,
+                loading = legacyLoading,
+                error = legacyError,
+            )
+        }
     }
 }
 
