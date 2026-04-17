@@ -1,6 +1,9 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.chat.attachments.AttachmentCrypto
+import compose.project.click.click.chat.attachments.ChatAttachmentValidator
 import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
@@ -1827,6 +1830,115 @@ class SupabaseChatRepository(
             ).getOrElse { return null }
         } catch (e: Exception) {
             println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
+            null
+        }
+    }
+
+    override suspend fun uploadEncryptedBlob(
+        bucketName: String,
+        chatId: String,
+        senderUserId: String,
+        plainBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+    ): ChatRepository.EncryptedAttachmentUpload? {
+        if (plainBytes.isEmpty()) return null
+        val trimmedChatId = chatId.trim()
+        val trimmedSender = senderUserId.trim()
+        val trimmedName = fileName.trim()
+        if (trimmedChatId.isEmpty() || trimmedSender.isEmpty()) return null
+
+        return when (bucketName) {
+            CHAT_MEDIA_BUCKET -> uploadEncryptedMediaBlob(
+                chatId = trimmedChatId,
+                senderUserId = trimmedSender,
+                plainBytes = plainBytes,
+                mimeType = mimeType,
+                fileName = trimmedName.ifEmpty { "media" },
+            )
+            CHAT_ATTACHMENTS_BUCKET -> uploadEncryptedAttachmentBlob(
+                chatId = trimmedChatId,
+                senderUserId = trimmedSender,
+                plainBytes = plainBytes,
+                mimeType = mimeType,
+                fileName = trimmedName,
+            )
+            else -> {
+                println("ChatRepository: uploadEncryptedBlob refused unknown bucket=$bucketName")
+                null
+            }
+        }
+    }
+
+    private suspend fun uploadEncryptedMediaBlob(
+        chatId: String,
+        senderUserId: String,
+        plainBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+    ): ChatRepository.EncryptedAttachmentUpload? = try {
+        // Route through the existing `/api/chat/media` path so wire compatibility with legacy
+        // image/audio upload sites stays bit-for-bit identical.
+        val objectPath = "$senderUserId/$chatId/$fileName"
+        val publicUrl = uploadChatMedia(plainBytes, objectPath, mimeType)
+        if (publicUrl.isNullOrBlank()) null
+        else ChatRepository.EncryptedAttachmentUpload(
+            path = publicUrl,
+            fileMasterKeyBase64 = "",
+            sha256Base64 = AttachmentCrypto.sha256Base64(plainBytes),
+            sizeBytes = plainBytes.size.toLong(),
+            mimeType = mimeType.ifBlank { "application/octet-stream" },
+            fileName = fileName,
+        )
+    } catch (e: Exception) {
+        println("ChatRepository: uploadEncryptedBlob(media) failed: ${e.redactedRestMessage()}")
+        null
+    }
+
+    private suspend fun uploadEncryptedAttachmentBlob(
+        chatId: String,
+        senderUserId: String,
+        plainBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+    ): ChatRepository.EncryptedAttachmentUpload? {
+        // Client-side gate — server enforces identical rules via the Storage bucket policy, but
+        // failing fast here avoids a round-trip and surfaces a friendly error.
+        val validation = ChatAttachmentValidator.validate(
+            fileName = fileName,
+            mimeType = mimeType,
+            sizeBytes = plainBytes.size.toLong(),
+        )
+        if (validation is ChatAttachmentValidator.Result.Invalid) {
+            println("ChatRepository: attachment validation failed reason=${validation.reason}")
+            return null
+        }
+
+        return try {
+            val fileMasterKey = AttachmentCrypto.generateFileMasterKey()
+            val cipher = AttachmentCrypto.encryptFileBytes(plainBytes, fileMasterKey)
+            val sha = AttachmentCrypto.sha256Base64(plainBytes)
+            val jwt = tokenStorage.getJwt() ?: return null
+            val uploaded = apiClient.uploadAttachment(
+                fileBytes = cipher,
+                chatId = chatId,
+                mimeType = mimeType.ifBlank { "application/octet-stream" },
+                fileName = fileName,
+                authToken = jwt,
+            ).getOrElse { err ->
+                println("ChatRepository: attachment upload failed: ${err.redactedRestMessage()}")
+                return null
+            }
+            ChatRepository.EncryptedAttachmentUpload(
+                path = uploaded.path,
+                fileMasterKeyBase64 = AttachmentCrypto.encodeFileMasterKeyBase64(fileMasterKey),
+                sha256Base64 = sha,
+                sizeBytes = plainBytes.size.toLong(),
+                mimeType = mimeType.ifBlank { "application/octet-stream" },
+                fileName = fileName,
+            )
+        } catch (e: Exception) {
+            println("ChatRepository: uploadEncryptedBlob(attachments) failed: ${e.redactedRestMessage()}")
             null
         }
     }

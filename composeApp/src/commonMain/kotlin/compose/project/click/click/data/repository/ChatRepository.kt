@@ -187,4 +187,38 @@ interface ChatRepository {
 
     /** Downloads ciphertext from [mediaUrl] and decrypts for [chatId] as [viewerUserId]. */
     suspend fun downloadAndDecryptChatMedia(chatId: String, viewerUserId: String, mediaUrl: String): ByteArray?
+
+    /**
+     * Outcome of an encrypted attachment upload. The sender embeds [fileMasterKeyBase64] +
+     * [sha256Base64] inside the `ccx:v1:` envelope, which is then E2EE-wrapped into the message
+     * body. [path] is the canonical Storage object path (signed URLs minted on demand for readers).
+     */
+    data class EncryptedAttachmentUpload(
+        val path: String,
+        val fileMasterKeyBase64: String,
+        val sha256Base64: String,
+        val sizeBytes: Long,
+        val mimeType: String,
+        val fileName: String,
+    )
+
+    /**
+     * Unified encrypted blob upload entry-point (Phase 2 — C4).
+     *
+     * Picks the target bucket based on [bucketName]:
+     *   - `CHAT_MEDIA_BUCKET`       — images / voice (keyed via the chat's E2EE keys).
+     *   - `CHAT_ATTACHMENTS_BUCKET` — arbitrary files with a fresh per-file AES-256 master key
+     *                                 and a `ccx:v1:` envelope ready for embedding in a message.
+     *
+     * Returns `null` on validation failure, auth failure, or Storage rejection. Never throws;
+     * caller is expected to surface a user-friendly error.
+     */
+    suspend fun uploadEncryptedBlob(
+        bucketName: String,
+        chatId: String,
+        senderUserId: String,
+        plainBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+    ): EncryptedAttachmentUpload?
 }

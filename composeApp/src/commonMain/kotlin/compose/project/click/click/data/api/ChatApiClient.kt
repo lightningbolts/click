@@ -143,6 +143,37 @@ class ChatApiClient(
     )
 
     @Serializable
+    private data class ChatAttachmentUploadJsonBody(
+        @SerialName("chat_id") val chatId: String,
+        @SerialName("mime_type") val mimeType: String,
+        @SerialName("file_name") val fileName: String,
+        @SerialName("file_b64") val fileBase64: String,
+    )
+
+    @Serializable
+    private data class ChatAttachmentUploadResponse(
+        val path: String,
+        val url: String? = null,
+        @SerialName("ttl_seconds") val ttlSeconds: Int = 0,
+    )
+
+    @Serializable
+    private data class ChatAttachmentSignBody(val path: String)
+
+    @Serializable
+    private data class ChatAttachmentSignResponse(
+        val url: String? = null,
+        @SerialName("ttl_seconds") val ttlSeconds: Int = 0,
+    )
+
+    /** Canonical outcome of a successful encrypted attachment upload. */
+    data class UploadedAttachment(
+        val path: String,
+        /** Short-lived signed URL. May be null if the server couldn't mint one. */
+        val initialSignedUrl: String?,
+    )
+
+    @Serializable
     private data class ClickWebHubMessageEnvelope(val message: HubMessageApiDto)
 
     /** Row returned from POST /api/hub/messages (matches public.hub_messages). */
@@ -539,6 +570,88 @@ class ChatApiClient(
                 }
             } else {
                 Result.failure(Exception("Failed to upload media: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Upload already-encrypted attachment bytes to the `chat-attachments` bucket via the Next.js
+     * gatekeeper. Returns the canonical object path plus a short-lived signed URL for immediate
+     * re-use by the uploader. The server writes under `{chatId}/{uid}/{safe_filename}` to satisfy
+     * the Storage RLS policies; never set request-level `multipart/form-data` without a boundary.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun uploadAttachment(
+        fileBytes: ByteArray,
+        chatId: String,
+        mimeType: String,
+        fileName: String,
+        authToken: String,
+    ): Result<UploadedAttachment> {
+        if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty attachment"))
+        if (fileName.isBlank()) return Result.failure(IllegalArgumentException("file_name is required"))
+        return try {
+            val encoded = Base64.encode(fileBytes)
+            val response = client.post("$clickWebBaseUrl/api/chat/attachments") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ChatAttachmentUploadJsonBody(
+                        chatId = chatId,
+                        mimeType = mimeType.ifBlank { "application/octet-stream" },
+                        fileName = fileName,
+                        fileBase64 = encoded,
+                    ),
+                )
+            }
+            if (response.status.value in 200..299) {
+                val payload = response.body<ChatAttachmentUploadResponse>()
+                val path = payload.path.trim()
+                if (path.isNotEmpty()) {
+                    Result.success(UploadedAttachment(path = path, initialSignedUrl = payload.url))
+                } else {
+                    Result.failure(Exception("Attachment upload response missing path"))
+                }
+            } else {
+                Result.failure(Exception("Failed to upload attachment: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** Mint a fresh signed URL for an existing `chat-attachments` object path. */
+    suspend fun signAttachmentUrl(path: String, authToken: String): Result<String> {
+        if (path.isBlank()) return Result.failure(IllegalArgumentException("path is required"))
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/chat/attachments/sign") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ChatAttachmentSignBody(path = path))
+            }
+            if (response.status.value in 200..299) {
+                val payload = response.body<ChatAttachmentSignResponse>()
+                val url = payload.url?.trim().orEmpty()
+                if (url.isNotEmpty()) Result.success(url)
+                else Result.failure(Exception("Attachment sign response missing url"))
+            } else {
+                Result.failure(Exception("Failed to sign attachment: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** Download raw ciphertext bytes for a signed attachment URL. */
+    suspend fun downloadAttachmentBytes(signedUrl: String): Result<ByteArray> {
+        return try {
+            val response = client.get(signedUrl)
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ByteArray>())
+            } else {
+                Result.failure(Exception("Attachment download failed: ${response.status}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

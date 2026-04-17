@@ -195,4 +195,13 @@ class FakeChatRepository(
         viewerUserId: String,
         mediaUrl: String,
     ): ByteArray? = null
+
+    override suspend fun uploadEncryptedBlob(
+        bucketName: String,
+        chatId: String,
+        senderUserId: String,
+        plainBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+    ): ChatRepository.EncryptedAttachmentUpload? = null
 }
