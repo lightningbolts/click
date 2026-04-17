@@ -23,6 +23,7 @@ import platform.MapKit.MKStandardMapConfiguration
 import platform.MapKit.MKMapElevationStyleFlat
 import platform.UIKit.UIColor
 import platform.UIKit.UIUserInterfaceStyle
+import platform.darwin.NSObject
 import kotlin.collections.filterIsInstance
 import kotlin.math.abs
 import kotlin.math.ln
@@ -51,11 +52,22 @@ actual fun PlatformMap(
     var lastAppliedTargetLon by remember { mutableStateOf<Double?>(null) }
     var lastAppliedTargetZoom by remember { mutableStateOf<Double?>(null) }
 
+    // C12: MKMapViewDelegate bridge so iOS pin taps reach the shared ProfileBottomSheet
+    // flow through the same `onPinTapped` / `onClusterTapped` callbacks as Android.
+    // We keep the delegate stable across recompositions and refresh its callback /
+    // lookup references in `update` — MapKit fires `mapView:didSelectAnnotationView:`
+    // on tap, and we resolve the annotation back to its MapPin / MapClusterPin by
+    // object identity against the lists we just added.
+    val pinTapDelegate = remember { MapPinTapDelegate() }
+    pinTapDelegate.onPin = onPinTapped
+    pinTapDelegate.onCluster = onClusterTapped
+
     UIKitView(
         modifier = modifier,
         factory = {
             MKMapView().apply {
                 mapRef = this
+                delegate = pinTapDelegate
                 showsCompass = true
                 showsScale = false
                 zoomEnabled = true
@@ -76,6 +88,9 @@ actual fun PlatformMap(
             mapRef = map
             // Update user location visibility based on ghost mode
             map.showsUserLocation = !ghostMode
+            if (map.delegate !== pinTapDelegate) {
+                map.delegate = pinTapDelegate
+            }
             
             val currentHash = pins.hashCode() + clusters.hashCode()
             
@@ -86,6 +101,9 @@ actual fun PlatformMap(
                 if (existingAnnotations.isNotEmpty()) {
                     map.removeAnnotations(existingAnnotations)
                 }
+
+                val pinEntries = mutableListOf<Pair<MKPointAnnotation, MapPin>>()
+                val clusterEntries = mutableListOf<Pair<MKPointAnnotation, MapClusterPin>>()
 
                 // Add individual pins with color based on time state
                 pins.forEach { pin ->
@@ -98,6 +116,7 @@ actual fun PlatformMap(
                     ann.setTitle(displayTitle)
                     ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
                     map.addAnnotation(ann)
+                    pinEntries += ann to pin
                 }
 
                 // Add cluster pins
@@ -107,7 +126,11 @@ actual fun PlatformMap(
                     ann.setTitle("$icon ${cluster.count} memories")
                     ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
                     map.addAnnotation(ann)
+                    clusterEntries += ann to cluster
                 }
+
+                pinTapDelegate.pinEntries = pinEntries
+                pinTapDelegate.clusterEntries = clusterEntries
 
                 // Initial centering
                 if (!hasCentered) {
@@ -253,6 +276,38 @@ private fun approximateZoomLevel(latitudeDelta: Double, longitudeDelta: Double):
 
 private fun approximatelyEqual(previous: Double?, current: Double, epsilon: Double = 0.00001): Boolean {
     return previous != null && kotlin.math.abs(previous - current) <= epsilon
+}
+
+/**
+ * Bridges `MKMapViewDelegate` pin-tap callbacks back into the Kotlin `onPinTapped` /
+ * `onClusterTapped` lambdas (C12). Identity-based lookup because MKPointAnnotation does
+ * not carry an app-level id; the list is small (viewport-bound) so O(n) is fine and
+ * robust against coordinate-rounding collisions. Always deselects after dispatch so a
+ * repeated tap on the same pin re-fires the selection.
+ */
+@OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
+private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
+    var pinEntries: List<Pair<MKPointAnnotation, MapPin>> = emptyList()
+    var clusterEntries: List<Pair<MKPointAnnotation, MapClusterPin>> = emptyList()
+    var onPin: (MapPin) -> Unit = {}
+    var onCluster: (MapClusterPin) -> Unit = {}
+
+    override fun mapView(mapView: MKMapView, didSelectAnnotationView: MKAnnotationView) {
+        val annotation = didSelectAnnotationView.annotation
+        if (annotation is MKUserLocation) return
+        val pointAnnotation = annotation as? MKPointAnnotation ?: return
+        val pin = pinEntries.firstOrNull { it.first === pointAnnotation }?.second
+        if (pin != null) {
+            onPin(pin)
+            mapView.deselectAnnotation(pointAnnotation, animated = true)
+            return
+        }
+        val cluster = clusterEntries.firstOrNull { it.first === pointAnnotation }?.second
+        if (cluster != null) {
+            onCluster(cluster)
+            mapView.deselectAnnotation(pointAnnotation, animated = true)
+        }
+    }
 }
 
 private fun metersForZoom(zoomLevel: Double): Double {
