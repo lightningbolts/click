@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.api.ConnectionTabMessage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.AttachmentCrypto
@@ -134,11 +135,19 @@ fun ProfileBottomSheet(
     var connectionLocalMessages by remember(state.connectionId, selectedUserId, state.viewerUserId) {
         mutableStateOf<List<ProfileSheetLocalMessage>>(emptyList())
     }
+    var connectionTabMedia by remember(state.connectionId, selectedUserId, state.viewerUserId) {
+        mutableStateOf<List<ProfileSheetMedia>>(emptyList())
+    }
+    var connectionTabFiles by remember(state.connectionId, selectedUserId, state.viewerUserId) {
+        mutableStateOf<List<ProfileSheetFile>>(emptyList())
+    }
 
     LaunchedEffect(selectedUserId, state.connectionId, state.viewerUserId) {
         val connectionId = state.connectionId?.trim().orEmpty()
         if (connectionId.isBlank()) {
             connectionLocalMessages = emptyList()
+            connectionTabMedia = emptyList()
+            connectionTabFiles = emptyList()
             return@LaunchedEffect
         }
 
@@ -160,6 +169,17 @@ fun ProfileBottomSheet(
                     metadata = msg.metadata,
                 )
             }
+
+        val tabsPayload = runCatching {
+            connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
+        }.getOrNull()
+
+        connectionTabMedia = tabsPayload?.media
+            ?.mapNotNull { it.toProfileSheetMediaFromTab() }
+            .orEmpty()
+        connectionTabFiles = tabsPayload?.files
+            ?.map { it.toProfileSheetFileFromTab() }
+            .orEmpty()
     }
 
     val profileLocalMessages = remember(state.localMessages, connectionLocalMessages) {
@@ -234,17 +254,18 @@ fun ProfileBottomSheet(
         }
     }
 
-    val effectiveMedia = remember(localMediaMessages, state.media) {
-        val fromLocal = localMediaMessages.mapNotNull { it.toProfileSheetMedia() }
-        if (fromLocal.isNotEmpty()) fromLocal else state.media
+    val effectiveMedia = remember(localMediaMessages, connectionTabMedia, state.media) {
+        mergeProfileMedia(
+            localMediaMessages.mapNotNull { it.toProfileSheetMedia() } + connectionTabMedia + state.media,
+        )
     }
-    val effectiveFiles = remember(localFileMessages, state.files) {
-        val fromLocal = localFileMessages.map { it.toProfileSheetFile() }
-        if (fromLocal.isNotEmpty()) fromLocal else state.files
+    val effectiveFiles = remember(localFileMessages, connectionTabFiles, state.files) {
+        mergeProfileFiles(
+            localFileMessages.map { it.toProfileSheetFile() } + connectionTabFiles + state.files,
+        )
     }
     val effectiveLinks = remember(localLinkMessages, state.links) {
-        val fromLocal = extractLinksFromLocalMessages(localLinkMessages)
-        if (fromLocal.isNotEmpty()) fromLocal else state.links
+        mergeProfileLinks(extractLinksFromLocalMessages(localLinkMessages) + state.links)
     }
 
     val handleOpenLink: (String) -> Unit = remember(onOpenLink, uriHandler) {
@@ -408,18 +429,44 @@ fun ProfileBottomSheet(
                 title = { Text("Media") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AsyncImage(
-                            model = media.imageUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                        )
+                        if (media.mediaType == ProfileSheetMediaType.Image) {
+                            AsyncImage(
+                                model = media.mediaUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            )
+                        } else {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Text(
+                                        text = "Audio recording",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "Open externally to play or download this voice note.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         Text(
-                            text = media.captionedAt ?: "Open this image externally or keep browsing.",
+                            text = media.captionedAt
+                                ?: if (media.mediaType == ProfileSheetMediaType.Audio)
+                                    "Voice note"
+                                else
+                                    "Open this image externally or keep browsing.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -428,7 +475,7 @@ fun ProfileBottomSheet(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            handleOpenLink(media.imageUrl)
+                            handleOpenLink(media.mediaUrl)
                             selectedMediaForPreview = null
                         },
                     ) {
@@ -499,9 +546,15 @@ data class ProfileSheetTimelineItem(
 
 data class ProfileSheetMedia(
     val id: String,
-    val imageUrl: String,
+    val mediaUrl: String,
+    val mediaType: ProfileSheetMediaType = ProfileSheetMediaType.Image,
     val captionedAt: String? = null,
 )
+
+enum class ProfileSheetMediaType {
+    Image,
+    Audio,
+}
 
 data class ProfileSheetLink(
     val id: String,
@@ -691,33 +744,81 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
 
 @Composable
 private fun MediaPanel(items: List<ProfileSheetMedia>, onOpenMedia: (ProfileSheetMedia) -> Unit) {
+    val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
+    val audioItems = items.filter { it.mediaType == ProfileSheetMediaType.Audio }
+    val imageRows = imageItems.chunked(3)
+
     if (items.isEmpty()) {
         EmptyTabState(
             icon = Icons.Outlined.Image,
-            title = "No shared photos",
-            body = "Photos you exchange in chat will appear here.",
+            title = "No shared media",
+            body = "Photos and voice notes you exchange in chat will appear here.",
         )
         return
     }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+
+    LazyColumn(
         modifier = Modifier.fillMaxSize().padding(top = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(items, key = { it.id }) { media ->
-            AsyncImage(
-                model = media.imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onOpenMedia(media) },
-            )
+        items(imageRows, key = { row -> row.firstOrNull()?.id ?: "row" }) { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { media ->
+                    AsyncImage(
+                        model = media.mediaUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(110.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onOpenMedia(media) },
+                    )
+                }
+                repeat(3 - row.size) {
+                    Spacer(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(110.dp),
+                    )
+                }
+            }
+        }
+
+        if (audioItems.isNotEmpty()) {
+            items(audioItems, key = { it.id }) { media ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .clickable { onOpenMedia(media) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Message, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Voice note",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (!media.captionedAt.isNullOrBlank()) {
+                            Text(
+                                text = media.captionedAt,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -874,9 +975,27 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
     val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
         meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
     } ?: return null
+    val lowerType = messageType.lowercase()
+    val mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image
     return ProfileSheetMedia(
         id = id,
-        imageUrl = url,
+        mediaUrl = url,
+        mediaType = mediaType,
+        captionedAt = content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
+    )
+}
+
+private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia? {
+    val lowerType = messageType.lowercase()
+    if (lowerType != "image" && lowerType != "audio") return null
+    val meta = metadata as? JsonObject
+    val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
+        meta?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    } ?: return null
+    return ProfileSheetMedia(
+        id = id,
+        mediaUrl = url,
+        mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
         captionedAt = content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
     )
 }
@@ -928,7 +1047,56 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
     )
 }
 
-private val METADATA_URL_KEYS = listOf("url", "storage_url", "image_url", "audio_url", "media_url")
+private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile {
+    val meta = metadata as? JsonObject
+    val fileName = meta?.stringAt("file_name")
+        ?: meta?.stringAt("filename")
+        ?: meta?.stringAt("name")
+        ?: content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
+        ?: "Attachment"
+    val size = meta?.get("file_size")?.jsonPrimitive?.longOrNull
+        ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
+        ?: meta?.get("size")?.jsonPrimitive?.longOrNull
+        ?: 0L
+    val mime = meta?.stringAt("mime_type")
+        ?: meta?.stringAt("content_type")
+        ?: "application/octet-stream"
+    val downloadUrl = meta?.stringAt("signed_url")
+        ?: meta?.stringAt("public_url")
+        ?: meta?.stringAt("url")
+        ?: meta?.stringAt("storage_url")
+        ?: meta?.stringAt("media_url")
+    val attachmentPath = meta?.stringAt("path")
+        ?: meta?.stringAt("storage_path")
+        ?: meta?.stringAt("object_path")
+    val attachmentKeyBase64 = meta?.stringAt("key")
+        ?: meta?.stringAt("file_key")
+        ?: meta?.stringAt("file_master_key")
+    val attachmentSha256Base64 = meta?.stringAt("sha256")
+        ?: meta?.stringAt("sha256_base64")
+
+    return ProfileSheetFile(
+        id = id,
+        fileName = fileName,
+        sizeBytes = size,
+        mimeType = mime,
+        timestamp = Instant.fromEpochMilliseconds(timeCreated).toString(),
+        downloadUrl = downloadUrl,
+        attachmentPath = attachmentPath,
+        attachmentKeyBase64 = attachmentKeyBase64,
+        attachmentSha256Base64 = attachmentSha256Base64,
+    )
+}
+
+private val METADATA_URL_KEYS = listOf(
+    "signed_url",
+    "public_url",
+    "url",
+    "storage_url",
+    "image_url",
+    "audio_url",
+    "media_url",
+)
 
 private fun ProfileSheetLocalMessage.hasMetadataMediaUrl(): Boolean {
     val meta = metadata as? JsonObject ?: return false
@@ -983,6 +1151,57 @@ private fun extractLinksFromLocalMessages(
         }
     }
     return out
+}
+
+private fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileSheetMedia> {
+    if (items.isEmpty()) return emptyList()
+    val merged = LinkedHashMap<String, ProfileSheetMedia>()
+    items.forEach { media ->
+        val prev = merged[media.id]
+        if (prev == null) {
+            merged[media.id] = media
+            return@forEach
+        }
+        merged[media.id] = prev.copy(
+            mediaUrl = if (media.mediaUrl.isNotBlank()) media.mediaUrl else prev.mediaUrl,
+            mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
+            captionedAt = media.captionedAt ?: prev.captionedAt,
+        )
+    }
+    return merged.values.toList()
+}
+
+private fun mergeProfileFiles(items: List<ProfileSheetFile>): List<ProfileSheetFile> {
+    if (items.isEmpty()) return emptyList()
+    val merged = LinkedHashMap<String, ProfileSheetFile>()
+    items.forEach { file ->
+        val prev = merged[file.id]
+        if (prev == null) {
+            merged[file.id] = file
+            return@forEach
+        }
+        merged[file.id] = prev.copy(
+            fileName = if (file.fileName != "Attachment") file.fileName else prev.fileName,
+            sizeBytes = if (file.sizeBytes > 0) file.sizeBytes else prev.sizeBytes,
+            mimeType = if (file.mimeType != "application/octet-stream") file.mimeType else prev.mimeType,
+            timestamp = if (file.timestamp.isNotBlank()) file.timestamp else prev.timestamp,
+            downloadUrl = file.downloadUrl ?: prev.downloadUrl,
+            attachmentPath = file.attachmentPath ?: prev.attachmentPath,
+            attachmentKeyBase64 = file.attachmentKeyBase64 ?: prev.attachmentKeyBase64,
+            attachmentSha256Base64 = file.attachmentSha256Base64 ?: prev.attachmentSha256Base64,
+        )
+    }
+    return merged.values.toList()
+}
+
+private fun mergeProfileLinks(items: List<ProfileSheetLink>): List<ProfileSheetLink> {
+    if (items.isEmpty()) return emptyList()
+    val merged = LinkedHashMap<String, ProfileSheetLink>()
+    items.forEach { link ->
+        val key = link.url.trim().lowercase()
+        if (key.isNotBlank()) merged[key] = link
+    }
+    return merged.values.toList()
 }
 
 /**
