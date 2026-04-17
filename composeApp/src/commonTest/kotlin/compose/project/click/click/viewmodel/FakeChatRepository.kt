@@ -204,4 +204,10 @@ class FakeChatRepository(
         mimeType: String,
         fileName: String,
     ): ChatRepository.EncryptedAttachmentUpload? = null
+
+    override suspend fun downloadAttachmentPlaintext(
+        path: String,
+        fileMasterKeyBase64: String,
+        expectedSha256Base64: String,
+    ): ByteArray? = null
 }

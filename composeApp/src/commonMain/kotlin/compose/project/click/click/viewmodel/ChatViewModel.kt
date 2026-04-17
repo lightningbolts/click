@@ -21,7 +21,10 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
+import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
+import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
@@ -45,7 +48,9 @@ import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: 
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
+import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
@@ -1832,6 +1837,127 @@ class ChatViewModel(
                 _isMessageSubmitInProgress.value = false
             }
         }
+    }
+
+    /**
+     * Send an encrypted arbitrary attachment (C4). Generates a fresh per-file master key inside
+     * [ChatRepository.uploadEncryptedBlob], uploads the ciphertext to the `chat-attachments`
+     * bucket, then sends a `message_type = file` message whose body is the `ccx:v1:` envelope —
+     * so the per-file key travels entirely inside the existing E2EE wire format.
+     */
+    fun sendChatFile(bytes: ByteArray, mimeType: String, fileName: String) {
+        if (bytes.isEmpty()) return
+        if (_isMessageSubmitInProgress.value) return
+        val connectionId = currentConnectionId ?: return
+        val userId = _currentUserId.value ?: return
+        val trimmedName = fileName.trim().ifEmpty { "attachment" }
+
+        val validation = ChatAttachmentValidator.validate(
+            fileName = trimmedName,
+            mimeType = mimeType,
+            sizeBytes = bytes.size.toLong(),
+        )
+        if (validation is ChatAttachmentValidator.Result.Invalid) {
+            _messageSendError.value = validation.message
+            return
+        }
+
+        _messageSendError.value = null
+        _isMessageSubmitInProgress.value = true
+        viewModelScope.launch {
+            try {
+                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                    _messageSendError.value = "Failed to send — unable to start chat"
+                    return@launch
+                }
+                val uploaded = chatRepository.uploadEncryptedBlob(
+                    bucketName = CHAT_ATTACHMENTS_BUCKET,
+                    chatId = apiChatId,
+                    senderUserId = userId,
+                    plainBytes = bytes,
+                    mimeType = mimeType,
+                    fileName = trimmedName,
+                ) ?: run {
+                    _messageSendError.value = "Failed to upload attachment"
+                    return@launch
+                }
+                val envelope = AttachmentCrypto.Envelope(
+                    v = 1,
+                    type = "file",
+                    name = uploaded.fileName,
+                    mime = uploaded.mimeType,
+                    size = uploaded.sizeBytes,
+                    path = uploaded.path,
+                    key = uploaded.fileMasterKeyBase64,
+                    sha256 = uploaded.sha256Base64,
+                )
+                val envelopeBody = AttachmentCrypto.encodeEnvelope(envelope)
+
+                val replyTarget = _replyingTo.value
+                val meta = buildJsonObject {
+                    put("attachment_path", uploaded.path)
+                    put("attachment_name", uploaded.fileName)
+                    put("attachment_mime", uploaded.mimeType)
+                    put("attachment_size", uploaded.sizeBytes)
+                    if (replyTarget != null) {
+                        put("reply_to_id", replyTarget.message.id)
+                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                    }
+                }
+
+                val message = chatRepository.sendMessage(
+                    chatId = apiChatId,
+                    userId = userId,
+                    content = envelopeBody,
+                    messageType = ChatMessageType.FILE,
+                    metadata = meta,
+                )
+                if (message != null) {
+                    _replyingTo.value = null
+                    val currentUser = resolveMessageUser(userId, apiChatId)
+                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                        ?: User(id = userId, name = "You", createdAt = 0L)
+                    applyInsertedMessage(message, currentUser, userId)
+                    activateConnectionIfPending(connectionId)
+                } else {
+                    _messageSendError.value = "Failed to send attachment"
+                }
+            } catch (e: Exception) {
+                _messageSendError.value = "Failed to send attachment — ${e.message ?: "error"}"
+                println("Error sending attachment: ${e.redactedRestMessage()}")
+            } finally {
+                _isMessageSubmitInProgress.value = false
+            }
+        }
+    }
+
+    /**
+     * Download + decrypt a chat attachment (Phase 2 — C6). Mints a fresh signed URL, pulls the
+     * ciphertext, decrypts with the per-file master key from the envelope, re-verifies SHA-256
+     * on the plaintext, then writes the bytes to the platform Downloads surface. All failures
+     * are surfaced as a user-visible [ChatAttachmentDownloadOutcome.Failure].
+     */
+    suspend fun downloadChatAttachment(
+        envelope: AttachmentCrypto.Envelope,
+    ): ChatAttachmentDownloadOutcome {
+        if (envelope.path.isBlank() || envelope.key.isBlank() || envelope.sha256.isBlank()) {
+            return ChatAttachmentDownloadOutcome.Failure("Attachment envelope is invalid.")
+        }
+        val plaintext = chatRepository.downloadAttachmentPlaintext(
+            path = envelope.path,
+            fileMasterKeyBase64 = envelope.key,
+            expectedSha256Base64 = envelope.sha256,
+        ) ?: return ChatAttachmentDownloadOutcome.Failure(
+            "Download failed — integrity check did not pass.",
+        )
+        val savedPath = saveDecryptedAttachmentToDownloads(
+            bytes = plaintext,
+            fileName = envelope.name.ifBlank { "attachment" },
+            mimeType = envelope.mime.ifBlank { "application/octet-stream" },
+        ) ?: return ChatAttachmentDownloadOutcome.Failure(
+            "Couldn't write the file to Downloads.",
+        )
+        return ChatAttachmentDownloadOutcome.Success(savedPath)
     }
 
     fun clearMessageSendError() {

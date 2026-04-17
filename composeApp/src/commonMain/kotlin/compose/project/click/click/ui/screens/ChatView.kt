@@ -461,6 +461,9 @@ fun ChatView(
                     val mediaPickers = rememberChatMediaPickers(
                         onImagePicked = { bytes, mime -> viewModel.sendChatImage(bytes, mime) },
                         onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
+                        onFilePicked = { picked ->
+                            viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
+                        },
                         onMediaAccessBlocked = { msg ->
                             coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
                         },
@@ -851,6 +854,9 @@ fun ChatView(
                                                         secureMediaHost = viewModel,
                                                         secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
                                                         activeChatId = activeApiChatId,
+                                                        onDownloadAttachment = { _, env ->
+                                                            viewModel.downloadChatAttachment(env)
+                                                        },
                                                     )
                                                 }
                                                 if (messageWithUser.message.messageType == "call_log") {

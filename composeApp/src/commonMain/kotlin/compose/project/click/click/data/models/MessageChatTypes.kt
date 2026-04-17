@@ -15,6 +15,8 @@ object ChatMessageType {
     const val IMAGE = "image"
     const val AUDIO = "audio"
     const val CALL_LOG = "call_log"
+    /** Encrypted arbitrary attachment — decrypted body is an `AttachmentCrypto` envelope. */
+    const val FILE = "file"
 }
 
 @Serializable
@@ -72,6 +74,7 @@ fun Message.previewLabel(): String {
             if (cap.isNotEmpty()) cap else "Voice message"
         }
         ChatMessageType.CALL_LOG -> "Call"
+        ChatMessageType.FILE -> "File"
         else -> content
     }
 }

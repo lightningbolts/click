@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
@@ -91,6 +92,14 @@ fun ChatMessageBubble(
     activeChatId: String? = null,
     /** When false, long-press context and its haptics are disabled (e.g. read-only hub preview). */
     enableMessageContextMenu: Boolean = true,
+    /**
+     * Download + decrypt handler for `message_type = file` attachments (Phase 2 — C6). The
+     * ViewModel is expected to wire this to [compose.project.click.click.data.repository
+     * .ChatRepository.downloadAttachmentPlaintext] plus [saveDecryptedAttachmentToDownloads];
+     * default is a no-op so non-chat surfaces (read-only hub preview) keep compiling.
+     */
+    onDownloadAttachment: suspend (MessageWithUser, AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome =
+        { _, _ -> ChatAttachmentDownloadOutcome.Failure("Download not available in this context.") },
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -104,6 +113,14 @@ fun ChatMessageBubble(
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
     val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
     val encryptedMedia = message.isEncryptedMedia()
+    val attachmentEnvelope = remember(message.id, message.content) {
+        if (mt == ChatMessageType.FILE || message.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)) {
+            AttachmentCrypto.tryDecodeEnvelope(message.content)
+        } else {
+            null
+        }
+    }
+    val isAttachment = attachmentEnvelope != null
 
     val secureSt = secureMediaState
         ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
@@ -435,6 +452,13 @@ fun ChatMessageBubble(
                                         }
                                     }
                                 }
+                                isAttachment && attachmentEnvelope != null -> {
+                                    ChatAttachmentBubble(
+                                        envelope = attachmentEnvelope,
+                                        isSent = true,
+                                        onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                    )
+                                }
                                 else -> {
                                     SelectionContainer {
                                         Column {
@@ -607,6 +631,13 @@ fun ChatMessageBubble(
                                             )
                                         }
                                     }
+                                }
+                                isAttachment && attachmentEnvelope != null -> {
+                                    ChatAttachmentBubble(
+                                        envelope = attachmentEnvelope,
+                                        isSent = false,
+                                        onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                    )
                                 }
                                 else -> {
                                     SelectionContainer {

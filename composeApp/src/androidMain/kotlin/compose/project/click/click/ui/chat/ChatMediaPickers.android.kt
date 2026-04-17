@@ -40,8 +40,13 @@ import java.io.File
 actual fun rememberChatMediaPickers(
     onImagePicked: (ByteArray, String) -> Unit,
     onAudioPicked: (ByteArray, String, Long?) -> Unit,
+    onFilePicked: (PickedFile) -> Unit,
     onMediaAccessBlocked: (String) -> Unit,
 ): ChatMediaPickerHandles {
+    val launchFilePicker = rememberFilePicker(
+        onFilePicked = onFilePicked,
+        onFilePickFailed = { message -> onMediaAccessBlocked(message) },
+    )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -158,6 +163,7 @@ actual fun rememberChatMediaPickers(
         },
         openCamera = { openCamera() },
         openVoiceRecorder = { openVoiceRecorder() },
+        openFilePicker = { launchFilePicker() },
     )
 }
 

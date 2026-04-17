@@ -68,12 +68,17 @@ import platform.posix.memcpy
 actual fun rememberChatMediaPickers(
     onImagePicked: (ByteArray, String) -> Unit,
     onAudioPicked: (ByteArray, String, Long?) -> Unit,
+    onFilePicked: (PickedFile) -> Unit,
     onMediaAccessBlocked: (String) -> Unit,
 ): ChatMediaPickerHandles {
     val viewController = LocalUIViewController.current
     val onImagePickedState by rememberUpdatedState(onImagePicked)
     val onAudioPickedState by rememberUpdatedState(onAudioPicked)
     val onMediaAccessBlockedState by rememberUpdatedState(onMediaAccessBlocked)
+    val launchFilePicker = rememberFilePicker(
+        onFilePicked = onFilePicked,
+        onFilePickFailed = { message -> onMediaAccessBlockedState(message) },
+    )
 
     var showVoiceDialog by remember { mutableStateOf(false) }
 
@@ -216,6 +221,7 @@ actual fun rememberChatMediaPickers(
         openPhotoLibrary = { openPhotoLibrary() },
         openCamera = { openCamera() },
         openVoiceRecorder = { requestMicThenShowVoiceDialog() },
+        openFilePicker = { launchFilePicker() },
     )
 }
 

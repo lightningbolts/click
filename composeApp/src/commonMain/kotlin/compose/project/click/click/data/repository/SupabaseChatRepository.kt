@@ -1943,6 +1943,36 @@ class SupabaseChatRepository(
         }
     }
 
+    override suspend fun downloadAttachmentPlaintext(
+        path: String,
+        fileMasterKeyBase64: String,
+        expectedSha256Base64: String,
+    ): ByteArray? {
+        if (path.isBlank() || fileMasterKeyBase64.isBlank()) return null
+        return try {
+            val jwt = tokenStorage.getJwt() ?: return null
+            val signedUrl = apiClient.signAttachmentUrl(path, jwt).getOrElse { err ->
+                println("ChatRepository: signAttachmentUrl failed: ${err.redactedRestMessage()}")
+                return null
+            }
+            val cipher = apiClient.downloadAttachmentBytes(signedUrl).getOrElse { err ->
+                println("ChatRepository: attachment download failed: ${err.redactedRestMessage()}")
+                return null
+            }
+            val key = AttachmentCrypto.decodeFileMasterKeyBase64(fileMasterKeyBase64)
+            val plain = AttachmentCrypto.decryptFileBytes(cipher, key)
+            val actualSha = AttachmentCrypto.sha256Base64(plain)
+            if (!actualSha.equals(expectedSha256Base64, ignoreCase = false)) {
+                println("ChatRepository: attachment SHA-256 mismatch — object may have been swapped")
+                return null
+            }
+            plain
+        } catch (e: Exception) {
+            println("ChatRepository: downloadAttachmentPlaintext failed: ${e.redactedRestMessage()}")
+            null
+        }
+    }
+
     override suspend fun downloadAndDecryptChatMedia(
         chatId: String,
         viewerUserId: String,

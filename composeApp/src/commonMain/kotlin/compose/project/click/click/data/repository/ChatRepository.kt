@@ -221,4 +221,19 @@ interface ChatRepository {
         mimeType: String,
         fileName: String,
     ): EncryptedAttachmentUpload?
+
+    /**
+     * Fetch, decrypt and verify a `chat-attachments` object described by a `ccx:v1:` envelope
+     * (Phase 2 — C6). Minting a **fresh** signed URL on every download keeps us safe against
+     * the original 1-hour TTL expiring mid-chat, and re-running the SHA-256 check on plaintext
+     * catches server-side object swaps even if the HMAC passes.
+     *
+     * Returns the plaintext bytes on success, or `null` on any validation / network / crypto
+     * failure — callers must surface a user-visible error.
+     */
+    suspend fun downloadAttachmentPlaintext(
+        path: String,
+        fileMasterKeyBase64: String,
+        expectedSha256Base64: String,
+    ): ByteArray?
 }

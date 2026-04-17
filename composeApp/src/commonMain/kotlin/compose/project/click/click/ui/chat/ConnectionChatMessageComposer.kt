@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -438,6 +439,25 @@ internal fun ConnectionChatMessageComposer(
                             onClick = {
                                 attachmentMenuExpanded = false
                                 mediaPickers.openVoiceRecorder()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "File",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.AttachFile,
+                                    contentDescription = null,
+                                    tint = PrimaryBlue.copy(alpha = 0.9f),
+                                )
+                            },
+                            onClick = {
+                                attachmentMenuExpanded = false
+                                mediaPickers.openFilePicker()
                             },
                         )
                     }
