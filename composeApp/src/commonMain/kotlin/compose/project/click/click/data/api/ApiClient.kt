@@ -425,23 +425,25 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             else -> "avatar.jpg"
         }
         return try {
+            // formData {} always prepends `Content-Disposition: form-data; name="file"`.
+            // Do not send a second full `form-data; name=...; filename=...` — Ktor joins
+            // duplicate header values with "; ", which breaks Node/undici multipart parsing
+            // and surfaces as 400 "Expected multipart/form-data" on click-web.
             val multipart = MultiPartFormDataContent(
                 formData {
                     append(
                         key = "file",
                         value = imageBytes,
                         headers = Headers.build {
-                            append(
-                                HttpHeaders.ContentDisposition,
-                                "form-data; name=\"file\"; filename=\"$filename\"",
-                            )
                             append(HttpHeaders.ContentType, normalizedMime)
+                            append(HttpHeaders.ContentDisposition, "filename=\"$filename\"")
                         },
                     )
                     append(key = "mime_type", value = normalizedMime)
                 },
             )
             val response = clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
+                contentType(multipart.contentType)
                 setBody(multipart)
             }
             if (response.status.value in 200..299) {
