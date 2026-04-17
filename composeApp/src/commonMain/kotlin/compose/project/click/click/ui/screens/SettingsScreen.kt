@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -744,14 +745,24 @@ private fun YourDataLocationCard(
 ) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
+            SettingsToggleRow(
+                icon = Icons.Outlined.VisibilityOff,
+                title = "Ghost Mode",
+                subtitle = "Go off the grid — hide your location, pause matching, and mute presence.",
+                iconTint = if (ghostModeEnabled) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                checked = ghostModeEnabled,
+                onCheckedChange = { AppDataManager.toggleGhostMode() },
+            )
             if (ghostModeEnabled) {
                 Text(
                     "Ghost mode is on — location not shared.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 8.dp)
                 )
             }
+
+            SettingsDivider()
 
             SettingsToggleRow(
                 icon = Icons.Default.LocationOn,
