@@ -35,11 +35,6 @@ import compose.project.click.click.ui.components.ProfileSheetState
 import compose.project.click.click.ui.components.ProfileSheetTimelineItem
 import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.ui.utils.*
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.viewmodel.MapState
@@ -147,6 +142,7 @@ fun MapScreen(
                         ghostMode = ghostModeEnabled,
                         cameraTarget = cameraTarget,
                         onPinTapped = { pin ->
+                            selectedProfileId = pin.id
                             val points = when (val rd = renderData) {
                                 is MapRenderData.IndividualPins -> rd.points
                                 is MapRenderData.Clusters -> rd.clusters.flatMap { it.points }
@@ -181,12 +177,8 @@ fun MapScreen(
                     LiquidGlassPill(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .windowInsetsPadding(
-                                WindowInsets.safeDrawing.only(
-                                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
-                                ),
-                            )
-                            .padding(start = 16.dp, top = 4.dp),
+                            .statusBarsPadding()
+                            .padding(top = 12.dp, start = 16.dp),
                     ) {
                         MemoriesPillContent(
                             memories = stats.totalConnections,

@@ -87,6 +87,7 @@ import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -111,7 +112,14 @@ fun ProfileBottomSheet(
     onOpenLink: (String) -> Unit = {},
     onDownloadFile: (ProfileSheetFile) -> Unit = {},
 ) {
-    val pagerState = rememberPagerState(pageCount = { ProfileSheetTab.entries.size })
+    val visibleTabs = remember {
+        listOf(
+            ProfileSheetTab.Timeline,
+            ProfileSheetTab.Media,
+            ProfileSheetTab.Files,
+        )
+    }
+    val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
     val scope = rememberCoroutineScope()
 
     // Hydrate legacy profile data for the Timeline subtab whenever both ids are known.
@@ -146,87 +154,36 @@ fun ProfileBottomSheet(
     // connection id and merge the server-owned payload with any rows that were
     // explicitly passed through state (so callers can still inject UI fixtures).
     val connectionRepository = remember { ConnectionRepository() }
-    var tabMedia by remember(state.connectionId) { mutableStateOf<List<ProfileSheetMedia>>(emptyList()) }
-    var tabFiles by remember(state.connectionId) { mutableStateOf<List<ProfileSheetFile>>(emptyList()) }
-    LaunchedEffect(state.connectionId) {
-        val cid = state.connectionId?.takeIf { it.isNotBlank() } ?: run {
-            tabMedia = emptyList()
-            tabFiles = emptyList()
+    val tabsFlow = remember(state.userId) { MutableStateFlow(ProfileTabsPayload()) }
+    val fetchedTabs by tabsFlow.collectAsState()
+    LaunchedEffect(state.userId) {
+        val userId = state.userId?.takeIf { it.isNotBlank() } ?: run {
+            tabsFlow.value = ProfileTabsPayload()
             return@LaunchedEffect
         }
-        val result = runCatching {
-            withContext(Dispatchers.Default) { connectionRepository.fetchConnectionTabs(cid) }
+        val profileTabsResult = runCatching {
+            withContext(Dispatchers.Default) { connectionRepository.getProfileTabs(userId) }
         }.getOrNull()?.getOrNull()
-        if (result != null) {
-            tabMedia = result.media.mapNotNull { it.toProfileSheetMedia() }
-            tabFiles = result.files.mapNotNull { it.toProfileSheetFile() }
+
+        val resolved = profileTabsResult ?: run {
+            val connectionId = state.connectionId?.takeIf { it.isNotBlank() } ?: return@run null
+            runCatching {
+                withContext(Dispatchers.Default) { connectionRepository.getProfileTabs(connectionId) }
+            }.getOrNull()?.getOrNull()
+        }
+
+        tabsFlow.value = if (resolved == null) {
+            ProfileTabsPayload()
+        } else {
+            ProfileTabsPayload(
+                media = resolved.media.mapNotNull { it.toProfileSheetMedia() },
+                files = resolved.files.mapNotNull { it.toProfileSheetFile() },
+            )
         }
     }
 
-    // Local E2EE cache: derive Media / Files / Links from the locally-decrypted
-    // messages when available, falling back to BFF results or caller-supplied data.
-    val localMedia = remember(state.localMessages) {
-        state.localMessages
-            .filter { it.messageType == "image" || it.messageType == "audio" }
-            .mapNotNull { msg ->
-                val meta = msg.metadata as? JsonObject ?: return@mapNotNull null
-                val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
-                    meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                } ?: return@mapNotNull null
-                ProfileSheetMedia(
-                    id = msg.id,
-                    imageUrl = url,
-                    captionedAt = msg.content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
-                )
-            }
-    }
-    val localFiles = remember(state.localMessages) {
-        state.localMessages
-            .filter { it.messageType == "file" || it.content.startsWith("ccx:v1:") }
-            .map { msg ->
-                val meta = msg.metadata as? JsonObject
-                ProfileSheetFile(
-                    id = msg.id,
-                    fileName = meta?.get("file_name")?.jsonPrimitive?.contentOrNull
-                        ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
-                        ?: meta?.get("name")?.jsonPrimitive?.contentOrNull
-                        ?: msg.content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
-                        ?: "Attachment",
-                    sizeBytes = meta?.get("file_size")?.jsonPrimitive?.longOrNull
-                        ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
-                        ?: 0L,
-                    mimeType = meta?.get("mime_type")?.jsonPrimitive?.contentOrNull
-                        ?: meta?.get("content_type")?.jsonPrimitive?.contentOrNull
-                        ?: "application/octet-stream",
-                    timestamp = msg.timestamp,
-                )
-            }
-    }
-    val localLinks = remember(state.localMessages) {
-        extractLinksFromLocalMessages(state.localMessages)
-    }
-
-    val effectiveMedia = remember(state.media, tabMedia, localMedia) {
-        when {
-            localMedia.isNotEmpty() -> localMedia
-            state.media.isNotEmpty() -> state.media
-            else -> tabMedia
-        }
-    }
-    val effectiveFiles = remember(state.files, tabFiles, localFiles) {
-        when {
-            localFiles.isNotEmpty() -> localFiles
-            state.files.isNotEmpty() -> state.files
-            else -> tabFiles
-        }
-    }
-    val effectiveLinks = remember(state.links, state.decryptedTextMessages, localLinks) {
-        when {
-            localLinks.isNotEmpty() -> localLinks
-            state.links.isNotEmpty() -> state.links
-            else -> extractLinksFromDecrypted(state.decryptedTextMessages)
-        }
-    }
+    val effectiveMedia = fetchedTabs.media
+    val effectiveFiles = fetchedTabs.files
 
     Column(
         modifier = Modifier
@@ -288,7 +245,7 @@ fun ProfileBottomSheet(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            ProfileSheetTab.entries.forEachIndexed { index, tab ->
+            visibleTabs.forEachIndexed { index, tab ->
                 val selected = pagerState.currentPage == index
                 Tab(
                     selected = selected,
@@ -322,7 +279,7 @@ fun ProfileBottomSheet(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.Top,
         ) { pageIndex ->
-            when (ProfileSheetTab.entries[pageIndex]) {
+            when (visibleTabs[pageIndex]) {
                 ProfileSheetTab.Timeline -> TimelinePanel(
                     items = state.timeline,
                     legacyProfile = legacyProfile,
@@ -331,7 +288,6 @@ fun ProfileBottomSheet(
                     showLegacy = !state.userId.isNullOrBlank(),
                 )
                 ProfileSheetTab.Media -> MediaPanel(items = effectiveMedia)
-                ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = onOpenLink)
                 ProfileSheetTab.Files -> FilesPanel(items = effectiveFiles, onDownload = onDownloadFile)
             }
         }
@@ -431,10 +387,14 @@ data class ProfileSheetFile(
     val timestamp: String,
 )
 
+private data class ProfileTabsPayload(
+    val media: List<ProfileSheetMedia> = emptyList(),
+    val files: List<ProfileSheetFile> = emptyList(),
+)
+
 enum class ProfileSheetTab(val label: String, val icon: ImageVector) {
     Timeline("Timeline", Icons.Outlined.History),
     Media("Media", Icons.Outlined.Image),
-    Links("Links", Icons.Outlined.Link),
     Files("Files", Icons.Outlined.AttachFile),
 }
 

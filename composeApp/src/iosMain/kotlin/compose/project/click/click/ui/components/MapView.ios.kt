@@ -114,6 +114,7 @@ actual fun PlatformMap(
                         TimeState.ARCHIVE -> "⚪ ${pin.title}"
                     }
                     ann.setTitle(displayTitle)
+                    ann.setSubtitle(pin.id)
                     ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
                     map.addAnnotation(ann)
                     pinEntries += ann to pin
@@ -124,6 +125,7 @@ actual fun PlatformMap(
                     val ann = MKPointAnnotation()
                     val icon = if (cluster.hasLiveConnections) "🔵" else "⭕"
                     ann.setTitle("$icon ${cluster.count} memories")
+                    ann.setSubtitle("cluster:${cluster.id}")
                     ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
                     map.addAnnotation(ann)
                     clusterEntries += ann to cluster
@@ -306,6 +308,40 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     var onPin: (MapPin) -> Unit = {}
     var onCluster: (MapClusterPin) -> Unit = {}
 
+    private fun dispatchByIdentifier(rawIdentifier: String?, mapView: MKMapView?): Boolean {
+        val identifier = rawIdentifier?.trim().orEmpty()
+        if (identifier.isEmpty()) return false
+
+        val clusterId = identifier.removePrefix("cluster:")
+        if (identifier.startsWith("cluster:")) {
+            val cluster = clusterEntries.firstOrNull { it.second.id == clusterId }?.second
+            if (cluster != null) {
+                onCluster(cluster)
+                return true
+            }
+        }
+
+        val pin = pinEntries.firstOrNull { it.second.id == identifier }?.second
+        if (pin != null) {
+            onPin(pin)
+            return true
+        }
+
+        val cluster = clusterEntries.firstOrNull { it.second.id == identifier }?.second
+        if (cluster != null) {
+            onCluster(cluster)
+            return true
+        }
+
+        val selected = mapView?.selectedAnnotations
+            ?.filterIsInstance<MKPointAnnotation>()
+            ?.firstOrNull { it.subtitle == rawIdentifier || it.title == rawIdentifier }
+        if (selected != null) {
+            mapView.deselectAnnotation(selected, animated = true)
+        }
+        return false
+    }
+
     private fun dispatch(annotation: Any?, mapView: MKMapView?) {
         if (annotation is MKUserLocation) return
         val pointAnnotation = annotation as? MKPointAnnotation ?: return
@@ -327,6 +363,12 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
      * This is the canonical pathway that runs `onPinTapped` per the C12 directive.
      */
     override fun mapView(mapView: MKMapView, didSelectAnnotationView: MKAnnotationView) {
+        val annotation = didSelectAnnotationView.annotation as? MKPointAnnotation
+        val identifier = annotation?.subtitle ?: annotation?.title
+        if (dispatchByIdentifier(identifier, mapView)) {
+            annotation?.let { mapView.deselectAnnotation(it, animated = true) }
+            return
+        }
         dispatch(didSelectAnnotationView.annotation, mapView)
     }
 

@@ -234,6 +234,11 @@ class ConnectionRepository(
     ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
         return apiClient.getConnectionTabs(connectionId)
     }
+
+    suspend fun getProfileTabs(userId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
+        return apiClient.getConnectionTabs(userId)
+    }
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
