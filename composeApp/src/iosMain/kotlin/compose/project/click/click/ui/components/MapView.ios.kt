@@ -324,18 +324,33 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
 
     /**
      * MapKit fires `mapView:didSelectAnnotationView:` on tap (still supported on iOS 13+).
-     * The iOS 16+ `mapView:didSelectAnnotation:` selector is covered by this same
-     * callback because MapKit continues to dispatch both for backwards compatibility.
+     * This is the canonical pathway that runs `onPinTapped` per the C12 directive.
      */
     override fun mapView(mapView: MKMapView, didSelectAnnotationView: MKAnnotationView) {
         dispatch(didSelectAnnotationView.annotation, mapView)
     }
 
     /**
+     * iOS 11+ `mapView:didSelectAnnotation:` selector (Swift signature
+     * `mapView(_:didSelect:)`). Implemented in addition to the deprecated
+     * `didSelectAnnotationView:` so the pin-tap → ProfileBottomSheet flow keeps working
+     * even when MapKit decides to dispatch only the modern callback under Compose
+     * Multiplatform's `UIKitView` interop. `@ObjCSignatureOverride` is required because
+     * both selectors collapse to the same Kotlin name `mapView(MKMapView, ...)`.
+     */
+    @kotlinx.cinterop.ObjCSignatureOverride
+    override fun mapView(mapView: MKMapView, didSelectAnnotation: MKAnnotationProtocol) {
+        dispatch(didSelectAnnotation, mapView)
+    }
+
+    /**
      * Explicitly return a selectable [MKMarkerAnnotationView] for every annotation. This
      * covers the Compose interop case where the implicit MapKit pipeline silently
      * declines to create selectable views, which in turn starved the `didSelect` callback.
+     * `@ObjCSignatureOverride` is needed because the `didSelectAnnotation:` selector below
+     * shares the same Kotlin name `mapView(MKMapView, MKAnnotationProtocol)`.
      */
+    @kotlinx.cinterop.ObjCSignatureOverride
     override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
         if (viewForAnnotation is MKUserLocation) return null
         val identifier = "ClickPinMarker"

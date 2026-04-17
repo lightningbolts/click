@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,8 +46,12 @@ import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
+import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue
@@ -612,4 +618,86 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes < 1_024 -> "$bytes B"
     bytes < 1_024L * 1_024 -> "${bytes / 1_024} KB"
     else -> "${(bytes * 10 / (1_024L * 1_024)) / 10.0} MB"
+}
+
+/**
+ * Drop-in replacement for the legacy [UserProfileBottomSheet] that surfaces the same
+ * peer-profile data (name, avatar, interests, shared interests, mutual moments) via
+ * the new tabbed [ProfileBottomSheet] (Timeline · Media · Links · Files).
+ *
+ * Wire from any list flow (e.g. the Clicks chat list) by setting [userId] to the peer
+ * id and providing the signed-in viewer id; pass `null` for [userId] to keep the sheet
+ * dismissed. The sheet hydrates `user_interests.tags` for [userId] via
+ * [SupabaseRepository.fetchUserPublicProfile] (which queries the
+ * `user_interests` Postgres `text[]`) so the Timeline tab renders interests as soon
+ * as the row resolves; if the peer has no `user_interests` row the section shows the
+ * standard empty state instead of being blank.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TabbedUserProfileSheet(
+    userId: String?,
+    viewerUserId: String?,
+    onDismiss: () -> Unit,
+    onMessage: (() -> Unit)? = null,
+) {
+    if (userId.isNullOrBlank()) return
+
+    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val cached: User? = connectedUsers[userId]
+
+    var resolved by remember(userId) { mutableStateOf<User?>(cached) }
+    LaunchedEffect(userId, cached) {
+        if (resolved == null) {
+            val fromCache = AppDataManager.connectedUsers.value[userId]
+            if (fromCache != null) {
+                resolved = fromCache
+            } else {
+                runCatching {
+                    withContext(Dispatchers.Default) {
+                        SupabaseRepository().fetchUserPublicProfile(viewerUserId, userId)?.user
+                    }
+                }.getOrNull()?.let { resolved = it }
+            }
+        }
+    }
+
+    val displayName = resolved?.name?.takeIf { it.isNotBlank() }
+        ?: cached?.name?.takeIf { it.isNotBlank() }
+        ?: "Member"
+    val state = remember(userId, viewerUserId, displayName, resolved?.image, resolved?.email) {
+        ProfileSheetState(
+            displayName = displayName,
+            subtitle = resolved?.email?.takeIf { it.isNotBlank() },
+            avatarUrl = resolved?.image,
+            statusBadge = null,
+            canNudge = onMessage != null,
+            timeline = emptyList(),
+            media = emptyList(),
+            links = emptyList(),
+            files = emptyList(),
+            userId = userId,
+            viewerUserId = viewerUserId,
+        )
+    }
+
+    AdaptiveBottomSheet(
+        onDismissRequest = onDismiss,
+        adaptiveSheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+    ) {
+        ProfileBottomSheet(
+            state = state,
+            onMessage = {
+                onMessage?.invoke()
+                onDismiss()
+            },
+            onNudge = {
+                onDismiss()
+            },
+        )
+    }
 }

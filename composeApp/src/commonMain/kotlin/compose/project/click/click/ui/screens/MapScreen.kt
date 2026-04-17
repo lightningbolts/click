@@ -37,9 +37,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.ui.utils.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.viewmodel.MapState
@@ -76,11 +76,6 @@ fun MapScreen(
         viewModel.onMapScreenEntered()
     }
 
-    val safeInsets = WindowInsets.safeDrawing
-        .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-        .asPaddingValues()
-    val topInset = safeInsets.calculateTopPadding()
-
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(ghostModeEnabled) {
@@ -101,10 +96,19 @@ fun MapScreen(
     }
 
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
-    var showBottomSheet by remember { mutableStateOf(false) }
+    // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
+    // Pin taps update this directly (in addition to the view-model selection state) so
+    // sheet visibility is decoupled from any race in the selection StateFlow.
+    var selectedProfileId by remember { mutableStateOf<String?>(null) }
+    val showBottomSheet = selectedProfileId != null && selection is MapSelection.ConnectionSelected
 
     LaunchedEffect(selection) {
-        showBottomSheet = selection is MapSelection.ConnectionSelected
+        val sel = selection
+        selectedProfileId = if (sel is MapSelection.ConnectionSelected) {
+            sel.point.connection.id
+        } else {
+            null
+        }
     }
 
     // C14: Parallax — when the ProfileBottomSheet is revealed, drift the map surface
@@ -147,8 +151,12 @@ fun MapScreen(
                                 is MapRenderData.IndividualPins -> rd.points
                                 is MapRenderData.Clusters -> rd.clusters.flatMap { it.points }
                             }
-                            points.find { it.connection.id == pin.id }?.let {
-                                viewModel.onConnectionTapped(it)
+                            points.find { it.connection.id == pin.id }?.let { p ->
+                                viewModel.onConnectionTapped(p)
+                                // Explicit state mutation per directive C12: the pin
+                                // tap *itself* opens the new ProfileBottomSheet rather
+                                // than relying solely on the selection StateFlow.
+                                selectedProfileId = p.connection.id
                             }
                         },
                         onClusterTapped = { clusterPin ->
@@ -166,13 +174,19 @@ fun MapScreen(
                     )
 
                     // Liquid Glass memories pill — replaces the old PageHeader + stats chip.
-                    // Directive: sit closer to the top safe area (was topInset + 12.dp
-                    // which felt too low on notched devices).
+                    // Directive: apply Modifier.windowInsetsPadding(safeDrawing.only(Top + Horizontal))
+                    // so the pill always sits *below* the system status bar / notch instead of
+                    // clipping into it on notched devices.
                     val stats = viewModel.getMapStats()
                     LiquidGlassPill(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(start = 16.dp, top = topInset + 4.dp),
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                                ),
+                            )
+                            .padding(start = 16.dp, top = 4.dp),
                     ) {
                         MemoriesPillContent(
                             memories = stats.totalConnections,
@@ -202,7 +216,7 @@ fun MapScreen(
         }
         AdaptiveBottomSheet(
             onDismissRequest = {
-                showBottomSheet = false
+                selectedProfileId = null
                 viewModel.clearSelection()
             },
             adaptiveSheetState = sheetState,
@@ -213,7 +227,7 @@ fun MapScreen(
             ProfileBottomSheet(
                 state = sheetData,
                 onMessage = {
-                    showBottomSheet = false
+                    selectedProfileId = null
                     viewModel.clearSelection()
                     onNavigateToChat?.invoke(connectionSelection.point.connection.id)
                 },
@@ -222,7 +236,7 @@ fun MapScreen(
                         connectionId = connectionSelection.point.connection.id,
                         otherUserName = connectionSelection.otherUser?.name ?: "Someone",
                     )
-                    showBottomSheet = false
+                    selectedProfileId = null
                     viewModel.clearSelection()
                 },
             )

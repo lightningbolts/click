@@ -36,7 +36,7 @@ import compose.project.click.click.ui.chat.GroupMembersPickerSheet
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
 import compose.project.click.click.ui.components.PlatformBackHandler
-import compose.project.click.click.ui.components.UserProfileBottomSheet
+import compose.project.click.click.ui.components.TabbedUserProfileSheet
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
 import kotlinx.coroutines.Job
@@ -288,10 +288,25 @@ fun ConnectionsScreen(
             }
         }
     }
-    UserProfileBottomSheet(
+    // C13 directive: chat-list avatar taps must surface the new tabbed
+    // ProfileBottomSheet (Timeline · Media · Links · Files), NOT the legacy
+    // UserProfileBottomSheet. The Timeline subtab hydrates user_interests.tags
+    // for the tapped peer via SupabaseRepository.fetchUserPublicProfile.
+    TabbedUserProfileSheet(
         userId = profileUserId,
         viewerUserId = userId,
-        onDismiss = { profileUserId = null }
+        onDismiss = { profileUserId = null },
+        onMessage = {
+            val pid = profileUserId
+            if (pid != null) {
+                val conn = compose.project.click.click.data.AppDataManager.connections.value
+                    .firstOrNull { c -> pid in c.user_ids && c.user_ids.contains(userId) }
+                if (conn != null) {
+                    profileUserId = null
+                    openChat(conn.id)
+                }
+            }
+        },
     )
     if (groupMemberPickerUsers != null) {
         GroupMembersPickerSheet(
