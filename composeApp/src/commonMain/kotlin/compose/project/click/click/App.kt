@@ -66,6 +66,8 @@ import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.MapViewModel
+import compose.project.click.click.viewmodel.OnboardingViewModel
+import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
@@ -484,12 +486,44 @@ fun App() {
 
             val supabaseRepo = remember { compose.project.click.click.data.repository.SupabaseRepository() }
             val onboardingScope = rememberCoroutineScope()
+
+            // Phase 2 (C8): drive onboarding through OnboardingViewModel rather than the legacy
+            // permissions-first gate. Permissions now live in the Settings Permissions Hub (C9)
+            // and are requested contextually; the gate is Loading → Welcome → Interests → Avatar
+            // → Complete. We rebuild the VM whenever the persisted state changes so step() stays
+            // in sync without having to hoist the whole thing into AppDataManager.
+            val onboardingStateSnapshot = onboardingState
+            val userHasAvatar = !appDataUser?.image.isNullOrBlank()
+            val onboardingPersistScope = rememberCoroutineScope()
+            val onboardingVm = remember(onboardingStateSnapshot, userHasAvatar) {
+                OnboardingViewModel(
+                    initialState = onboardingStateSnapshot ?: OnboardingState(),
+                    userHasAvatar = { userHasAvatar },
+                    onPersist = { next ->
+                        onboardingPersistScope.launch {
+                            persistOnboardingState(next)
+                        }
+                    },
+                    clockMillis = { kotlinx.datetime.Clock.System.now().toEpochMilliseconds() },
+                )
+            }
+            val vmStep by onboardingVm.step.collectAsState()
+            val isDataReady = onboardingStateSnapshot != null &&
+                appDataUser != null &&
+                interestsRemoteResolved &&
+                hasCompletedOnboarding != null
+            LaunchedEffect(isDataReady) {
+                if (isDataReady) onboardingVm.onDataLoaded()
+            }
             val onboardingStep = when {
-                onboardingState == null || appDataUser == null || !interestsRemoteResolved || hasCompletedOnboarding == null -> "loading"
-                hasCompletedOnboarding != true -> "permissions"
-                onboardingState?.interestsCompleted != true -> "interests"
+                !isDataReady -> "loading"
+                vmStep == OnboardingViewModel.Step.Welcome -> "welcome"
+                vmStep == OnboardingViewModel.Step.Interests -> "interests"
+                vmStep == OnboardingViewModel.Step.Avatar -> "avatar"
                 else -> "complete"
             }
+
+            val avatarAuthRepo = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
 
             if (onboardingStep == "loading") {
                 Box(
@@ -520,59 +554,26 @@ fun App() {
                     label = "onboarding_transition"
                 ) { step ->
                     when (step) {
-                        "permissions" -> {
-                            PermissionsOnboardingScreen(
-                                initialConnectionSnapEnabled = locationPreferences.connectionSnapEnabled,
-                                initialShowOnMapEnabled = locationPreferences.showOnMapEnabled,
-                                initialIncludeInInsightsEnabled = locationPreferences.includeInInsightsEnabled,
-                                initialNotificationsEnabled = notificationPreferences.messagePushEnabled || notificationPreferences.callPushEnabled,
-                                initialAmbientNoiseEnabled = ambientNoiseOptIn,
-                                initialBarometricContextEnabled = barometricContextOptIn,
-                                locationService = locationService,
-                                ambientNoiseMonitor = ambientNoiseMonitor,
-                                requestLocationPermissionThen = requestLocationPermissionThen,
-                                requestMicrophonePermissionThen = requestMicrophonePermissionThen,
-                                isLoading = isCompletingPermissions,
-                                onContinue = { selection ->
+                        "welcome" -> {
+                            WelcomeScreen(
+                                firstName = appDataUser?.firstName,
+                                onContinue = { onboardingVm.onWelcomeAcknowledged() },
+                            )
+                        }
+
+                        "avatar" -> {
+                            AvatarScreen(
+                                existingAvatarUrl = appDataUser?.image,
+                                onUploadBytes = { bytes, mimeType ->
+                                    avatarAuthRepo.uploadProfilePicture(bytes, mimeType)
+                                },
+                                onUploaded = { _ ->
                                     onboardingScope.launch {
-                                        isCompletingPermissions = true
-                                        try {
-                                            ambientNoiseOptIn = selection.ambientNoiseEnabled
-                                            barometricContextOptIn = selection.barometricContextEnabled
-                                            tokenStorage.saveAmbientNoiseOptIn(selection.ambientNoiseEnabled)
-                                            tokenStorage.saveBarometricContextOptIn(selection.barometricContextEnabled)
-                                            tokenStorage.saveLocationExplainerSeen(true)
-
-                                            AppDataManager.updateLocationPreferences(
-                                                locationPreferences.copy(
-                                                    connectionSnapEnabled = selection.connectionSnapEnabled,
-                                                    showOnMapEnabled = selection.showOnMapEnabled,
-                                                    includeInInsightsEnabled = selection.includeInInsightsEnabled
-                                                )
-                                            )
-                                            AppDataManager.setMessageNotificationsEnabled(selection.notificationsEnabled)
-                                            AppDataManager.setCallNotificationsEnabled(selection.notificationsEnabled)
-                                            tokenStorage.saveHasCompletedOnboarding(true)
-                                            hasCompletedOnboarding = true
-
-                                            val updatedState = (onboardingState ?: OnboardingState()).copy(
-                                                permissionsCompleted = true,
-                                                locationPermissionRequested = selection.connectionSnapEnabled,
-                                                notificationPermissionRequested = selection.notificationsEnabled,
-                                                microphonePermissionRequested = selection.ambientNoiseEnabled,
-                                                barometricContextPermissionReviewed = selection.barometricContextEnabled,
-                                                completedAt = if (onboardingState?.interestsCompleted == true) {
-                                                    kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                                                } else {
-                                                    null
-                                                }
-                                            )
-                                            persistOnboardingState(updatedState)
-                                        } finally {
-                                            isCompletingPermissions = false
-                                        }
+                                        AppDataManager.refresh(force = true)
+                                        onboardingVm.onAvatarSetOrSkipped()
                                     }
-                                }
+                                },
+                                onSkip = { onboardingVm.onAvatarSetOrSkipped() },
                             )
                         }
 
@@ -583,15 +584,15 @@ fun App() {
                                         val saveResult = supabaseRepo.updateUserInterests(currentUser.id, tags)
                                         if (saveResult.isSuccess) {
                                             tokenStorage.saveTagsInitialized(true)
+                                            // B2: Phase 2 no longer requires permissionsCompleted to
+                                            // mark onboarding complete — we finalize flowVersion once
+                                            // interests land and let OnboardingViewModel drive the
+                                            // remaining Avatar step.
                                             val base = onboardingState ?: OnboardingState()
                                             persistOnboardingState(
                                                 base.copy(
                                                     interestsCompleted = true,
-                                                    flowVersion = if (base.permissionsCompleted) {
-                                                        ONBOARDING_FLOW_VERSION_COMPLETE
-                                                    } else {
-                                                        base.flowVersion
-                                                    },
+                                                    flowVersion = ONBOARDING_FLOW_VERSION_COMPLETE,
                                                     completedAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
                                                 ),
                                             )
