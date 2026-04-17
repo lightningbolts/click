@@ -26,7 +26,16 @@ data class OnboardingState(
     val microphonePermissionRequested: Boolean = false,
     val barometricContextPermissionReviewed: Boolean = false,
     val completedAt: Long? = null,
+    // Phase 2 B2 — Welcome → Interests → Avatar → Complete (permissions go contextual).
+    // Defaults are backwards-compatible: pre-existing states see `welcomeSeen = false` and
+    // `avatarSetOrSkipped = false`, which the Phase 2 OnboardingViewModel layers on top without
+    // forcing a re-onboarding for accounts that already completed the legacy flow
+    // (see [OnboardingViewModel.needsPhase2Onboarding]).
+    val welcomeSeen: Boolean = false,
+    val avatarSetOrSkipped: Boolean = false,
 ) {
+    /** Legacy (Phase 1) completion predicate. Kept as-is so the existing migration path in App.kt
+     * continues to recognise already-onboarded accounts while we roll out B2. */
     val isComplete: Boolean
         get() = flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE && permissionsCompleted && interestsCompleted
 }
