@@ -156,7 +156,6 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
 import compose.project.click.click.ui.chat.CallLogSystemRow
-import compose.project.click.click.ui.chat.ChatAudioBubbleRow
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent
 import compose.project.click.click.ui.chat.ChatChannelLoadingView
 import compose.project.click.click.ui.chat.ChatWarmLoadingView
@@ -182,8 +181,6 @@ import compose.project.click.click.ui.chat.ReplySwipeSideIcon
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
 import compose.project.click.click.ui.chat.callLogLabel
 import compose.project.click.click.ui.chat.formatCallDurationForLog
-import compose.project.click.click.ui.chat.formatChatAudioDuration
-import compose.project.click.click.ui.chat.formatChatAudioPositionMs
 import compose.project.click.click.ui.chat.formatConnectionListTimestamp
 import compose.project.click.click.ui.chat.formatConversationDayLabel
 import compose.project.click.click.ui.chat.formatMessageTime
@@ -236,7 +233,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageBubble
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret

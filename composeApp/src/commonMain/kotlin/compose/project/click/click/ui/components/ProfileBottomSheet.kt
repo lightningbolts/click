@@ -85,6 +85,8 @@ import compose.project.click.click.data.api.ConnectionTabMessage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.AttachmentCrypto
+import compose.project.click.click.ui.chat.ChatAudioBubble
+import compose.project.click.click.ui.chat.ChatAudioChromeKind
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.utils.toImageBitmap
@@ -93,6 +95,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -332,6 +335,10 @@ fun ProfileBottomSheet(
                 }
             }
 
+            if (media.mediaType == ProfileSheetMediaType.Audio && media.isEncrypted) {
+                return@forEach
+            }
+
             resolvedUrls[media.id] = url
         }
 
@@ -499,6 +506,7 @@ fun ProfileBottomSheet(
                     items = effectiveMedia,
                     resolvedUrls = resolvedMediaUrls,
                     resolvedBitmaps = resolvedMediaBitmaps,
+                    resolvedAudioLocalPaths = resolvedAudioLocalPaths,
                     onOpenMedia = { selectedMediaForPreview = it },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
@@ -539,24 +547,30 @@ fun ProfileBottomSheet(
                                 )
                             }
                         } else {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp)),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Text(
-                                        text = "Audio recording",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text = "Open externally to play or download this voice note.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                            val stream = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                            val local = resolvedAudioLocalPaths[media.id]
+                            val canPlay = !local.isNullOrBlank() ||
+                                (stream?.isNotBlank() == true && !media.isEncrypted)
+                            if (canPlay) {
+                                ChatAudioBubble(
+                                    mediaUrl = stream.orEmpty(),
+                                    durationSeconds = media.durationSeconds,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                    accentColor = PrimaryBlue,
+                                    isEncrypted = false,
+                                    localFilePathForPlayback = local,
+                                    secureLoading = false,
+                                    secureError = null,
+                                    onRequestDecrypt = {},
+                                    modifier = Modifier.fillMaxWidth(),
+                                    chromeKind = ChatAudioChromeKind.ProfileSurface,
+                                )
+                            } else {
+                                Text(
+                                    text = "This voice note could not be decrypted for playback.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                         Text(
@@ -571,23 +585,29 @@ fun ProfileBottomSheet(
                     }
                 },
                 confirmButton = {
-                    TextButton(
-                        onClick = {
-                            val target = resolvedAudioLocalPaths[media.id]
-                                ?: resolvedMediaUrls[media.id]
-                                ?: media.mediaUrl
-                            if (!target.isNullOrBlank()) {
-                                handleOpenLink(target)
-                            }
-                            selectedMediaForPreview = null
-                        },
-                    ) {
-                        Text("Open")
+                    if (media.mediaType == ProfileSheetMediaType.Image) {
+                        TextButton(
+                            onClick = {
+                                val target = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                                if (!target.isNullOrBlank()) {
+                                    handleOpenLink(target)
+                                }
+                                selectedMediaForPreview = null
+                            },
+                        ) {
+                            Text("Open")
+                        }
+                    } else {
+                        TextButton(onClick = { selectedMediaForPreview = null }) {
+                            Text("Close")
+                        }
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { selectedMediaForPreview = null }) {
-                        Text("Close")
+                    if (media.mediaType == ProfileSheetMediaType.Image) {
+                        TextButton(onClick = { selectedMediaForPreview = null }) {
+                            Text("Close")
+                        }
                     }
                 },
             )
@@ -655,6 +675,8 @@ data class ProfileSheetMedia(
     val isEncrypted: Boolean = false,
     val mediaType: ProfileSheetMediaType = ProfileSheetMediaType.Image,
     val captionedAt: String? = null,
+    /** Voice-note length from message metadata when available. */
+    val durationSeconds: Int? = null,
 )
 
 enum class ProfileSheetMediaType {
@@ -853,6 +875,7 @@ private fun MediaPanel(
     items: List<ProfileSheetMedia>,
     resolvedUrls: Map<String, String>,
     resolvedBitmaps: Map<String, ImageBitmap>,
+    resolvedAudioLocalPaths: Map<String, String>,
     onOpenMedia: (ProfileSheetMedia) -> Unit,
 ) {
     val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
@@ -916,33 +939,51 @@ private fun MediaPanel(
 
         if (audioItems.isNotEmpty()) {
             items(audioItems, key = { it.id }) { media ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .clickable { onOpenMedia(media) }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                val stream = resolvedUrls[media.id] ?: media.mediaUrl
+                val local = resolvedAudioLocalPaths[media.id]
+                val canPlay = !local.isNullOrBlank() ||
+                    (stream?.isNotBlank() == true && !media.isEncrypted)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(Icons.Outlined.Message, contentDescription = null, tint = PrimaryBlue)
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Voice note",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                    if (!media.captionedAt.isNullOrBlank()) {
                         Text(
-                            text = "Voice note",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            text = media.captionedAt,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(bottom = 6.dp),
                         )
-                        if (!media.captionedAt.isNullOrBlank()) {
-                            Text(
-                                text = media.captionedAt,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                    }
+                    if (canPlay) {
+                        ChatAudioBubble(
+                            mediaUrl = stream.orEmpty(),
+                            durationSeconds = media.durationSeconds,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            accentColor = PrimaryBlue,
+                            isEncrypted = false,
+                            localFilePathForPlayback = local,
+                            secureLoading = false,
+                            secureError = null,
+                            onRequestDecrypt = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            chromeKind = ChatAudioChromeKind.ProfileSurface,
+                        )
+                    } else {
+                        Text(
+                            text = "Voice note unavailable",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
                     }
                 }
             }
@@ -1122,6 +1163,9 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
         mediaType = mediaType,
         captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() },
+        durationSeconds = meta.intAt("duration_seconds")
+            ?: meta.intAt("durationSeconds")
+            ?: meta["duration"]?.jsonPrimitive?.intOrNull,
     )
 }
 
@@ -1150,6 +1194,11 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
         mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
         captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() },
+        durationSeconds = meta?.let { m ->
+            m.intAt("duration_seconds")
+                ?: m.intAt("durationSeconds")
+                ?: m["duration"]?.jsonPrimitive?.intOrNull
+        },
     )
 }
 
@@ -1280,6 +1329,13 @@ private fun ProfileSheetLocalMessage.hasMetadataAttachmentV1(): Boolean {
 private fun JsonObject.stringAt(key: String): String? =
     this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
+private fun JsonObject.intAt(key: String): Int? {
+    val raw = this[key]?.jsonPrimitive ?: return null
+    raw.intOrNull?.let { return it }
+    raw.contentOrNull?.trim()?.toIntOrNull()?.let { return it }
+    return null
+}
+
 private fun JsonObject.booleanAt(key: String): Boolean? {
     val raw = this[key]?.jsonPrimitive ?: return null
     raw.contentOrNull?.trim()?.lowercase()?.let { text ->
@@ -1370,6 +1426,7 @@ private fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileSheet
             isEncrypted = media.isEncrypted || prev.isEncrypted,
             mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
             captionedAt = media.captionedAt ?: prev.captionedAt,
+            durationSeconds = media.durationSeconds ?: prev.durationSeconds,
         )
     }
     return merged.values.toList()

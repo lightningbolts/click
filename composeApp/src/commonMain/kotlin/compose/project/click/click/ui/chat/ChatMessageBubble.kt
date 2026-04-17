@@ -125,13 +125,21 @@ fun ChatMessageBubble(
     val secureSt = secureMediaState
         ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
     val hapticFeedback = LocalHapticFeedback.current
+    val onRequestSecureAudio = remember(message.id, activeChatId, currentUserId, encryptedMedia, secureMediaHost) {
+        {
+            val chatId = activeChatId
+            val viewer = currentUserId
+            if (encryptedMedia && secureMediaHost != null && chatId != null && viewer != null) {
+                secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
+            }
+        }
+    }
     LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, encryptedMedia) {
         val chatId = activeChatId
         val viewer = currentUserId
         if (encryptedMedia && secureMediaHost != null && chatId != null && viewer != null) {
             when (mt) {
                 ChatMessageType.IMAGE -> secureMediaHost.ensureSecureChatImageLoaded(chatId, viewer, message)
-                ChatMessageType.AUDIO -> secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
             }
         }
     }
@@ -430,14 +438,17 @@ fun ChatMessageBubble(
                             }
                             when {
                                 mt == ChatMessageType.AUDIO && mediaUrl != null -> {
-                                    ChatAudioBubbleRow(
+                                    ChatAudioBubble(
                                         mediaUrl = mediaUrl,
                                         durationSeconds = audioDurSec,
                                         contentColor = Color.White,
                                         accentColor = Color.White,
+                                        isEncrypted = encryptedMedia,
                                         localFilePathForPlayback = secureSt?.audioLocalPath,
-                                        secureLoading = encryptedMedia && (secureSt == null || secureSt.loading),
+                                        secureLoading = encryptedMedia && secureSt?.loading == true,
                                         secureError = if (encryptedMedia) secureSt?.error else null,
+                                        onRequestDecrypt = onRequestSecureAudio,
+                                        chromeKind = ChatAudioChromeKind.SentBubble,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
@@ -610,14 +621,17 @@ fun ChatMessageBubble(
                             val linkC = MaterialTheme.colorScheme.primary
                             when {
                                 mt == ChatMessageType.AUDIO && mediaUrl != null -> {
-                                    ChatAudioBubbleRow(
+                                    ChatAudioBubble(
                                         mediaUrl = mediaUrl,
                                         durationSeconds = audioDurSec,
                                         contentColor = onBody,
                                         accentColor = linkC,
+                                        isEncrypted = encryptedMedia,
                                         localFilePathForPlayback = secureSt?.audioLocalPath,
                                         secureLoading = encryptedMedia && secureSt?.loading == true,
                                         secureError = if (encryptedMedia) secureSt?.error else null,
+                                        onRequestDecrypt = onRequestSecureAudio,
+                                        chromeKind = ChatAudioChromeKind.ReceivedBubble,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
