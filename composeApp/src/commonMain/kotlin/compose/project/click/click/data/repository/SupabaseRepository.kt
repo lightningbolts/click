@@ -25,6 +25,10 @@ import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.datetime.Clock
@@ -84,6 +88,41 @@ class SupabaseRepository {
      */
     private var connectionArchivesTableMissing: Boolean = false
     private var connectionHiddenTableMissing: Boolean = false
+
+    companion object {
+        private val userPublicProfileCache =
+            MutableStateFlow<Map<String, UserPublicProfile>>(emptyMap())
+    }
+
+    fun getCachedUserPublicProfile(targetUserId: String): UserPublicProfile? {
+        val key = targetUserId.trim()
+        if (key.isEmpty()) return null
+        return userPublicProfileCache.value[key]
+    }
+
+    fun observeCachedUserPublicProfile(targetUserId: String): Flow<UserPublicProfile?> {
+        val key = targetUserId.trim()
+        if (key.isEmpty()) {
+            return userPublicProfileCache.map { null }.distinctUntilChanged()
+        }
+        return userPublicProfileCache
+            .map { it[key] }
+            .distinctUntilChanged()
+    }
+
+    private fun cacheUserPublicProfile(targetUserId: String, profile: UserPublicProfile) {
+        val key = targetUserId.trim()
+        if (key.isEmpty()) return
+        userPublicProfileCache.value = userPublicProfileCache.value + (key to profile)
+    }
+
+    suspend fun refreshUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {
+        val key = targetUserId.trim()
+        if (key.isEmpty()) return null
+        val fresh = fetchUserPublicProfile(viewerUserId, key)
+        if (fresh != null) cacheUserPublicProfile(key, fresh)
+        return fresh
+    }
 
     private fun isConnectionArchivesUnavailableError(e: Throwable): Boolean {
         val msg = e.redactedRestMessage()
@@ -194,7 +233,7 @@ class SupabaseRepository {
             val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
                 fetchSharedConnectionBetween(v, trimmedTarget)
             }
-            return UserPublicProfile(
+            val profile = UserPublicProfile(
                 user = user,
                 interestTags = tags,
                 availability = availability,
@@ -202,6 +241,8 @@ class SupabaseRepository {
                 viewerInterestTags = viewerTagsFromBff,
                 sharedConnection = shared,
             )
+            cacheUserPublicProfile(trimmedTarget, profile)
+            return profile
         }
 
         // Fallback: legacy direct-Supabase path.
@@ -223,7 +264,7 @@ class SupabaseRepository {
         val viewerTags = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
             fetchUserInterests(v).getOrNull()?.tags.orEmpty()
         }.orEmpty()
-        return UserPublicProfile(
+        val profile = UserPublicProfile(
             user = user,
             interestTags = tags,
             availability = availability,
@@ -231,6 +272,8 @@ class SupabaseRepository {
             viewerInterestTags = viewerTags,
             sharedConnection = shared,
         )
+        cacheUserPublicProfile(trimmedTarget, profile)
+        return profile
     }
 
     /**

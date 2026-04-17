@@ -74,10 +74,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import compose.project.click.click.data.api.ConnectionTabMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
-import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -87,7 +85,6 @@ import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -100,8 +97,8 @@ import kotlinx.coroutines.withContext
  * legacy profile rendering (interests, shared interests, availability intents, "Our
  * timeline" encounters) via [SupabaseRepository.fetchUserPublicProfile] — restoring the
  * data that was previously only available through the standalone
- * [UserProfileBottomSheet]. Media / Links / Files tabs remain empty-state placeholders
- * until the per-conversation attachment query (C15) is plumbed.
+ * [UserProfileBottomSheet]. Media / Links / Files are derived client-side from
+ * [ProfileSheetState.localMessages] because chat message content is E2EE on the wire.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,6 +113,7 @@ fun ProfileBottomSheet(
         listOf(
             ProfileSheetTab.Timeline,
             ProfileSheetTab.Media,
+            ProfileSheetTab.Links,
             ProfileSheetTab.Files,
         )
     }
@@ -129,61 +127,69 @@ fun ProfileBottomSheet(
     }
     var legacyLoading by remember(state.userId, state.viewerUserId) { mutableStateOf(false) }
     var legacyError by remember(state.userId, state.viewerUserId) { mutableStateOf<String?>(null) }
+    val cachedLegacyProfile by remember(state.userId) {
+        repository.observeCachedUserPublicProfile(state.userId.orEmpty())
+    }.collectAsState(initial = repository.getCachedUserPublicProfile(state.userId.orEmpty()))
+
+    LaunchedEffect(cachedLegacyProfile) {
+        if (cachedLegacyProfile != null) {
+            legacyProfile = cachedLegacyProfile
+            legacyLoading = false
+            legacyError = null
+        }
+    }
+
     LaunchedEffect(state.userId, state.viewerUserId) {
-        val uid = state.userId
+        val uid = state.userId?.trim()
         if (uid.isNullOrBlank()) {
             legacyProfile = null
             legacyLoading = false
             legacyError = null
             return@LaunchedEffect
         }
-        legacyLoading = true
+        legacyProfile = repository.getCachedUserPublicProfile(uid)
+        legacyLoading = legacyProfile == null
         legacyError = null
         val result = runCatching {
             withContext(Dispatchers.Default) {
-                repository.fetchUserPublicProfile(state.viewerUserId, uid)
+                repository.refreshUserPublicProfile(state.viewerUserId, uid)
             }
         }
-        legacyProfile = result.getOrNull()
-        legacyError = result.exceptionOrNull()?.message
+        val refreshed = result.getOrNull()
+        if (refreshed != null) {
+            legacyProfile = refreshed
+            legacyError = null
+        } else if (legacyProfile == null) {
+            legacyError = result.exceptionOrNull()?.message
+        }
         legacyLoading = false
     }
 
-    // BFF hydration for Media + Files subtabs (C15). We call
-    // `ConnectionRepository.fetchConnectionTabs` whenever the caller supplies a
-    // connection id and merge the server-owned payload with any rows that were
-    // explicitly passed through state (so callers can still inject UI fixtures).
-    val connectionRepository = remember { ConnectionRepository() }
-    val tabsFlow = remember(state.userId) { MutableStateFlow(ProfileTabsPayload()) }
-    val fetchedTabs by tabsFlow.collectAsState()
-    LaunchedEffect(state.userId) {
-        val userId = state.userId?.takeIf { it.isNotBlank() } ?: run {
-            tabsFlow.value = ProfileTabsPayload()
-            return@LaunchedEffect
-        }
-        val profileTabsResult = runCatching {
-            withContext(Dispatchers.Default) { connectionRepository.getProfileTabs(userId) }
-        }.getOrNull()?.getOrNull()
-
-        val resolved = profileTabsResult ?: run {
-            val connectionId = state.connectionId?.takeIf { it.isNotBlank() } ?: return@run null
-            runCatching {
-                withContext(Dispatchers.Default) { connectionRepository.getProfileTabs(connectionId) }
-            }.getOrNull()?.getOrNull()
-        }
-
-        tabsFlow.value = if (resolved == null) {
-            ProfileTabsPayload()
-        } else {
-            ProfileTabsPayload(
-                media = resolved.media.mapNotNull { it.toProfileSheetMedia() },
-                files = resolved.files.mapNotNull { it.toProfileSheetFile() },
-            )
+    val localMediaMessages = remember(state.localMessages) {
+        state.localMessages.filter { it.messageType == "image" || it.messageType == "audio" }
+    }
+    val localFileMessages = remember(state.localMessages) {
+        state.localMessages.filter { it.messageType == "file" || it.content.startsWith("ccx:v1:") }
+    }
+    val localLinkMessages = remember(state.localMessages) {
+        state.localMessages.filter {
+            it.messageType == "text" &&
+                (it.content.contains("http://") || it.content.contains("https://"))
         }
     }
 
-    val effectiveMedia = fetchedTabs.media
-    val effectiveFiles = fetchedTabs.files
+    val effectiveMedia = remember(localMediaMessages, state.media) {
+        val fromLocal = localMediaMessages.mapNotNull { it.toProfileSheetMedia() }
+        if (fromLocal.isNotEmpty()) fromLocal else state.media
+    }
+    val effectiveFiles = remember(localFileMessages, state.files) {
+        val fromLocal = localFileMessages.map { it.toProfileSheetFile() }
+        if (fromLocal.isNotEmpty()) fromLocal else state.files
+    }
+    val effectiveLinks = remember(localLinkMessages, state.links) {
+        val fromLocal = extractLinksFromLocalMessages(localLinkMessages)
+        if (fromLocal.isNotEmpty()) fromLocal else state.links
+    }
 
     Column(
         modifier = Modifier
@@ -288,6 +294,7 @@ fun ProfileBottomSheet(
                     showLegacy = !state.userId.isNullOrBlank(),
                 )
                 ProfileSheetTab.Media -> MediaPanel(items = effectiveMedia)
+                ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = onOpenLink)
                 ProfileSheetTab.Files -> FilesPanel(items = effectiveFiles, onDownload = onDownloadFile)
             }
         }
@@ -309,34 +316,14 @@ data class ProfileSheetState(
     val userId: String? = null,
     /** Viewer user id — needed to compute shared interests + mutual connection. */
     val viewerUserId: String? = null,
-    /**
-     * Connection / chat id — when non-blank, the sheet pulls the Media and Files
-     * subtab payloads from the click-web BFF (`GET /api/connections/{id}/tabs`) and
-     * merges them with any `media` / `files` explicitly passed via state.
-     */
+    /** Optional connection/chat id retained for callers that want contextual actions. */
     val connectionId: String? = null,
-    /**
-     * Locally-decrypted text messages (plus timestamp) to scan client-side for
-     * http(s) URLs. Kept here because [content] is E2EE on the wire — the BFF
-     * intentionally doesn't parse links.
-     */
-    val decryptedTextMessages: List<ProfileSheetDecryptedMessage> = emptyList(),
     /**
      * All locally-decrypted chat messages with type metadata. Used to populate
      * the Media / Files / Links tabs from the local E2EE cache instead of making
      * a server round-trip (message content is encrypted on the wire).
      */
     val localMessages: List<ProfileSheetLocalMessage> = emptyList(),
-)
-
-/**
- * A single locally-decrypted text message used as input for the Links subtab's
- * client-side http(s) filter. Only the fields the sheet needs to render a link row.
- */
-data class ProfileSheetDecryptedMessage(
-    val id: String,
-    val content: String,
-    val timestamp: String,
 )
 
 /**
@@ -387,14 +374,10 @@ data class ProfileSheetFile(
     val timestamp: String,
 )
 
-private data class ProfileTabsPayload(
-    val media: List<ProfileSheetMedia> = emptyList(),
-    val files: List<ProfileSheetFile> = emptyList(),
-)
-
 enum class ProfileSheetTab(val label: String, val icon: ImageVector) {
     Timeline("Timeline", Icons.Outlined.History),
     Media("Media", Icons.Outlined.Image),
+    Links("Links", Icons.Outlined.Link),
     Files("Files", Icons.Outlined.AttachFile),
 }
 
@@ -733,14 +716,7 @@ private fun formatFileSize(bytes: Long): String = when {
     else -> "${(bytes * 10 / (1_024L * 1_024)) / 10.0} MB"
 }
 
-/**
- * Map a BFF `messages` row (`image` / `audio`) into the shape [MediaPanel] renders.
- * The attachment URL is looked up through common metadata keys (`url`, `storage_url`,
- * `image_url`) because the `messages.metadata` JSON shape is authored by a few
- * different upload paths. Returns `null` when no renderable URL is present so the
- * caller can filter the row out silently.
- */
-private fun ConnectionTabMessage.toProfileSheetMedia(): ProfileSheetMedia? {
+private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
     val meta = metadata as? JsonObject ?: return null
     val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
         meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
@@ -752,13 +728,7 @@ private fun ConnectionTabMessage.toProfileSheetMedia(): ProfileSheetMedia? {
     )
 }
 
-/**
- * Map a BFF `messages` row of type `file` into the shape [FilesPanel] renders. Falls
- * back gracefully when metadata fields are absent so we still list the row rather
- * than hiding it. Timestamp is intentionally the raw epoch ms / seconds as a string
- * because higher-level formatting lives at the call site in the existing codebase.
- */
-private fun ConnectionTabMessage.toProfileSheetFile(): ProfileSheetFile? {
+private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
     val meta = metadata as? JsonObject
     val fileName = meta?.get("file_name")?.jsonPrimitive?.contentOrNull
         ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
@@ -777,7 +747,7 @@ private fun ConnectionTabMessage.toProfileSheetFile(): ProfileSheetFile? {
         fileName = fileName,
         sizeBytes = size,
         mimeType = mime,
-        timestamp = timeCreated.toString(),
+        timestamp = timestamp,
     )
 }
 
@@ -795,40 +765,16 @@ private val URL_REGEX = Regex("https?://\\S+", RegexOption.IGNORE_CASE)
  * client-side because message `content` is E2EE on the server and the BFF
  * intentionally does not parse links.
  */
-private fun extractLinksFromDecrypted(
-    messages: List<ProfileSheetDecryptedMessage>,
-): List<ProfileSheetLink> {
-    if (messages.isEmpty()) return emptyList()
-    val seen = mutableSetOf<String>()
-    val out = mutableListOf<ProfileSheetLink>()
-    messages.forEach { msg ->
-        URL_REGEX.findAll(msg.content).forEach { match ->
-            val url = match.value.trimEnd('.', ',', ')', ']', '}', ';', ':')
-            if (url.isNotBlank() && seen.add(url)) {
-                out += ProfileSheetLink(
-                    id = "${msg.id}:$url",
-                    url = url,
-                    title = null,
-                    timestamp = msg.timestamp,
-                )
-            }
-        }
-    }
-    return out
-}
-
-/**
- * Extract http(s) URLs from the full [ProfileSheetLocalMessage] list (E2EE
- * local cache). Only considers text messages so image/file metadata URLs are
- * not surfaced in the Links tab.
- */
 private fun extractLinksFromLocalMessages(
     messages: List<ProfileSheetLocalMessage>,
 ): List<ProfileSheetLink> {
     if (messages.isEmpty()) return emptyList()
     val seen = mutableSetOf<String>()
     val out = mutableListOf<ProfileSheetLink>()
-    messages.filter { it.messageType == "text" && it.content.contains("http") }.forEach { msg ->
+    messages.filter {
+        it.messageType == "text" &&
+            (it.content.contains("http://") || it.content.contains("https://"))
+    }.forEach { msg ->
         URL_REGEX.findAll(msg.content).forEach { match ->
             val url = match.value.trimEnd('.', ',', ')', ']', '}', ';', ':')
             if (url.isNotBlank() && seen.add(url)) {
