@@ -307,6 +307,7 @@ fun ConnectionsScreen(
                 }
             }
         },
+        localMessages = viewModel.currentChatLocalMessages(),
     )
     if (groupMemberPickerUsers != null) {
         GroupMembersPickerSheet(

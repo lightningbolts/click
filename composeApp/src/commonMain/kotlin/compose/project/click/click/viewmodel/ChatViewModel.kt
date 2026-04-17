@@ -47,6 +47,7 @@ import compose.project.click.click.data.repository.ChatMessageSubscription // pr
 import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
@@ -2403,6 +2404,26 @@ class ChatViewModel(
 
     fun clearNudgeResult() {
         _nudgeResult.value = null
+    }
+
+    /**
+     * Snapshot of the current chat's locally-decrypted messages shaped for the
+     * [ProfileBottomSheet] Media / Files / Links tabs. Returns an empty list
+     * when no chat is loaded or messages haven't been fetched yet.
+     */
+    fun currentChatLocalMessages(): List<ProfileSheetLocalMessage> {
+        val state = _chatMessagesState.value
+        if (state !is ChatMessagesState.Success) return emptyList()
+        return state.messages.map { mwu ->
+            val m = mwu.message
+            ProfileSheetLocalMessage(
+                id = m.id,
+                content = m.content,
+                messageType = m.messageType,
+                timestamp = kotlinx.datetime.Instant.fromEpochMilliseconds(m.timeCreated).toString(),
+                metadata = m.metadata,
+            )
+        }
     }
 
     /**

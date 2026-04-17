@@ -162,17 +162,69 @@ fun ProfileBottomSheet(
         }
     }
 
-    val effectiveMedia = remember(state.media, tabMedia) {
-        if (state.media.isNotEmpty()) state.media else tabMedia
+    // Local E2EE cache: derive Media / Files / Links from the locally-decrypted
+    // messages when available, falling back to BFF results or caller-supplied data.
+    val localMedia = remember(state.localMessages) {
+        state.localMessages
+            .filter { it.messageType == "image" || it.messageType == "audio" }
+            .mapNotNull { msg ->
+                val meta = msg.metadata as? JsonObject ?: return@mapNotNull null
+                val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
+                    meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                } ?: return@mapNotNull null
+                ProfileSheetMedia(
+                    id = msg.id,
+                    imageUrl = url,
+                    captionedAt = msg.content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") },
+                )
+            }
     }
-    val effectiveFiles = remember(state.files, tabFiles) {
-        if (state.files.isNotEmpty()) state.files else tabFiles
+    val localFiles = remember(state.localMessages) {
+        state.localMessages
+            .filter { it.messageType == "file" || it.content.startsWith("ccx:v1:") }
+            .map { msg ->
+                val meta = msg.metadata as? JsonObject
+                ProfileSheetFile(
+                    id = msg.id,
+                    fileName = meta?.get("file_name")?.jsonPrimitive?.contentOrNull
+                        ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
+                        ?: meta?.get("name")?.jsonPrimitive?.contentOrNull
+                        ?: msg.content.takeIf { it.isNotBlank() && !it.startsWith("ccx:v1:") }
+                        ?: "Attachment",
+                    sizeBytes = meta?.get("file_size")?.jsonPrimitive?.longOrNull
+                        ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
+                        ?: 0L,
+                    mimeType = meta?.get("mime_type")?.jsonPrimitive?.contentOrNull
+                        ?: meta?.get("content_type")?.jsonPrimitive?.contentOrNull
+                        ?: "application/octet-stream",
+                    timestamp = msg.timestamp,
+                )
+            }
     }
-    // Links are *always* derived client-side from locally-decrypted text because
-    // message `content` is E2EE on the wire. If the caller preseeded `state.links`
-    // (e.g. fixtures) we use those, otherwise we scan `decryptedTextMessages`.
-    val effectiveLinks = remember(state.links, state.decryptedTextMessages) {
-        if (state.links.isNotEmpty()) state.links else extractLinksFromDecrypted(state.decryptedTextMessages)
+    val localLinks = remember(state.localMessages) {
+        extractLinksFromLocalMessages(state.localMessages)
+    }
+
+    val effectiveMedia = remember(state.media, tabMedia, localMedia) {
+        when {
+            localMedia.isNotEmpty() -> localMedia
+            state.media.isNotEmpty() -> state.media
+            else -> tabMedia
+        }
+    }
+    val effectiveFiles = remember(state.files, tabFiles, localFiles) {
+        when {
+            localFiles.isNotEmpty() -> localFiles
+            state.files.isNotEmpty() -> state.files
+            else -> tabFiles
+        }
+    }
+    val effectiveLinks = remember(state.links, state.decryptedTextMessages, localLinks) {
+        when {
+            localLinks.isNotEmpty() -> localLinks
+            state.links.isNotEmpty() -> state.links
+            else -> extractLinksFromDecrypted(state.decryptedTextMessages)
+        }
     }
 
     Column(
@@ -180,12 +232,11 @@ fun ProfileBottomSheet(
             .fillMaxWidth()
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            // Honour the top safe-area inset so the "Profile" header never clips
-            // the iOS Dynamic Island / notch when the sheet expands to full height.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .padding(horizontal = 20.dp)
             .padding(top = 4.dp, bottom = 12.dp),
     ) {
+        Spacer(Modifier.height(24.dp))
         Text(
             text = "Profile",
             style = MaterialTheme.typography.titleMedium,
@@ -313,6 +364,12 @@ data class ProfileSheetState(
      * intentionally doesn't parse links.
      */
     val decryptedTextMessages: List<ProfileSheetDecryptedMessage> = emptyList(),
+    /**
+     * All locally-decrypted chat messages with type metadata. Used to populate
+     * the Media / Files / Links tabs from the local E2EE cache instead of making
+     * a server round-trip (message content is encrypted on the wire).
+     */
+    val localMessages: List<ProfileSheetLocalMessage> = emptyList(),
 )
 
 /**
@@ -323,6 +380,20 @@ data class ProfileSheetDecryptedMessage(
     val id: String,
     val content: String,
     val timestamp: String,
+)
+
+/**
+ * A locally-decrypted chat message carrying its [messageType] so the profile sheet
+ * can populate Media / Files / Links tabs entirely from the local E2EE cache
+ * without making a server round-trip (message content is end-to-end encrypted on
+ * the wire, so the BFF cannot parse it).
+ */
+data class ProfileSheetLocalMessage(
+    val id: String,
+    val content: String,
+    val messageType: String,
+    val timestamp: String,
+    val metadata: JsonElement? = null,
 )
 
 data class ProfileSheetBadge(
@@ -786,6 +857,33 @@ private fun extractLinksFromDecrypted(
 }
 
 /**
+ * Extract http(s) URLs from the full [ProfileSheetLocalMessage] list (E2EE
+ * local cache). Only considers text messages so image/file metadata URLs are
+ * not surfaced in the Links tab.
+ */
+private fun extractLinksFromLocalMessages(
+    messages: List<ProfileSheetLocalMessage>,
+): List<ProfileSheetLink> {
+    if (messages.isEmpty()) return emptyList()
+    val seen = mutableSetOf<String>()
+    val out = mutableListOf<ProfileSheetLink>()
+    messages.filter { it.messageType == "text" && it.content.contains("http") }.forEach { msg ->
+        URL_REGEX.findAll(msg.content).forEach { match ->
+            val url = match.value.trimEnd('.', ',', ')', ']', '}', ';', ':')
+            if (url.isNotBlank() && seen.add(url)) {
+                out += ProfileSheetLink(
+                    id = "${msg.id}:$url",
+                    url = url,
+                    title = null,
+                    timestamp = msg.timestamp,
+                )
+            }
+        }
+    }
+    return out
+}
+
+/**
  * Drop-in replacement for the legacy [UserProfileBottomSheet] that surfaces the same
  * peer-profile data (name, avatar, interests, shared interests, mutual moments) via
  * the new tabbed [ProfileBottomSheet] (Timeline · Media · Links · Files).
@@ -805,6 +903,7 @@ fun TabbedUserProfileSheet(
     viewerUserId: String?,
     onDismiss: () -> Unit,
     onMessage: (() -> Unit)? = null,
+    localMessages: List<ProfileSheetLocalMessage> = emptyList(),
 ) {
     if (userId.isNullOrBlank()) return
 
@@ -831,7 +930,7 @@ fun TabbedUserProfileSheet(
     val displayName = resolved?.name?.takeIf { it.isNotBlank() }
         ?: cached?.name?.takeIf { it.isNotBlank() }
         ?: "Member"
-    val state = remember(userId, viewerUserId, displayName, resolved?.image, resolved?.email) {
+    val state = remember(userId, viewerUserId, displayName, resolved?.image, resolved?.email, localMessages) {
         ProfileSheetState(
             displayName = displayName,
             subtitle = resolved?.email?.takeIf { it.isNotBlank() },
@@ -844,6 +943,7 @@ fun TabbedUserProfileSheet(
             files = emptyList(),
             userId = userId,
             viewerUserId = viewerUserId,
+            localMessages = localMessages,
         )
     }
 
