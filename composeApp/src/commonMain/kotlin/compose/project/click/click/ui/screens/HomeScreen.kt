@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +42,8 @@ import compose.project.click.click.ui.components.OnlineFriendItem // pragma: all
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.RecentClickCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppShimmerVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.StatCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.getAdaptiveCornerRadius // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
@@ -67,7 +70,6 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 // Spacing constants matching app's consistent 20.dp horizontal padding
 private val ScreenPaddingHorizontal = 20.dp
@@ -162,12 +164,12 @@ fun HomeScreen(
     ) {
         when (val state = homeState) {
             is HomeState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
-                }
+                AppShimmerScreen(
+                    isDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                    variant = AppShimmerVariant.HomeReveal,
+                    titleOverride = "Loading your home",
+                    subtitleOverride = "Bringing in your latest updates...",
+                )
             }
             is HomeState.Error -> {
                 Column(

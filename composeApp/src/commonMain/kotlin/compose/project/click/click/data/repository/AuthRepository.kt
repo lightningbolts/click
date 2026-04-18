@@ -5,6 +5,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Apple
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.OAuthProvider
+import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
@@ -16,6 +17,7 @@ import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import kotlinx.coroutines.withTimeout
 
 class AuthRepository(
@@ -144,7 +146,56 @@ class AuthRepository(
 
     suspend fun signInWithGoogle(): Result<Unit> = signInWithOAuth(Google)
 
-    suspend fun signInWithApple(): Result<Unit> = signInWithOAuth(Apple)
+    suspend fun signInWithApple(): Result<Unit> {
+        return try {
+            // Native Apple Sign-In is the canonical path on iOS.
+            // IMPORTANT: do not convert native failures into OAuth fallback, otherwise we can
+            // get stuck waiting for a browser deep link that never returns on simulator.
+            val nativePayloadResult = withTimeout(AUTH_TIMEOUT_MS) {
+                requestNativeAppleSignInPayload()
+            }
+
+            nativePayloadResult.fold(
+                onSuccess = { nativePayload ->
+                    if (nativePayload != null) {
+                        supabase.auth.signInWith(IDToken) {
+                            provider = Apple
+                            idToken = nativePayload.idToken
+                            nativePayload.nonce?.let { nonce = it }
+                        }
+                        Result.success(Unit)
+                    } else {
+                        // Android/other platforms return null payload by design.
+                        signInWithOAuth(Apple)
+                    }
+                },
+                onFailure = { nativeError ->
+                    val simulatorHint = if (isSimulatorOrEmulatorRuntime()) {
+                        " Apple Sign-In may be unavailable on simulator; use a physical iPhone or ensure Simulator Settings > Apple Account is signed in."
+                    } else {
+                        ""
+                    }
+                    Result.failure(
+                        Exception(
+                            mapAuthErrorMessage(
+                                nativeError,
+                                defaultMessage = "Apple sign-in could not be started right now.$simulatorHint",
+                            ),
+                        ),
+                    )
+                },
+            )
+        } catch (e: Exception) {
+            Result.failure(
+                Exception(
+                    mapAuthErrorMessage(
+                        e,
+                        defaultMessage = "Apple sign-in could not be started right now.",
+                    ),
+                ),
+            )
+        }
+    }
 
     suspend fun signOut(): Result<Unit> {
         return try {

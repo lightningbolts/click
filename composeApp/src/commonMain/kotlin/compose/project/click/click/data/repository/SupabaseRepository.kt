@@ -145,6 +145,8 @@ class SupabaseRepository {
     }
     private val userColumnSets = listOf(
         listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
+        listOf("id", "name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
+        listOf("id", "name", "first_name", "last_name", "birthday", "email", "image"),
         listOf("id", "name", "full_name", "email", "image", "last_polled"),
         listOf("id", "name", "email", "image", "last_polled"),
         listOf("id", "name", "full_name", "email", "image"),
@@ -1092,7 +1094,10 @@ class SupabaseRepository {
     ): Result<Unit> {
         val f = firstName.trim()
         val l = lastName.trim()
-        val b = birthdayIso.trim()
+        val b = birthdayIso
+            .trim()
+            .substringBefore('T')
+            .substringBefore(' ')
         if (f.isEmpty()) {
             return Result.failure(IllegalArgumentException("First name is required"))
         }

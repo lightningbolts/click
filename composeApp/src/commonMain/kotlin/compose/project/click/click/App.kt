@@ -6,6 +6,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,6 +28,7 @@ import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
@@ -36,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
 import compose.project.click.click.ui.components.PlatformBottomBar
@@ -44,6 +47,7 @@ import compose.project.click.click.calls.CallOverlayState
 import compose.project.click.click.calls.CallPreviewOverlay
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.HeightCategory
@@ -58,6 +62,8 @@ import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.ConnectionContextSheet
+import compose.project.click.click.ui.components.AppShimmerScreen
+import compose.project.click.click.ui.components.AppShimmerVariant
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
@@ -239,6 +245,10 @@ fun App() {
         supabaseRepo.fetchUserInterests(currentUser.id).fold(
             onSuccess = { row ->
                 if (row != null) {
+                    if (hasCompletedOnboarding != true) {
+                        hasCompletedOnboarding = true
+                        tokenStorage.saveHasCompletedOnboarding(true)
+                    }
                     val base = (onboardingState ?: OnboardingState()).let { state ->
                         if (hasCompletedOnboarding == true && !state.permissionsCompleted) {
                             state.copy(permissionsCompleted = true)
@@ -248,7 +258,9 @@ fun App() {
                     }
                     val permissionsCompleted = hasCompletedOnboarding == true || base.permissionsCompleted
                     val merged = base.copy(
+                        welcomeSeen = true,
                         interestsCompleted = true,
+                        permissionsCompleted = permissionsCompleted,
                         flowVersion = if (permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
                         completedAt = base.completedAt ?: if (permissionsCompleted) {
                             kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
@@ -363,6 +375,33 @@ fun App() {
 
 
     var showSignUp by remember { mutableStateOf(false) }
+    var authShimmerVisible by remember { mutableStateOf(false) }
+    var authShimmerVariant by remember { mutableStateOf(AppShimmerVariant.AuthSignIn) }
+    var authSurfaceVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(authViewModel.authState, authViewModel.isAuthenticated, showSignUp) {
+        if (authViewModel.authState is AuthState.Loading) {
+            authShimmerVariant = when {
+                authViewModel.isAuthenticated -> AppShimmerVariant.AuthSignOut
+                showSignUp -> AppShimmerVariant.AuthSignUp
+                else -> AppShimmerVariant.AuthSignIn
+            }
+            authShimmerVisible = true
+        } else if (authShimmerVisible) {
+            delay(340)
+            authShimmerVisible = false
+        }
+    }
+
+    LaunchedEffect(authViewModel.isAuthenticated, authViewModel.authState, authShimmerVisible) {
+        if (!authViewModel.isAuthenticated && authViewModel.authState !is AuthState.Loading && !authShimmerVisible) {
+            authSurfaceVisible = false
+            delay(16)
+            authSurfaceVisible = true
+        } else {
+            authSurfaceVisible = false
+        }
+    }
 
     val scheme = if (isDarkMode) {
         darkColorScheme(
@@ -415,14 +454,31 @@ fun App() {
                 }
         ) {
         // Show login/signup screens when not authenticated
-        if (authViewModel.authState is AuthState.Loading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                AdaptiveCircularProgressIndicator(color = PrimaryBlue)
-            }
+        if (authViewModel.authState is AuthState.Loading || authShimmerVisible) {
+            AppShimmerScreen(
+                isDarkMode = isDarkMode,
+                variant = authShimmerVariant,
+            )
         } else if (!authViewModel.isAuthenticated) {
+            val authSurfaceAlpha by animateFloatAsState(
+                targetValue = if (authSurfaceVisible) 1f else 0f,
+                animationSpec = tween(durationMillis = 280, easing = LinearOutSlowInEasing),
+                label = "auth_surface_alpha",
+            )
+            val authSurfaceScale by animateFloatAsState(
+                targetValue = if (authSurfaceVisible) 1f else 1.01f,
+                animationSpec = tween(durationMillis = 280, easing = LinearOutSlowInEasing),
+                label = "auth_surface_scale",
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = authSurfaceAlpha
+                        scaleX = authSurfaceScale
+                        scaleY = authSurfaceScale
+                    }
+            ) {
             if (showSignUp) {
                 SignUpScreen(
                     onSignUpSuccess = {
@@ -468,6 +524,7 @@ fun App() {
                     } else null
                 )
             }
+            }
         } else {
             val ambientMonitor = AmbientNoiseMonitorProvider.current
             val baroMonitor = BarometricHeightMonitorProvider.current
@@ -480,6 +537,50 @@ fun App() {
             val globalCallOverlayState by CallSessionManager.overlayState.collectAsState()
             val globalCallState by CallSessionManager.callState.collectAsState()
             val activeInvite by CallSessionManager.activeInvite.collectAsState()
+            val profileApi = remember { ApiClient() }
+            var remoteBirthdayMissing by remember { mutableStateOf<Boolean?>(null) }
+            var remoteFirstNameMissing by remember { mutableStateOf<Boolean?>(null) }
+            var remoteAvatarPresent by remember { mutableStateOf<Boolean?>(null) }
+            var profileGateCheckReady by remember { mutableStateOf(false) }
+            var profileGateBootstrapped by remember { mutableStateOf(false) }
+
+            LaunchedEffect(authViewModel.isAuthenticated, currentUser.id) {
+                if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
+                    remoteBirthdayMissing = null
+                    remoteFirstNameMissing = null
+                    remoteAvatarPresent = null
+                    profileGateCheckReady = false
+                    profileGateBootstrapped = false
+                    return@LaunchedEffect
+                }
+
+                if (profileGateBootstrapped) return@LaunchedEffect
+
+                if (appDataUser == null) {
+                    profileGateCheckReady = false
+                    return@LaunchedEffect
+                }
+
+                profileGateCheckReady = false
+                val localUser = appDataUser
+                    ?: run {
+                        profileGateCheckReady = false
+                        return@LaunchedEffect
+                    }
+
+                val remoteUser = profileApi.getUserProfile(currentUser.id).getOrNull()?.user
+                if (remoteUser != null) {
+                    remoteBirthdayMissing = remoteUser.birthday.isNullOrBlank()
+                    remoteFirstNameMissing = remoteUser.firstName.isNullOrBlank()
+                    remoteAvatarPresent = !remoteUser.image.isNullOrBlank()
+                } else {
+                    remoteBirthdayMissing = localUser.birthday.isNullOrBlank()
+                    remoteFirstNameMissing = localUser.firstName.isNullOrBlank()
+                    remoteAvatarPresent = !localUser.image.isNullOrBlank()
+                }
+                profileGateCheckReady = true
+                profileGateBootstrapped = true
+            }
 
             LaunchedEffect(appDataUser?.id, appDataUser?.name) {
                 CallSessionManager.bindUser(appDataUser?.id, appDataUser?.name)
@@ -494,7 +595,7 @@ fun App() {
             // → Complete. We rebuild the VM whenever the persisted state changes so step() stays
             // in sync without having to hoist the whole thing into AppDataManager.
             val onboardingStateSnapshot = onboardingState
-            val userHasAvatar = !appDataUser?.image.isNullOrBlank()
+            val userHasAvatar = remoteAvatarPresent ?: !appDataUser?.image.isNullOrBlank()
             val onboardingPersistScope = rememberCoroutineScope()
             val onboardingVm = remember(onboardingStateSnapshot, userHasAvatar) {
                 OnboardingViewModel(
@@ -524,27 +625,100 @@ fun App() {
                 else -> "complete"
             }
 
+            var previousOnboardingStep by remember { mutableStateOf<String?>(null) }
+            var onboardingHandoffActive by remember { mutableStateOf(false) }
+            var showHomeRevealOverlay by remember { mutableStateOf(false) }
+
             val avatarAuthRepo = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
+
+            val birthdayMissing = if (appDataUser != null) {
+                remoteBirthdayMissing ?: appDataUser!!.birthday.isNullOrBlank()
+            } else {
+                true
+            }
+            val firstNameMissing = if (appDataUser != null) {
+                remoteFirstNameMissing ?: appDataUser!!.firstName.isNullOrBlank()
+            } else {
+                true
+            }
+
+            val profileGatePending =
+                currentUser.id.isNotBlank() &&
+                    appDataUser != null &&
+                    !profileGateBootstrapped &&
+                    !profileGateCheckReady
 
             val profileGateActive =
                 currentUser.id.isNotBlank() &&
                     appDataUser != null &&
-                    isPublicUserProfileIncomplete(appDataUser!!)
+                    profileGateCheckReady &&
+                    (birthdayMissing || firstNameMissing)
 
-            if (profileGateActive) {
+            val shouldStartOnboardingHandoff =
+                previousOnboardingStep != null &&
+                    previousOnboardingStep != "complete" &&
+                    previousOnboardingStep != "loading" &&
+                    onboardingStep == "complete" &&
+                    !profileGateActive &&
+                    !profileGatePending
+
+            val shouldStartInitialHomeReveal =
+                previousOnboardingStep == null &&
+                    onboardingStep == "complete" &&
+                    !profileGateActive &&
+                    !profileGatePending
+
+            LaunchedEffect(shouldStartOnboardingHandoff) {
+                if (shouldStartOnboardingHandoff) {
+                    AppDataManager.refresh(force = true)
+                    onboardingHandoffActive = true
+                    try {
+                        delay(1300)
+                    } finally {
+                        // Ensure we never get stuck on shimmer if the coroutine is cancelled
+                        // during recomposition/key changes.
+                        onboardingHandoffActive = false
+                    }
+                    showHomeRevealOverlay = true
+                    delay(850)
+                    showHomeRevealOverlay = false
+                }
+            }
+
+            LaunchedEffect(shouldStartInitialHomeReveal) {
+                if (shouldStartInitialHomeReveal) {
+                    AppDataManager.refresh(force = true)
+                    showHomeRevealOverlay = true
+                    delay(700)
+                    showHomeRevealOverlay = false
+                }
+            }
+
+            SideEffect {
+                previousOnboardingStep = onboardingStep
+            }
+
+            if (profileGatePending) {
+                AppShimmerScreen(
+                    isDarkMode = isDarkMode,
+                    variant = AppShimmerVariant.Generic,
+                    titleOverride = "Checking your profile",
+                    subtitleOverride = "Verifying your saved details...",
+                )
+            } else if (profileGateActive) {
                 ProfileBasicsGateScreen(
                     userId = currentUser.id,
                     initialFirstName = appDataUser!!.firstName.orEmpty(),
                     initialLastName = appDataUser!!.lastName.orEmpty(),
+                    initialBirthdayIso = appDataUser!!.birthday.orEmpty(),
+                    requireBirthday = birthdayMissing,
                     onCompleted = { appScope.launch { AppDataManager.refresh(force = true) } },
                 )
             } else if (onboardingStep == "loading") {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
-                }
+                AppShimmerScreen(
+                    isDarkMode = isDarkMode,
+                    variant = AppShimmerVariant.OnboardingLoading,
+                )
             } else if (onboardingStep != "complete") {
                 val onboardingSnackbarHostState = remember { SnackbarHostState() }
                 LaunchedEffect(Unit) {
@@ -629,7 +803,17 @@ fun App() {
                         .padding(bottom = 24.dp),
                 )
                 }
+            } else if (onboardingHandoffActive || shouldStartOnboardingHandoff) {
+                AppShimmerScreen(
+                    isDarkMode = isDarkMode,
+                    variant = AppShimmerVariant.OnboardingWelcome,
+                )
             } else {
+            val homeRevealAlpha by animateFloatAsState(
+                targetValue = if (showHomeRevealOverlay) 1f else 0f,
+                animationSpec = tween(durationMillis = 760, easing = LinearOutSlowInEasing),
+                label = "home_reveal_overlay_alpha",
+            )
             var currentRoute by remember { mutableStateOf("home") }
             var previousRoute by remember { mutableStateOf("home") }
             var transitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
@@ -639,8 +823,6 @@ fun App() {
             var pendingChatId by remember { mutableStateOf<String?>(null) }
             var isConnectionsChatOpen by remember { mutableStateOf(false) }
             var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
-
-            // Helper: navigate to a route, pushing onto history stack
             fun navigateTo(route: String) {
                 if (route != currentRoute) {
                     transitionMode = NavigationTransitionMode.Tap
@@ -1540,6 +1722,19 @@ fun App() {
                                         onEndCall = { CallSessionManager.endActiveCall() },
                                     )
                                 }
+                            }
+                        }
+
+                        if (homeRevealAlpha > 0.01f) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = homeRevealAlpha },
+                            ) {
+                                AppShimmerScreen(
+                                    isDarkMode = isDarkMode,
+                                    variant = AppShimmerVariant.HomeReveal,
+                                )
                             }
                         }
                     }

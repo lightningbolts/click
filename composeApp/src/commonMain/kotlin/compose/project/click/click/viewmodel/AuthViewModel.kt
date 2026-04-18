@@ -188,7 +188,35 @@ class AuthViewModel(
      * semantics — the flow is identical; only the upstream IdP differs.
      */
     fun signInWithApple() {
-        launchOAuthSignIn(providerLabel = "Apple") { authRepository.signInWithApple() }
+        viewModelScope.launch {
+            authState = AuthState.Loading
+            var browserOpenedAwaitingDeepLink = false
+            try {
+                val result = authRepository.signInWithApple()
+                result.fold(
+                    onSuccess = {
+                        // Native Apple ID-token sign-in or browser OAuth launch both transition
+                        // through Supabase session callbacks; keep Loading while awaiting completion.
+                        browserOpenedAwaitingDeepLink = true
+                    },
+                    onFailure = { error ->
+                        authState = AuthState.Error(
+                            error.message ?: "Could not start Apple sign-in right now.",
+                        )
+                    },
+                )
+            } catch (e: Exception) {
+                println("AuthViewModel: Apple sign-in failed: ${e.redactedRestMessage()}")
+                authState = AuthState.Error(
+                    e.message ?: "Could not start Apple sign-in right now.",
+                )
+            } finally {
+                // Equivalent to clearing loading state when startup failed before auth callback.
+                if (!browserOpenedAwaitingDeepLink && authState is AuthState.Loading) {
+                    authState = AuthState.Idle
+                }
+            }
+        }
     }
 
     private fun launchOAuthSignIn(providerLabel: String, launch: suspend () -> Result<Unit>) {
@@ -388,12 +416,14 @@ class AuthViewModel(
     fun signOut() {
         viewModelScope.launch {
             try {
+                authState = AuthState.Loading
                 AppDataManager.clearData()
                 tokenStorage.clearSessionData()
                 authRepository.signOut()
                 isAuthenticated = false
                 authState = AuthState.Idle
             } catch (e: Exception) {
+                authState = AuthState.Loading
                 AppDataManager.clearData()
                 runCatching { tokenStorage.clearSessionData() }
                 isAuthenticated = false

@@ -1,7 +1,6 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -16,16 +15,21 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +37,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.repository.SupabaseRepository
 import kotlinx.coroutines.launch
@@ -48,12 +57,23 @@ import kotlinx.datetime.until
 private const val MinSignupAgeYears = 13
 
 private fun parseIsoLocalDate(raw: String): LocalDate? =
-    runCatching { LocalDate.parse(raw.trim()) }.getOrNull()
+    runCatching {
+        val trimmed = raw.trim()
+        val canonical = when {
+            trimmed.contains('T') -> trimmed.substringBefore('T')
+            trimmed.contains(' ') -> trimmed.substringBefore(' ')
+            else -> trimmed
+        }
+        LocalDate.parse(canonical)
+    }.getOrNull()
 
-private fun formatBirthdayDisplay(date: LocalDate): String {
-    val month = date.monthNumber.toString().padStart(2, '0')
-    val day = date.dayOfMonth.toString().padStart(2, '0')
-    return "$month/$day/${date.year}"
+private fun normalizeBirthdayInput(raw: String): String {
+    val trimmed = raw.trim().replace('/', '-')
+    return when {
+        trimmed.contains('T') -> trimmed.substringBefore('T')
+        trimmed.contains(' ') -> trimmed.substringBefore(' ')
+        else -> trimmed
+    }
 }
 
 private fun utcMillisToIsoDate(millis: Long): String =
@@ -74,11 +94,13 @@ fun ProfileBasicsGateScreen(
     userId: String,
     initialFirstName: String,
     initialLastName: String,
+    initialBirthdayIso: String = "",
+    requireBirthday: Boolean = true,
     onCompleted: () -> Unit,
 ) {
     var firstName by remember { mutableStateOf(initialFirstName) }
     var lastName by remember { mutableStateOf(initialLastName) }
-    var birthdayIso by remember { mutableStateOf("") }
+    var birthdayIso by remember { mutableStateOf(normalizeBirthdayInput(initialBirthdayIso)) }
     var showBirthdayPicker by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -86,20 +108,31 @@ fun ProfileBasicsGateScreen(
     val repo = remember { SupabaseRepository() }
     val scroll = rememberScrollState()
 
+    LaunchedEffect(initialFirstName, initialLastName, initialBirthdayIso) {
+        val incomingFirst = initialFirstName.trim()
+        val incomingLast = initialLastName.trim()
+        val incomingBirthday = normalizeBirthdayInput(initialBirthdayIso)
+
+        if (firstName.isBlank() && incomingFirst.isNotBlank()) firstName = incomingFirst
+        if (lastName.isBlank() && incomingLast.isNotBlank()) lastName = incomingLast
+        if (birthdayIso.isBlank() && incomingBirthday.isNotBlank()) birthdayIso = incomingBirthday
+    }
+
     val parsedBirth = remember(birthdayIso) { parseIsoLocalDate(birthdayIso) }
-    val birthdayDisplay = remember(parsedBirth) { parsedBirth?.let(::formatBirthdayDisplay).orEmpty() }
     val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
     val birthdayHelper = when {
-        birthdayIso.isBlank() -> "Required — select your birthday"
-        parsedBirth == null -> "Select a valid date"
+        birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
+        parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
         !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
         else -> null
     }
 
+    val birthdaySatisfied = if (requireBirthday) birthdayValid else true
+
     val canSave =
         firstName.isNotBlank() &&
             lastName.isNotBlank() &&
-            birthdayValid &&
+            birthdaySatisfied &&
             !saving
 
     Column(
@@ -138,43 +171,54 @@ fun ProfileBasicsGateScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
-            value = birthdayDisplay,
-            onValueChange = { },
-            label = { Text("Birthday") },
-            placeholder = { Text("MM/DD/YYYY") },
-            supportingText = birthdayHelper?.let { { Text(it) } },
-            isError = birthdayIso.isNotBlank() && !birthdayValid,
-            singleLine = true,
-            readOnly = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !saving) { showBirthdayPicker = true },
-        )
-        if (showBirthdayPicker) {
-            val birthdayPickerState = rememberDatePickerState()
-            DatePickerDialog(
-                onDismissRequest = { showBirthdayPicker = false },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
-                                birthdayIso = utcMillisToIsoDate(selectedMillis)
-                            }
-                            showBirthdayPicker = false
-                        },
-                        enabled = birthdayPickerState.selectedDateMillis != null,
-                    ) {
-                        Text("OK")
+        if (requireBirthday) {
+            OutlinedTextField(
+                value = birthdayIso,
+                onValueChange = { birthdayIso = normalizeBirthdayInput(it) },
+                label = { Text("Birthday") },
+                placeholder = { Text("YYYY-MM-DD") },
+                trailingIcon = {
+                    IconButton(onClick = { showBirthdayPicker = true }, enabled = !saving) {
+                        Icon(Icons.Filled.DateRange, contentDescription = "Open birthday calendar")
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showBirthdayPicker = false }) {
-                        Text("Cancel")
-                    }
-                },
-            ) {
-                DatePicker(state = birthdayPickerState)
+                supportingText = birthdayHelper?.let { { Text(it) } },
+                isError = birthdayIso.isNotBlank() && !birthdayValid,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = {}),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("profile-gate-birthday-field"),
+            )
+            if (showBirthdayPicker) {
+                val birthdayPickerState = rememberDatePickerState()
+                DatePickerDialog(
+                    onDismissRequest = { showBirthdayPicker = false },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
+                                    birthdayIso = utcMillisToIsoDate(selectedMillis)
+                                }
+                                showBirthdayPicker = false
+                            },
+                            enabled = birthdayPickerState.selectedDateMillis != null,
+                        ) {
+                            Text("OK")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBirthdayPicker = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                ) {
+                    DatePicker(state = birthdayPickerState)
+                }
             }
         }
         error?.let { msg ->
@@ -190,12 +234,20 @@ fun ProfileBasicsGateScreen(
                 saving = true
                 error = null
                 scope.launch {
-                    val result = repo.updateUserProfileBasics(
-                        userId = userId,
-                        firstName = firstName,
-                        lastName = lastName,
-                        birthdayIso = birthdayIso.trim(),
-                    )
+                    val result = if (requireBirthday) {
+                        repo.updateUserProfileBasics(
+                            userId = userId,
+                            firstName = firstName,
+                            lastName = lastName,
+                            birthdayIso = birthdayIso.trim(),
+                        )
+                    } else {
+                        repo.updateUserProfileNames(
+                            userId = userId,
+                            firstName = firstName,
+                            lastName = lastName,
+                        )
+                    }
                     result.fold(
                         onSuccess = {
                             saving = false
@@ -209,7 +261,7 @@ fun ProfileBasicsGateScreen(
                     )
                 }
             },
-            enabled = firstName.isNotBlank() && lastName.isNotBlank() && birthdayValid && !saving,
+            enabled = firstName.isNotBlank() && lastName.isNotBlank() && birthdaySatisfied && !saving,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (saving) "Saving…" else "Save and continue")

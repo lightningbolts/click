@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,12 +54,6 @@ private const val MinSignupAgeYears = 13
 
 private fun parseIsoLocalDate(raw: String): LocalDate? =
     runCatching { LocalDate.parse(raw.trim()) }.getOrNull()
-
-private fun formatBirthdayDisplay(date: LocalDate): String {
-    val month = date.monthNumber.toString().padStart(2, '0')
-    val day = date.dayOfMonth.toString().padStart(2, '0')
-    return "$month/$day/${date.year}"
-}
 
 private fun utcMillisToIsoDate(millis: Long): String =
     Instant.fromEpochMilliseconds(millis).toString().take(10)
@@ -111,11 +106,10 @@ fun SignUpScreen(
     val scrollState = rememberScrollState()
 
     val parsedBirth = remember(birthdayIso) { parseIsoLocalDate(birthdayIso) }
-    val birthdayDisplay = remember(parsedBirth) { parsedBirth?.let(::formatBirthdayDisplay).orEmpty() }
     val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
     val birthdayHelper = when {
-        birthdayIso.isBlank() -> "Required — select your birthday"
-        parsedBirth == null -> "Select a valid date"
+        birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
+        parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
         !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
         else -> null
     }
@@ -316,12 +310,17 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = birthdayDisplay,
-                onValueChange = { },
+                value = birthdayIso,
+                onValueChange = { birthdayIso = it.replace('/', '-') },
                 label = { Text("Birthday") },
-                placeholder = { Text("MM/DD/YYYY") },
+                placeholder = { Text("YYYY-MM-DD") },
                 leadingIcon = {
                     Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+                },
+                trailingIcon = {
+                    IconButton(onClick = { showBirthdayPicker = true }, enabled = !isLoading) {
+                        Icon(Icons.Filled.DateRange, contentDescription = "Open birthday calendar")
+                    }
                 },
                 supportingText = {
                     val h = birthdayHelper
@@ -332,9 +331,15 @@ fun SignUpScreen(
                 isError = birthdayIso.isNotBlank() && !birthdayValid,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = !isLoading) { showBirthdayPicker = true },
+                    .testTag("signup-birthday-field"),
                 singleLine = true,
-                readOnly = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next,
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
