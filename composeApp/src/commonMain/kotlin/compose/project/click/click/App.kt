@@ -1406,7 +1406,6 @@ fun App() {
                                             onNavigateToMap = {
                                                 navigateTo(NavigationItem.Map.route)
                                             },
-                                            onBack = { navigateBack() }
                                         )
                                     }
 

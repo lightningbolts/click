@@ -182,6 +182,16 @@ interface ChatRepository {
 
     suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>>
 
+    /**
+     * Loads [user_interests] and active [availability_intents] rows for [peerUserIds]
+     * (typically mutual-connection peers). Callers apply substring filters locally.
+     * Returns [UnifiedSearchSupplement.EMPTY] on auth/network failure — never throws.
+     */
+    suspend fun unifiedSearchSupplement(
+        viewerUserId: String,
+        peerUserIds: List<String>,
+    ): UnifiedSearchSupplement
+
     /** Uploads raw bytes to Supabase Storage (`chat-media` bucket) and returns a public URL, or null on failure. */
     suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String?
 

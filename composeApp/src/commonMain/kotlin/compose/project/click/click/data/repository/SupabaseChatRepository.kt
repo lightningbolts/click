@@ -1711,6 +1711,78 @@ class SupabaseChatRepository(
         return resolvedChatId to messages
     }
 
+    override suspend fun unifiedSearchSupplement(
+        viewerUserId: String,
+        peerUserIds: List<String>,
+    ): UnifiedSearchSupplement {
+        if (viewerUserId.isBlank() || peerUserIds.isEmpty()) return UnifiedSearchSupplement.EMPTY
+        val peers = distinctPeerIdsForSearch(peerUserIds)
+        if (peers.isEmpty()) return UnifiedSearchSupplement.EMPTY
+        return try {
+            UnifiedSearchSupplement(
+                peerInterestTagsByUserId = loadInterestTagsForPeers(peers),
+                activePeerIntentsByUserId = loadActiveIntentsForPeers(peers),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("ChatRepository: unifiedSearchSupplement failed: ${e.redactedRestMessage()}")
+            UnifiedSearchSupplement.EMPTY
+        }
+    }
+
+    @Serializable
+    private data class UserInterestRowDb(
+        @SerialName("user_id") val userId: String,
+        val tags: List<String> = emptyList(),
+    )
+
+    private fun distinctPeerIdsForSearch(raw: List<String>): List<String> {
+        val out = LinkedHashSet<String>(minOf(raw.size, 400))
+        for (id in raw) {
+            val t = id.trim()
+            if (t.isNotEmpty()) out.add(t)
+            if (out.size >= 400) break
+        }
+        return out.toList()
+    }
+
+    private suspend fun loadInterestTagsForPeers(peerIds: List<String>): Map<String, List<String>> {
+        val rows = supabase.from("user_interests")
+            .select {
+                filter { isIn("user_id", peerIds) }
+                limit(500)
+            }
+            .decodeList<UserInterestRowDb>()
+        if (rows.isEmpty()) return emptyMap()
+        val map = HashMap<String, List<String>>(rows.size)
+        for (row in rows) {
+            map[row.userId] = row.tags
+        }
+        return map
+    }
+
+    private suspend fun loadActiveIntentsForPeers(peerIds: List<String>): Map<String, List<AvailabilityIntentRow>> {
+        val nowIso = Clock.System.now().toString()
+        val rows = supabase.from("availability_intents")
+            .select {
+                filter {
+                    isIn("user_id", peerIds)
+                    gte("expires_at", nowIso)
+                }
+                limit(500)
+            }
+            .decodeList<AvailabilityIntentRow>()
+        if (rows.isEmpty()) return emptyMap()
+        val map = HashMap<String, MutableList<AvailabilityIntentRow>>()
+        for (row in rows) {
+            val uid = row.userId?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+            val bucket = map.getOrPut(uid) { ArrayList(4) }
+            bucket.add(row)
+        }
+        return map
+    }
+
     override suspend fun createVerifiedClique(
         memberUserIds: List<String>,
         encryptedKeysByUserId: Map<String, String>,

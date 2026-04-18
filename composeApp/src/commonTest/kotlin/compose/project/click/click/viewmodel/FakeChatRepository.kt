@@ -9,6 +9,7 @@ import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatRealtimeEvent
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.PresenceHealth
+import compose.project.click.click.data.repository.UnifiedSearchSupplement
 import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.MessageListInsertEvent
 import compose.project.click.click.data.repository.TypingStatus
@@ -54,6 +55,10 @@ class FakeChatRepository(
     var onSendMessage: suspend (String, String, String, String, JsonElement?) -> Message? = { _, _, _, _, _ -> null },
     var onEnsureChatForConnection: suspend (String) -> Chat? = { null },
     var onGetUserById: suspend (String) -> User? = { null },
+    var onUnifiedSearchSupplement: suspend (viewerUserId: String, peerUserIds: List<String>) -> UnifiedSearchSupplement =
+        { _, _ -> UnifiedSearchSupplement.EMPTY },
+    var onSearchMessagesByConnectionId: suspend (connectionId: String, query: String) -> Pair<String?, List<Message>> =
+        { _, _ -> null to emptyList() },
 ) : ChatRepository {
 
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
@@ -186,7 +191,12 @@ class FakeChatRepository(
     override fun clearChatListLocalCaches() {}
 
     override suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> =
-        null to emptyList()
+        onSearchMessagesByConnectionId(connectionId, query)
+
+    override suspend fun unifiedSearchSupplement(
+        viewerUserId: String,
+        peerUserIds: List<String>,
+    ): UnifiedSearchSupplement = onUnifiedSearchSupplement(viewerUserId, peerUserIds)
 
     override suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String? = null
 
