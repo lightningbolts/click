@@ -61,7 +61,7 @@ fun MapScreen(
     onNavigateToChat: ((String) -> Unit)? = null,
 ) {
     val mapState by viewModel.mapState.collectAsState()
-    val zoomLevel by viewModel.zoomLevel.collectAsState()
+    val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
     val renderData by viewModel.renderData.collectAsState()
     val selection by viewModel.selection.collectAsState()
     val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
@@ -138,7 +138,7 @@ fun MapScreen(
                 is MapState.Success -> {
                     MapContent(
                         renderData = renderData,
-                        zoom = zoomLevel,
+                        zoom = cameraTarget?.zoom ?: mapBindingZoom,
                         ghostMode = ghostModeEnabled,
                         cameraTarget = cameraTarget,
                         onPinTapped = { pin ->

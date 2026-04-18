@@ -22,6 +22,7 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,7 +75,7 @@ class MapViewModel : ViewModel() {
     private val _mapState = MutableStateFlow<MapState>(MapState.Loading)
     val mapState: StateFlow<MapState> = _mapState.asStateFlow()
 
-    // Current zoom level (drives cluster vs pin rendering)
+    // Current zoom level (logical; updated from native map readbacks and programmatic moves)
     private val _zoomLevel = MutableStateFlow(10.0)
     val zoomLevel: StateFlow<Double> = _zoomLevel.asStateFlow()
 
@@ -114,13 +116,26 @@ class MapViewModel : ViewModel() {
      * threshold, treat the map as "pin mode" for clustering decisions so [determineMapRenderData]
      * does not snap back to hub markers while the camera is still on the cluster.
      */
-    private var pinRenderZoomFloor: Double? = null
+    private val _pinRenderZoomFloor = MutableStateFlow<Double?>(null)
 
     private fun zoomForClusteringRender(zoom: Double): Double {
-        val floor = pinRenderZoomFloor ?: return zoom
+        val floor = _pinRenderZoomFloor.value ?: return zoom
         return maxOf(zoom, floor)
     }
-    
+
+    /**
+     * Zoom passed to [PlatformMap] for camera span / meters. Sits above [_zoomLevel] while
+     * [_pinRenderZoomFloor] keeps pin mode so the map is not left at world scale with many
+     * markers stacked on one pixel.
+     */
+    val mapBindingZoom: StateFlow<Double> = combine(_zoomLevel, _pinRenderZoomFloor) { z, floor ->
+        floor?.let { maxOf(z, it) } ?: z
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = _zoomLevel.value,
+    )
+
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
 
@@ -261,7 +276,7 @@ class MapViewModel : ViewModel() {
      * Set the active tribe filter
      */
     fun setFilter(filter: String) {
-        pinRenderZoomFloor = null
+        _pinRenderZoomFloor.value = null
         _selectedFilter.value = filter
     }
 
@@ -300,7 +315,7 @@ class MapViewModel : ViewModel() {
         _zoomLevel.value = coerced
 
         if (pendingProgrammaticZoomTarget == null && coerced < clusterThreshold - 0.05) {
-            pinRenderZoomFloor = null
+            _pinRenderZoomFloor.value = null
         }
 
         _visibleBounds.value?.let { bounds ->
@@ -425,7 +440,7 @@ class MapViewModel : ViewModel() {
     fun zoomOut() {
         val target = maxOf(_zoomLevel.value - 1.0, 2.0)
         if (target < clusterThreshold - 0.25) {
-            pinRenderZoomFloor = null
+            _pinRenderZoomFloor.value = null
         }
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
@@ -464,7 +479,7 @@ class MapViewModel : ViewModel() {
         // Calculate zoom level to fit the cluster bounds
         val bounds = cluster.boundingBox
         val targetZoom = maxOf(clusterThreshold + 1, calculateZoomForBounds(bounds))
-        pinRenderZoomFloor = maxOf(clusterThreshold + 0.25, targetZoom)
+        _pinRenderZoomFloor.value = maxOf(clusterThreshold + 0.25, targetZoom)
         
         // Animate camera to cluster center with appropriate zoom
         _cameraTarget.value = CameraTarget(
