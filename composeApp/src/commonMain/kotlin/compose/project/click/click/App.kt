@@ -51,6 +51,7 @@ import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.data.models.ONBOARDING_FLOW_VERSION_COMPLETE
 import compose.project.click.click.data.models.OnboardingState
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.isPublicUserProfileIncomplete
 import compose.project.click.click.data.models.isPendingSync
 import compose.project.click.click.ui.components.ConnectionRevealOverlay
 import compose.project.click.click.ui.components.ConnectionRevealPhase
@@ -525,7 +526,19 @@ fun App() {
 
             val avatarAuthRepo = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
 
-            if (onboardingStep == "loading") {
+            val profileGateActive =
+                currentUser.id.isNotBlank() &&
+                    appDataUser != null &&
+                    isPublicUserProfileIncomplete(appDataUser!!)
+
+            if (profileGateActive) {
+                ProfileBasicsGateScreen(
+                    userId = currentUser.id,
+                    initialFirstName = appDataUser!!.firstName.orEmpty(),
+                    initialLastName = appDataUser!!.lastName.orEmpty(),
+                    onCompleted = { appScope.launch { AppDataManager.refresh(force = true) } },
+                )
+            } else if (onboardingStep == "loading") {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center

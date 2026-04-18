@@ -501,8 +501,9 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         lastName: String? = null,
         image: String? = null,
         tags: List<String>? = null,
+        birthday: String? = null,
     ): Result<User> {
-        if (firstName == null && lastName == null && image == null && tags == null) {
+        if (firstName == null && lastName == null && image == null && tags == null && birthday == null) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))
         }
         val body = buildJsonObject {
@@ -512,6 +513,7 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             tags?.let { list ->
                 put("tags", JsonArray(list.map { JsonPrimitive(it) }))
             }
+            birthday?.let { put("birthday", it) }
         }
         if (body.isEmpty()) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))

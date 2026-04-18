@@ -51,6 +51,9 @@ class AuthViewModel(
     }
 
     /**
+     * OAuth profile hydration (birthday / first name) is enforced in [compose.project.click.click.App]
+     * once [AppDataManager] loads [public.users] — see [compose.project.click.click.data.models.isPublicUserProfileIncomplete].
+     *
      * Reflect deep-link-driven OAuth completion into the UI state machine (Phase 2 — C16).
      *
      * When the PKCE callback (`click://login`) is delivered to the app, supabase-kt

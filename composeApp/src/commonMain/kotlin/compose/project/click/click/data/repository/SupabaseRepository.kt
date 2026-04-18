@@ -1079,6 +1079,36 @@ class SupabaseRepository {
                 println("Error updating user profile names (redacted): ${e.redactedRestMessage()}")
             }
     }
+
+    /**
+     * OAuth / incomplete rows: persist first name, last name, and birthday via click-web PATCH
+     * (writes [public.users] with RLS-safe server-side validation).
+     */
+    suspend fun updateUserProfileBasics(
+        userId: String,
+        firstName: String,
+        lastName: String,
+        birthdayIso: String,
+    ): Result<Unit> {
+        val f = firstName.trim()
+        val l = lastName.trim()
+        val b = birthdayIso.trim()
+        if (f.isEmpty()) {
+            return Result.failure(IllegalArgumentException("First name is required"))
+        }
+        if (b.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Birthday is required"))
+        }
+        return clickWebApi.patchUserProfile(
+            userId = userId,
+            firstName = f,
+            lastName = l,
+            birthday = b,
+        ).map { }
+            .onFailure { e ->
+                println("Error updating user profile basics (redacted): ${e.redactedRestMessage()}")
+            }
+    }
     
     /**
      * Upsert a user record in the users table.
