@@ -89,7 +89,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
         if url.scheme?.lowercased() == "click", url.host?.lowercased() == "login" {
-            MainViewControllerKt.handleSupabaseAuthDeepLink(url: url as NSURL)
+            MainViewControllerKt.handleSupabaseAuthDeepLink(url: url)
             return true
         }
         if let hubId = Self.communityHubId(from: url) {
