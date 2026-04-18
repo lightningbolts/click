@@ -670,7 +670,6 @@ fun App() {
 
             LaunchedEffect(shouldStartOnboardingHandoff) {
                 if (shouldStartOnboardingHandoff) {
-                    AppDataManager.refresh(force = true)
                     onboardingHandoffActive = true
                     try {
                         delay(1300)
@@ -687,7 +686,6 @@ fun App() {
 
             LaunchedEffect(shouldStartInitialHomeReveal) {
                 if (shouldStartInitialHomeReveal) {
-                    AppDataManager.refresh(force = true)
                     showHomeRevealOverlay = true
                     delay(700)
                     showHomeRevealOverlay = false

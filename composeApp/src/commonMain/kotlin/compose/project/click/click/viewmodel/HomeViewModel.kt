@@ -211,7 +211,9 @@ class HomeViewModel(
                 }
 
                 when {
-                    user != null && isDataLoaded -> {
+                    // Treat an authenticated, hydrated user as render-ready once the load cycle
+                    // is no longer active, even if isDataLoaded lags due a cancelled/restarted refresh.
+                    user != null && (isDataLoaded || !isLoading) -> {
                         if (availabilityIntentRefreshJob == null) {
                             availabilityIntentRefreshJob = viewModelScope.launch {
                                 while (isActive) {
@@ -282,7 +284,7 @@ class HomeViewModel(
                             }
                         }
                     }
-                    !isDataLoaded || isLoading -> {
+                    !isDataLoaded && isLoading -> {
                         _homeState.value = HomeState.Loading
                     }
                     else -> {
