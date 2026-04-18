@@ -4,10 +4,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import compose.project.click.click.ui.utils.TimeState
+import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import platform.CoreLocation.CLLocationCoordinate2DMake
 import platform.MapKit.MKAnnotationProtocol
 import platform.MapKit.MKAnnotationView
@@ -47,7 +46,6 @@ actual fun PlatformMap(
 ) {
     var lastPinsHash by remember { mutableStateOf(pins.hashCode() + clusters.hashCode()) }
     var hasCentered by remember { mutableStateOf(false) }
-    var mapRef by remember { mutableStateOf<MKMapView?>(null) }
     var lastAppliedTargetLat by remember { mutableStateOf<Double?>(null) }
     var lastAppliedTargetLon by remember { mutableStateOf<Double?>(null) }
     var lastAppliedTargetZoom by remember { mutableStateOf<Double?>(null) }
@@ -61,12 +59,14 @@ actual fun PlatformMap(
     val pinTapDelegate = remember { MapPinTapDelegate() }
     pinTapDelegate.onPin = onPinTapped
     pinTapDelegate.onCluster = onClusterTapped
+    pinTapDelegate.onProgrammaticCameraSettled = onCameraAnimationComplete
+    pinTapDelegate.onVisibleBoundsChanged = onVisibleBoundsChanged
+    pinTapDelegate.onZoomChanged = onZoomChanged
 
     UIKitView(
         modifier = modifier,
         factory = {
             MKMapView().apply {
-                mapRef = this
                 delegate = pinTapDelegate
                 showsCompass = true
                 showsScale = false
@@ -85,7 +85,6 @@ actual fun PlatformMap(
             }
         },
         update = { map ->
-            mapRef = map
             // Update user location visibility based on ghost mode
             map.showsUserLocation = !ghostMode
             if (map.delegate !== pinTapDelegate) {
@@ -96,6 +95,13 @@ actual fun PlatformMap(
             
             // Handle Pins and Clusters
             if (currentHash != lastPinsHash || !hasCentered) {
+                // Replacing all annotations can reset the visible region on some MapKit versions;
+                // preserve the user's viewport when we are not in the middle of a VM-driven camera target.
+                val savedRegion = if (hasCentered && centerLat == null && centerLon == null) {
+                    map.region
+                } else {
+                    null
+                }
                 // Remove existing annotations (except user location)
                 val existingAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
                 if (existingAnnotations.isNotEmpty()) {
@@ -134,6 +140,10 @@ actual fun PlatformMap(
                 pinTapDelegate.pinEntries = pinEntries
                 pinTapDelegate.clusterEntries = clusterEntries
 
+                if (savedRegion != null && centerLat == null && centerLon == null) {
+                    map.setRegion(savedRegion, false)
+                }
+
                 // Initial centering
                 if (!hasCentered) {
                     val initialTarget = when {
@@ -164,6 +174,10 @@ actual fun PlatformMap(
                     !approximatelyEqual(lastAppliedTargetZoom, zoom, epsilon = 0.01)
 
                 if (centerChanged) {
+                    pinTapDelegate.pendingProgrammaticCamera =
+                        ProgrammaticCameraTarget(centerLat, centerLon, zoom)
+                    pinTapDelegate.programmaticCameraStartedAtMs =
+                        Clock.System.now().toEpochMilliseconds()
                     val meters = metersForZoom(zoom)
                     val center = CLLocationCoordinate2DMake(centerLat, centerLon)
                     val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
@@ -171,70 +185,14 @@ actual fun PlatformMap(
                     lastAppliedTargetLat = centerLat
                     lastAppliedTargetLon = centerLon
                     lastAppliedTargetZoom = zoom
-                    onCameraAnimationComplete()
-                }
-            } else {
-                // Apply external zoom changes only when meaningfully different from the map's current zoom.
-                // This avoids fighting user double-tap/pinch gestures and prevents accidental zoom-to-world resets.
-                val currentMapZoom = map.region.useContents {
-                    approximateZoomLevel(
-                        latitudeDelta = span.latitudeDelta,
-                        longitudeDelta = span.longitudeDelta
-                    )
-                }
-                if (abs(zoom - currentMapZoom) > 0.35) {
-                    val meters = metersForZoom(zoom)
-                    val center = map.centerCoordinate
-                    val region = MKCoordinateRegionMakeWithDistance(center, meters, meters)
-                    map.setRegion(map.regionThatFits(region), true)
                 }
             }
+            // When centerLat/centerLon are null the *map* owns pinch / double-tap zoom. Pushing
+            // setRegion from ViewModel zoom here created a feedback loop with regionDidChange →
+            // onZoomChanged → _zoomLevel → update → setRegion, and bogus span reads produced
+            // continent-scale jumps. Programmatic zoom (buttons, cluster) always supplies a target center.
         }
     )
-
-    // Poll the map's current region so viewport-dependent UI always reflects the true iOS map window.
-    LaunchedEffect(mapRef) {
-        val map = mapRef ?: return@LaunchedEffect
-        var lastMinLat: Double? = null
-        var lastMaxLat: Double? = null
-        var lastMinLon: Double? = null
-        var lastMaxLon: Double? = null
-        var lastReportedZoom: Double? = null
-
-        while (isActive) {
-            val (minLat, maxLat, minLon, maxLon, zoomLevel) = map.region.useContents {
-                val minLatValue = center.latitude - (span.latitudeDelta / 2.0)
-                val maxLatValue = center.latitude + (span.latitudeDelta / 2.0)
-                val minLonValue = center.longitude - (span.longitudeDelta / 2.0)
-                val maxLonValue = center.longitude + (span.longitudeDelta / 2.0)
-                val zoomValue = approximateZoomLevel(
-                    latitudeDelta = span.latitudeDelta,
-                    longitudeDelta = span.longitudeDelta
-                )
-                listOf(minLatValue, maxLatValue, minLonValue, maxLonValue, zoomValue)
-            }
-
-            val boundsChanged =
-                !approximatelyEqual(lastMinLat, minLat) ||
-                !approximatelyEqual(lastMaxLat, maxLat) ||
-                !approximatelyEqual(lastMinLon, minLon) ||
-                !approximatelyEqual(lastMaxLon, maxLon)
-            if (boundsChanged) {
-                onVisibleBoundsChanged(minLat, maxLat, minLon, maxLon)
-                lastMinLat = minLat
-                lastMaxLat = maxLat
-                lastMinLon = minLon
-                lastMaxLon = maxLon
-            }
-
-            if (!approximatelyEqual(lastReportedZoom, zoomLevel, epsilon = 0.05)) {
-                onZoomChanged(zoomLevel)
-                lastReportedZoom = zoomLevel
-            }
-
-            delay(250)
-        }
-    }
 }
 
 private fun computeDataCenter(pins: List<MapPin>, clusters: List<MapClusterPin>): Pair<Double, Double>? {
@@ -280,6 +238,46 @@ private fun approximatelyEqual(previous: Double?, current: Double, epsilon: Doub
     return previous != null && kotlin.math.abs(previous - current) <= epsilon
 }
 
+private data class ProgrammaticCameraTarget(
+    val latitude: Double,
+    val longitude: Double,
+    val zoom: Double,
+)
+
+@OptIn(ExperimentalForeignApi::class)
+private fun mapRegionMatchesProgrammaticTarget(
+    map: MKMapView,
+    target: ProgrammaticCameraTarget,
+    startedAtMs: Long,
+): Boolean {
+    val elapsedMs = if (startedAtMs > 0L) {
+        Clock.System.now().toEpochMilliseconds() - startedAtMs
+    } else {
+        0L
+    }
+    val relaxZoomMatch = elapsedMs > 900L
+    return map.region.useContents {
+        val z = approximateZoomLevel(span.latitudeDelta, span.longitudeDelta)
+        val centerOk =
+            abs(center.latitude - target.latitude) < 0.00025 &&
+                abs(center.longitude - target.longitude) < 0.00025
+        val zoomOk = abs(z - target.zoom) < 2.5
+        centerOk && (zoomOk || relaxZoomMatch)
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun mapRegionLooksUsable(map: MKMapView): Boolean =
+    map.region.useContents {
+        val latD = span.latitudeDelta
+        val lonD = span.longitudeDelta
+        center.latitude.isFinite() && center.longitude.isFinite() &&
+            latD.isFinite() && lonD.isFinite() &&
+            latD > 1e-8 && lonD > 1e-8 &&
+            latD <= 160.0 && lonD <= 340.0 &&
+            abs(center.latitude) <= 90.0 && abs(center.longitude) <= 180.0
+    }
+
 /**
  * Bridges `MKMapViewDelegate` pin-tap callbacks back into the Kotlin `onPinTapped` /
  * `onClusterTapped` lambdas (C12). Identity-based lookup because MKPointAnnotation does
@@ -294,7 +292,7 @@ private fun approximatelyEqual(previous: Double?, current: Double, epsilon: Doub
  *    under Compose Multiplatform's `UIKitView` touch interop — the default annotation
  *    pipeline can drop selection events when the map is hosted inside a Compose
  *    interop container.
- *  * Keeps a weak [mapRef] so we can dispatch taps even if MapKit's `didSelect`
+ *  * Keeps stable references so we can dispatch taps even if MapKit's `didSelect`
  *    callback is starved (see the gesture-recognizer fallback attached in
  *    `viewForAnnotation`).
  *  * Implements both the deprecated `mapView:didSelectAnnotationView:` and the
@@ -307,6 +305,68 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     var clusterEntries: List<Pair<MKPointAnnotation, MapClusterPin>> = emptyList()
     var onPin: (MapPin) -> Unit = {}
     var onCluster: (MapClusterPin) -> Unit = {}
+    var pendingProgrammaticCamera: ProgrammaticCameraTarget? = null
+    var programmaticCameraStartedAtMs: Long = 0L
+    var onProgrammaticCameraSettled: () -> Unit = {}
+    var onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit =
+        { _, _, _, _ -> }
+    var onZoomChanged: (Double) -> Unit = {}
+
+    private var lastViewportMinLat: Double? = null
+    private var lastViewportMaxLat: Double? = null
+    private var lastViewportMinLon: Double? = null
+    private var lastViewportMaxLon: Double? = null
+    private var lastViewportZoom: Double? = null
+
+    private fun dispatchViewportIfChanged(mapView: MKMapView) {
+        if (!mapRegionLooksUsable(mapView)) return
+        val (minLat, maxLat, minLon, maxLon, zoomLevel) = mapView.region.useContents {
+            val minLatValue = center.latitude - (span.latitudeDelta / 2.0)
+            val maxLatValue = center.latitude + (span.latitudeDelta / 2.0)
+            val minLonValue = center.longitude - (span.longitudeDelta / 2.0)
+            val maxLonValue = center.longitude + (span.longitudeDelta / 2.0)
+            val zoomValue = approximateZoomLevel(
+                latitudeDelta = span.latitudeDelta,
+                longitudeDelta = span.longitudeDelta,
+            )
+            listOf(minLatValue, maxLatValue, minLonValue, maxLonValue, zoomValue)
+        }
+
+        val boundsChanged =
+            !approximatelyEqual(lastViewportMinLat, minLat) ||
+            !approximatelyEqual(lastViewportMaxLat, maxLat) ||
+            !approximatelyEqual(lastViewportMinLon, minLon) ||
+            !approximatelyEqual(lastViewportMaxLon, maxLon)
+        if (boundsChanged) {
+            onVisibleBoundsChanged(minLat, maxLat, minLon, maxLon)
+            lastViewportMinLat = minLat
+            lastViewportMaxLat = maxLat
+            lastViewportMinLon = minLon
+            lastViewportMaxLon = maxLon
+        }
+
+        if (!approximatelyEqual(lastViewportZoom, zoomLevel, epsilon = 0.05)) {
+            onZoomChanged(zoomLevel)
+            lastViewportZoom = zoomLevel
+        }
+    }
+
+    private fun maybeFinishProgrammaticCamera(mapView: MKMapView) {
+        val pending = pendingProgrammaticCamera ?: return
+        if (!mapRegionLooksUsable(mapView)) return
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (programmaticCameraStartedAtMs > 0L && now - programmaticCameraStartedAtMs > 3000L) {
+            pendingProgrammaticCamera = null
+            programmaticCameraStartedAtMs = 0L
+            onProgrammaticCameraSettled()
+            return
+        }
+        if (mapRegionMatchesProgrammaticTarget(mapView, pending, programmaticCameraStartedAtMs)) {
+            pendingProgrammaticCamera = null
+            programmaticCameraStartedAtMs = 0L
+            onProgrammaticCameraSettled()
+        }
+    }
 
     private fun dispatchByIdentifier(rawIdentifier: String?, mapView: MKMapView?): Boolean {
         val identifier = rawIdentifier?.trim().orEmpty()
@@ -404,6 +464,16 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         view.setEnabled(true)
         view.setSelected(false, animated = false)
         return view
+    }
+
+    override fun mapViewDidFinishLoadingMap(mapView: MKMapView) {
+        dispatchViewportIfChanged(mapView)
+    }
+
+    @kotlinx.cinterop.ObjCSignatureOverride
+    override fun mapView(mapView: MKMapView, regionDidChangeAnimated: Boolean) {
+        dispatchViewportIfChanged(mapView)
+        maybeFinishProgrammaticCamera(mapView)
     }
 }
 

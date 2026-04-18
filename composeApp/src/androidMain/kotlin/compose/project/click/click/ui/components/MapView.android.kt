@@ -61,13 +61,9 @@ actual fun PlatformMap(
                 )
                 onCameraAnimationComplete()
             }
-        } else {
-            if (cameraPositionState.position.zoom != zoom.toFloat()) {
-                cameraPositionState.animate(
-                    update = com.google.android.gms.maps.CameraUpdateFactory.zoomTo(zoom.toFloat()),
-                )
-            }
         }
+        // Do not call zoomTo from ViewModel zoom when center is null — the GoogleMap owns
+        // pinch/double-tap zoom; mirroring state here fought gestures and caused random zoom jumps.
     }
 
     // Report zoom changes back to the ViewModel.

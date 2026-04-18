@@ -156,11 +156,7 @@ fun MapScreen(
                             }
                         },
                         onClusterTapped = { clusterPin ->
-                            val clusters = (renderData as? MapRenderData.Clusters)?.clusters
-                                ?: return@MapContent
-                            clusters.find { it.id == clusterPin.id }?.let {
-                                viewModel.onClusterTapped(it)
-                            }
+                            viewModel.onClusterTappedFromMap(clusterPin.id)
                         },
                         onZoomChanged = { viewModel.setZoomLevel(it) },
                         onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->

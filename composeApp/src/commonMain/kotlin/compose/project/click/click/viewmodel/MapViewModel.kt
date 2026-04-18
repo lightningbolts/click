@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.pow
@@ -105,6 +107,19 @@ class MapViewModel : ViewModel() {
 
     // Cluster threshold - zoom level above which individual pins are shown
     private val clusterThreshold = 12.0
+
+    /**
+     * After a cluster zoom-in, native map zoom readbacks often dip below [clusterThreshold] briefly
+     * or stay inconsistent with [metersForZoom]. Until the user clearly zooms out past the
+     * threshold, treat the map as "pin mode" for clustering decisions so [determineMapRenderData]
+     * does not snap back to hub markers while the camera is still on the cluster.
+     */
+    private var pinRenderZoomFloor: Double? = null
+
+    private fun zoomForClusteringRender(zoom: Double): Double {
+        val floor = pinRenderZoomFloor ?: return zoom
+        return maxOf(zoom, floor)
+    }
     
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
@@ -119,6 +134,8 @@ class MapViewModel : ViewModel() {
     // Guards against map callback feedback immediately canceling programmatic zoom animations.
     private var pendingProgrammaticZoomTarget: Double? = null
     private var pendingProgrammaticZoomSetAtMs: Long = 0L
+
+    private var renderDataJob: Job? = null
 
     init {
         observeAppData()
@@ -159,7 +176,7 @@ class MapViewModel : ViewModel() {
                         val mapVisibleConnections =
                             if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
                         ensureDefaultCameraTarget(mapVisibleConnections)
-                        updateRenderData(mapVisibleConnections, zoom, filter)
+                        updateRenderData(mapVisibleConnections, zoomForClusteringRender(zoom), filter)
                         refreshSelectedConnectionUser(connectedUsers)
                     }
                     isLoading -> {
@@ -184,7 +201,8 @@ class MapViewModel : ViewModel() {
      * [MutableStateFlow] from any dispatcher.
      */
     private fun updateRenderData(connections: List<Connection>, zoom: Double, filter: String = "All") {
-        viewModelScope.launch {
+        renderDataJob?.cancel()
+        renderDataJob = viewModelScope.launch {
             val rendered = withContext(Dispatchers.Default) {
                 val filtered = if (filter == "All") {
                     connections
@@ -218,7 +236,7 @@ class MapViewModel : ViewModel() {
         val maxLon = valid.maxOf { it.second.lon }
 
         val bounds = BoundingBox(minLat = minLat, maxLat = maxLat, minLon = minLon, maxLon = maxLon)
-        val targetZoom = calculateZoomForBounds(bounds).coerceIn(2.0, 16.0)
+        val targetZoom = calculateZoomForBounds(bounds).coerceIn(4.0, 16.0)
 
         val computedTarget = CameraTarget(
             latitude = bounds.centerLat,
@@ -243,6 +261,7 @@ class MapViewModel : ViewModel() {
      * Set the active tribe filter
      */
     fun setFilter(filter: String) {
+        pinRenderZoomFloor = null
         _selectedFilter.value = filter
     }
 
@@ -250,27 +269,45 @@ class MapViewModel : ViewModel() {
      * Update the current zoom level
      */
     fun setZoomLevel(zoom: Double) {
+        if (!zoom.isFinite()) return
+        val coerced = zoom.coerceIn(2.0, 20.0)
+        // Drop single-shot readouts that would snap from a city-level view to ~world scale
+        // (bad spans during annotation churn / projection glitches on native maps).
+        if (coerced < 5.0 && _zoomLevel.value > 8.0 && (_zoomLevel.value - coerced) > 3.0) {
+            return
+        }
+
         val pendingTarget = pendingProgrammaticZoomTarget
         if (pendingTarget != null) {
             val now = Clock.System.now().toEpochMilliseconds()
             val ageMs = now - pendingProgrammaticZoomSetAtMs
-            val reachedPendingTarget = abs(zoom - pendingTarget) <= 0.25
-
-            if (reachedPendingTarget || ageMs > 1500L) {
+            // MapKit span → zoom can disagree with our metersForZoom ladder by ~1 level; keep the
+            // guard loose so we clear pending when the map has essentially arrived.
+            val reachedPendingTarget = abs(coerced - pendingTarget) <= 1.0
+            if (reachedPendingTarget) {
                 pendingProgrammaticZoomTarget = null
+            } else if (ageMs > 1500L) {
+                // Do not apply this stale reading: it often underestimates zoom on iOS and would
+                // snap _zoomLevel back below [clusterThreshold], reverting to cluster markers.
+                pendingProgrammaticZoomTarget = null
+                return
             } else {
                 return
             }
         }
 
-        if (abs(_zoomLevel.value - zoom) <= 0.01) return
-        _zoomLevel.value = zoom
+        if (abs(_zoomLevel.value - coerced) <= 0.01) return
+        _zoomLevel.value = coerced
+
+        if (pendingProgrammaticZoomTarget == null && coerced < clusterThreshold - 0.05) {
+            pinRenderZoomFloor = null
+        }
 
         _visibleBounds.value?.let { bounds ->
             persistCameraTarget(
                 latitude = bounds.centerLat,
                 longitude = bounds.centerLon,
-                zoom = zoom
+                zoom = coerced
             )
         }
     }
@@ -279,6 +316,11 @@ class MapViewModel : ViewModel() {
      * Update visible bounds from outside (e.g., the platform map callback)
      */
     fun updateVisibleBounds(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) {
+        if (!minLat.isFinite() || !maxLat.isFinite() || !minLon.isFinite() || !maxLon.isFinite()) return
+        val latSpan = abs(maxLat - minLat)
+        val lonSpan = abs(maxLon - minLon)
+        if (latSpan < 1e-7 || lonSpan < 1e-7) return
+        if (latSpan > 160.0 || lonSpan > 340.0) return
         val bounds = BoundingBox(minLat, maxLat, minLon, maxLon)
         _visibleBounds.value = bounds
         persistCameraTarget(
@@ -290,11 +332,14 @@ class MapViewModel : ViewModel() {
 
     private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
         if (!latitude.isFinite() || !longitude.isFinite() || !zoom.isFinite()) return
+        val z = zoom.coerceIn(2.0, 20.0)
+        // Never persist continent/world scale; it becomes the next session's "restore camera".
+        if (z < 4.0) return
 
         val candidate = CameraTarget(
             latitude = latitude,
             longitude = longitude,
-            zoom = zoom.coerceIn(2.0, 20.0)
+            zoom = z
         )
 
         val previous = lastKnownCameraTarget
@@ -349,6 +394,18 @@ class MapViewModel : ViewModel() {
         )
     }
 
+    private fun anchorLatLonForProgrammaticCamera(): Pair<Double, Double>? {
+        lastKnownCameraTarget?.let { return it.latitude to it.longitude }
+        _visibleBounds.value?.let { return it.centerLat to it.centerLon }
+        _defaultCameraTarget.value?.let { return it.latitude to it.longitude }
+        val state = _mapState.value
+        if (state is MapState.Success) {
+            val geo = state.connections.firstNotNullOfOrNull { it.connectionMapGeo() }
+            if (geo != null) return geo.lat to geo.lon
+        }
+        return null
+    }
+
     /**
      * Zoom in
      */
@@ -356,6 +413,9 @@ class MapViewModel : ViewModel() {
         val target = minOf(_zoomLevel.value + 1.0, 20.0)
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        anchorLatLonForProgrammaticCamera()?.let { (lat, lon) ->
+            _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
+        }
         _zoomLevel.value = target
     }
 
@@ -364,9 +424,34 @@ class MapViewModel : ViewModel() {
      */
     fun zoomOut() {
         val target = maxOf(_zoomLevel.value - 1.0, 2.0)
+        if (target < clusterThreshold - 0.25) {
+            pinRenderZoomFloor = null
+        }
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        anchorLatLonForProgrammaticCamera()?.let { (lat, lon) ->
+            _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
+        }
         _zoomLevel.value = target
+    }
+
+    /**
+     * Resolves a tapped cluster marker to [MapCluster] using the latest [renderData] snapshot
+     * inside the ViewModel (avoids races with Compose where [renderData] already flipped to pins).
+     */
+    fun onClusterTappedFromMap(clusterId: String) {
+        fun findCluster(): MapCluster? =
+            (_renderData.value as? MapRenderData.Clusters)?.clusters?.find { it.id == clusterId }
+
+        findCluster()?.let {
+            onClusterTapped(it)
+            return
+        }
+        // [updateRenderData] runs off the main thread; a tap can land between zoom update and publish.
+        viewModelScope.launch {
+            delay(64)
+            findCluster()?.let { onClusterTapped(it) }
+        }
     }
 
     /**
@@ -379,6 +464,7 @@ class MapViewModel : ViewModel() {
         // Calculate zoom level to fit the cluster bounds
         val bounds = cluster.boundingBox
         val targetZoom = maxOf(clusterThreshold + 1, calculateZoomForBounds(bounds))
+        pinRenderZoomFloor = maxOf(clusterThreshold + 0.25, targetZoom)
         
         // Animate camera to cluster center with appropriate zoom
         _cameraTarget.value = CameraTarget(
@@ -436,7 +522,17 @@ class MapViewModel : ViewModel() {
      * Clear camera target after animation completes
      */
     fun onCameraAnimationComplete() {
+        pendingProgrammaticZoomTarget = null
+        val target = _cameraTarget.value
         _cameraTarget.value = null
+        // Re-assert zoom from the programmatic target so map readouts during the animation
+        // cannot leave _zoomLevel out of sync with pin-vs-cluster mode.
+        if (target != null) {
+            val z = target.zoom.coerceIn(2.0, 20.0)
+            if (abs(_zoomLevel.value - z) > 0.02) {
+                _zoomLevel.value = z
+            }
+        }
     }
 
     /**
@@ -445,12 +541,16 @@ class MapViewModel : ViewModel() {
     fun onMapScreenEntered() {
         if (_cameraTarget.value != null) return
 
-        val target = lastKnownCameraTarget ?: _defaultCameraTarget.value
-        if (target != null) {
-            _cameraTarget.value = target
-            if (abs(_zoomLevel.value - target.zoom) > 0.01) {
-                _zoomLevel.value = target.zoom
-            }
+        val raw = lastKnownCameraTarget ?: _defaultCameraTarget.value ?: return
+        val safeZoom = raw.zoom.coerceIn(4.0, 20.0)
+        val target = if (abs(raw.zoom - safeZoom) > 0.01) {
+            CameraTarget(latitude = raw.latitude, longitude = raw.longitude, zoom = safeZoom)
+        } else {
+            raw
+        }
+        _cameraTarget.value = target
+        if (abs(_zoomLevel.value - target.zoom) > 0.01) {
+            _zoomLevel.value = target.zoom
         }
     }
 

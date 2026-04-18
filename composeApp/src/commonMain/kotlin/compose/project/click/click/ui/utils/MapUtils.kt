@@ -232,9 +232,15 @@ fun clusterPoints(
             .mapValues { it.value.size }
         val dominantIcon = iconCounts.maxByOrNull { it.value }?.key ?: SemanticIcon.DEFAULT
 
+        // Stable id from member connections so cluster identity survives recomposition / zoom
+        // nudges. Index-based ids (`cluster_0`, …) reshuffle when clustering order changes,
+        // which broke MapScreen's `find { it.id == clusterPin.id }` and dropped zoom-to-pins.
+        val memberKey = nearbyPoints.map { it.connection.id }.sorted().joinToString("|")
+        val stableId = "cluster_${abs(memberKey.hashCode())}"
+
         clusters.add(
             MapCluster(
-                id = "cluster_${clusters.size}",
+                id = stableId,
                 centerLat = centerLat,
                 centerLon = centerLon,
                 points = nearbyPoints,
