@@ -43,6 +43,7 @@ import compose.project.click.click.utils.toImageBitmap
 import androidx.compose.ui.zIndex
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -52,6 +53,15 @@ private const val MinSignupAgeYears = 13
 
 private fun parseIsoLocalDate(raw: String): LocalDate? =
     runCatching { LocalDate.parse(raw.trim()) }.getOrNull()
+
+private fun formatBirthdayDisplay(date: LocalDate): String {
+    val month = date.monthNumber.toString().padStart(2, '0')
+    val day = date.dayOfMonth.toString().padStart(2, '0')
+    return "$month/$day/${date.year}"
+}
+
+private fun utcMillisToIsoDate(millis: Long): String =
+    Instant.fromEpochMilliseconds(millis).toString().take(10)
 
 private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
     val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -84,6 +94,7 @@ fun SignUpScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var showBirthdayPicker by remember { mutableStateOf(false) }
     var pendingAvatarBytes by remember { mutableStateOf<ByteArray?>(null) }
     var pendingAvatarMime by remember { mutableStateOf<String?>(null) }
     var localAvatarError by remember { mutableStateOf<String?>(null) }
@@ -100,10 +111,11 @@ fun SignUpScreen(
     val scrollState = rememberScrollState()
 
     val parsedBirth = remember(birthdayIso) { parseIsoLocalDate(birthdayIso) }
+    val birthdayDisplay = remember(parsedBirth) { parsedBirth?.let(::formatBirthdayDisplay).orEmpty() }
     val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
     val birthdayHelper = when {
-        birthdayIso.isBlank() -> "Required — format YYYY-MM-DD"
-        parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
+        birthdayIso.isBlank() -> "Required — select your birthday"
+        parsedBirth == null -> "Select a valid date"
         !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
         else -> null
     }
@@ -117,8 +129,6 @@ fun SignUpScreen(
                     confirmPassword.isNotBlank() &&
                     passwordsMatch &&
                     password.length >= 6
-
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Box(
         modifier = Modifier
@@ -139,7 +149,8 @@ fun SignUpScreen(
         IconButton(
             onClick = onLoginClick,
             modifier = Modifier
-                .padding(start = 16.dp, top = topInset + 8.dp)
+                .statusBarsPadding()
+                .padding(start = 16.dp, top = 8.dp)
                 .align(Alignment.TopStart)
                 .size(48.dp)
                 .shadow(2.dp, CircleShape)
@@ -157,11 +168,12 @@ fun SignUpScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                 .imePadding()
                 .navigationBarsPadding()
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp)
-                .padding(top = topInset + 60.dp, bottom = 24.dp),
+                .padding(top = 60.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // App Logo/Icon
@@ -304,10 +316,10 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = birthdayIso,
-                onValueChange = { birthdayIso = it },
+                value = birthdayDisplay,
+                onValueChange = { },
                 label = { Text("Birthday") },
-                placeholder = { Text("YYYY-MM-DD") },
+                placeholder = { Text("MM/DD/YYYY") },
                 leadingIcon = {
                     Icon(Icons.Filled.CalendarMonth, contentDescription = null)
                 },
@@ -318,15 +330,11 @@ fun SignUpScreen(
                     }
                 },
                 isError = birthdayIso.isNotBlank() && !birthdayValid,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !isLoading) { showBirthdayPicker = true },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
+                readOnly = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -334,6 +342,34 @@ fun SignUpScreen(
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
             )
+
+            if (showBirthdayPicker) {
+                val birthdayPickerState = rememberDatePickerState()
+                DatePickerDialog(
+                    onDismissRequest = { showBirthdayPicker = false },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
+                                    birthdayIso = utcMillisToIsoDate(selectedMillis)
+                                }
+                                showBirthdayPicker = false
+                                focusManager.clearFocus()
+                            },
+                            enabled = birthdayPickerState.selectedDateMillis != null,
+                        ) {
+                            Text("OK")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBirthdayPicker = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                ) {
+                    DatePicker(state = birthdayPickerState)
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
