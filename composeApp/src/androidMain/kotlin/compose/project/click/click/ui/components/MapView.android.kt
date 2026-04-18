@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
+import kotlin.math.abs
 
 @Composable
 actual fun PlatformMap(
@@ -44,25 +45,28 @@ actual fun PlatformMap(
         position = CameraPosition.fromLatLngZoom(initialCenter, zoom.toFloat())
     }
 
-    // Animate to target when centerLat/centerLon changes.
-    LaunchedEffect(centerLat, centerLon) {
+    // One effect: lat/lon + zoom use newLatLngZoom together. A separate zoomTo effect kept the
+    // old viewport center and broke cluster zoom.
+    LaunchedEffect(centerLat, centerLon, zoom) {
         if (centerLat != null && centerLon != null) {
-            cameraPositionState.animate(
-                update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
-                    LatLng(centerLat, centerLon),
-                    zoom.toFloat()
+            val target = LatLng(centerLat, centerLon)
+            val z = zoom.toFloat()
+            val pos = cameraPositionState.position
+            val moved = abs(pos.target.latitude - centerLat) > 1e-5 ||
+                abs(pos.target.longitude - centerLon) > 1e-5
+            val zoomChanged = abs(pos.zoom - z) > 0.05f
+            if (moved || zoomChanged) {
+                cameraPositionState.animate(
+                    update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(target, z),
                 )
-            )
-            onCameraAnimationComplete()
-        }
-    }
-
-    // Update zoom when changed externally
-    LaunchedEffect(zoom) {
-        if (cameraPositionState.position.zoom != zoom.toFloat()) {
-            cameraPositionState.animate(
-                update = com.google.android.gms.maps.CameraUpdateFactory.zoomTo(zoom.toFloat())
-            )
+                onCameraAnimationComplete()
+            }
+        } else {
+            if (cameraPositionState.position.zoom != zoom.toFloat()) {
+                cameraPositionState.animate(
+                    update = com.google.android.gms.maps.CameraUpdateFactory.zoomTo(zoom.toFloat()),
+                )
+            }
         }
     }
 

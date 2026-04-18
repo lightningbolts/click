@@ -17,6 +17,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -145,6 +147,11 @@ data class GlobalSearchResults(
     }
 }
 
+private const val REMOTE_MESSAGE_SEARCH_MAX_DIRECT_CHATS = 40
+private const val REMOTE_MESSAGE_SEARCH_MAX_GROUP_CHATS = 24
+private const val MESSAGE_SEARCH_CONCURRENCY = 8
+private const val MIN_QUERY_LENGTH_FOR_REMOTE_MESSAGE_SCAN = 2
+
 private val searchResultComparator =
     compareBy<SearchResult>({ typeRank(it) }, { it.sortKey })
 
@@ -218,9 +225,12 @@ class GlobalSearchViewModel(
                     return@launch
                 }
 
-                val activeRows = chatRepository.fetchDirectUserChatsWithDetails(userId)
-                val archivedRows = chatRepository.fetchArchivedUserChatsWithDetails(userId)
-                val cliqueRows = chatRepository.fetchGroupUserChatsWithDetails(userId)
+                val (activeRows, archivedRows, cliqueRows) = coroutineScope {
+                    val activeD = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
+                    val archivedD = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
+                    val groupsD = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                    Triple(activeD.await(), archivedD.await(), groupsD.await())
+                }
 
                 val archivedIds = junctionArchivedConnectionIds()
                 val hiddenIds = junctionHiddenConnectionIds()
@@ -263,10 +273,18 @@ class GlobalSearchViewModel(
 
                 emitLocationBuckets(lowerQuery, activeRows, archivedRows, out)
 
-                out.addAll(
-                    searchAllMessages(lowerQuery, userId, activeRows, archivedRows, cliqueRows, archivedIds),
-                )
+                if (out.isNotEmpty()) {
+                    _results.value = GlobalSearchResults(items = out.toList())
+                    _isSearching.value = false
+                }
 
+                val messageHits =
+                    if (lowerQuery.length >= MIN_QUERY_LENGTH_FOR_REMOTE_MESSAGE_SCAN) {
+                        searchAllMessages(lowerQuery, userId, activeRows, archivedRows, cliqueRows, archivedIds)
+                    } else {
+                        emptyList()
+                    }
+                out.addAll(messageHits)
                 _results.value = GlobalSearchResults(items = out)
             } catch (e: Exception) {
                 println("GlobalSearch error: ${e.redactedRestMessage()}")
@@ -292,52 +310,72 @@ class GlobalSearchViewModel(
         cliqueRows: List<ChatWithDetails>,
         archivedIds: Set<String>,
     ): List<SearchResult.MessageHit> = coroutineScope {
-        val directJobs = (activeRows + archivedRows).filter { it.groupClique == null }.map { row ->
+        val limiter = Semaphore(MESSAGE_SEARCH_CONCURRENCY)
+        val directAll = (activeRows + archivedRows).filter { it.groupClique == null }
+            .sortedByDescending { row ->
+                row.lastMessage?.timeCreated ?: row.connection.last_message_at ?: row.connection.created
+            }
+        val remoteDirectIds: Set<String> =
+            directAll.take(REMOTE_MESSAGE_SEARCH_MAX_DIRECT_CHATS).map { it.connection.id }.toSet()
+        val directJobs = directAll.map { row ->
             async {
-                if (directPeerId(row, userId) == null) return@async emptyList()
-                val chatName = row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
-                val (resolvedChatId, remoteMatches) = chatRepository.searchMessagesByConnectionId(
-                    connectionId = row.connection.id,
-                    query = lowerQuery,
-                )
-                val localMatches = row.chat.messages.filter { msg ->
-                    msg.content.lowercase().contains(lowerQuery)
-                }
-                val merged = (remoteMatches + localMatches).distinctBy { it.id }
-                val resultChatId = resolvedChatId ?: row.chat.id ?: row.connection.id
-                val cats = messageCategories(row.connection.id, archivedIds)
-                merged.map { msg ->
-                    SearchResult.MessageHit(
-                        result = MessageSearchResult(
-                            message = msg,
-                            chatId = resultChatId,
-                            chatName = chatName,
+                limiter.withPermit {
+                    if (directPeerId(row, userId) == null) return@withPermit emptyList()
+                    val chatName = row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
+                    val (resolvedChatId, remoteMatches) = if (row.connection.id in remoteDirectIds) {
+                        chatRepository.searchMessagesByConnectionId(
                             connectionId = row.connection.id,
-                        ),
-                        categories = cats,
-                    )
+                            query = lowerQuery,
+                        )
+                    } else {
+                        null to emptyList()
+                    }
+                    val localMatches = row.chat.messages.filter { msg ->
+                        msg.content.lowercase().contains(lowerQuery)
+                    }
+                    val merged = (remoteMatches + localMatches).distinctBy { it.id }
+                    val resultChatId = resolvedChatId ?: row.chat.id ?: row.connection.id
+                    val cats = messageCategories(row.connection.id, archivedIds)
+                    merged.map { msg ->
+                        SearchResult.MessageHit(
+                            result = MessageSearchResult(
+                                message = msg,
+                                chatId = resultChatId,
+                                chatName = chatName,
+                                connectionId = row.connection.id,
+                            ),
+                            categories = cats,
+                        )
+                    }
                 }
             }
         }
-        val groupJobs = cliqueRows.mapNotNull { row ->
+        val rankedGroups = cliqueRows
+            .sortedByDescending { row ->
+                row.lastMessage?.timeCreated ?: row.connection.last_message_at ?: row.connection.created
+            }
+            .take(REMOTE_MESSAGE_SEARCH_MAX_GROUP_CHATS)
+        val groupJobs = rankedGroups.mapNotNull { row ->
             val chatId = row.chat.id ?: return@mapNotNull null
             async {
-                val remote = chatRepository.fetchMessagesForChat(chatId, userId)?.filter { msg ->
-                    msg.content.lowercase().contains(lowerQuery)
-                }.orEmpty()
-                val local = row.chat.messages.filter { it.content.lowercase().contains(lowerQuery) }
-                val merged = (remote + local).distinctBy { it.id }
-                val title = row.groupClique?.name ?: "Clique"
-                merged.map { msg ->
-                    SearchResult.MessageHit(
-                        result = MessageSearchResult(
-                            message = msg,
-                            chatId = chatId,
-                            chatName = title,
-                            connectionId = row.connection.id,
-                        ),
-                        categories = setOf(SearchResultCategory.Cliques),
-                    )
+                limiter.withPermit {
+                    val remote = chatRepository.fetchMessagesForChat(chatId, userId)?.filter { msg ->
+                        msg.content.lowercase().contains(lowerQuery)
+                    }.orEmpty()
+                    val local = row.chat.messages.filter { it.content.lowercase().contains(lowerQuery) }
+                    val merged = (remote + local).distinctBy { it.id }
+                    val title = row.groupClique?.name ?: "Clique"
+                    merged.map { msg ->
+                        SearchResult.MessageHit(
+                            result = MessageSearchResult(
+                                message = msg,
+                                chatId = chatId,
+                                chatName = title,
+                                connectionId = row.connection.id,
+                            ),
+                            categories = setOf(SearchResultCategory.Cliques),
+                        )
+                    }
                 }
             }
         }
