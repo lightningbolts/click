@@ -16,8 +16,6 @@ import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.forms.MultiPartFormDataContent
-import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -26,8 +24,6 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
-import io.ktor.http.Headers
-import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.SerialName
@@ -38,6 +34,8 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * JSON body for `GET /api/ping` on [ApiConfig.CLICK_WEB_BASE_URL] (verified Supabase JWT).
@@ -98,6 +96,12 @@ data class ConnectionTabMessage(
 private data class AvatarUploadResponseDto(
     val image: String,
     val user: UserCore? = null,
+)
+
+@Serializable
+private data class AvatarUploadBodyDto(
+    @SerialName("file_b64") val fileBase64: String,
+    @SerialName("mime_type") val mimeType: String,
 )
 
 @Serializable
@@ -410,36 +414,23 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
      * Provide at least one of [firstName], [lastName], [image], [tags].
      */
     /**
-     * POST `/api/user/avatar` on click-web (multipart `file` + JWT bearer).
+     * POST `/api/user/avatar` on click-web (JSON base64 `file_b64` + JWT bearer).
      * Returns the new public image URL.
      */
+    @OptIn(ExperimentalEncodingApi::class)
     suspend fun uploadAvatar(imageBytes: ByteArray, mimeType: String): Result<String> {
         if (imageBytes.isEmpty()) {
             return Result.failure(IllegalArgumentException("Empty image"))
         }
         val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
-        val filename = when {
-            normalizedMime.contains("png", ignoreCase = true) -> "avatar.png"
-            normalizedMime.contains("webp", ignoreCase = true) -> "avatar.webp"
-            normalizedMime.contains("gif", ignoreCase = true) -> "avatar.gif"
-            else -> "avatar.jpg"
-        }
         return try {
-            // formData {} supplies `Content-Disposition: form-data; name="file"`.
-            // Add part `Content-Type` and `filename="..."` only via Headers.build — do not
-            // set the POST's top-level Content-Type: Ktor must emit the boundary on the main header.
+            val payload = AvatarUploadBodyDto(
+                fileBase64 = Base64.encode(imageBytes),
+                mimeType = normalizedMime,
+            )
             val response = clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
-                setBody(
-                    MultiPartFormDataContent(
-                        formData {
-                            append("file", imageBytes, Headers.build {
-                                append(HttpHeaders.ContentType, normalizedMime)
-                                append(HttpHeaders.ContentDisposition, "filename=\"$filename\"")
-                            })
-                            append(key = "mime_type", value = normalizedMime)
-                        },
-                    ),
-                )
+                contentType(ContentType.Application.Json)
+                setBody(payload)
             }
             if (response.status.value in 200..299) {
                 val dto = response.body<AvatarUploadResponseDto>()

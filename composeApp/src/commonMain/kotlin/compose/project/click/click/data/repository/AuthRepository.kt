@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
@@ -326,13 +327,25 @@ class AuthRepository(
         if (imageBytes.isEmpty()) {
             return Result.failure(IllegalArgumentException("Empty image"))
         }
-        if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
-            return Result.failure(IllegalArgumentException("Image must be under 2 MB"))
-        }
         supabase.auth.currentUserOrNull() ?: return Result.failure(Exception("Not signed in"))
         val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
         return try {
-            clickWebApi.uploadAvatar(imageBytes, normalizedMime)
+            val compressedCandidate = if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
+                compressOutgoingChatImageForUpload(imageBytes, normalizedMime)
+            } else {
+                imageBytes
+            }
+            val wasReencoded = compressedCandidate !== imageBytes
+            val bytesToUpload = compressedCandidate
+            if (bytesToUpload.size > MAX_PROFILE_IMAGE_BYTES) {
+                return Result.failure(
+                    IllegalArgumentException("Image is too large to upload. Please choose a smaller photo."),
+                )
+            }
+
+            // iOS/Android compression utilities currently re-encode as JPEG.
+            val uploadMime = if (wasReencoded) "image/jpeg" else normalizedMime
+            clickWebApi.uploadAvatar(bytesToUpload, uploadMime)
         } catch (e: Exception) {
             println("AuthRepository: uploadProfilePicture failed: ${e.redactedRestMessage()}")
             Result.failure(e)

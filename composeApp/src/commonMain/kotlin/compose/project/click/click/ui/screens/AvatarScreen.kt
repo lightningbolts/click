@@ -82,10 +82,6 @@ fun AvatarScreen(
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime ->
             errorMessage = null
-            if (bytes.size > 2_000_000) {
-                errorMessage = "Image must be under 2 MB"
-                return@rememberChatMediaPickers
-            }
             selectedBytes = bytes
             selectedMime = mime
         },

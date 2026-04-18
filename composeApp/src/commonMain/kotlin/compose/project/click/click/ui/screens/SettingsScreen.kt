@@ -121,10 +121,6 @@ fun SettingsScreen(
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime ->
             settingsScope.launch {
-                if (bytes.size > 2_000_000) {
-                    snackbarHostState.showSnackbar("Image must be under 2 MB")
-                    return@launch
-                }
                 avatarUploading = true
                 try {
                     authRepoForAvatar.uploadProfilePicture(bytes, mime).fold(
@@ -538,7 +534,7 @@ fun SettingsScreen(
                                 }
                             }
                             Text(
-                                text = "Tap to change photo · max 2 MB",
+                                text = "Tap to change photo · auto-compressed if needed",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier

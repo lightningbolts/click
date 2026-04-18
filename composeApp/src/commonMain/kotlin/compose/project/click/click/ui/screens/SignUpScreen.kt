@@ -90,10 +90,6 @@ fun SignUpScreen(
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime ->
             localAvatarError = null
-            if (bytes.size > 2_000_000) {
-                localAvatarError = "Image must be under 2 MB"
-                return@rememberChatMediaPickers
-            }
             pendingAvatarBytes = bytes
             pendingAvatarMime = mime
         },
