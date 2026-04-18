@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -156,6 +157,22 @@ fun HomeScreen(
         }
     }
 
+    var successContentVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(homeState is HomeState.Success) {
+        if (homeState is HomeState.Success) {
+            successContentVisible = false
+            delay(16)
+            successContentVisible = true
+        } else {
+            successContentVisible = false
+        }
+    }
+    val successContentAlpha by animateFloatAsState(
+        targetValue = if (successContentVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 340),
+        label = "home_success_content_alpha",
+    )
+
     // Apply deep dark background (Zinc-950)
     Box(
         modifier = Modifier
@@ -208,7 +225,11 @@ fun HomeScreen(
                 }
             }
             is HomeState.Success -> {
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = successContentAlpha }
+                ) {
                     Box(
                         modifier = Modifier.padding(
                             start = ScreenPaddingHorizontal,
