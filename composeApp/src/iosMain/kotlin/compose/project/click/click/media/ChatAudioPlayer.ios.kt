@@ -18,6 +18,9 @@ import platform.AVFoundation.play
 import platform.AVFoundation.removeTimeObserver
 import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.setActive
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
 import platform.Foundation.NSNotificationCenter
@@ -98,10 +101,23 @@ private class IosChatAudioPlayer(
             avPlayer.pause()
             isPlayingState.value = false
         } else {
-            avPlayer.play()
-            isPlayingState.value = true
+            if (prepareAudioSessionForPlayback()) {
+                avPlayer.play()
+                isPlayingState.value = true
+            }
         }
         refreshProgressFromPlayer()
+    }
+
+    private fun prepareAudioSessionForPlayback(): Boolean {
+        return try {
+            val session = AVAudioSession.sharedInstance()
+            session.setCategory(AVAudioSessionCategoryPlayback, error = null)
+            session.setActive(true, error = null)
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     override fun seekTo(positionMs: Long) {
