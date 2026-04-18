@@ -663,7 +663,7 @@ fun App() {
                     !profileGatePending
 
             val shouldStartInitialHomeReveal =
-                previousOnboardingStep == null &&
+                (previousOnboardingStep == null || previousOnboardingStep == "loading") &&
                     onboardingStep == "complete" &&
                     !profileGateActive &&
                     !profileGatePending
@@ -687,7 +687,7 @@ fun App() {
             LaunchedEffect(shouldStartInitialHomeReveal) {
                 if (shouldStartInitialHomeReveal) {
                     showHomeRevealOverlay = true
-                    delay(700)
+                    delay(420)
                     showHomeRevealOverlay = false
                 }
             }
@@ -811,6 +811,20 @@ fun App() {
                 targetValue = if (showHomeRevealOverlay) 1f else 0f,
                 animationSpec = tween(durationMillis = 760, easing = LinearOutSlowInEasing),
                 label = "home_reveal_overlay_alpha",
+            )
+            var homeSurfaceVisible by remember { mutableStateOf(false) }
+            LaunchedEffect(showHomeRevealOverlay, onboardingHandoffActive, shouldStartOnboardingHandoff) {
+                if (showHomeRevealOverlay || onboardingHandoffActive || shouldStartOnboardingHandoff) {
+                    homeSurfaceVisible = false
+                } else {
+                    delay(16)
+                    homeSurfaceVisible = true
+                }
+            }
+            val homeSurfaceAlpha by animateFloatAsState(
+                targetValue = if (homeSurfaceVisible) 1f else 0f,
+                animationSpec = tween(durationMillis = 320, easing = LinearOutSlowInEasing),
+                label = "home_surface_alpha",
             )
             var currentRoute by remember { mutableStateOf("home") }
             var previousRoute by remember { mutableStateOf("home") }
@@ -1081,6 +1095,7 @@ fun App() {
                 Box(modifier = Modifier
                     .padding(paddingValues)
                     .fillMaxSize()
+                    .graphicsLayer { alpha = homeSurfaceAlpha }
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),

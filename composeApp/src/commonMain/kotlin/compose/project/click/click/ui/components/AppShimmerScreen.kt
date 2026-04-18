@@ -132,20 +132,21 @@ fun AppShimmerScreen(
     val accent = if (isDarkMode) PrimaryBlue.copy(alpha = 0.30f) else AccentBlue.copy(alpha = 0.22f)
     val glow = if (isDarkMode) NeonPurple.copy(alpha = 0.20f) else PrimaryBlue.copy(alpha = 0.14f)
 
-    val progress = (phase / (2f * PI).toFloat()).coerceIn(0f, 1f)
     val wave = sin(phase)
     val drift = cos(phase * 1.7f)
+    val orbitX = sin(phase * 0.85f)
+    val orbitY = cos(phase * 0.9f)
     val start = Offset(
-        x = -700f + (progress * 2400f) + (wave * 180f),
-        y = -200f + (drift * 160f),
+        x = 340f + (wave * 760f) + (orbitX * 240f),
+        y = -60f + (drift * 210f) + (orbitY * 120f),
     )
     val end = Offset(
-        x = -100f + (progress * 2400f) + (drift * 220f),
-        y = 1700f + (wave * 220f),
+        x = 760f + (drift * 720f) + (orbitY * 220f),
+        y = 1460f + (wave * 260f) + (orbitX * 140f),
     )
     val glowCenter = Offset(
-        x = 420f + (sin(phase * 1.3f) * 260f),
-        y = 560f + (cos(phase * 1.1f) * 220f),
+        x = 460f + (sin(phase * 1.3f) * 240f),
+        y = 560f + (cos(phase * 1.1f) * 210f),
     )
 
     Box(

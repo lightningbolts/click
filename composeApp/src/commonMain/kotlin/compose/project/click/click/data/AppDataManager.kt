@@ -249,6 +249,12 @@ object AppDataManager {
             println("AppDataManager: Loading data for user ${authUser.id}")
 
             withTimeout(STARTUP_TIMEOUT_MS) {
+                val snapshotDeferred = async {
+                    runCatching { supabaseRepository.fetchUserConnectionsSnapshot(authUser.id) }
+                        .onFailure { println("AppDataManager: Connection snapshot fetch failed: ${it.message}") }
+                        .getOrNull()
+                }
+
                 val meta = authUser.userMetadata
                 fun metaStr(key: String) =
                     meta?.get(key)?.toString()?.removeSurrounding("\"")?.trim()?.takeIf { it.isNotEmpty() }
@@ -313,12 +319,24 @@ object AppDataManager {
                     }
                 }
 
-                val interestTags = supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty()
-                _currentUser.value = user.copy(tags = interestTags)
+                _currentUser.value = user
                 println("AppDataManager: Current user set to: ${user.name}")
                 runCatching { chatRepository.startGlobalPresence(user.id) }
                     .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.redactedRestMessage()}") }
                 startPresenceHeartbeat(user.id)
+
+                // Interest tags are not required for first Home paint.
+                scope.launch {
+                    runCatching { supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty() }
+                        .onSuccess { tags ->
+                            if (_currentUser.value?.id == user.id) {
+                                _currentUser.value = _currentUser.value?.copy(tags = tags)
+                            }
+                        }
+                        .onFailure { e ->
+                            println("AppDataManager: Interest tags fetch failed: ${e.redactedRestMessage()}")
+                        }
+                }
 
                 // Load location preferences from Supabase
                 runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
@@ -385,15 +403,27 @@ object AppDataManager {
 
                     // Prioritize connections and connected-user hydration so the Home/Map/Chats
                     // screens are ready before slower auxiliary startup work completes.
-                    val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(user.id)
-                    _connections.value = snapshot.connections
-                    _archivedConnectionIds.value = snapshot.archivedConnectionIds
-                    _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
-                    refreshConnectedUsers(snapshot.connections, user.id)
+                    val snapshot = snapshotDeferred.await()
+                    if (snapshot != null) {
+                        _connections.value = snapshot.connections
+                        _archivedConnectionIds.value = snapshot.archivedConnectionIds
+                        _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+                    }
 
                     _isDataLoaded.value = true
                     lastRefreshTime = Clock.System.now().toEpochMilliseconds()
                     persistSnapshot()
+
+                    // Keep first paint fast: hydrate connected users in background instead of
+                    // blocking Home readiness on this network call.
+                    scope.launch {
+                        if (_currentUser.value?.id == user.id) {
+                            runCatching { refreshConnectedUsers(_connections.value, user.id) }
+                                .onFailure { e ->
+                                    println("AppDataManager: Background connected-user hydration failed: ${e.redactedRestMessage()}")
+                                }
+                        }
+                    }
 
                     // Apply availability after the primary connection data is visible.
                     val availability = availabilityDeferred.await()
