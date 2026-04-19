@@ -81,6 +81,7 @@ import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
 import compose.project.click.click.utils.LocationService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.models.LocationPreferences
@@ -150,9 +151,23 @@ fun SettingsScreen(
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     var micPermissionBump by remember { mutableIntStateOf(0) }
     var locationPermissionBump by remember { mutableIntStateOf(0) }
-    val microphoneGranted = remember(micPermissionBump, foregroundSyncTick) { ambientNoiseMonitor.hasPermission }
-    val locationSnapGranted = remember(locationPermissionBump, foregroundSyncTick) {
-        locationService.hasLocationPermission()
+    var microphoneGranted by remember { mutableStateOf(ambientNoiseMonitor.hasPermission) }
+    var locationSnapGranted by remember { mutableStateOf(locationService.hasLocationPermission()) }
+
+    LaunchedEffect(micPermissionBump, foregroundSyncTick) {
+        microphoneGranted = ambientNoiseMonitor.hasPermission
+    }
+
+    LaunchedEffect(locationPermissionBump, foregroundSyncTick) {
+        locationSnapGranted = locationService.hasLocationPermission()
+        if (!locationSnapGranted) {
+            repeat(4) {
+                delay(250)
+                val refreshed = locationService.hasLocationPermission()
+                locationSnapGranted = refreshed
+                if (refreshed) return@LaunchedEffect
+            }
+        }
     }
 
     LaunchedEffect(Unit) {

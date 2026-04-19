@@ -213,7 +213,13 @@ class HomeViewModel(
                 when {
                     // Treat an authenticated, hydrated user as render-ready once the load cycle
                     // is no longer active, even if isDataLoaded lags due a cancelled/restarted refresh.
-                    user != null && (isDataLoaded || !isLoading) -> {
+                    // Also allow immediate render when we already have active connections from cached
+                    // snapshot/state while a background refresh is still in-flight.
+                    user != null && (
+                        isDataLoaded ||
+                            !isLoading ||
+                            connections.any { it.isActiveForUser(archivedIds, hiddenIds) }
+                        ) -> {
                         if (availabilityIntentRefreshJob == null) {
                             availabilityIntentRefreshJob = viewModelScope.launch {
                                 while (isActive) {

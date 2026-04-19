@@ -542,26 +542,20 @@ fun App() {
             var remoteFirstNameMissing by remember { mutableStateOf<Boolean?>(null) }
             var remoteAvatarPresent by remember { mutableStateOf<Boolean?>(null) }
             var profileGateCheckReady by remember { mutableStateOf(false) }
-            var profileGateBootstrapped by remember { mutableStateOf(false) }
 
-            LaunchedEffect(authViewModel.isAuthenticated, currentUser.id) {
+            LaunchedEffect(
+                authViewModel.isAuthenticated,
+                currentUser.id,
+                appDataUser?.id,
+            ) {
                 if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
                     remoteBirthdayMissing = null
                     remoteFirstNameMissing = null
                     remoteAvatarPresent = null
                     profileGateCheckReady = false
-                    profileGateBootstrapped = false
                     return@LaunchedEffect
                 }
 
-                if (profileGateBootstrapped) return@LaunchedEffect
-
-                if (appDataUser == null) {
-                    profileGateCheckReady = false
-                    return@LaunchedEffect
-                }
-
-                profileGateCheckReady = false
                 val localUser = appDataUser
                     ?: run {
                         profileGateCheckReady = false
@@ -579,7 +573,6 @@ fun App() {
                     remoteAvatarPresent = !localUser.image.isNullOrBlank()
                 }
                 profileGateCheckReady = true
-                profileGateBootstrapped = true
             }
 
             LaunchedEffect(appDataUser?.id, appDataUser?.name) {
@@ -628,6 +621,7 @@ fun App() {
             var previousOnboardingStep by remember { mutableStateOf<String?>(null) }
             var onboardingHandoffActive by remember { mutableStateOf(false) }
             var showHomeRevealOverlay by remember { mutableStateOf(false) }
+            var hasPlayedHomeEntrance by remember(currentUser.id) { mutableStateOf(false) }
 
             val avatarAuthRepo = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
 
@@ -645,7 +639,6 @@ fun App() {
             val profileGatePending =
                 currentUser.id.isNotBlank() &&
                     appDataUser != null &&
-                    !profileGateBootstrapped &&
                     !profileGateCheckReady
 
             val profileGateActive =
@@ -655,6 +648,7 @@ fun App() {
                     (birthdayMissing || firstNameMissing)
 
             val shouldStartOnboardingHandoff =
+                !hasPlayedHomeEntrance &&
                 previousOnboardingStep != null &&
                     previousOnboardingStep != "complete" &&
                     previousOnboardingStep != "loading" &&
@@ -663,6 +657,7 @@ fun App() {
                     !profileGatePending
 
             val shouldStartInitialHomeReveal =
+                !hasPlayedHomeEntrance &&
                 (previousOnboardingStep == null || previousOnboardingStep == "loading") &&
                     onboardingStep == "complete" &&
                     !profileGateActive &&
@@ -681,6 +676,7 @@ fun App() {
                     showHomeRevealOverlay = true
                     delay(850)
                     showHomeRevealOverlay = false
+                    hasPlayedHomeEntrance = true
                 }
             }
 
@@ -689,6 +685,7 @@ fun App() {
                     showHomeRevealOverlay = true
                     delay(420)
                     showHomeRevealOverlay = false
+                    hasPlayedHomeEntrance = true
                 }
             }
 
@@ -710,7 +707,12 @@ fun App() {
                     initialLastName = appDataUser!!.lastName.orEmpty(),
                     initialBirthdayIso = appDataUser!!.birthday.orEmpty(),
                     requireBirthday = birthdayMissing,
-                    onCompleted = { appScope.launch { AppDataManager.refresh(force = true) } },
+                    onCompleted = {
+                        remoteBirthdayMissing = false
+                        remoteFirstNameMissing = false
+                        profileGateCheckReady = true
+                        appScope.launch { AppDataManager.refresh(force = true) }
+                    },
                 )
             } else if (onboardingStep == "loading") {
                 AppShimmerScreen(
@@ -812,7 +814,7 @@ fun App() {
                 animationSpec = tween(durationMillis = 760, easing = LinearOutSlowInEasing),
                 label = "home_reveal_overlay_alpha",
             )
-            var homeSurfaceVisible by remember { mutableStateOf(false) }
+            var homeSurfaceVisible by remember(hasPlayedHomeEntrance) { mutableStateOf(hasPlayedHomeEntrance) }
             LaunchedEffect(showHomeRevealOverlay, onboardingHandoffActive, shouldStartOnboardingHandoff) {
                 if (showHomeRevealOverlay || onboardingHandoffActive || shouldStartOnboardingHandoff) {
                     homeSurfaceVisible = false
@@ -1068,7 +1070,7 @@ fun App() {
                     connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen ->
                         connectionViewModel.resetConnectionState()
                     pendingChatId != null -> pendingChatId = null // close open chat first
-                    else -> navigateBack()
+                    else -> navigateBack(NavigationTransitionMode.GestureBack)
                 }
             }
 
@@ -1104,8 +1106,11 @@ fun App() {
                         val screenKey = activeScreenKey
                         val swipeBackEnabled = isIOS && isSwipeBackScreen(screenKey)
 
-                        LaunchedEffect(screenKey) {
+                        LaunchedEffect(screenKey, transitionMode) {
                             if (transitionMode == NavigationTransitionMode.GestureBack) {
+                                // Let gesture-driven render settle before returning to tap mode;
+                                // immediate reset can trigger an extra animated pass on Home.
+                                delay(80)
                                 transitionMode = NavigationTransitionMode.Tap
                             }
                         }

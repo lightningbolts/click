@@ -261,6 +261,8 @@ object AppDataManager {
                 val metaFirst = metaStr("first_name")
                 val metaLast = metaStr("last_name")
                 val metaBirthday = metaStr("birthday")
+                val cachedSessionUser = _currentUser.value?.takeIf { it.id == authUser.id }
+                val cachedImage = cachedSessionUser?.image?.trim()?.takeIf { it.isNotEmpty() }
                 val authDisplay = authUser.displayNameFromMetadata()
                 println(
                     "AppDataManager: Auth metadata — first/last: $metaFirst / $metaLast, display: $authDisplay"
@@ -271,23 +273,27 @@ object AppDataManager {
                 println("AppDataManager: Fetched user from DB: ${user?.name}")
 
                 if (user == null) {
+                    val resolvedFirst = metaFirst ?: cachedSessionUser?.firstName
+                    val resolvedLast = metaLast ?: cachedSessionUser?.lastName
+                    val resolvedBirthday = metaBirthday ?: cachedSessionUser?.birthday
+                    val resolvedImage = cachedImage
                     // Create user in database if not exists
                     val newUser = User(
                         id = authUser.id,
                         name = resolveDisplayName(
-                            firstName = metaFirst,
-                            lastName = metaLast,
+                            firstName = resolvedFirst,
+                            lastName = resolvedLast,
                             fullName = metaStr("full_name") ?: authDisplay,
                             name = null,
                             email = authUser.email
                         ),
                         email = authUser.email,
-                        image = null,
+                        image = resolvedImage,
                         createdAt = Clock.System.now().toEpochMilliseconds(),
                         lastPolled = null,
-                        firstName = metaFirst,
-                        lastName = metaLast,
-                        birthday = metaBirthday,
+                        firstName = resolvedFirst,
+                        lastName = resolvedLast,
+                        birthday = resolvedBirthday,
                         connections = emptyList(),
                         paired_with = emptyList(),
                         connection_today = 0,
@@ -305,12 +311,14 @@ object AppDataManager {
                         email = authUser.email ?: user.email
                     )
                     val desiredEmail = authUser.email ?: user.email
+                    val resolvedImage = user.image?.trim()?.takeIf { it.isNotEmpty() } ?: cachedImage
                     val syncedUser = user.copy(
                         name = desiredName,
                         email = desiredEmail,
-                        firstName = metaFirst ?: user.firstName,
-                        lastName = metaLast ?: user.lastName,
-                        birthday = metaBirthday ?: user.birthday
+                        image = resolvedImage,
+                        firstName = metaFirst ?: user.firstName ?: cachedSessionUser?.firstName,
+                        lastName = metaLast ?: user.lastName ?: cachedSessionUser?.lastName,
+                        birthday = metaBirthday ?: user.birthday ?: cachedSessionUser?.birthday,
                     )
                     if (syncedUser != user) {
                         println("AppDataManager: Syncing current user profile to users table: ${syncedUser.name}")

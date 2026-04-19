@@ -177,9 +177,9 @@ class AuthRepository(
                     }
                     Result.failure(
                         Exception(
-                            mapAuthErrorMessage(
+                            mapAppleSignInErrorMessage(
                                 nativeError,
-                                defaultMessage = "Apple sign-in could not be started right now.$simulatorHint",
+                                defaultMessage = "Apple sign-in couldn't be completed right now.$simulatorHint",
                             ),
                         ),
                     )
@@ -188,9 +188,9 @@ class AuthRepository(
         } catch (e: Exception) {
             Result.failure(
                 Exception(
-                    mapAuthErrorMessage(
+                    mapAppleSignInErrorMessage(
                         e,
-                        defaultMessage = "Apple sign-in could not be started right now.",
+                        defaultMessage = "Apple sign-in couldn't be completed right now.",
                     ),
                 ),
             )
@@ -419,18 +419,55 @@ class AuthRepository(
                 normalized.contains("invalid credentials") ->
                 "That email or password is incorrect."
 
-            normalized.contains("network") ||
-                normalized.contains("timeout") ||
-                normalized.contains("timed out") ||
-                normalized.contains("unable to resolve host") ||
-                normalized.contains("offline") ||
-                normalized.contains("socket") ||
-                normalized.contains("connection") ->
+            isLikelyNetworkErrorMessage(normalized) ->
                 "You're offline or the network is unstable. Please try again when you're connected."
 
             rawMessage.isNotBlank() -> rawMessage
             else -> defaultMessage
         }
+    }
+
+    private fun mapAppleSignInErrorMessage(error: Throwable, defaultMessage: String): String {
+        val rawMessage = error.message?.trim().orEmpty()
+        val normalized = rawMessage.lowercase()
+
+        if (rawMessage.isBlank()) return defaultMessage
+
+        if (
+            normalized.contains("canceled") ||
+            normalized.contains("cancelled") ||
+            normalized.contains("asauthorizationerror") && normalized.contains("1001")
+        ) {
+            return "Apple sign-in was canceled."
+        }
+
+        if (
+            normalized.contains("akauthenticationerror") ||
+            normalized.contains("asauthorizationerror") ||
+            normalized.contains("apple sign")
+        ) {
+            return rawMessage
+        }
+
+        return mapAuthErrorMessage(error, defaultMessage)
+    }
+
+    private fun isLikelyNetworkErrorMessage(normalizedMessage: String): Boolean {
+        if (normalizedMessage.isBlank()) return false
+
+        if (normalizedMessage.contains("network")) return true
+        if (normalizedMessage.contains("offline")) return true
+        if (normalizedMessage.contains("unable to resolve host")) return true
+        if (normalizedMessage.contains("socket")) return true
+        if (normalizedMessage.contains("dns")) return true
+        if (normalizedMessage.contains("host unreachable")) return true
+        if (normalizedMessage.contains("connection reset")) return true
+        if (normalizedMessage.contains("connection refused")) return true
+        if (normalizedMessage.contains("connection timed out")) return true
+        if (normalizedMessage.contains("timed out")) return true
+        if (normalizedMessage.contains("timeout")) return true
+
+        return false
     }
 }
 

@@ -157,22 +157,6 @@ fun HomeScreen(
         }
     }
 
-    var successContentVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(homeState is HomeState.Success) {
-        if (homeState is HomeState.Success) {
-            successContentVisible = false
-            delay(16)
-            successContentVisible = true
-        } else {
-            successContentVisible = false
-        }
-    }
-    val successContentAlpha by animateFloatAsState(
-        targetValue = if (successContentVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 340),
-        label = "home_success_content_alpha",
-    )
-
     // Apply deep dark background (Zinc-950)
     Box(
         modifier = Modifier
@@ -228,7 +212,6 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer { alpha = successContentAlpha }
                 ) {
                     Box(
                         modifier = Modifier.padding(

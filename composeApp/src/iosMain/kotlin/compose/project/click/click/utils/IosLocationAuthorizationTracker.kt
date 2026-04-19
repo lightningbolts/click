@@ -35,6 +35,11 @@ internal object IosLocationAuthorizationTracker {
                 }
             }
         }
+
+        // Seed from the manager instance immediately so UI does not stay at UNSET/denied
+        // until the async static read or delegate callback lands.
+        cachedStatus = authManager.authorizationStatus.toInt()
+
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
             val raw = CLLocationManager.authorizationStatus()
             dispatch_async(dispatch_get_main_queue()) {
@@ -56,7 +61,13 @@ internal object IosLocationAuthorizationTracker {
     fun currentStatusInt(): Int {
         ensureStarted()
         val c = cachedStatus
-        return if (c == UNSET) 0 else c
+        if (c != UNSET) return c
+
+        val immediate = authManager.authorizationStatus.toInt()
+        if (immediate != UNSET) {
+            cachedStatus = immediate
+        }
+        return if (immediate == UNSET) 0 else immediate
     }
 
     fun hasWhenInUseOrAlways(): Boolean {
