@@ -24,11 +24,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,8 +47,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,7 +57,6 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.MessageReaction
-import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
@@ -77,70 +69,6 @@ import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-
-/** Single / double checkmarks for outbound send pipeline (replaces word labels). */
-@Composable
-private fun SentDeliveryReceiptIcon(
-    messageWithUser: MessageWithUser,
-    baseTint: Color,
-    readTint: Color,
-    modifier: Modifier = Modifier,
-) {
-    if (!messageWithUser.isSent) return
-    val m = messageWithUser.message
-    val a11y =
-        when {
-            m.deliveryState == MessageDeliveryState.ERROR -> "Failed to send"
-            m.deliveryState == MessageDeliveryState.PENDING -> "Sending"
-            m.deliveryState == MessageDeliveryState.READ || m.readAt != null || m.isRead -> "Read"
-            m.deliveryState == MessageDeliveryState.DELIVERED -> "Delivered"
-            else -> "Sent"
-        }
-    Box(
-        modifier =
-            modifier.semantics {
-                contentDescription = a11y
-            },
-    ) {
-        when {
-            m.deliveryState == MessageDeliveryState.ERROR ->
-                Icon(
-                    imageVector = Icons.Outlined.ErrorOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(15.dp),
-                )
-            m.deliveryState == MessageDeliveryState.PENDING ->
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = null,
-                    tint = baseTint.copy(alpha = baseTint.alpha * 0.38f),
-                    modifier = Modifier.size(14.dp),
-                )
-            m.deliveryState == MessageDeliveryState.READ || m.readAt != null || m.isRead ->
-                Icon(
-                    imageVector = Icons.Filled.DoneAll,
-                    contentDescription = null,
-                    tint = readTint,
-                    modifier = Modifier.size(17.dp),
-                )
-            m.deliveryState == MessageDeliveryState.DELIVERED ->
-                Icon(
-                    imageVector = Icons.Filled.DoneAll,
-                    contentDescription = null,
-                    tint = baseTint,
-                    modifier = Modifier.size(17.dp),
-                )
-            else ->
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = null,
-                    tint = baseTint,
-                    modifier = Modifier.size(14.dp),
-                )
-        }
-    }
-}
 
 @Composable
 fun ChatMessageBubble(
@@ -399,7 +327,7 @@ fun ChatMessageBubble(
                 if (isSent) {
                     if (isImageMessage) {
                         Column(
-                            modifier = Modifier.widthIn(max = 280.dp),
+                            modifier = Modifier.widthIn(max = 300.dp),
                             horizontalAlignment = Alignment.Start,
                         ) {
                             replyRef?.let { r ->
@@ -430,9 +358,6 @@ fun ChatMessageBubble(
                                 message = message,
                                 isEncrypted = encryptedMedia,
                                 secureState = secureSt,
-                                overflowTint = Color.White.copy(alpha = 0.92f),
-                                onOverflow = { onLongPress(messageWithUser) },
-                                useLightOverflowContrast = true,
                                 borderIfReceived = false,
                             )
                             val capImg = message.content.trim()
@@ -454,35 +379,16 @@ fun ChatMessageBubble(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                                 )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = formatMessageTime(message.timeCreated),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                modifier = Modifier.align(Alignment.End),
-                            )
-                            SentDeliveryReceiptIcon(
-                                messageWithUser = messageWithUser,
-                                baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                readTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                                modifier = Modifier.align(Alignment.End),
-                            )
                         }
                     } else {
                     Box(
                         modifier = Modifier
-                            .widthIn(max = 280.dp)
+                            .widthIn(max = 300.dp)
                             .clip(sentShape)
                             .background(sentGradient)
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
-                        ChatMessageOverflowButton(
-                            onClick = { onLongPress(messageWithUser) },
-                            tint = Color.White.copy(alpha = 0.75f),
-                            modifier = Modifier.align(Alignment.TopEnd),
-                        )
                         Column(
-                            modifier = Modifier.padding(end = 22.dp),
                             horizontalAlignment = Alignment.Start,
                         ) {
                             replyRef?.let { r ->
@@ -564,26 +470,13 @@ fun ChatMessageBubble(
                                     color = Color.White.copy(alpha = 0.5f),
                                 )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = formatMessageTime(message.timeCreated),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.65f),
-                                modifier = Modifier.align(Alignment.End),
-                            )
-                            SentDeliveryReceiptIcon(
-                                messageWithUser = messageWithUser,
-                                baseTint = Color.White.copy(alpha = 0.55f),
-                                readTint = Color(0xFFB7E0FF),
-                                modifier = Modifier.align(Alignment.End),
-                            )
                         }
                     }
                     }
                 } else {
                     if (isImageMessage) {
                         Column(
-                            modifier = Modifier.widthIn(max = 280.dp),
+                            modifier = Modifier.widthIn(max = 300.dp),
                             horizontalAlignment = Alignment.Start,
                         ) {
                             replyRef?.let { r ->
@@ -616,9 +509,6 @@ fun ChatMessageBubble(
                                 message = message,
                                 isEncrypted = encryptedMedia,
                                 secureState = secureSt,
-                                overflowTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.95f),
-                                onOverflow = { onLongPress(messageWithUser) },
-                                useLightOverflowContrast = false,
                                 borderIfReceived = true,
                             )
                             val capRx = message.content.trim()
@@ -640,30 +530,17 @@ fun ChatMessageBubble(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = formatMessageTime(message.timeCreated),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.align(Alignment.End),
-                            )
                         }
                     } else {
                     Box(
                         modifier = Modifier
-                            .widthIn(max = 280.dp)
+                            .widthIn(max = 300.dp)
                             .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
                             .clip(receivedShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
-                        ChatMessageOverflowButton(
-                            onClick = { onLongPress(messageWithUser) },
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                            modifier = Modifier.align(Alignment.TopEnd),
-                        )
                         Column(
-                            modifier = Modifier.padding(end = 22.dp),
                             horizontalAlignment = Alignment.Start,
                         ) {
                             replyRef?.let { r ->
@@ -747,13 +624,6 @@ fun ChatMessageBubble(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = formatMessageTime(message.timeCreated),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.align(Alignment.End),
-                            )
                         }
                     }
                     }

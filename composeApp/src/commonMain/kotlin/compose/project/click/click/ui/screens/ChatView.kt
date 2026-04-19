@@ -52,7 +52,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -157,7 +156,6 @@ import compose.project.click.click.data.models.MessageWithUser // pragma: allowl
 import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
 import compose.project.click.click.ui.chat.chatBubbleStableRowKey
 import compose.project.click.click.ui.chat.CallLogSystemRow
-import compose.project.click.click.ui.chat.ChatBubblePhotoContent
 import compose.project.click.click.ui.chat.ChatChannelLoadingView
 import compose.project.click.click.ui.chat.ChatWarmLoadingView
 import compose.project.click.click.ui.chat.ConnectionItem
@@ -172,7 +170,10 @@ import compose.project.click.click.ui.chat.connectionHasNoGeo
 import compose.project.click.click.ui.chat.connectionListActivityTs
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
 import compose.project.click.click.ui.chat.ConnectionActionSheet
-import compose.project.click.click.ui.chat.ChatMessageOverflowButton
+import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
+import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
+import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
+import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer
 import compose.project.click.click.ui.chat.ChatTimelineEntry
 import compose.project.click.click.ui.chat.ChatTypingDots
@@ -799,6 +800,11 @@ fun ChatView(
                         val timelineEntries = remember(messages) {
                             buildChatTimelineEntriesNewestFirst(messages)
                         }
+                        var timestampPeekProgress by remember { mutableFloatStateOf(0f) }
+                        val peekRevealPx = rememberTimestampPeekRevealPx()
+                        val newestSentMessage = remember(messages) {
+                            messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
+                        }
                         Box(
                             modifier = messageContentModifier
                                 .padding(horizontal = 4.dp)
@@ -813,14 +819,35 @@ fun ChatView(
                                         )
                                     )
                                 )
+                                .chatTimestampPeekOnSwipeLeft(peekRevealPx) { timestampPeekProgress = it },
                         ) {
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 reverseLayout = true,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
+                                if (newestSentMessage != null) {
+                                    val receiptM = newestSentMessage
+                                    items(
+                                        listOf(receiptM),
+                                        key = { _ -> "outbound-delivery-receipt" },
+                                    ) { mwu ->
+                                        Box(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(end = 10.dp, bottom = 0.dp),
+                                            contentAlignment = Alignment.CenterEnd,
+                                        ) {
+                                            ChatDeliveryReceiptIcon(
+                                                messageWithUser = mwu,
+                                                baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                readTint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                }
                                 items(timelineEntries, key = { it.key }) { entry ->
                                     when (entry) {
                                         is ChatTimelineEntry.DaySeparator -> {
@@ -832,39 +859,47 @@ fun ChatView(
                                             val messageWithUser = entry.messageWithUser
                                             val msgReactions =
                                                 reactionsMap[messageWithUser.message.id] ?: emptyList()
+                                            val isCallLog = messageWithUser.message.messageType == "call_log"
                                             Column {
-                                                val bubble: @Composable () -> Unit = {
-                                                    ChatMessageBubble(
-                                                        messageWithUser = messageWithUser,
-                                                        currentUserId = currentUserId,
-                                                        reactions = msgReactions,
-                                                        onToggleReaction = { reaction ->
-                                                            viewModel.toggleReaction(messageWithUser.message.id, reaction)
-                                                        },
-                                                        onForward = { msgId ->
-                                                            forwardMessageId = msgId
-                                                        },
-                                                        onLongPress = { contextMenuMessage = messageWithUser },
-                                                        onSwipeReply = {
-                                                            viewModel.startReplyTo(it)
-                                                        },
-                                                        showPeerAvatarInGroup = isGroupChat,
-                                                        secureMediaHost = viewModel,
-                                                        secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
-                                                        activeChatId = activeApiChatId,
-                                                        onDownloadAttachment = { _, env ->
-                                                            viewModel.downloadChatAttachment(env)
-                                                        },
-                                                    )
-                                                }
-                                                if (messageWithUser.message.messageType == "call_log") {
-                                                    bubble()
-                                                } else {
-                                                    AnimatedVisibilityChatBubble(
-                                                        bubbleStabilityKey = chatBubbleStableRowKey(messageWithUser),
-                                                        isSent = messageWithUser.isSent,
-                                                        content = bubble
-                                                    )
+                                                ChatMessageRowWithTimestampGutter(
+                                                    isCallLog = isCallLog,
+                                                    isSent = messageWithUser.isSent,
+                                                    timeCreated = messageWithUser.message.timeCreated,
+                                                    stripProgress = timestampPeekProgress,
+                                                ) {
+                                                    val bubble: @Composable () -> Unit = {
+                                                        ChatMessageBubble(
+                                                            messageWithUser = messageWithUser,
+                                                            currentUserId = currentUserId,
+                                                            reactions = msgReactions,
+                                                            onToggleReaction = { reaction ->
+                                                                viewModel.toggleReaction(messageWithUser.message.id, reaction)
+                                                            },
+                                                            onForward = { msgId ->
+                                                                forwardMessageId = msgId
+                                                            },
+                                                            onLongPress = { contextMenuMessage = messageWithUser },
+                                                            onSwipeReply = {
+                                                                viewModel.startReplyTo(it)
+                                                            },
+                                                            showPeerAvatarInGroup = isGroupChat,
+                                                            secureMediaHost = viewModel,
+                                                            secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
+                                                            activeChatId = activeApiChatId,
+                                                            onDownloadAttachment = { _, env ->
+                                                                viewModel.downloadChatAttachment(env)
+                                                            },
+                                                        )
+                                                    }
+                                                    if (isCallLog) {
+                                                        bubble()
+                                                    } else {
+                                                        AnimatedVisibilityChatBubble(
+                                                            bubbleStabilityKey = chatBubbleStableRowKey(messageWithUser),
+                                                            isSent = messageWithUser.isSent,
+                                                            content = bubble
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }

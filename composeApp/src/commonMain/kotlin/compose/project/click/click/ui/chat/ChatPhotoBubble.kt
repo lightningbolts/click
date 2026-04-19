@@ -8,13 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -35,13 +29,8 @@ import compose.project.click.click.utils.toImageBitmap
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 
 /**
- * Image-bubble rendering for both encrypted (E2EE) and plain photo
- * messages, plus the three-dot overflow button that sits on top of them.
- *
- * Extracted verbatim from ConnectionsScreen.kt so the large and
- * branchy render logic has a dedicated home. Behavior is unchanged —
- * the decoded-bitmap cache, the error/loading branches, and the
- * overflow-button overlay all match the original.
+ * Image-bubble rendering for both encrypted (E2EE) and plain photo messages.
+ * Long-press / message actions are handled on the parent bubble surface.
  */
 
 private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
@@ -54,26 +43,6 @@ private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
 internal val secureChatImageBitmapCache: LruMemoryCache<String, ImageBitmap> =
     LruMemoryCache(SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES)
 
-/** Three-dot overflow affordance shown on chat message bubbles. */
-@Composable
-internal fun ChatMessageOverflowButton(
-    onClick: () -> Unit,
-    tint: Color,
-    modifier: Modifier = Modifier,
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier.size(30.dp),
-    ) {
-        Icon(
-            Icons.Outlined.MoreVert,
-            contentDescription = "Message actions",
-            tint = tint,
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
-
 /**
  * Renders the photo portion of a chat message bubble, routing between
  * the encrypted (E2EE) and plain paths:
@@ -84,9 +53,6 @@ internal fun ChatMessageOverflowButton(
  *   [secureChatImageBitmapCache], render with [Image]
  * - E2EE bytes not yet available — spinner
  * - Plain — [AsyncImage] directly from [mediaUrl]
- *
- * On top of the image, a semi-transparent disc hosts the overflow
- * button so the affordance stays readable on any photo background.
  */
 @Composable
 internal fun ChatBubblePhotoContent(
@@ -95,9 +61,6 @@ internal fun ChatBubblePhotoContent(
     isEncrypted: Boolean,
     secureState: SecureChatMediaLoadState?,
     modifier: Modifier = Modifier,
-    overflowTint: Color,
-    onOverflow: () -> Unit,
-    useLightOverflowContrast: Boolean,
     borderIfReceived: Boolean = false,
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
@@ -185,27 +148,6 @@ internal fun ChatBubblePhotoContent(
                         .clip(RoundedCornerShape(16.dp)),
                 )
             }
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(6.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (useLightOverflowContrast) Color.Black.copy(alpha = 0.35f)
-                        else Color.Black.copy(alpha = 0.22f),
-                    )
-                    .align(Alignment.Center),
-            )
-            ChatMessageOverflowButton(
-                onClick = onOverflow,
-                tint = overflowTint,
-                modifier = Modifier.align(Alignment.Center),
-            )
         }
     }
 }

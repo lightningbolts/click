@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,7 +37,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageBubble
+import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
+import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
+import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
@@ -160,28 +165,66 @@ fun HubChatScreen(
                 }
             }
 
-            LazyColumn(
+            var timestampPeekProgress by remember { mutableFloatStateOf(0f) }
+            val peekRevealPx = rememberTimestampPeekRevealPx()
+            val newestSentMessage = remember(messages) {
+                messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
+            }
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .fillMaxWidth()
+                    .chatTimestampPeekOnSwipeLeft(peekRevealPx) { timestampPeekProgress = it },
             ) {
-                items(messages, key = { it.message.id }) { mwu ->
-                    ChatMessageBubble(
-                        messageWithUser = mwu,
-                        currentUserId = currentUserId,
-                        reactions = emptyList(),
-                        onToggleReaction = {},
-                        onForward = {},
-                        onLongPress = {},
-                        onSwipeReply = {},
-                        showPeerAvatarInGroup = true,
-                        secureMediaHost = viewModel,
-                        secureMediaState = secureMediaLoadMap[mwu.message.id],
-                        activeChatId = hubIdForSecureMedia,
-                        enableMessageContextMenu = false,
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(messages, key = { it.message.id }) { mwu ->
+                        val isCallLog = mwu.message.messageType == "call_log"
+                        ChatMessageRowWithTimestampGutter(
+                            isCallLog = isCallLog,
+                            isSent = mwu.isSent,
+                            timeCreated = mwu.message.timeCreated,
+                            stripProgress = timestampPeekProgress,
+                        ) {
+                            ChatMessageBubble(
+                                messageWithUser = mwu,
+                                currentUserId = currentUserId,
+                                reactions = emptyList(),
+                                onToggleReaction = {},
+                                onForward = {},
+                                onLongPress = {},
+                                onSwipeReply = {},
+                                showPeerAvatarInGroup = true,
+                                secureMediaHost = viewModel,
+                                secureMediaState = secureMediaLoadMap[mwu.message.id],
+                                activeChatId = hubIdForSecureMedia,
+                                enableMessageContextMenu = false,
+                            )
+                        }
+                    }
+                    if (newestSentMessage != null) {
+                        val receiptM = newestSentMessage
+                        items(
+                            listOf(receiptM),
+                            key = { _ -> "hub-outbound-delivery-receipt" },
+                        ) { mwu ->
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(end = 10.dp, top = 0.dp),
+                                contentAlignment = Alignment.CenterEnd,
+                            ) {
+                                ChatDeliveryReceiptIcon(
+                                    messageWithUser = mwu,
+                                    baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    readTint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
