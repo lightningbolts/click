@@ -8,8 +8,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -61,6 +64,7 @@ import compose.project.click.click.ui.components.ConnectionRevealOverlay
 import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.AppShimmerVariant
@@ -1343,11 +1347,19 @@ fun App() {
                                 }
 
                                 "hub_chat" -> {
+                                    var hubChatRightToLeftPeek by remember {
+                                        mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
+                                    }
                                     val previousKey = currentRoute
                                     val interactive = allowInteractiveSwipeBack &&
                                         swipeBackEnabled &&
                                         previousKey != animatedScreen
                                     val hubArgs = hubChatArgs
+                                    LaunchedEffect(hubArgs) {
+                                        if (hubArgs == null) {
+                                            hubChatRightToLeftPeek = null
+                                        }
+                                    }
                                     val hubUserId = when (val state = authViewModel.authState) {
                                         is AuthState.Success -> state.userId
                                         else -> ""
@@ -1363,6 +1375,10 @@ fun App() {
                                                     hubChatArgs = null
                                                 },
                                                 resolveHubGatekeeperLocation = { resolveConnectionLocation() },
+                                                integrateTimestampPeekWithSwipeBackContainer = interactive,
+                                                onRegisterSwipeBackRightToLeftPeek = {
+                                                    hubChatRightToLeftPeek = it
+                                                },
                                             )
                                         } else {
                                             Box(
@@ -1383,6 +1399,7 @@ fun App() {
                                                 hubChatArgs = null
                                             },
                                             previousContent = { renderScreen(previousKey, false) },
+                                            rightToLeftPeek = hubChatRightToLeftPeek,
                                             currentContent = content,
                                         )
                                     } else {
@@ -1714,31 +1731,81 @@ fun App() {
                             )
                         }
 
-                        when (val overlayState = globalCallOverlayState) {
-                            is CallOverlayState.Outgoing,
-                            is CallOverlayState.Incoming,
-                            is CallOverlayState.Connecting,
-                            is CallOverlayState.Ended,
-                            -> {
-                                CallPreviewOverlay(
-                                    overlayState = overlayState,
-                                    currentUserId = appDataUser?.id,
-                                    onAccept = { CallSessionManager.acceptIncomingCall() },
-                                    onDecline = { CallSessionManager.declineIncomingCall() },
-                                    onCancel = { CallSessionManager.cancelCurrentCall() },
-                                    onDismissEnded = { CallSessionManager.dismissEndedCall() },
+                        val overlayState = globalCallOverlayState
+                        val callPreviewVisible =
+                            overlayState is CallOverlayState.Outgoing ||
+                                overlayState is CallOverlayState.Incoming ||
+                                overlayState is CallOverlayState.Connecting ||
+                                overlayState is CallOverlayState.Ended
+                        val activeCallVisible =
+                            overlayState is CallOverlayState.Idle && globalCallState !is CallState.Idle
+                        val callOverlayEnter =
+                            fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                                scaleIn(
+                                    initialScale = 0.94f,
+                                    animationSpec = tween(220, easing = FastOutSlowInEasing),
                                 )
+                        val callOverlayExit =
+                            fadeOut(tween(180, easing = LinearOutSlowInEasing)) +
+                                scaleOut(
+                                    targetScale = 0.96f,
+                                    animationSpec = tween(180, easing = LinearOutSlowInEasing),
+                                )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(11_000f),
+                        ) {
+                            AnimatedVisibility(
+                                visible = callPreviewVisible,
+                                modifier = Modifier.fillMaxSize(),
+                                enter = callOverlayEnter,
+                                exit = callOverlayExit,
+                            ) {
+                                when (val st = overlayState) {
+                                    is CallOverlayState.Outgoing,
+                                    is CallOverlayState.Incoming,
+                                    is CallOverlayState.Connecting,
+                                    is CallOverlayState.Ended,
+                                    -> {
+                                        CallPreviewOverlay(
+                                            overlayState = st,
+                                            currentUserId = appDataUser?.id,
+                                            onAccept = { CallSessionManager.acceptIncomingCall() },
+                                            onDecline = { CallSessionManager.declineIncomingCall() },
+                                            onCancel = { CallSessionManager.cancelCurrentCall() },
+                                            onDismissEnded = { CallSessionManager.dismissEndedCall() },
+                                        )
+                                    }
+
+                                    CallOverlayState.Idle -> {
+                                        Box(modifier = Modifier)
+                                    }
+                                }
                             }
 
-                            CallOverlayState.Idle -> {
-                                if (globalCallState !is CallState.Idle) {
-                                    ActiveCallOverlay(
-                                        callManager = CallSessionManager.callManager,
-                                        otherUserName = activeInvite?.counterpartName(appDataUser?.id) ?: "Connection",
-                                        state = globalCallState,
-                                        onEndCall = { CallSessionManager.endActiveCall() },
-                                    )
-                                }
+                            AnimatedVisibility(
+                                visible = activeCallVisible,
+                                modifier = Modifier.fillMaxSize(),
+                                enter =
+                                    fadeIn(tween(240, easing = FastOutSlowInEasing)) +
+                                        scaleIn(
+                                            initialScale = 0.96f,
+                                            animationSpec = tween(240, easing = FastOutSlowInEasing),
+                                        ),
+                                exit =
+                                    fadeOut(tween(200, easing = LinearOutSlowInEasing)) +
+                                        scaleOut(
+                                            targetScale = 0.98f,
+                                            animationSpec = tween(200, easing = LinearOutSlowInEasing),
+                                        ),
+                            ) {
+                                ActiveCallOverlay(
+                                    callManager = CallSessionManager.callManager,
+                                    otherUserName = activeInvite?.counterpartName(appDataUser?.id) ?: "Connection",
+                                    state = globalCallState,
+                                    onEndCall = { CallSessionManager.endActiveCall() },
+                                )
                             }
                         }
 

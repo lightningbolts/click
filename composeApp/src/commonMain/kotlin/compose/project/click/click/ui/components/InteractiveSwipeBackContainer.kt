@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,29 @@ import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+
+/**
+ * Optional integration for **right-to-left** horizontal drag while the interactive-back offset is 0.
+ * Used by chat to reveal timestamp gutters without a second competing horizontal gesture layer.
+ *
+ * [onGestureStart] is invoked when any horizontal drag begins (same moment as interactive back).
+ * [onLeftDragDelta] receives the **positive** pixel magnitude of leftward finger movement per step.
+ * [onLeftDragEnd] runs when the finger lifts (alongside normal back-velocity settling).
+ */
+data class InteractiveSwipeBackRightToLeftPeek(
+    val onGestureStart: () -> Unit = {},
+    val onLeftDragDelta: (deltaPxLeftward: Float) -> Unit,
+    /**
+     * Horizontal fling velocity when the finger lifts (px/s); same convention as
+     * [androidx.compose.foundation.gestures.draggable] `onDragStopped`.
+     */
+    val onLeftDragEnd: (velocityXPxPerSec: Float) -> Unit = { _ -> },
+    /**
+     * Rightward drag while the back offset is still ~0 (e.g. user begins interactive back after
+     * timestamp peek); collapse peek so it does not stay visible under the sliding route.
+     */
+    val onRightDragFromRest: (deltaPxRightward: Float) -> Unit = {},
+)
 
 /**
  * Fraction of screen width the previous route sits left of its rest position while progress is 0.
@@ -75,6 +99,12 @@ fun InteractiveSwipeBackContainer(
     externalDragOffsetPx: MutableFloatState? = null,
     /** Invoked when layer 1/2 visibility (`isGestureActive || isSettling`) changes; also `false` on dispose. */
     onBehindLayersVisibleChanged: (Boolean) -> Unit = {},
+    /**
+     * When non-null and [useFullWidthHorizontalDrag] is true, **negative** horizontal drag deltas
+     * (finger moving left) are routed here while the back-swipe offset is ~0; **positive** deltas
+     * still drive interactive back everywhere this container is used.
+     */
+    rightToLeftPeek: InteractiveSwipeBackRightToLeftPeek? = null,
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit
 ) {
@@ -153,9 +183,22 @@ fun InteractiveSwipeBackContainer(
             }
         }
 
+        val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
         val dragState = rememberDraggableState { delta ->
             if (!isGestureActive || isSettling) return@rememberDraggableState
-            snapDragOffset(offsetPx.floatValue + delta)
+            val offset = offsetPx.floatValue
+            when {
+                delta > 0f -> {
+                    if (offset <= 0f) {
+                        rightToLeftPeekState.value?.onRightDragFromRest?.invoke(delta)
+                    }
+                    snapDragOffset(offset + delta)
+                }
+                delta < 0f && offset > 0f -> snapDragOffset(offset + delta)
+                delta < 0f && offset <= 0f ->
+                    rightToLeftPeekState.value?.onLeftDragDelta?.invoke(-delta)
+                else -> Unit
+            }
         }
 
         val dragModifier = if (enabled) {
@@ -169,8 +212,10 @@ fun InteractiveSwipeBackContainer(
                     settleJob = null
                     isSettling = false
                     isGestureActive = true
+                    rightToLeftPeekState.value?.onGestureStart?.invoke()
                 },
                 onDragStopped = { velocity ->
+                    rightToLeftPeekState.value?.onLeftDragEnd?.invoke(velocity)
                     finishGesture(velocity)
                 }
             )

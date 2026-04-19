@@ -21,12 +21,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -40,12 +42,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageBubble
 import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
+import compose.project.click.click.ui.chat.applyTimestampPeekDragStep
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
-import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
+import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
+import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
+import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
+import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
 import compose.project.click.click.viewmodel.HubChatViewModel
+import kotlinx.coroutines.Job
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -60,6 +68,12 @@ fun HubChatScreen(
     currentUserId: String,
     onNavigateBack: () -> Unit,
     resolveHubGatekeeperLocation: suspend () -> LocationResult? = { null },
+    /**
+     * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
+     * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]).
+     */
+    integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
+    onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
 ) {
     val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
         HubChatViewModel(
@@ -83,6 +97,7 @@ fun HubChatScreen(
     )
 
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
+    val hubPeekScope = rememberCoroutineScope()
 
     val inLobby = occupantCount < 3
 
@@ -165,8 +180,64 @@ fun HubChatScreen(
                 }
             }
 
-            var timestampPeekProgress by remember { mutableFloatStateOf(0f) }
+            val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
+            val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
+            val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
             val peekRevealPx = rememberTimestampPeekRevealPx()
+            val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
+            DisposableEffect(
+                integrateTimestampPeekWithSwipeBackContainer,
+                peekRevealPx,
+                timestampPeekSoftKneePx,
+                hubPeekScope,
+            ) {
+                val integrate = integrateTimestampPeekWithSwipeBackContainer
+                if (integrate) {
+                    val integration = InteractiveSwipeBackRightToLeftPeek(
+                        onGestureStart = {
+                            timestampPeekSettleJob.value?.cancel()
+                            timestampPeekSettleJob.value = null
+                            restoreTimestampPeekRawFromDisplay(
+                                rawLeftPx = rawTimestampPeekTravelPx,
+                                displayVisualPx = displayTimestampPeekVisualPx,
+                                maxRevealPx = peekRevealPx,
+                                softKneePx = timestampPeekSoftKneePx,
+                            )
+                        },
+                        onLeftDragDelta = { dLeft ->
+                            applyTimestampPeekDragStep(
+                                rawLeftPx = rawTimestampPeekTravelPx,
+                                displayVisualPx = displayTimestampPeekVisualPx,
+                                maxRevealPx = peekRevealPx,
+                                softKneePx = timestampPeekSoftKneePx,
+                                dLeftPx = dLeft,
+                            )
+                        },
+                        onLeftDragEnd = {
+                            hubPeekScope.launchTimestampPeekReplyStyleSettle(
+                                rawLeftPx = rawTimestampPeekTravelPx,
+                                displayVisualPx = displayTimestampPeekVisualPx,
+                                settleJobHolder = timestampPeekSettleJob,
+                            )
+                        },
+                        onRightDragFromRest = {
+                            timestampPeekSettleJob.value?.cancel()
+                            timestampPeekSettleJob.value = null
+                            rawTimestampPeekTravelPx.floatValue = 0f
+                            displayTimestampPeekVisualPx.floatValue = 0f
+                        },
+                    )
+                    onRegisterSwipeBackRightToLeftPeek(integration)
+                }
+                onDispose {
+                    timestampPeekSettleJob.value?.cancel()
+                    timestampPeekSettleJob.value = null
+                    if (integrate) {
+                        onRegisterSwipeBackRightToLeftPeek(null)
+                    }
+                }
+            }
+
             val newestSentMessage = remember(messages) {
                 messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
             }
@@ -174,7 +245,20 @@ fun HubChatScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .chatTimestampPeekOnSwipeLeft(peekRevealPx) { timestampPeekProgress = it },
+                    .then(
+                        if (!integrateTimestampPeekWithSwipeBackContainer) {
+                            Modifier.chatTimestampPeekOnSwipeLeft(
+                                maxRevealPx = peekRevealPx,
+                                softKneePx = timestampPeekSoftKneePx,
+                                rawLeftPx = rawTimestampPeekTravelPx,
+                                displayVisualPx = displayTimestampPeekVisualPx,
+                                scope = hubPeekScope,
+                                settleJobHolder = timestampPeekSettleJob,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -187,7 +271,8 @@ fun HubChatScreen(
                             isCallLog = isCallLog,
                             isSent = mwu.isSent,
                             timeCreated = mwu.message.timeCreated,
-                            stripProgress = timestampPeekProgress,
+                            stripVisualPx = displayTimestampPeekVisualPx,
+                            maxRevealPx = peekRevealPx,
                         ) {
                             ChatMessageBubble(
                                 messageWithUser = mwu,

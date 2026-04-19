@@ -35,6 +35,7 @@ import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
 import compose.project.click.click.viewmodel.ChatViewModel
@@ -60,6 +61,7 @@ fun ConnectionsScreen(
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
     val iosChatSwipeDragPx = remember { mutableFloatStateOf(0f) }
     var iosChatSwipeBehindLayers by remember { mutableStateOf(false) }
+    var iosChatRightToLeftPeek by remember { mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
     var isTapCloseInFlight by remember { mutableStateOf(false) }
     val screenScope = rememberCoroutineScope()
@@ -140,6 +142,7 @@ fun ConnectionsScreen(
         if (isIOS && selectedChatId == null) {
             iosChatSwipeDragPx.floatValue = 0f
             iosChatSwipeBehindLayers = false
+            iosChatRightToLeftPeek = null
         }
     }
 
@@ -234,6 +237,7 @@ fun ConnectionsScreen(
                         opaquePreviousBackground = false,
                         externalDragOffsetPx = iosChatSwipeDragPx,
                         onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },
+                        rightToLeftPeek = iosChatRightToLeftPeek,
                         previousContent = {},
                         currentContent = {
                             ChatView(
@@ -242,6 +246,8 @@ fun ConnectionsScreen(
                                 onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
                                 onOpenUserProfile = { profileUserId = it },
                                 onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
+                                integrateTimestampPeekWithSwipeBackContainer = true,
+                                onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
                             )
                         }
                     )

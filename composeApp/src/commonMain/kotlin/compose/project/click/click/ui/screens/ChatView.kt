@@ -27,7 +27,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -119,8 +118,7 @@ import compose.project.click.click.notifications.NotificationRuntimeState // pra
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
@@ -172,8 +170,12 @@ import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
 import compose.project.click.click.ui.chat.ConnectionActionSheet
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
+import compose.project.click.click.ui.chat.applyTimestampPeekDragStep
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
+import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
+import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
+import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer
 import compose.project.click.click.ui.chat.ChatTimelineEntry
 import compose.project.click.click.ui.chat.ChatTypingDots
@@ -250,6 +252,13 @@ fun ChatView(
     onBackPressed: () -> Unit,
     onOpenUserProfile: (String) -> Unit = {},
     onOpenGroupMembersPicker: (List<User>) -> Unit = {},
+    /**
+     * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
+     * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]). When false, the chat
+     * surface uses a local full-width left-drag handler instead.
+     */
+    integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
+    onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
@@ -632,39 +641,73 @@ fun ChatView(
                                     }
                                     val menuStyle = LocalPlatformStyle.current
                                     val density = LocalDensity.current
-                                    if (menuStyle.isIOS && showCallMenu) {
-                                        Popup(
-                                            alignment = Alignment.TopStart,
-                                            offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
-                                            onDismissRequest = { showCallMenu = false },
-                                            properties = PopupProperties(
-                                                focusable = true,
-                                                dismissOnBackPress = true,
-                                                dismissOnClickOutside = true,
-                                            ),
-                                        ) {
-                                            ChatCallOptionsIosSurface(
-                                                onVoice = {
-                                                    showCallMenu = false
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = false
-                                                    )
-                                                },
-                                                onVideo = {
-                                                    showCallMenu = false
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = true
-                                                    )
-                                                },
+                                    val callMenuEnter =
+                                        fadeIn(tween(190, easing = FastOutSlowInEasing)) +
+                                            scaleIn(
+                                                initialScale = 0.92f,
+                                                animationSpec = tween(190, easing = FastOutSlowInEasing),
                                             )
+                                    val callMenuExit =
+                                        fadeOut(tween(150, easing = LinearOutSlowInEasing)) +
+                                            scaleOut(
+                                                targetScale = 0.96f,
+                                                animationSpec = tween(150, easing = LinearOutSlowInEasing),
+                                            )
+                                    var keepIosCallMenuMounted by remember { mutableStateOf(false) }
+                                    var iosCallMenuContentVisible by remember { mutableStateOf(false) }
+                                    LaunchedEffect(showCallMenu) {
+                                        if (showCallMenu) {
+                                            keepIosCallMenuMounted = true
+                                            iosCallMenuContentVisible = false
+                                            withFrameNanos { }
+                                            iosCallMenuContentVisible = true
+                                        } else {
+                                            iosCallMenuContentVisible = false
+                                            delay(150)
+                                            keepIosCallMenuMounted = false
                                         }
-                                    } else if (!menuStyle.isIOS) {
+                                    }
+                                    if (menuStyle.isIOS) {
+                                        if (keepIosCallMenuMounted) {
+                                            Popup(
+                                                alignment = Alignment.TopStart,
+                                                offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
+                                                onDismissRequest = { showCallMenu = false },
+                                                properties = PopupProperties(
+                                                    focusable = true,
+                                                    dismissOnBackPress = true,
+                                                    dismissOnClickOutside = true,
+                                                ),
+                                            ) {
+                                                androidx.compose.animation.AnimatedVisibility(
+                                                    visible = iosCallMenuContentVisible,
+                                                    enter = callMenuEnter,
+                                                    exit = callMenuExit,
+                                                ) {
+                                                    ChatCallOptionsIosSurface(
+                                                        onVoice = {
+                                                            showCallMenu = false
+                                                            CallSessionManager.startOutgoingCall(
+                                                                connectionId = chatDetails.connection.id,
+                                                                otherUserId = chatDetails.otherUser.id,
+                                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                                videoEnabled = false
+                                                            )
+                                                        },
+                                                        onVideo = {
+                                                            showCallMenu = false
+                                                            CallSessionManager.startOutgoingCall(
+                                                                connectionId = chatDetails.connection.id,
+                                                                otherUserId = chatDetails.otherUser.id,
+                                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                                videoEnabled = true
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
                                         DropdownMenu(
                                             expanded = showCallMenu,
                                             onDismissRequest = { showCallMenu = false },
@@ -800,14 +843,83 @@ fun ChatView(
                         val timelineEntries = remember(messages) {
                             buildChatTimelineEntriesNewestFirst(messages)
                         }
-                        var timestampPeekProgress by remember { mutableFloatStateOf(0f) }
+                        val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
+                        val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
+                        val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
                         val peekRevealPx = rememberTimestampPeekRevealPx()
+                        val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
+                        DisposableEffect(
+                            integrateTimestampPeekWithSwipeBackContainer,
+                            peekRevealPx,
+                            timestampPeekSoftKneePx,
+                            coroutineScope,
+                        ) {
+                            val integrate = integrateTimestampPeekWithSwipeBackContainer
+                            if (integrate) {
+                                val integration = InteractiveSwipeBackRightToLeftPeek(
+                                    onGestureStart = {
+                                        timestampPeekSettleJob.value?.cancel()
+                                        timestampPeekSettleJob.value = null
+                                        restoreTimestampPeekRawFromDisplay(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                        )
+                                    },
+                                    onLeftDragDelta = { dLeft ->
+                                        applyTimestampPeekDragStep(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                            dLeftPx = dLeft,
+                                        )
+                                    },
+                                    onLeftDragEnd = {
+                                        coroutineScope.launchTimestampPeekReplyStyleSettle(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            settleJobHolder = timestampPeekSettleJob,
+                                        )
+                                    },
+                                    onRightDragFromRest = {
+                                        timestampPeekSettleJob.value?.cancel()
+                                        timestampPeekSettleJob.value = null
+                                        rawTimestampPeekTravelPx.floatValue = 0f
+                                        displayTimestampPeekVisualPx.floatValue = 0f
+                                    },
+                                )
+                                onRegisterSwipeBackRightToLeftPeek(integration)
+                            }
+                            onDispose {
+                                timestampPeekSettleJob.value?.cancel()
+                                timestampPeekSettleJob.value = null
+                                if (integrate) {
+                                    onRegisterSwipeBackRightToLeftPeek(null)
+                                }
+                            }
+                        }
                         val newestSentMessage = remember(messages) {
                             messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
                         }
                         Box(
                             modifier = messageContentModifier
                                 .padding(horizontal = 4.dp)
+                                .then(
+                                    if (!integrateTimestampPeekWithSwipeBackContainer) {
+                                        Modifier.chatTimestampPeekOnSwipeLeft(
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            scope = coroutineScope,
+                                            settleJobHolder = timestampPeekSettleJob,
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(
                                     // Stronger tint toward the composer (visual bottom)
@@ -818,8 +930,7 @@ fun ChatView(
                                             Color(0xFF3A86FF).copy(alpha = 0.05f)
                                         )
                                     )
-                                )
-                                .chatTimestampPeekOnSwipeLeft(peekRevealPx) { timestampPeekProgress = it },
+                                ),
                         ) {
                             LazyColumn(
                                 state = listState,
@@ -865,7 +976,8 @@ fun ChatView(
                                                     isCallLog = isCallLog,
                                                     isSent = messageWithUser.isSent,
                                                     timeCreated = messageWithUser.message.timeCreated,
-                                                    stripProgress = timestampPeekProgress,
+                                                    stripVisualPx = displayTimestampPeekVisualPx,
+                                                    maxRevealPx = peekRevealPx,
                                                 ) {
                                                     val bubble: @Composable () -> Unit = {
                                                         ChatMessageBubble(
