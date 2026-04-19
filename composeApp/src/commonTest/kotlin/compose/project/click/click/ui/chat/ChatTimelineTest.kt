@@ -3,6 +3,7 @@
 package compose.project.click.click.ui.chat
 
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.User
 import kotlinx.datetime.LocalDateTime
@@ -188,6 +189,36 @@ class ChatTimelineTest {
         )
         val keys = entries.map { it.key }
         assertEquals(keys.toSet().size, keys.size, "Keys must be unique, got $keys")
+    }
+
+    @Test
+    fun stableRowKey_matchesOptimisticAndDeliveredOutboundWithSameLocalSentAt() {
+        val t = 1_700_000_000_000L
+        val optimistic = MessageWithUser(
+            message = Message(
+                id = "temp-$t-1",
+                user_id = "u1",
+                content = "hi",
+                timeCreated = t,
+                localSentAt = t,
+                deliveryState = MessageDeliveryState.PENDING,
+            ),
+            user = user("u1"),
+            isSent = true,
+        )
+        val delivered = MessageWithUser(
+            message = Message(
+                id = "real-uuid",
+                user_id = "u1",
+                content = "hi",
+                timeCreated = t + 80,
+                localSentAt = t,
+                deliveryState = MessageDeliveryState.SENT,
+            ),
+            user = user("u1"),
+            isSent = true,
+        )
+        assertEquals(chatBubbleStableRowKey(optimistic), chatBubbleStableRowKey(delivered))
     }
 
     // endregion

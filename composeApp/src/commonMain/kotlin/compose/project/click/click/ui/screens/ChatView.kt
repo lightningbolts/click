@@ -155,6 +155,7 @@ import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma:
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble
+import compose.project.click.click.ui.chat.chatBubbleStableRowKey
 import compose.project.click.click.ui.chat.CallLogSystemRow
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent
 import compose.project.click.click.ui.chat.ChatChannelLoadingView
@@ -829,7 +830,8 @@ fun ChatView(
                                         }
                                         is ChatTimelineEntry.MessageEntry -> {
                                             val messageWithUser = entry.messageWithUser
-                                            val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
+                                            val msgReactions =
+                                                reactionsMap[messageWithUser.message.id] ?: emptyList()
                                             Column {
                                                 val bubble: @Composable () -> Unit = {
                                                     ChatMessageBubble(
@@ -859,7 +861,7 @@ fun ChatView(
                                                     bubble()
                                                 } else {
                                                     AnimatedVisibilityChatBubble(
-                                                        messageId = messageWithUser.message.id,
+                                                        bubbleStabilityKey = chatBubbleStableRowKey(messageWithUser),
                                                         isSent = messageWithUser.isSent,
                                                         content = bubble
                                                     )

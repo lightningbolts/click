@@ -52,7 +52,8 @@ class FakeChatRepository(
     var onObservePeerOnline: (String, String) -> Flow<Boolean> = { _, _ -> flowOf(false) },
     var onStartGlobalPresence: suspend (String) -> Unit = { },
     var onStopGlobalPresence: suspend () -> Unit = { },
-    var onSendMessage: suspend (String, String, String, String, JsonElement?) -> Message? = { _, _, _, _, _ -> null },
+    var onSendMessage: suspend (String, String, String, String, JsonElement?, Long?) -> Message? =
+        { _, _, _, _, _, _ -> null },
     var onEnsureChatForConnection: suspend (String) -> Chat? = { null },
     var onGetUserById: suspend (String) -> User? = { null },
     var onUnifiedSearchSupplement: suspend (viewerUserId: String, peerUserIds: List<String>) -> UnifiedSearchSupplement =
@@ -97,8 +98,9 @@ class FakeChatRepository(
         content: String,
         messageType: String,
         metadata: JsonElement?,
+        clientLocalSentAtMs: Long?,
     ): Message? =
-        onSendMessage(chatId, userId, content, messageType, metadata)
+        onSendMessage(chatId, userId, content, messageType, metadata, clientLocalSentAtMs)
 
     override suspend fun ensureChatForConnection(connectionId: String): Chat? =
         onEnsureChatForConnection(connectionId)
@@ -116,6 +118,8 @@ class FakeChatRepository(
     }
 
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {}
+
+    override suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>) {}
 
     override suspend fun subscribeToMessages(
         chatId: String,

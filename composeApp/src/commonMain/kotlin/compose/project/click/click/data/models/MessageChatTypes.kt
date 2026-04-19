@@ -19,6 +19,42 @@ object ChatMessageType {
     const val FILE = "file"
 }
 
+/** Client / UI lifecycle for an outgoing or hydrated inbox row (not a DB enum). */
+@Serializable
+enum class MessageDeliveryState {
+    /** Optimistic row; not yet confirmed by click-web insert. */
+    PENDING,
+    /** Persisted on the server; recipient has not yet ack'd device receipt. */
+    SENT,
+    /** At least one recipient client reported device receipt ([Message.deliveredAt]). */
+    DELIVERED,
+    READ,
+    ERROR,
+}
+
+/**
+ * Derives [MessageDeliveryState] from [Message.readAt], [Message.deliveredAt], and
+ * persistence (SENT) while preserving in-flight [MessageDeliveryState.PENDING] /
+ * [MessageDeliveryState.ERROR] rows.
+ */
+fun Message.withDbDerivedDeliveryState(): Message =
+    when (deliveryState) {
+        MessageDeliveryState.PENDING,
+        MessageDeliveryState.ERROR,
+        -> this
+        MessageDeliveryState.SENT,
+        MessageDeliveryState.DELIVERED,
+        MessageDeliveryState.READ,
+        -> copy(
+            deliveryState =
+                when {
+                    readAt != null -> MessageDeliveryState.READ
+                    deliveredAt != null -> MessageDeliveryState.DELIVERED
+                    else -> MessageDeliveryState.SENT
+                },
+        )
+    }
+
 @Serializable
 data class MessageMediaMetadata(
     @SerialName("media_url") val mediaUrl: String? = null,

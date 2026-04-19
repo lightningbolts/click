@@ -85,6 +85,8 @@ interface ChatRepository {
         content: String,
         messageType: String = "text",
         metadata: JsonElement? = null,
+        /** Client clock (ms) forwarded to click-web for `local_sent_at` on the inserted row. */
+        clientLocalSentAtMs: Long? = null,
     ): Message?
 
     suspend fun ensureChatForConnection(connectionId: String): Chat?
@@ -98,6 +100,11 @@ interface ChatRepository {
     ): Message?
 
     suspend fun markMessagesAsRead(chatId: String, userId: String)
+
+    /**
+     * Recipient device receipt: marks peer-authored rows with [delivered_at] (click-web gatekeeper).
+     */
+    suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>)
 
     /**
      * @param viewerUserId Required to unwrap group master keys from the database when not already cached.

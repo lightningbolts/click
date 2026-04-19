@@ -10,8 +10,10 @@ import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allow
 import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
+import compose.project.click.click.data.models.withDbDerivedDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
@@ -1044,6 +1046,12 @@ class ChatViewModel(
                     isLoadingMessages = false
                 )
 
+                enqueueInboundDeliveredAck(
+                    apiChatId,
+                    userId,
+                    payload.messages.map { it.message },
+                )
+
                 // Mark messages as read (optimistic inbox badge first so the Clicks list updates immediately).
                 markMessagesReadOptimistically(
                     connectionId = resolvedConnectionId,
@@ -1332,6 +1340,9 @@ class ChatViewModel(
                                             ?: User(id = event.message.user_id, name = null, createdAt = 0L)
                                         applyInsertedMessage(event.message, user, userId)
                                         if (event.message.user_id != userId) {
+                                            if (event.message.deliveredAt == null) {
+                                                enqueueInboundDeliveredAck(chatId, userId, listOf(event.message))
+                                            }
                                             val active = _chatMessagesState.value as? ChatMessagesState.Success
                                             val activeApiChatId = active?.chatDetails?.chat?.id
                                             if (active != null && activeApiChatId == chatId) {
@@ -1350,16 +1361,17 @@ class ChatViewModel(
                                     is MessageChangeEvent.Update -> {
                                         val currentState = _chatMessagesState.value
                                         if (currentState is ChatMessagesState.Success) {
+                                            val normalized = event.message.withDbDerivedDeliveryState()
                                             val updatedMessages = currentState.messages.map { mwu ->
-                                                if (mwu.message.id == event.message.id) {
-                                                    mwu.copy(message = event.message)
+                                                if (mwu.message.id == normalized.id) {
+                                                    mwu.copy(message = normalized)
                                                 } else mwu
                                             }
                                             _chatMessagesState.value = currentState.copy(messages = updatedMessages)
                                             updatedMessages
                                                 .maxByOrNull { it.message.timeCreated }
                                                 ?.message
-                                                ?.takeIf { it.id == event.message.id }
+                                                ?.takeIf { it.id == normalized.id }
                                                 ?.let { newest ->
                                                     bumpConnectionInChatList(currentState.chatDetails.connection.id, newest)
                                                 }
@@ -1492,8 +1504,24 @@ class ChatViewModel(
         if (currentState.chatDetails.chat.id != chatId) return
 
         val latestMessages = chatRepository.fetchMessagesForChat(chatId, userId) ?: return
-        val currentMessages = currentState.messages.map { it.message }
-        if (latestMessages == currentMessages) return
+        val pendingOptimistic = currentState.messages.filter { mwu ->
+            val m = mwu.message
+            m.id.startsWith("temp-") &&
+                m.deliveryState == MessageDeliveryState.PENDING &&
+                (
+                    m.localSentAt == null ||
+                        latestMessages.none { s ->
+                            s.user_id == m.user_id && s.localSentAt == m.localSentAt
+                        }
+                    )
+        }
+        val currentSansPending = currentState.messages
+            .filterNot { mwu ->
+                val m = mwu.message
+                m.id.startsWith("temp-") && m.deliveryState == MessageDeliveryState.PENDING
+            }
+            .map { it.message }
+        if (latestMessages == currentSansPending && pendingOptimistic.isEmpty()) return
 
         val knownUsers = buildMap {
             put(currentState.chatDetails.otherUser.id, currentState.chatDetails.otherUser)
@@ -1529,7 +1557,8 @@ class ChatViewModel(
             )
         }
 
-        _chatMessagesState.value = currentState.copy(messages = refreshedMessages)
+        val mergedTimeline = (refreshedMessages + pendingOptimistic).sortedBy { it.message.timeCreated }
+        _chatMessagesState.value = currentState.copy(messages = mergedTimeline)
 
         latestMessages.lastOrNull()?.let { newest ->
             bumpConnectionInChatList(currentState.chatDetails.connection.id, newest)
@@ -1541,6 +1570,24 @@ class ChatViewModel(
                 chatId = chatId,
                 userId = userId,
             )
+        }
+
+        enqueueInboundDeliveredAck(chatId, userId, latestMessages)
+    }
+
+    private fun enqueueInboundDeliveredAck(chatId: String, viewerUserId: String, messages: List<Message>) {
+        val ids = messages
+            .asSequence()
+            .filter { it.user_id != viewerUserId && it.deliveredAt == null }
+            .map { it.id }
+            .distinct()
+            .take(200)
+            .toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.chunked(80).forEach { chunk ->
+                runCatching { chatRepository.markMessagesDelivered(chatId, chunk) }
+            }
         }
     }
 
@@ -1558,23 +1605,67 @@ class ChatViewModel(
         return chatRepository.getUserById(userId)
     }
 
+    private fun stripOptimisticMatchingServerRow(
+        messages: List<MessageWithUser>,
+        serverMessage: Message,
+    ): List<MessageWithUser> {
+        val stamp = serverMessage.localSentAt
+        return messages.filterNot { mwu ->
+            mwu.message.id.startsWith("temp-") &&
+                mwu.message.user_id == serverMessage.user_id &&
+                stamp != null &&
+                mwu.message.localSentAt == stamp
+        }
+    }
+
+    private fun appendOutgoingOptimistic(message: Message, currentUser: User) {
+        val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
+        val connectionId = currentState.chatDetails.connection.id
+        _chatMessagesState.value = currentState.copy(
+            messages = currentState.messages + MessageWithUser(
+                message = message,
+                user = currentUser,
+                isSent = true,
+            ),
+        )
+        bumpConnectionInChatList(connectionId, message)
+    }
+
+    private fun markOptimisticSendFailed(tempId: String) {
+        val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
+        _chatMessagesState.value = currentState.copy(
+            messages = currentState.messages.map { mwu ->
+                if (mwu.message.id == tempId) {
+                    mwu.copy(message = mwu.message.copy(deliveryState = MessageDeliveryState.ERROR))
+                } else {
+                    mwu
+                }
+            },
+        )
+    }
+
     private fun applyInsertedMessage(message: Message, user: User, currentUserId: String) {
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         val connectionId = currentState.chatDetails.connection.id
-        val exists = currentState.messages.any { it.message.id == message.id }
+        val baseList = stripOptimisticMatchingServerRow(currentState.messages, message)
+        val exists = baseList.any { it.message.id == message.id }
         if (exists) {
             // Realtime often delivers the insert before the REST send returns, or sync refreshes
             // the thread first — the list row must still bump or the Clicks preview stays stale.
+            val merged = baseList.map { mwu ->
+                if (mwu.message.id == message.id) mwu.copy(message = message) else mwu
+            }
+            _chatMessagesState.value = currentState.copy(messages = merged)
             bumpConnectionInChatList(connectionId, message)
             return
         }
 
         _chatMessagesState.value = currentState.copy(
-            messages = currentState.messages + MessageWithUser(
+            messages = baseList + MessageWithUser(
                 message = message,
                 user = user,
-                isSent = message.user_id == currentUserId
-            )
+                isSent = message.user_id == currentUserId,
+            ),
         )
         bumpConnectionInChatList(connectionId, message)
     }
@@ -1684,20 +1775,37 @@ class ChatViewModel(
                 } else {
                     null
                 }
+                val localMs = Clock.System.now().toEpochMilliseconds()
+                val tempId = "temp-$localMs-${Random.nextInt(1_000_000_000)}"
+                val currentUser = resolveMessageUser(userId, apiChatId)
+                    ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                    ?: User(id = userId, name = "You", createdAt = 0L)
+                val optimistic = Message(
+                    id = tempId,
+                    user_id = userId,
+                    content = content,
+                    timeCreated = localMs,
+                    isRead = false,
+                    messageType = ChatMessageType.TEXT,
+                    metadata = metadata,
+                    localSentAt = localMs,
+                    readAt = null,
+                    deliveryState = MessageDeliveryState.PENDING,
+                )
+                appendOutgoingOptimistic(optimistic, currentUser)
                 val message = chatRepository.sendMessage(
                     chatId = apiChatId,
                     userId = userId,
                     content = content,
                     metadata = metadata,
+                    clientLocalSentAtMs = localMs,
                 )
                 if (message != null) {
                     _replyingTo.value = null
-                    val currentUser = resolveMessageUser(userId, apiChatId)
-                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                        ?: User(id = userId, name = "You", createdAt = 0L)
                     applyInsertedMessage(message, currentUser, userId)
                     activateConnectionIfPending(connectionId)
                 } else {
+                    markOptimisticSendFailed(tempId)
                     _messageSendError.value = "Failed to send message"
                     _messageInput.value = content
                     updateMessageInput(content)

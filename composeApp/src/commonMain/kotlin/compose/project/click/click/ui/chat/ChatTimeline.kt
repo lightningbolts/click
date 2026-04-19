@@ -3,6 +3,22 @@ package compose.project.click.click.ui.chat
 import compose.project.click.click.data.models.MessageWithUser
 
 /**
+ * Stable Compose/LazyColumn identity for a row so an optimistic outbound bubble
+ * (`temp-…` id) and the same row after the server assigns a UUID do not remount
+ * (avoids replaying the bubble enter animation and keeps reactions map aligned
+ * until ids converge where needed).
+ *
+ * Inbound rows keep [Message.id] as the key. Outbound rows prefer
+ * `local_sent_at` + sender id when present (mirrors click-web insert payload).
+ */
+internal fun chatBubbleStableRowKey(mwu: MessageWithUser): String {
+    val m = mwu.message
+    if (!mwu.isSent) return m.id
+    val stamp = m.localSentAt ?: return m.id
+    return "out-${m.user_id}-$stamp"
+}
+
+/**
  * Entries fed into the chat LazyColumn: either a day separator or a
  * message row. Each has a stable [key] for Compose item reuse.
  */
@@ -43,7 +59,7 @@ internal fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<Cha
             previousDayKey = dayKey
         }
         timeline += ChatTimelineEntry.MessageEntry(
-            key = messageWithUser.message.id,
+            key = chatBubbleStableRowKey(messageWithUser),
             messageWithUser = messageWithUser,
         )
     }
@@ -75,7 +91,7 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
             currentDayTimestamp = messageWithUser.message.timeCreated
         }
         out += ChatTimelineEntry.MessageEntry(
-            key = messageWithUser.message.id,
+            key = chatBubbleStableRowKey(messageWithUser),
             messageWithUser = messageWithUser,
         )
         currentDayKey = dayKey

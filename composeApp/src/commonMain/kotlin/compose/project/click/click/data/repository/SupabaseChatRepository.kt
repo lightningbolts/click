@@ -448,29 +448,34 @@ class SupabaseChatRepository(
     }
 
     private fun decryptMessage(message: Message, crypto: ResolvedChatCrypto?): Message {
-        if (message.messageType == "call_log") return message
-        if (crypto == null) {
-            if (MessageCrypto.isAnyE2eeWireContent(message.content)) {
-                return message.copy(content = "New message")
-            }
-            return message
-        }
-        return when (crypto) {
-            is ResolvedChatCrypto.GroupMaster -> {
-                if (!MessageCrypto.isGroupMessageEncrypted(message.content)) {
-                    if (MessageCrypto.isEncrypted(message.content)) message.copy(content = "New message")
-                    else message
+        val decrypted =
+            if (message.messageType == "call_log") {
+                message
+            } else if (crypto == null) {
+                if (MessageCrypto.isAnyE2eeWireContent(message.content)) {
+                    message.copy(content = "New message")
                 } else {
-                    message.copy(
-                        content = MessageCrypto.decryptGroupMessageContent(message.content, crypto.masterKey),
-                    )
+                    message
+                }
+            } else {
+                when (crypto) {
+                    is ResolvedChatCrypto.GroupMaster -> {
+                        if (!MessageCrypto.isGroupMessageEncrypted(message.content)) {
+                            if (MessageCrypto.isEncrypted(message.content)) message.copy(content = "New message")
+                            else message
+                        } else {
+                            message.copy(
+                                content = MessageCrypto.decryptGroupMessageContent(message.content, crypto.masterKey),
+                            )
+                        }
+                    }
+                    is ResolvedChatCrypto.Pairwise -> {
+                        if (!MessageCrypto.isEncrypted(message.content)) message
+                        else message.copy(content = MessageCrypto.decryptContent(message.content, crypto.keys))
+                    }
                 }
             }
-            is ResolvedChatCrypto.Pairwise -> {
-                if (!MessageCrypto.isEncrypted(message.content)) message
-                else message.copy(content = MessageCrypto.decryptContent(message.content, crypto.keys))
-            }
-        }
+        return decrypted.withDbDerivedDeliveryState()
     }
 
     private suspend fun rememberChatConnectionRouting(chatId: String, connectionId: String) {
@@ -557,17 +562,27 @@ class SupabaseChatRepository(
         @SerialName("message_type")
         val messageType: String = "text",
         val metadata: JsonElement? = null,
+        @SerialName("local_sent_at")
+        val localSentAt: Long? = null,
+        @SerialName("read_at")
+        val readAt: Long? = null,
+        @SerialName("delivered_at")
+        val deliveredAt: Long? = null,
     ) {
-        fun toMessage(): Message = Message(
-            id = id,
-            user_id = userId,
-            content = content,
-            timeCreated = timeCreated,
-            timeEdited = timeEdited,
-            isRead = isRead,
-            messageType = messageType,
-            metadata = metadata,
-        )
+        fun toMessage(): Message =
+            Message(
+                id = id,
+                user_id = userId,
+                content = content,
+                timeCreated = timeCreated,
+                timeEdited = timeEdited,
+                isRead = isRead,
+                messageType = messageType,
+                metadata = metadata,
+                localSentAt = localSentAt,
+                readAt = readAt,
+                deliveredAt = deliveredAt,
+            ).withDbDerivedDeliveryState()
     }
 
     /**
@@ -994,6 +1009,7 @@ class SupabaseChatRepository(
         content: String,
         messageType: String,
         metadata: JsonElement?,
+        clientLocalSentAtMs: Long?,
     ): Message? {
         return try {
             val crypto = resolveChatCrypto(chatId, userId)
@@ -1017,6 +1033,7 @@ class SupabaseChatRepository(
                 authToken = authToken,
                 messageType = messageType,
                 metadata = enrichedMetadata,
+                localSentAtMs = clientLocalSentAtMs,
             ).getOrNull() ?: return null
 
             val decrypted = decryptMessage(insertedWire, crypto)
@@ -1123,6 +1140,18 @@ class SupabaseChatRepository(
             }
         } catch (e: Exception) {
             println("Error marking messages as read: ${e.redactedRestMessage()}")
+        }
+    }
+
+    override suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>) {
+        if (chatId.isBlank() || messageIds.isEmpty()) return
+        try {
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            apiClient.markMessagesDelivered(chatId, messageIds, jwt).onFailure { e ->
+                println("markMessagesDelivered failed: ${e.redactedRestMessage()}")
+            }
+        } catch (e: Exception) {
+            println("Error marking messages delivered: ${e.redactedRestMessage()}")
         }
     }
 

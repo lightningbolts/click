@@ -273,6 +273,17 @@ data class Message(
     val messageType: String = "text",
     /** JSON payload; for media messages typically includes `media_url` and optional `duration_seconds`. */
     val metadata: JsonElement? = null,
+    /** Device clock when the client queued the send (ms); mirrored from PostgREST when present. */
+    @SerialName("local_sent_at")
+    val localSentAt: Long? = null,
+    /** When the row was marked read server-side (ms). */
+    @SerialName("read_at")
+    val readAt: Long? = null,
+    /** When a recipient client ack'd device receipt (ms); drives true “Delivered” for the sender. */
+    @SerialName("delivered_at")
+    val deliveredAt: Long? = null,
+    /** Optimistic UI + read-receipt surface state (defaults for rows loaded from the network). */
+    val deliveryState: MessageDeliveryState = MessageDeliveryState.SENT,
 )
 
 @Serializable

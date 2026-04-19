@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatRealtimeEvent
@@ -33,6 +34,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -161,8 +163,16 @@ class ChatViewModelTest {
                 )
             },
             onFetchReactionsForChat = { emptyList() },
-            onSendMessage = { chatId, userId, content, _, _ ->
-                if (chatId == apiChatId && userId == selfId && content == "hi") sent else null
+            onSendMessage = { chatId, userId, content, _, _, localSentAtMs ->
+                assertNotNull(localSentAtMs)
+                if (chatId == apiChatId && userId == selfId && content == "hi") {
+                    sent.copy(
+                        localSentAt = localSentAtMs,
+                        timeCreated = now + 1,
+                    )
+                } else {
+                    null
+                }
             },
             onGetUserById = { id ->
                 when (id) {
@@ -191,6 +201,80 @@ class ChatViewModelTest {
         val messagesState = vm.chatMessagesState.value
         assertIs<ChatMessagesState.Success>(messagesState)
         assertTrue(messagesState.messages.any { it.message.id == "msg-new" && it.message.content == "hi" })
+        assertTrue(
+            messagesState.messages.none {
+                it.message.id.startsWith("temp-") && it.message.deliveryState == MessageDeliveryState.PENDING
+            },
+        )
+    }
+
+    @Test
+    fun sendMessage_marksOptimisticRowErrorWhenRepositoryReturnsNull() = runVmTest {
+        val selfId = "user-self"
+        val otherId = "user-other"
+        val connectionId = "conn-1"
+        val apiChatId = "chat-api-1"
+        val now = 1_700_000_000_000L
+
+        val connection = Connection(
+            id = connectionId,
+            created = now,
+            expiry = Long.MAX_VALUE,
+            geo_location = GeoLocation(0.0, 0.0),
+            user_ids = listOf(selfId, otherId),
+            chat = Chat(id = apiChatId, connectionId = connectionId),
+            has_begun = true,
+            expiry_state = "active"
+        )
+        val details = ChatWithDetails(
+            chat = connection.chat,
+            connection = connection,
+            otherUser = User(id = otherId, name = "Other"),
+            lastMessage = null,
+            unreadCount = 0
+        )
+
+        val fake = FakeChatRepository(
+            onFetchChatWithDetails = { _, uid ->
+                if (uid == selfId) details else null
+            },
+            onFetchMessagesForChat = { _, _ -> emptyList() },
+            onFetchChatParticipants = {
+                listOf(
+                    User(id = selfId, name = "Me"),
+                    User(id = otherId, name = "Other")
+                )
+            },
+            onFetchReactionsForChat = { emptyList() },
+            onSendMessage = { _, _, _, _, _, _ -> null },
+            onGetUserById = { id ->
+                when (id) {
+                    selfId -> User(id = selfId, name = "Me", createdAt = 0L)
+                    otherId -> User(id = otherId, name = "Other", createdAt = 0L)
+                    else -> null
+                }
+            }
+        )
+
+        val vm = ChatViewModel(
+            tokenStorage = FakeTokenStorage(),
+            chatRepository = fake,
+            supabaseRepository = SupabaseRepository()
+        )
+        vm.setCurrentUser(selfId)
+        advanceUntilIdle()
+
+        vm.loadChatMessages(connectionId)
+        advanceUntilIdle()
+
+        vm.updateMessageInput("hi")
+        vm.sendMessage()
+        advanceUntilIdle()
+
+        val messagesState = vm.chatMessagesState.value
+        assertIs<ChatMessagesState.Success>(messagesState)
+        assertTrue(messagesState.messages.any { it.message.deliveryState == MessageDeliveryState.ERROR })
+        assertEquals("hi", vm.messageInput.value)
     }
 
     @Test
@@ -265,5 +349,87 @@ class ChatViewModelTest {
         val messagesState = vm.chatMessagesState.value
         assertIs<ChatMessagesState.Success>(messagesState)
         assertTrue(messagesState.messages.any { it.message.id == "msg-rt" && it.message.content == "hello from realtime" })
+    }
+
+    @Test
+    fun realtimeMessageUpdate_promotesReadReceiptWhenReadAtSet() = runVmTest {
+        val selfId = "user-self"
+        val otherId = "user-other"
+        val connectionId = "conn-1"
+        val apiChatId = "chat-api-1"
+        val now = 1_700_000_000_000L
+
+        val connection = Connection(
+            id = connectionId,
+            created = now,
+            expiry = Long.MAX_VALUE,
+            geo_location = GeoLocation(0.0, 0.0),
+            user_ids = listOf(selfId, otherId),
+            chat = Chat(id = apiChatId, connectionId = connectionId),
+            has_begun = true,
+            expiry_state = "active"
+        )
+        val details = ChatWithDetails(
+            chat = connection.chat,
+            connection = connection,
+            otherUser = User(id = otherId, name = "Other"),
+            lastMessage = null,
+            unreadCount = 0
+        )
+
+        val seeded = Message(
+            id = "msg-1",
+            user_id = selfId,
+            content = "sent",
+            timeCreated = now,
+            isRead = false,
+            readAt = null,
+            deliveredAt = null,
+            deliveryState = MessageDeliveryState.SENT,
+        )
+
+        val messageEvents = MutableSharedFlow<ChatRealtimeEvent>(extraBufferCapacity = 16)
+
+        val fake = FakeChatRepository(
+            onFetchChatWithDetails = { _, uid ->
+                if (uid == selfId) details else null
+            },
+            onFetchMessagesForChat = { _, _ -> listOf(seeded) },
+            onFetchChatParticipants = {
+                listOf(
+                    User(id = selfId, name = "Me"),
+                    User(id = otherId, name = "Other")
+                )
+            },
+            onFetchReactionsForChat = { emptyList() },
+            onSubscribeToMessages = { _, _ ->
+                object : ChatMessageSubscription {
+                    override suspend fun attach() {}
+                    override suspend fun detach() {}
+                } to messageEvents.asSharedFlow()
+            }
+        )
+
+        val vm = ChatViewModel(
+            tokenStorage = FakeTokenStorage(),
+            chatRepository = fake,
+            supabaseRepository = SupabaseRepository()
+        )
+        vm.setCurrentUser(selfId)
+        advanceUntilIdle()
+
+        vm.loadChatMessages(connectionId)
+        advanceUntilIdle()
+
+        val readStamp = now + 99
+        val updated = seeded.copy(readAt = readStamp, isRead = true)
+        messageEvents.emit(ChatRealtimeEvent.Message(MessageChangeEvent.Update(updated)))
+        advanceUntilIdle()
+
+        val messagesState = vm.chatMessagesState.value
+        assertIs<ChatMessagesState.Success>(messagesState)
+        val row = messagesState.messages.first { it.message.id == "msg-1" }.message
+        assertEquals(MessageDeliveryState.READ, row.deliveryState)
+        assertEquals(readStamp, row.readAt)
     }
 }

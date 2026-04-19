@@ -149,17 +149,18 @@ internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
 
 /**
  * Wraps a chat bubble's content in a short fade+slide+scale enter and
- * exit animation keyed off [messageId].
+ * exit animation keyed off [bubbleStabilityKey] (must stay constant when an
+ * optimistic row is reconciled with the server-assigned message id).
  */
 @Composable
 internal fun AnimatedVisibilityChatBubble(
-    messageId: String,
+    bubbleStabilityKey: String,
     isSent: Boolean,
     content: @Composable () -> Unit,
 ) {
     @Suppress("UNUSED_PARAMETER") val unusedIsSent = isSent
-    var visible by remember(messageId) { mutableStateOf(false) }
-    LaunchedEffect(messageId) {
+    var visible by remember(bubbleStabilityKey) { mutableStateOf(false) }
+    LaunchedEffect(bubbleStabilityKey) {
         visible = true
     }
     val enterFade = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)

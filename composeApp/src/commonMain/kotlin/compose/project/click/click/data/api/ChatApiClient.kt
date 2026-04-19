@@ -76,17 +76,24 @@ class ChatApiClient(
         @SerialName("is_read") val is_read: Boolean = false,
         @SerialName("message_type") val message_type: String = "text",
         val metadata: JsonElement? = null,
+        @SerialName("local_sent_at") val local_sent_at: Long? = null,
+        @SerialName("read_at") val read_at: Long? = null,
+        @SerialName("delivered_at") val delivered_at: Long? = null,
     ) {
-        fun toMessage(): Message = Message(
-            id = id,
-            user_id = user_id,
-            content = content,
-            timeCreated = time_created,
-            timeEdited = time_edited,
-            isRead = is_read,
-            messageType = message_type,
-            metadata = metadata,
-        )
+        fun toMessage(): Message =
+            Message(
+                id = id,
+                user_id = user_id,
+                content = content,
+                timeCreated = time_created,
+                timeEdited = time_edited,
+                isRead = is_read,
+                messageType = message_type,
+                metadata = metadata,
+                localSentAt = local_sent_at,
+                readAt = read_at,
+                deliveredAt = delivered_at,
+            ).withDbDerivedDeliveryState()
     }
 
     @Serializable
@@ -99,6 +106,7 @@ class ChatApiClient(
         val content: String,
         @SerialName("message_type") val message_type: String? = null,
         val metadata: JsonElement? = null,
+        @SerialName("local_sent_at") val local_sent_at: Long? = null,
     )
 
     @Serializable
@@ -110,6 +118,12 @@ class ChatApiClient(
 
     @Serializable
     private data class ClickWebMarkChatReadBody(@SerialName("chat_id") val chat_id: String)
+
+    @Serializable
+    private data class ClickWebMarkDeliveredBody(
+        @SerialName("chat_id") val chat_id: String,
+        @SerialName("message_ids") val message_ids: List<String>,
+    )
 
     @Serializable
     private data class ClickWebReactionEnvelope(
@@ -420,6 +434,7 @@ class ChatApiClient(
         authToken: String,
         messageType: String? = null,
         metadata: JsonElement? = null,
+        localSentAtMs: Long? = null,
     ): Result<Message> {
         return try {
             val response = client.post("$clickWebBaseUrl/api/chat/messages") {
@@ -432,6 +447,7 @@ class ChatApiClient(
                         content = content,
                         message_type = messageType,
                         metadata = metadata,
+                        local_sent_at = localSentAtMs,
                     ),
                 )
             }
@@ -534,6 +550,36 @@ class ChatApiClient(
             }
         } catch (e: Exception) {
             println("Error marking chat as read: ${e.redactedRestMessage()}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Recipient ack: marks peer-authored [message_ids] in [chatId] with [delivered_at] (gatekeeper).
+     */
+    suspend fun markMessagesDelivered(
+        chatId: String,
+        messageIds: List<String>,
+        authToken: String,
+    ): Result<Unit> {
+        if (chatId.isBlank() || messageIds.isEmpty()) {
+            return Result.failure(IllegalArgumentException("chatId and messageIds required"))
+        }
+        return try {
+            val chunks = messageIds.distinct().chunked(100)
+            for (chunk in chunks) {
+                val response = client.patch("$clickWebBaseUrl/api/chat/messages/delivered") {
+                    headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    contentType(ContentType.Application.Json)
+                    setBody(ClickWebMarkDeliveredBody(chat_id = chatId, message_ids = chunk))
+                }
+                if (response.status.value !in 200..299) {
+                    return Result.failure(Exception("markMessagesDelivered failed: ${response.status}"))
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("Error marking messages delivered: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
