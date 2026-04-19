@@ -8,18 +8,24 @@ import platform.AuthenticationServices.ASAuthorizationAppleIDCredential
 import platform.AuthenticationServices.ASAuthorizationAppleIDProvider
 import platform.AuthenticationServices.ASAuthorizationController
 import platform.AuthenticationServices.ASAuthorizationControllerDelegateProtocol
+import platform.AuthenticationServices.ASAuthorizationControllerPresentationContextProvidingProtocol
+import platform.AuthenticationServices.ASPresentationAnchor
 import platform.AuthenticationServices.ASAuthorizationScopeEmail
 import platform.AuthenticationServices.ASAuthorizationScopeFullName
 import platform.Foundation.NSError
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.create
+import platform.UIKit.UIApplication
+import platform.UIKit.UIWindow
 import platform.darwin.NSObject
 import kotlin.coroutines.resume
 
 private class NativeAppleSignInDelegate(
     private val onResult: (Result<NativeAppleSignInPayload>) -> Unit,
-) : NSObject(), ASAuthorizationControllerDelegateProtocol {
+) : NSObject(),
+    ASAuthorizationControllerDelegateProtocol,
+    ASAuthorizationControllerPresentationContextProvidingProtocol {
 
     override fun authorizationController(
         controller: ASAuthorizationController,
@@ -52,8 +58,13 @@ private class NativeAppleSignInDelegate(
         val domain = didCompleteWithError.domain
         val code = didCompleteWithError.code
         val message = localized
+            ?.let { "$it ($domain/$code)" }
             ?: "Apple sign-in failed ($domain/$code)."
         onResult(Result.failure(Exception(message)))
+    }
+
+    override fun presentationAnchorForAuthorizationController(controller: ASAuthorizationController): ASPresentationAnchor {
+        return UIApplication.sharedApplication.keyWindow ?: UIWindow()
     }
 }
 
@@ -69,14 +80,17 @@ actual suspend fun requestNativeAppleSignInPayload(): Result<NativeAppleSignInPa
             if (settled) return@NativeAppleSignInDelegate
             settled = true
             controller.delegate = null
+            controller.presentationContextProvider = null
             cont.resume(result)
         }
 
         controller.delegate = delegate
+        controller.presentationContextProvider = delegate
         controller.performRequests()
 
         cont.invokeOnCancellation {
             settled = true
             controller.delegate = null
+            controller.presentationContextProvider = null
         }
     }

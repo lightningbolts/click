@@ -430,6 +430,13 @@ class AuthRepository(
     private fun mapAppleSignInErrorMessage(error: Throwable, defaultMessage: String): String {
         val rawMessage = error.message?.trim().orEmpty()
         val normalized = rawMessage.lowercase()
+        val appleDomainHint =
+            normalized.contains("akauthenticationerror") ||
+                normalized.contains("asauthorizationerror") ||
+                normalized.contains("authenticationservices.authorizationerror") ||
+                normalized.contains("com.apple.authenticationservices") ||
+                normalized.contains("com.apple.authenticationkit") ||
+                normalized.contains("apple sign")
 
         if (rawMessage.isBlank()) return defaultMessage
 
@@ -441,15 +448,19 @@ class AuthRepository(
             return "Apple sign-in was canceled."
         }
 
-        if (
-            normalized.contains("akauthenticationerror") ||
-            normalized.contains("asauthorizationerror") ||
-            normalized.contains("apple sign")
-        ) {
+        if (normalized.contains("authenticationservices.authorizationerror/1000")) {
+            return "Apple sign-in failed (AuthorizationError 1000). Ensure Sign in with Apple is enabled in this build's Signing & Capabilities, then verify the simulator is signed in with an Apple ID that has two-factor authentication enabled."
+        }
+
+        if (appleDomainHint) {
             return rawMessage
         }
 
-        return mapAuthErrorMessage(error, defaultMessage)
+        if (isLikelyNetworkErrorMessage(normalized)) {
+            return "Apple sign-in couldn't reach Apple services. Check your connection and try again."
+        }
+
+        return rawMessage
     }
 
     private fun isLikelyNetworkErrorMessage(normalizedMessage: String): Boolean {
