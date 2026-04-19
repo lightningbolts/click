@@ -28,6 +28,7 @@ class AuthRepository(
     private val clickWebApi by lazy { ApiClient() }
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
+        const val AUTH_INTERACTIVE_TIMEOUT_MS = 120_000L
         const val MAX_PROFILE_IMAGE_BYTES = 2_000_000
     }
 
@@ -151,35 +152,56 @@ class AuthRepository(
             // Native Apple Sign-In is the canonical path on iOS.
             // IMPORTANT: do not convert native failures into OAuth fallback, otherwise we can
             // get stuck waiting for a browser deep link that never returns on simulator.
-            val nativePayloadResult = withTimeout(AUTH_TIMEOUT_MS) {
+            // Native Apple sign-in is user-interactive and can legitimately take longer
+            // than API-style timeouts while users authenticate/approve in system sheets.
+            val nativePayloadResult = withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
                 requestNativeAppleSignInPayload()
             }
 
             nativePayloadResult.fold(
                 onSuccess = { nativePayload ->
                     if (nativePayload != null) {
-                        supabase.auth.signInWith(IDToken) {
-                            provider = Apple
-                            idToken = nativePayload.idToken
-                            nativePayload.nonce?.let { nonce = it }
-                        }
-                        Result.success(Unit)
+                        runCatching {
+                            supabase.auth.signInWith(IDToken) {
+                                provider = Apple
+                                idToken = nativePayload.idToken
+                                nativePayload.nonce?.let { nonce = it }
+                            }
+                        }.fold(
+                            onSuccess = {
+                                Result.success(Unit)
+                            },
+                            onFailure = { idTokenError ->
+                                val normalizedError = idTokenError.message?.trim().orEmpty().lowercase()
+                                if (isAppleAudienceMismatchError(normalizedError)) {
+                                    if (!isSimulatorOrEmulatorRuntime()) {
+                                        signInWithOAuth(Apple)
+                                    } else {
+                                        Result.failure(Exception(appleAudienceMismatchMessage()))
+                                    }
+                                } else {
+                                    Result.failure(
+                                        Exception(
+                                            mapAppleSignInErrorMessage(
+                                                idTokenError,
+                                                defaultMessage = "Apple sign-in couldn't be completed right now.",
+                                            ),
+                                        ),
+                                    )
+                                }
+                            },
+                        )
                     } else {
                         // Android/other platforms return null payload by design.
                         signInWithOAuth(Apple)
                     }
                 },
                 onFailure = { nativeError ->
-                    val simulatorHint = if (isSimulatorOrEmulatorRuntime()) {
-                        " Apple Sign-In may be unavailable on simulator; use a physical iPhone or ensure Simulator Settings > Apple Account is signed in."
-                    } else {
-                        ""
-                    }
                     Result.failure(
                         Exception(
                             mapAppleSignInErrorMessage(
                                 nativeError,
-                                defaultMessage = "Apple sign-in couldn't be completed right now.$simulatorHint",
+                                defaultMessage = "Apple sign-in couldn't be completed right now.",
                             ),
                         ),
                     )
@@ -452,15 +474,33 @@ class AuthRepository(
             return "Apple sign-in failed (AuthorizationError 1000). Ensure Sign in with Apple is enabled in this build's Signing & Capabilities, then verify the simulator is signed in with an Apple ID that has two-factor authentication enabled."
         }
 
+        if (isAppleAudienceMismatchError(normalized)) {
+            return appleAudienceMismatchMessage()
+        }
+
+        if (
+            normalized.contains("timed out waiting for") ||
+            normalized.contains("timeoutcancellationexception") ||
+            normalized.contains("timed out")
+        ) {
+            return "Apple sign-in took too long to complete. Please try again."
+        }
+
         if (appleDomainHint) {
             return rawMessage
         }
 
-        if (isLikelyNetworkErrorMessage(normalized)) {
-            return "Apple sign-in couldn't reach Apple services. Check your connection and try again."
-        }
-
         return rawMessage
+    }
+
+    private fun isAppleAudienceMismatchError(normalizedMessage: String): Boolean {
+        if (normalizedMessage.isBlank()) return false
+        return normalizedMessage.contains("unacceptable audience in id_token") ||
+            normalizedMessage.contains("audience in id_token")
+    }
+
+    private fun appleAudienceMismatchMessage(): String {
+        return "Apple sign-in configuration mismatch: native token audience is compose.project.click.click. Add this iOS bundle ID to Apple provider Client IDs in Supabase Auth settings."
     }
 
     private fun isLikelyNetworkErrorMessage(normalizedMessage: String): Boolean {

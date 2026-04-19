@@ -65,7 +65,7 @@ fun AppShimmerScreen(
     val defaultCopy = when (variant) {
         AppShimmerVariant.AuthSignIn -> AppShimmerCopy(
             title = "Signing you in",
-            subtitle = "Restoring your session...",
+            subtitle = "Connecting to secure sign-in...",
         )
 
         AppShimmerVariant.AuthSignUp -> AppShimmerCopy(

@@ -13,13 +13,19 @@ import platform.AuthenticationServices.ASPresentationAnchor
 import platform.AuthenticationServices.ASAuthorizationScopeEmail
 import platform.AuthenticationServices.ASAuthorizationScopeFullName
 import platform.Foundation.NSError
+import platform.Foundation.NSThread
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.create
 import platform.UIKit.UIApplication
 import platform.UIKit.UIWindow
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 import kotlin.coroutines.resume
+
+private var activeAppleSignInController: ASAuthorizationController? = null
+private var activeAppleSignInDelegate: NativeAppleSignInDelegate? = null
 
 private class NativeAppleSignInDelegate(
     private val onResult: (Result<NativeAppleSignInPayload>) -> Unit,
@@ -70,27 +76,49 @@ private class NativeAppleSignInDelegate(
 
 actual suspend fun requestNativeAppleSignInPayload(): Result<NativeAppleSignInPayload?> =
     suspendCancellableCoroutine { cont ->
-        val request = ASAuthorizationAppleIDProvider().createRequest().apply {
-            requestedScopes = listOf(ASAuthorizationScopeFullName, ASAuthorizationScopeEmail)
-        }
-
-        val controller = ASAuthorizationController(listOf(request))
         var settled = false
-        val delegate = NativeAppleSignInDelegate { result ->
-            if (settled) return@NativeAppleSignInDelegate
-            settled = true
-            controller.delegate = null
-            controller.presentationContextProvider = null
-            cont.resume(result)
+
+        fun clearActiveRequest() {
+            activeAppleSignInController?.delegate = null
+            activeAppleSignInController?.presentationContextProvider = null
+            activeAppleSignInController = null
+            activeAppleSignInDelegate = null
         }
 
-        controller.delegate = delegate
-        controller.presentationContextProvider = delegate
-        controller.performRequests()
+        fun startRequestOnMainThread() {
+            val request = ASAuthorizationAppleIDProvider().createRequest().apply {
+                requestedScopes = listOf(ASAuthorizationScopeFullName, ASAuthorizationScopeEmail)
+            }
+
+            val controller = ASAuthorizationController(listOf(request))
+            val delegate = NativeAppleSignInDelegate { result ->
+                if (settled) return@NativeAppleSignInDelegate
+                settled = true
+                clearActiveRequest()
+                cont.resume(result)
+            }
+
+            // Retain strongly until completion; ASAuthorizationController delegate references
+            // are not guaranteed to keep local Kotlin objects alive.
+            activeAppleSignInController = controller
+            activeAppleSignInDelegate = delegate
+
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests()
+        }
+
+        if (NSThread.isMainThread) {
+            startRequestOnMainThread()
+        } else {
+            dispatch_async(dispatch_get_main_queue()) {
+                if (settled) return@dispatch_async
+                startRequestOnMainThread()
+            }
+        }
 
         cont.invokeOnCancellation {
             settled = true
-            controller.delegate = null
-            controller.presentationContextProvider = null
+            clearActiveRequest()
         }
     }
