@@ -42,6 +42,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -143,6 +144,14 @@ private data class CombinedInboxState(
     val groupLoaded: Boolean,
 )
 
+const val CHAT_STAGED_MEDIA_MAX = 10
+
+data class StagedChatImage(
+    val id: String,
+    val bytes: ByteArray,
+    val mimeType: String,
+)
+
 class ChatViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
@@ -169,6 +178,9 @@ class ChatViewModel(
 
     private val _messageInput = MutableStateFlow("")
     val messageInput: StateFlow<String> = _messageInput.asStateFlow()
+
+    private val _stagedChatImages = MutableStateFlow<List<StagedChatImage>>(emptyList())
+    val stagedChatImages: StateFlow<List<StagedChatImage>> = _stagedChatImages.asStateFlow()
 
     private val _replyingTo = MutableStateFlow<MessageWithUser?>(null)
     val replyingTo: StateFlow<MessageWithUser?> = _replyingTo.asStateFlow()
@@ -904,6 +916,7 @@ class ChatViewModel(
         val switchingConnection = currentConnectionId != null && currentConnectionId != connectionId
         if (switchingConnection) {
             currentApiChatId = null
+            _stagedChatImages.value = emptyList()
         }
         currentConnectionId = connectionId
 
@@ -1856,62 +1869,169 @@ class ChatViewModel(
         }
     }
 
-    fun sendChatImage(bytes: ByteArray, mimeType: String) {
+    fun stageMediaForUpload(bytes: ByteArray, mimeType: String) {
         if (bytes.isEmpty()) return
-        val connectionId = currentConnectionId ?: return
-        val userId = _currentUserId.value ?: return
-        val caption = _messageInput.value.trim()
+        _stagedChatImages.update { cur ->
+            if (cur.size >= CHAT_STAGED_MEDIA_MAX) cur
+            else {
+                cur + StagedChatImage(
+                    id = "stg-${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}",
+                    bytes = bytes,
+                    mimeType = mimeType,
+                )
+            }
+        }
+    }
+
+    fun removeStagedMedia(id: String) {
+        _stagedChatImages.update { it.filterNot { s -> s.id == id } }
+    }
+
+    fun commitStagedMediaToUpload() {
+        val batch = _stagedChatImages.value
+        if (batch.isEmpty()) return
+        _stagedChatImages.value = emptyList()
         _messageSendError.value = null
         viewModelScope.launch {
             outboundChatMessageMutex.withLock {
                 _isMessageSubmitInProgress.value = true
                 try {
-                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
-                    _messageSendError.value = "Failed to send — unable to start chat"
-                    return@withLock
-                }
-                val ext = extensionForChatMedia(mimeType, isImage = true)
-                val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
-                val path = "$userId/$apiChatId/$unique.$ext"
-                val url = chatRepository.uploadChatMedia(bytes, path, mimeType) ?: run {
-                    _messageSendError.value = "Failed to upload photo"
-                    return@withLock
-                }
-                val replyTarget = _replyingTo.value
-                val meta = if (replyTarget != null) {
-                    buildJsonObject {
-                        put("media_url", url)
-                        put("original_mime_type", mimeType)
-                        put("reply_to_id", replyTarget.message.id)
-                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                    val connectionId = currentConnectionId ?: run {
+                        _messageSendError.value = "Failed to send — no chat"
+                        return@withLock
                     }
-                } else {
-                    buildJsonObject {
-                        put("media_url", url)
-                        put("original_mime_type", mimeType)
+                    val userId = _currentUserId.value ?: run {
+                        _messageSendError.value = "Failed to send — not signed in"
+                        return@withLock
                     }
-                }
-                val message = chatRepository.sendMessage(
-                    chatId = apiChatId,
-                    userId = userId,
-                    content = if (caption.isEmpty()) " " else caption,
-                    messageType = ChatMessageType.IMAGE,
-                    metadata = meta,
-                )
-                if (message != null) {
-                    _messageInput.value = ""
-                    updateMessageInput("")
-                    _replyingTo.value = null
+                    val caption = _messageInput.value.trim()
+                    val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                        _messageSendError.value = "Failed to send — unable to start chat"
+                        return@withLock
+                    }
+                    val replyTarget = _replyingTo.value
                     val currentUser = resolveMessageUser(userId, apiChatId)
                         ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
                         ?: User(id = userId, name = "You", createdAt = 0L)
-                    applyInsertedMessage(message, currentUser, userId)
-                    activateConnectionIfPending(connectionId)
-                } else {
-                    _messageSendError.value = "Failed to send photo"
-                }
-                } catch (e: Exception) {
-                    _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
+                    batch.forEachIndexed { index, item ->
+                        val tempId = "temp-img-${item.id}"
+                        val localMs = Clock.System.now().toEpochMilliseconds()
+                        val optimistic = Message(
+                            id = tempId,
+                            user_id = userId,
+                            content = if (caption.isEmpty() || index > 0) " " else caption,
+                            timeCreated = localMs,
+                            messageType = ChatMessageType.IMAGE,
+                            metadata = buildJsonObject {
+                                put("is_encrypted_media", true)
+                                put("original_mime_type", item.mimeType)
+                            },
+                            localSentAt = localMs,
+                            deliveryState = MessageDeliveryState.PENDING,
+                        )
+                        appendOutgoingOptimistic(optimistic, currentUser)
+                        secureImageBytesCache.put(tempId, item.bytes)
+                        _secureChatMediaLoadState.update {
+                            it + (
+                                tempId to SecureChatMediaLoadState(
+                                    loading = false,
+                                    imageBytes = item.bytes,
+                                    uploadProgress = 0f,
+                                )
+                                )
+                        }
+                        var progress = 0f
+                        val progressJob = launch {
+                            while (isActive && progress < 0.9f) {
+                                delay(110)
+                                progress = (progress + 0.045f).coerceAtMost(0.9f)
+                                _secureChatMediaLoadState.update { m ->
+                                    val cur = m[tempId]
+                                    val bytes = cur?.imageBytes ?: item.bytes
+                                    m + (
+                                        tempId to SecureChatMediaLoadState(
+                                            loading = false,
+                                            imageBytes = bytes,
+                                            uploadProgress = progress,
+                                        )
+                                        )
+                                }
+                            }
+                        }
+                        try {
+                            val ext = extensionForChatMedia(item.mimeType, isImage = true)
+                            val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
+                            val path = "$userId/$apiChatId/$unique.$ext"
+                            val url = chatRepository.uploadChatMedia(item.bytes, path, item.mimeType) ?: run {
+                                progressJob.cancel()
+                                markOptimisticSendFailed(tempId)
+                                secureImageBytesCache.remove(tempId)
+                                _secureChatMediaLoadState.update { m -> m - tempId }
+                                _messageSendError.value = "Failed to upload photo"
+                                return@forEachIndexed
+                            }
+                            progressJob.cancel()
+                            _secureChatMediaLoadState.update {
+                                val cur = it[tempId]
+                                val bytes = cur?.imageBytes ?: item.bytes
+                                it + (
+                                    tempId to SecureChatMediaLoadState(
+                                        loading = false,
+                                        imageBytes = bytes,
+                                        uploadProgress = 1f,
+                                    )
+                                    )
+                            }
+                            delay(60)
+                            val meta = when {
+                                replyTarget != null && index == 0 -> {
+                                    buildJsonObject {
+                                        put("media_url", url)
+                                        put("original_mime_type", item.mimeType)
+                                        put("is_encrypted_media", true)
+                                        put("reply_to_id", replyTarget.message.id)
+                                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                                    }
+                                }
+                                else -> {
+                                    buildJsonObject {
+                                        put("media_url", url)
+                                        put("original_mime_type", item.mimeType)
+                                        put("is_encrypted_media", true)
+                                    }
+                                }
+                            }
+                            val message = chatRepository.sendMessage(
+                                chatId = apiChatId,
+                                userId = userId,
+                                content = if (caption.isEmpty() || index > 0) " " else caption,
+                                messageType = ChatMessageType.IMAGE,
+                                metadata = meta,
+                            )
+                            if (message != null) {
+                                secureImageBytesCache.remove(tempId)
+                                _secureChatMediaLoadState.update { m -> m - tempId }
+                                if (index == 0) {
+                                    _messageInput.value = ""
+                                    updateMessageInput("")
+                                    _replyingTo.value = null
+                                }
+                                applyInsertedMessage(message, currentUser, userId)
+                                activateConnectionIfPending(connectionId)
+                            } else {
+                                markOptimisticSendFailed(tempId)
+                                secureImageBytesCache.remove(tempId)
+                                _secureChatMediaLoadState.update { m -> m - tempId }
+                                _messageSendError.value = "Failed to send photo"
+                            }
+                        } catch (e: Exception) {
+                            progressJob.cancel()
+                            markOptimisticSendFailed(tempId)
+                            secureImageBytesCache.remove(tempId)
+                            _secureChatMediaLoadState.update { m -> m - tempId }
+                            _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
+                        }
+                    }
                 } finally {
                     _isMessageSubmitInProgress.value = false
                 }
@@ -2195,6 +2315,7 @@ class ChatViewModel(
         }
         currentConnectionId = null
         currentApiChatId = null
+        _stagedChatImages.value = emptyList()
         _isPeerTyping.value = false
         _isPeerOnline.value = false
         _isLocalTypingActive.value = false

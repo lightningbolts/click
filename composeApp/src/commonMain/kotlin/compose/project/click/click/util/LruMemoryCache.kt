@@ -37,4 +37,9 @@ class LruMemoryCache<K, V>(private val maxEntries: Int) {
         values.clear()
         accessOrder.clear()
     }
+
+    fun remove(key: K): V? {
+        accessOrder.remove(key)
+        return values.remove(key)
+    }
 }

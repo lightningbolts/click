@@ -6,22 +6,47 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsBytes
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSMutableData
+import platform.Foundation.NSData
 import platform.Foundation.NSTemporaryDirectory
 import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fwrite
+import platform.posix.memcpy
 import platform.Photos.PHAccessLevelAddOnly
 import platform.Photos.PHAuthorizationStatusAuthorized
 import platform.Photos.PHAuthorizationStatusLimited
 import platform.Photos.PHPhotoLibrary
+import platform.UIKit.UIActivityViewController
+import platform.UIKit.UIApplication
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageWriteToSavedPhotosAlbum
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+
+@OptIn(ExperimentalForeignApi::class)
+private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
+    val m = NSMutableData()
+    m.setLength(size.convert())
+    m.mutableBytes?.let { dest ->
+        memcpy(dest, pinned.addressOf(0), size.convert())
+    }
+    m
+}
+
+@OptIn(ExperimentalForeignApi::class)
+actual fun shareDecryptedImage(imageBytes: ByteArray, fileName: String) {
+    val data = imageBytes.toNSData()
+    val image = UIImage.imageWithData(data) ?: return
+    val activityViewController = UIActivityViewController(listOf(image), null)
+    val window = UIApplication.sharedApplication.keyWindow
+    window?.rootViewController?.presentViewController(activityViewController, animated = true, completion = null)
+}
 
 @OptIn(ExperimentalForeignApi::class)
 actual suspend fun saveChatImageToGallery(

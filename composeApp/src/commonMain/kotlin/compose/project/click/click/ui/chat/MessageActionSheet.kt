@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,7 +65,6 @@ import kotlinx.coroutines.launch
  * optional image download, copy, and (for sent messages) edit +
  * two-step delete confirmation.
  *
- * Extracted verbatim from ConnectionsScreen.kt; no behavior change.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -209,12 +209,12 @@ internal fun MessageActionSheet(
                 if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
                     ListItem(
                         headlineContent = {
-                            Text("Download image", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                            Text("Save to gallery", color = onSurface, style = MaterialTheme.typography.bodyLarge)
                         },
                         leadingContent = {
                             Icon(
                                 imageVector = Icons.Outlined.Save,
-                                contentDescription = "Download image",
+                                contentDescription = "Save to gallery",
                                 tint = PrimaryBlue,
                             )
                         },
@@ -236,6 +236,35 @@ internal fun MessageActionSheet(
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
+                    if (message.isEncryptedMedia()) {
+                        ListItem(
+                            headlineContent = {
+                                Text("Share image", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                            },
+                            leadingContent = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Share,
+                                    contentDescription = "Share image",
+                                    tint = PrimaryBlue,
+                                )
+                            },
+                            modifier = Modifier.clickable {
+                                scope.launch {
+                                    val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
+                                    if (bytes != null) {
+                                        val ext = when {
+                                            message.originalMimeTypeOrNull()?.contains("png", ignoreCase = true) == true -> "png"
+                                            message.originalMimeTypeOrNull()?.contains("webp", ignoreCase = true) == true -> "webp"
+                                            else -> "jpg"
+                                        }
+                                        shareDecryptedImage(bytes, "click_chat.$ext")
+                                        dismiss()
+                                    }
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+                    }
                 }
 
                 ListItem(

@@ -1,9 +1,11 @@
 package compose.project.click.click.ui.chat
 
 import android.content.Context
+import android.content.Intent
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -56,4 +58,19 @@ actual suspend fun saveChatImageToGallery(
             null,
         )
     }
+}
+
+actual fun shareDecryptedImage(imageBytes: ByteArray, fileName: String) {
+    val ctx = AndroidChatImageSaveContext.applicationContext
+    val safeName = fileName.trim().ifEmpty { "click_share.jpg" }.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+    val tempFile = File(ctx.cacheDir, safeName).apply { writeBytes(imageBytes) }
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", tempFile)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    ctx.startActivity(
+        Intent.createChooser(intent, "Share image").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 }

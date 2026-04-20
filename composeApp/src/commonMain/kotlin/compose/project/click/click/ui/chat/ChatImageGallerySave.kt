@@ -9,3 +9,6 @@ expect suspend fun saveChatImageToGallery(
     decryptedImageBytes: ByteArray? = null,
     mimeTypeHint: String? = null,
 ): Result<Unit>
+
+/** Share decrypted image bytes via the system sheet (cache-scoped temp file on Android). */
+expect fun shareDecryptedImage(imageBytes: ByteArray, fileName: String)

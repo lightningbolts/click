@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -33,6 +36,8 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -51,6 +56,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -72,7 +80,9 @@ import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
+import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 
 /**
  * Message composer strip for the chat screen: reply banner, text
@@ -93,6 +103,7 @@ internal fun ConnectionChatMessageComposer(
 ) {
     val messageInput by viewModel.messageInput.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
+    val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
@@ -213,6 +224,74 @@ internal fun ConnectionChatMessageComposer(
             }
             if (replyBannerVisible) {
                 Spacer(modifier = Modifier.height(6.dp))
+            }
+            if (stagedChatImages.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    LazyRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(stagedChatImages, key = { it.id }) { item ->
+                            val thumb: ImageBitmap? = remember(item.id, item.bytes) {
+                                runCatching { item.bytes.toImageBitmap() }.getOrNull()
+                            }
+                            Box {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
+                                ) {
+                                    if (thumb != null) {
+                                        Image(
+                                            bitmap = thumb,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(2.dp)
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.52f))
+                                        .clickable { viewModel.removeStagedMedia(item.id) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Remove",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = { viewModel.commitStagedMediaToUpload() },
+                        enabled = !isSending,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    ) {
+                        Text("Send (${stagedChatImages.size})")
+                    }
+                }
+                Text(
+                    text = "Up to $CHAT_STAGED_MEDIA_MAX photos per batch",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
             }
             val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
             val fieldSideInset = auxButtonSize + composerGap

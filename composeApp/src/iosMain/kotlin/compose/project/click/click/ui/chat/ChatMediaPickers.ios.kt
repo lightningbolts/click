@@ -38,6 +38,7 @@ import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
 import platform.AVFoundation.*
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSError
 import platform.Foundation.NSURL
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSData
@@ -86,29 +87,50 @@ actual fun rememberChatMediaPickers(
         object : NSObject(), PHPickerViewControllerDelegateProtocol {
             override fun picker(picker: PHPickerViewController, didFinishPicking: List<*>) {
                 picker.dismissViewControllerAnimated(true, completion = null)
-                if (didFinishPicking.isEmpty()) return
-                val result = didFinishPicking.firstOrNull() as? PHPickerResult ?: return
-                val provider = result.itemProvider
-                provider.loadDataRepresentationForTypeIdentifier(UTTypeImage.identifier) { data, _ ->
-                    if (data == null) {
-                        dispatch_async(dispatch_get_main_queue()) {
-                            onMediaAccessBlockedState(
-                                "Couldn't read that photo. If access was denied, enable Photos for Click in Settings.",
+                val results = didFinishPicking.mapNotNull { it as? PHPickerResult }
+                if (results.isEmpty()) return
+
+                fun loadAt(index: Int) {
+                    if (index >= results.size) return
+                    val provider = results[index].itemProvider
+                    provider.loadDataRepresentationForTypeIdentifier(UTTypeImage.identifier) { data, err ->
+                        val nsErr = err as? NSError
+                        if (nsErr != null) {
+                            println(
+                                "ChatMediaPickers: PHPicker load failed: code=${nsErr.code} domain=${nsErr.domain} " +
+                                    nsErr.localizedDescription,
                             )
+                            dispatch_async(dispatch_get_main_queue()) {
+                                onMediaAccessBlockedState(
+                                    "Cannot load image from iCloud. Please try a local photo.",
+                                )
+                                loadAt(index + 1)
+                            }
+                            return@loadDataRepresentationForTypeIdentifier
                         }
-                        return@loadDataRepresentationForTypeIdentifier
-                    }
-                    val bytes = data.toByteArray()
-                    dispatch_async(dispatch_get_main_queue()) {
-                        if (bytes.isNotEmpty()) {
-                            onImagePickedState(bytes, "image/jpeg")
-                        } else {
-                            onMediaAccessBlockedState(
-                                "Couldn't read that photo. Enable Photos access for Click in Settings.",
-                            )
+                        if (data == null) {
+                            dispatch_async(dispatch_get_main_queue()) {
+                                onMediaAccessBlockedState(
+                                    "Cannot load image from iCloud. Please try a local photo.",
+                                )
+                                loadAt(index + 1)
+                            }
+                            return@loadDataRepresentationForTypeIdentifier
+                        }
+                        val bytes = data.toByteArray()
+                        dispatch_async(dispatch_get_main_queue()) {
+                            if (bytes.isNotEmpty()) {
+                                onImagePickedState(bytes, "image/jpeg")
+                            } else {
+                                onMediaAccessBlockedState(
+                                    "Couldn't read that photo. Enable Photos access for Click in Settings.",
+                                )
+                            }
+                            loadAt(index + 1)
                         }
                     }
                 }
+                loadAt(0)
             }
         }
     }
@@ -138,7 +160,7 @@ actual fun rememberChatMediaPickers(
     fun openPhotoLibrary() {
         val config = PHPickerConfiguration().apply {
             filter = PHPickerFilter.imagesFilter
-            selectionLimit = 1L
+            selectionLimit = 10L
         }
         val picker = PHPickerViewController(configuration = config)
         picker.delegate = photoPickerDelegate

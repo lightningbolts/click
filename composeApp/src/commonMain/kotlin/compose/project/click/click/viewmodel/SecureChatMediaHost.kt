@@ -8,6 +8,8 @@ data class SecureChatMediaLoadState(
     val imageBytes: ByteArray? = null,
     val audioLocalPath: String? = null,
     val error: String? = null,
+    /** 0..1 while an outgoing image upload is in flight (optimistic bubble). */
+    val uploadProgress: Float? = null,
 )
 
 /**
