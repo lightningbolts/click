@@ -139,6 +139,8 @@ import compose.project.click.click.data.models.replyRef // pragma: allowlist sec
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
@@ -188,6 +190,10 @@ import compose.project.click.click.ui.chat.ConversationDaySeparator
 import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
+import compose.project.click.click.ui.chat.ChatGlassComposerPlateTestTag
+import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
 import compose.project.click.click.ui.chat.callLogLabel
 import compose.project.click.click.ui.chat.formatCallDurationForLog
 import compose.project.click.click.ui.chat.formatConnectionListTimestamp
@@ -481,20 +487,38 @@ fun ChatView(
                         },
                     )
 
+                    val navBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    val imeBottomDp = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+                    val headerBlockHeight = topInset + 56.dp
+                    val replyExtra = if (replyingTo != null && editingMessageId == null) 54.dp else 0.dp
+                    val listBottomPad = navBottomDp + imeBottomDp + 96.dp + replyExtra
                     val messageContentModifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        ChatAmbientMeshBackground(
+                            connection = chatDetails.connection,
+                            isHubNeutral = false,
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
                     // Match ConnectionsListView: list rows + composer are full width; only the top bar uses 20.dp gutters.
                     Column(modifier = Modifier.fillMaxSize()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 20.dp, top = topInset, end = 20.dp)
+                                .height(headerBlockHeight)
+                                .padding(horizontal = 20.dp),
                         ) {
+                            ChatLiquidGlassPlate(
+                                modifier = Modifier.fillMaxSize(),
+                                testTag = ChatGlassHeaderPlateTestTag,
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .align(Alignment.BottomCenter)
                                     .height(56.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -589,7 +613,17 @@ fun ChatView(
                                             AnimatedContent(
                                                 targetState = isPeerOnline,
                                                 transitionSpec = {
-                                                    fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                                                    fadeIn(
+                                                        animationSpec = spring(
+                                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                                            stiffness = Spring.StiffnessMedium,
+                                                        ),
+                                                    ) togetherWith fadeOut(
+                                                        animationSpec = spring(
+                                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                                            stiffness = Spring.StiffnessMedium,
+                                                        ),
+                                                    )
                                                 },
                                                 label = "peer_presence_subtitle"
                                             ) { online ->
@@ -646,17 +680,21 @@ fun ChatView(
                                     }
                                     val menuStyle = LocalPlatformStyle.current
                                     val density = LocalDensity.current
+                                    val callMenuSpring = spring<Float>(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                    )
                                     val callMenuEnter =
-                                        fadeIn(tween(190, easing = FastOutSlowInEasing)) +
+                                        fadeIn(animationSpec = callMenuSpring) +
                                             scaleIn(
                                                 initialScale = 0.92f,
-                                                animationSpec = tween(190, easing = FastOutSlowInEasing),
+                                                animationSpec = callMenuSpring,
                                             )
                                     val callMenuExit =
-                                        fadeOut(tween(150, easing = LinearOutSlowInEasing)) +
+                                        fadeOut(animationSpec = callMenuSpring) +
                                             scaleOut(
                                                 targetScale = 0.96f,
-                                                animationSpec = tween(150, easing = LinearOutSlowInEasing),
+                                                animationSpec = callMenuSpring,
                                             )
                                     var keepIosCallMenuMounted by remember { mutableStateOf(false) }
                                     var iosCallMenuContentVisible by remember { mutableStateOf(false) }
@@ -777,6 +815,11 @@ fun ChatView(
                     }
 
                     // Messages
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    ) {
                     if (state.isLoadingMessages && messages.isEmpty()) {
                         Box(
                             modifier = messageContentModifier
@@ -925,23 +968,17 @@ fun ChatView(
                                         Modifier
                                     },
                                 )
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(
-                                    // Stronger tint toward the composer (visual bottom)
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            PrimaryBlue.copy(alpha = 0.05f),
-                                            Color.Transparent,
-                                            Color(0xFF3A86FF).copy(alpha = 0.05f)
-                                        )
-                                    )
-                                ),
                         ) {
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 reverseLayout = true,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                                contentPadding = PaddingValues(
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    top = 10.dp,
+                                    bottom = 10.dp + listBottomPad,
+                                ),
                                 verticalArrangement = Arrangement.spacedBy(0.dp)
                             ) {
                                 if (newestSentMessage != null) {
@@ -1037,12 +1074,21 @@ fun ChatView(
                             }
                         }
                     }
+                    }
 
                     // Typing indicator — label + bouncing dots (Realtime Broadcast)
                     AnimatedVisibility(
                         visible = isPeerTyping,
-                        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-                        exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+                        enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                            slideInVertically(
+                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                initialOffsetY = { it / 2 },
+                            ),
+                        exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                            slideOutVertically(
+                                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                targetOffsetY = { it / 2 },
+                            ),
                     ) {
                         Row(
                             modifier = Modifier
@@ -1148,14 +1194,21 @@ fun ChatView(
                         }
                     }
 
-                    ConnectionChatMessageComposer(
-                        viewModel = viewModel,
-                        chatDetails = chatDetails,
-                        isGroupChat = isGroupChat,
-                        editingMessageId = editingMessageId,
-                        replyingTo = replyingTo,
-                        mediaPickers = mediaPickers,
-                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        ChatLiquidGlassPlate(
+                            modifier = Modifier.matchParentSize(),
+                            testTag = ChatGlassComposerPlateTestTag,
+                        )
+                        ConnectionChatMessageComposer(
+                            viewModel = viewModel,
+                            chatDetails = chatDetails,
+                            isGroupChat = isGroupChat,
+                            editingMessageId = editingMessageId,
+                            replyingTo = replyingTo,
+                            mediaPickers = mediaPickers,
+                        )
+                    }
+                    }
                     }
                 }
             }

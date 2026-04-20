@@ -1,12 +1,11 @@
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +45,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,7 +61,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -139,7 +136,7 @@ internal fun ConnectionChatMessageComposer(
     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
     val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
     val composerStripInteraction = remember { MutableInteractionSource() }
-    val composerStripBg = MaterialTheme.colorScheme.background
+    val composerStripBg = Color.Transparent
     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -160,7 +157,10 @@ internal fun ConnectionChatMessageComposer(
         ) {
             Crossfade(
                 targetState = replyBannerVisible,
-                animationSpec = tween(320, easing = FastOutSlowInEasing),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
                 modifier = Modifier.fillMaxWidth(),
                 label = "replyComposerBanner",
             ) { showBanner ->
@@ -238,6 +238,7 @@ internal fun ConnectionChatMessageComposer(
             val fieldSideInset = auxButtonSize + composerGap
             val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
             val attachInteraction = remember { MutableInteractionSource() }
+            val sendInteraction = remember { MutableInteractionSource() }
             val canSend = messageInput.trim().isNotEmpty() && !isSending
             val sendGradient = Brush.linearGradient(
                 colors = if (canSend) {
@@ -349,13 +350,10 @@ internal fun ConnectionChatMessageComposer(
                             .fillMaxSize()
                             .clip(CircleShape)
                             .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
+                            .chatSpringPressScale(attachInteraction)
                             .clickable(
                                 interactionSource = attachInteraction,
-                                indication = if (composerStyle.useRipple) {
-                                    ripple(bounded = true)
-                                } else {
-                                    null
-                                },
+                                indication = null,
                                 enabled = !isSending,
                                 onClick = { attachmentMenuExpanded = true },
                             ),
@@ -468,15 +466,15 @@ internal fun ConnectionChatMessageComposer(
                         .size(auxButtonSize)
                         .zIndex(4f)
                         .focusProperties { canFocus = false }
+                        .chatSpringPressScale(sendInteraction)
                         .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
                         .background(sendGradient)
-                        .pointerInput(canSend) {
-                            detectTapGestures {
-                                if (canSend) {
-                                    viewModel.sendMessage()
-                                }
-                            }
-                        },
+                        .clickable(
+                            interactionSource = sendInteraction,
+                            indication = null,
+                            enabled = canSend,
+                            onClick = { viewModel.sendMessage() },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

@@ -1,6 +1,9 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -39,6 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
+import compose.project.click.click.ui.chat.ChatGlassComposerPlateTestTag
+import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
+import compose.project.click.click.ui.chat.chatSpringPressScale
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageBubble
 import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
@@ -103,51 +110,52 @@ fun HubChatScreen(
     val hubPeekScope = rememberCoroutineScope()
 
     val inLobby = occupantCount < 3
+    val hubNavBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val hubListBottomPad = hubNavBottomDp + 96.dp
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets.statusBars,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = viewModel.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = if (inLobby) {
-                                "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
-                            } else {
-                                "$occupantCount people in this hub"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .consumeWindowInsets(WindowInsets.ime)
-                .imePadding(),
-        ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .consumeWindowInsets(WindowInsets.ime)
+            .imePadding(),
+    ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                ChatLiquidGlassPlate(
+                    modifier = Modifier.matchParentSize(),
+                    testTag = ChatGlassHeaderPlateTestTag,
+                )
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = viewModel.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = if (inLobby) {
+                                    "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
+                                } else {
+                                    "$occupantCount people in this hub"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
+                )
+            }
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = PrimaryBlue,
@@ -263,9 +271,19 @@ fun HubChatScreen(
                         },
                     ),
             ) {
+                ChatAmbientMeshBackground(
+                    connection = null,
+                    isHubNeutral = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(
+                        start = 6.dp,
+                        end = 6.dp,
+                        top = 12.dp,
+                        bottom = 12.dp + hubListBottomPad,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     items(
@@ -338,12 +356,17 @@ fun HubChatScreen(
                 )
             }
 
-            HubChatInputBar(
-                viewModel = viewModel,
-                inLobby = inLobby,
-                onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
-            )
-        }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                ChatLiquidGlassPlate(
+                    modifier = Modifier.matchParentSize(),
+                    testTag = ChatGlassComposerPlateTestTag,
+                )
+                HubChatInputBar(
+                    viewModel = viewModel,
+                    inLobby = inLobby,
+                    onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
+                )
+            }
     }
 }
 
@@ -355,6 +378,8 @@ private fun HubChatInputBar(
 ) {
     val draft by viewModel.draft.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
+    val mediaInteraction = remember { MutableInteractionSource() }
+    val sendInteraction = remember { MutableInteractionSource() }
     val focusRequester = remember { FocusRequester() }
     var wasSending by remember { mutableStateOf(false) }
     LaunchedEffect(isSending, draft) {
@@ -388,9 +413,17 @@ private fun HubChatInputBar(
             maxLines = 10,
             shape = RoundedCornerShape(20.dp),
         )
-        IconButton(
-            onClick = onOpenPhotoLibrary,
-            enabled = !inLobby && !isSending,
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .chatSpringPressScale(mediaInteraction)
+                .clickable(
+                    interactionSource = mediaInteraction,
+                    indication = null,
+                    enabled = !inLobby && !isSending,
+                    onClick = onOpenPhotoLibrary,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Outlined.Image,
@@ -402,12 +435,20 @@ private fun HubChatInputBar(
                 },
             )
         }
-        IconButton(
-            onClick = {
-                viewModel.sendMessage()
-                focusRequester.requestFocus()
-            },
-            enabled = !inLobby && draft.isNotBlank() && !isSending,
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .chatSpringPressScale(sendInteraction)
+                .clickable(
+                    interactionSource = sendInteraction,
+                    indication = null,
+                    enabled = !inLobby && draft.isNotBlank() && !isSending,
+                    onClick = {
+                        viewModel.sendMessage()
+                        focusRequester.requestFocus()
+                    },
+                ),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Send,

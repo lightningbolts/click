@@ -106,3 +106,5 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
 
     return out
 }
+
+// Ambient mesh color seeding for chat lives in [ChatAmbientColorSeeds]; this file keeps timeline keys only.
