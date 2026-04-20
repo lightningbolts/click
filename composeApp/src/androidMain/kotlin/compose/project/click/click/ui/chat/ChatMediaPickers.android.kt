@@ -54,19 +54,21 @@ actual fun rememberChatMediaPickers(
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-    ) { uri: Uri? ->
-        uri ?: return@rememberLauncherForActivityResult
+        contract = ActivityResultContracts.PickMultipleVisualMedia(10),
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            val read = readUriBytes(context, uri)
-            if (read == null) {
-                onMediaAccessBlocked(
-                    "Couldn't read that photo. If access was denied, enable Photos & videos permission for Click in Settings.",
-                )
-                return@launch
+            for (uri in uris) {
+                val read = readUriBytes(context, uri)
+                if (read == null) {
+                    onMediaAccessBlocked(
+                        "Couldn't read that photo. If access was denied, enable Photos & videos permission for Click in Settings.",
+                    )
+                    continue
+                }
+                val (bytes, mime) = read
+                onImagePicked(bytes, mime)
             }
-            val (bytes, mime) = read
-            onImagePicked(bytes, mime)
         }
     }
 

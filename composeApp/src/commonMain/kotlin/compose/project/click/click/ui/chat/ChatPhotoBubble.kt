@@ -95,22 +95,44 @@ internal fun ChatBubblePhotoContent(
                     }
                 }
                 if (cachedBitmap != null) {
-                    Image(
-                        bitmap = cachedBitmap,
-                        contentDescription = "Photo",
-                        contentScale = ContentScale.Fit,
+                    val up = secureState?.uploadProgress
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = chatBubbleScaledDp(330f))
-                            .then(
-                                if (borderIfReceived) {
-                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .clip(RoundedCornerShape(chatBubbleScaledDp(24f))),
-                    )
+                            .heightIn(max = chatBubbleScaledDp(330f)),
+                    ) {
+                        Image(
+                            bitmap = cachedBitmap,
+                            contentDescription = "Photo",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (borderIfReceived) {
+                                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .clip(RoundedCornerShape(chatBubbleScaledDp(24f))),
+                        )
+                        if (up != null && up < 1f) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { up },
+                                    modifier = Modifier.size(chatBubbleScaledDp(44f)),
+                                    strokeWidth = chatBubbleScaledDp(4f),
+                                    color = PrimaryBlue,
+                                )
+                            }
+                        }
+                    }
                 } else {
                     Text(
                         text = "Could not render image",

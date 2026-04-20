@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
  * Attachment actions from the chat composer (+ menu).
  * [onImagePicked] is used for gallery + camera JPEG; [onAudioPicked] for voice and file-based audio.
  * [onMediaAccessBlocked] surfaces permission denials and unreadable picks (snackbar/dialog from caller).
+ * Photo library picks may return multiple images (capped at 10 per batch).
  */
 data class ChatMediaPickerHandles(
     val openPhotoLibrary: () -> Unit,

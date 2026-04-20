@@ -512,7 +512,7 @@ fun ChatView(
                         "${gc.memberUserIds.size} members: ${nameParts.joinToString(", ")}"
                     }
                     val mediaPickers = rememberChatMediaPickers(
-                        onImagePicked = { bytes, mime -> viewModel.sendChatImage(bytes, mime) },
+                        onImagePicked = { bytes, mime -> viewModel.stageMediaForUpload(bytes, mime) },
                         onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
                         onFilePicked = { picked ->
                             viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)

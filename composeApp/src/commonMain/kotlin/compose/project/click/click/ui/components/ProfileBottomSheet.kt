@@ -87,9 +87,12 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.ui.chat.ChatAudioBubble
 import compose.project.click.click.ui.chat.ChatAudioChromeKind
+import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
+import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
+import compose.project.click.click.ui.chat.shareDecryptedImage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
-import compose.project.click.click.utils.toImageBitmap
+import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -577,8 +580,10 @@ fun ProfileBottomSheet(
                             text = media.captionedAt
                                 ?: if (media.mediaType == ProfileSheetMediaType.Audio)
                                     "Voice note"
+                                else if (media.isEncrypted)
+                                    "This photo is end-to-end encrypted. Save or share uses the decrypted copy on your device — not the raw cloud link."
                                 else
-                                    "Open this image externally or keep browsing.",
+                                    "Save a copy, share, or open the hosted image in your browser.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -586,16 +591,87 @@ fun ProfileBottomSheet(
                 },
                 confirmButton = {
                     if (media.mediaType == ProfileSheetMediaType.Image) {
-                        TextButton(
-                            onClick = {
-                                val target = resolvedMediaUrls[media.id] ?: media.mediaUrl
-                                if (!target.isNullOrBlank()) {
-                                    handleOpenLink(target)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { selectedMediaForPreview = null }) {
+                                Text("Close")
+                            }
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+                                        if (url.isNotBlank() && media.isEncrypted &&
+                                            !connectionChatId.isNullOrBlank() &&
+                                            !effectiveViewerUserId.isNullOrBlank()
+                                        ) {
+                                            val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                                                chatId = connectionChatId!!,
+                                                viewerUserId = effectiveViewerUserId!!,
+                                                mediaUrl = url,
+                                            )
+                                            if (bytes != null && bytes.isNotEmpty()) {
+                                                saveChatImageToGallery(
+                                                    imageUrl = url,
+                                                    decryptedImageBytes = bytes,
+                                                    mimeTypeHint = media.mimeType,
+                                                )
+                                            }
+                                        } else if (url.isNotBlank()) {
+                                            saveChatImageToGallery(imageUrl = url)
+                                        }
+                                        selectedMediaForPreview = null
+                                    }
+                                },
+                            ) {
+                                Text("Save to gallery")
+                            }
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+                                        val ext = when {
+                                            media.mimeType?.contains("png", ignoreCase = true) == true -> "png"
+                                            media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
+                                            else -> "jpg"
+                                        }
+                                        if (url.isNotBlank()) {
+                                            if (media.isEncrypted &&
+                                                !connectionChatId.isNullOrBlank() &&
+                                                !effectiveViewerUserId.isNullOrBlank()
+                                            ) {
+                                                val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                                                    chatId = connectionChatId!!,
+                                                    viewerUserId = effectiveViewerUserId!!,
+                                                    mediaUrl = url,
+                                                )
+                                                if (bytes != null && bytes.isNotEmpty()) {
+                                                    shareDecryptedImage(bytes, "click_share.$ext")
+                                                }
+                                            } else {
+                                                val bytes = fetchImageBytesFromUrl(url)
+                                                if (bytes != null && bytes.isNotEmpty()) {
+                                                    shareDecryptedImage(bytes, "click_share.$ext")
+                                                }
+                                            }
+                                        }
+                                        selectedMediaForPreview = null
+                                    }
+                                },
+                            ) {
+                                Text("Share")
+                            }
+                            if (!media.isEncrypted) {
+                                TextButton(
+                                    onClick = {
+                                        val target = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                                        if (!target.isNullOrBlank()) {
+                                            handleOpenLink(target)
+                                        }
+                                        selectedMediaForPreview = null
+                                    },
+                                ) {
+                                    Text("Open in browser")
                                 }
-                                selectedMediaForPreview = null
-                            },
-                        ) {
-                            Text("Open")
+                            }
                         }
                     } else {
                         TextButton(onClick = { selectedMediaForPreview = null }) {
@@ -603,13 +679,7 @@ fun ProfileBottomSheet(
                         }
                     }
                 },
-                dismissButton = {
-                    if (media.mediaType == ProfileSheetMediaType.Image) {
-                        TextButton(onClick = { selectedMediaForPreview = null }) {
-                            Text("Close")
-                        }
-                    }
-                },
+                dismissButton = {},
             )
         }
     }
