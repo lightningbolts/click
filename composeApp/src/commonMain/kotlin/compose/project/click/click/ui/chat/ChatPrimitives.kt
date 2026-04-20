@@ -97,7 +97,7 @@ internal fun ChatTypingDots() {
     val transition = rememberInfiniteTransition(label = "typing_dots")
     val delays = listOf(0, 140, 280)
     Row(
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(5f)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         delays.forEachIndexed { index, delayMs ->
@@ -112,8 +112,8 @@ internal fun ChatTypingDots() {
             )
             Box(
                 modifier = Modifier
-                    .offset(y = (-4f * offsetY).dp)
-                    .size(5.dp)
+                    .offset(y = chatBubbleTypingDotOffsetY(offsetY))
+                    .size(chatBubbleScaledDp(8f))
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
             )
@@ -194,30 +194,30 @@ internal fun CallLogSystemRow(message: Message) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Surface(
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(chatBubbleScaledDp(30f)),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
             tonalElevation = 1.dp,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = chatBubbleScaledDp(21f), vertical = chatBubbleScaledDp(12f)),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(12f)),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Call,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(24f)),
                     tint = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                 )
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = chatBubbleReplySnippetStyle(),
                     color = if (isMissed) Color(0xFFE57373) else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
                     text = formatMessageTime(message.timeCreated),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = chatBubbleReplyLabelStyle(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                     modifier = Modifier.padding(start = 4.dp),
                 )
@@ -306,7 +306,7 @@ internal fun ReplySwipeSideIcon(
                 scaleX = scale
                 scaleY = scale
             }
-            .size(40.dp)
+            .size(chatBubbleScaledDp(40f))
             .clip(CircleShape)
             .background(LightBlue.copy(alpha = (0.18f + 0.22f * smooth) * a)),
         contentAlignment = Alignment.Center,
@@ -315,7 +315,7 @@ internal fun ReplySwipeSideIcon(
             imageVector = Icons.AutoMirrored.Filled.Reply,
             contentDescription = "Reply",
             tint = LightBlue.copy(alpha = a),
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(chatBubbleScaledDp(22f)),
         )
     }
 }

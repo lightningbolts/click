@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -146,8 +147,18 @@ fun ChatMessageBubble(
 
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
 
-    val sentShape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 5.dp)
-    val receivedShape = RoundedCornerShape(topStart = 5.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
+    val sentShape = RoundedCornerShape(
+        topStart = ChatBubbleTokens.cornerMain,
+        topEnd = ChatBubbleTokens.cornerMain,
+        bottomStart = ChatBubbleTokens.cornerMain,
+        bottomEnd = ChatBubbleTokens.cornerTailSmall,
+    )
+    val receivedShape = RoundedCornerShape(
+        topStart = ChatBubbleTokens.cornerTailSmall,
+        topEnd = ChatBubbleTokens.cornerMain,
+        bottomStart = ChatBubbleTokens.cornerMain,
+        bottomEnd = ChatBubbleTokens.cornerMain,
+    )
 
     val reactionGroups = reactions.groupBy { it.reactionType }
         .mapValues { (_, list) -> list.size }
@@ -262,11 +273,13 @@ fun ChatMessageBubble(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp)
+                .padding(horizontal = ChatBubbleTokens.bubbleRowHorizontalInset)
         ) {
+            val bubbleContentMaxWidth =
+                (maxWidth * ChatBubbleTokens.messageMaxWidthToParentFraction).coerceAtLeast(120.dp)
             Box(modifier = Modifier.fillMaxWidth()) {
                 if (!isSent) {
                     ReplySwipeSideIcon(
@@ -292,8 +305,8 @@ fun ChatMessageBubble(
                         val peer = messageWithUser.user
                         Box(
                             modifier = Modifier
-                                .padding(end = 6.dp, bottom = 2.dp)
-                                .size(24.dp)
+                                .padding(end = ChatBubbleTokens.peerAvatarEndPad, bottom = ChatBubbleTokens.peerAvatarBottomPad)
+                                .size(ChatBubbleTokens.peerAvatarSize)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
@@ -310,7 +323,7 @@ fun ChatMessageBubble(
                             } else {
                                 Text(
                                     text = peer.name?.trim()?.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = chatBubbleReplyLabelStyle(),
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -327,26 +340,29 @@ fun ChatMessageBubble(
                 if (isSent) {
                     if (isImageMessage) {
                         Column(
-                            modifier = Modifier.widthIn(max = 300.dp),
+                            modifier = Modifier.widthIn(max = bubbleContentMaxWidth),
                             horizontalAlignment = Alignment.Start,
                         ) {
                             replyRef?.let { r ->
                                 Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 6.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .widthIn(max = bubbleContentMaxWidth)
+                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
                                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(
+                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                        ),
                                 ) {
                                     Text(
                                         text = "Reply",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = chatBubbleReplyLabelStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                     )
                                     Text(
                                         text = r.replyToContent.ifBlank { "Message" },
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = chatBubbleReplySnippetStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
@@ -362,20 +378,20 @@ fun ChatMessageBubble(
                             )
                             val capImg = message.content.trim()
                             if (capImg.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
                                 SelectionContainer {
                                     ChatLinkifyText(
                                         text = capImg,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         linkColor = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = chatBubbleMessageTextStyle(),
                                     )
                                 }
                             }
                             if (message.timeEdited != null) {
                                 Text(
                                     text = "(edited)",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = chatBubbleEditedFootnoteStyle(),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                                 )
                             }
@@ -383,10 +399,13 @@ fun ChatMessageBubble(
                     } else {
                     Box(
                         modifier = Modifier
-                            .widthIn(max = 300.dp)
+                            .widthIn(max = bubbleContentMaxWidth)
                             .clip(sentShape)
                             .background(sentGradient)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(
+                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
+                                vertical = ChatBubbleTokens.bubblePaddingVertical,
+                            ),
                     ) {
                         Column(
                             horizontalAlignment = Alignment.Start,
@@ -394,20 +413,23 @@ fun ChatMessageBubble(
                             replyRef?.let { r ->
                                 Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 6.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .widthIn(max = bubbleContentMaxWidth)
+                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
                                         .background(Color.Black.copy(alpha = 0.12f))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(
+                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                        ),
                                 ) {
                                     Text(
                                         text = "Reply",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = chatBubbleReplyLabelStyle(),
                                         color = Color.White.copy(alpha = 0.55f),
                                     )
                                     Text(
                                         text = r.replyToContent.ifBlank { "Message" },
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = chatBubbleReplySnippetStyle(),
                                         color = Color.White.copy(alpha = 0.78f),
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
@@ -427,16 +449,17 @@ fun ChatMessageBubble(
                                         secureError = if (encryptedMedia) secureSt?.error else null,
                                         onRequestDecrypt = onRequestSecureAudio,
                                         chromeKind = ChatAudioChromeKind.SentBubble,
+                                        messageBubbleMaxWidth = bubbleContentMaxWidth,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
                                         SelectionContainer {
                                             ChatLinkifyText(
                                                 text = cap,
                                                 color = Color.White,
                                                 linkColor = Color(0xFFB7E0FF),
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = chatBubbleMessageTextStyle(),
                                             )
                                         }
                                     }
@@ -446,6 +469,7 @@ fun ChatMessageBubble(
                                         envelope = attachmentEnvelope,
                                         isSent = true,
                                         onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                        maxCardWidth = bubbleContentMaxWidth,
                                     )
                                 }
                                 else -> {
@@ -456,7 +480,7 @@ fun ChatMessageBubble(
                                                     text = message.content,
                                                     color = Color.White,
                                                     linkColor = Color(0xFFB7E0FF),
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    style = chatBubbleMessageTextStyle(),
                                                 )
                                             }
                                         }
@@ -466,7 +490,7 @@ fun ChatMessageBubble(
                             if (message.timeEdited != null) {
                                 Text(
                                     text = "(edited)",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = chatBubbleEditedFootnoteStyle(),
                                     color = Color.White.copy(alpha = 0.5f),
                                 )
                             }
@@ -476,26 +500,29 @@ fun ChatMessageBubble(
                 } else {
                     if (isImageMessage) {
                         Column(
-                            modifier = Modifier.widthIn(max = 300.dp),
+                            modifier = Modifier.widthIn(max = bubbleContentMaxWidth),
                             horizontalAlignment = Alignment.Start,
                         ) {
                             replyRef?.let { r ->
                                 Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 6.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .widthIn(max = bubbleContentMaxWidth)
+                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
                                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(
+                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                        ),
                                 ) {
                                     Text(
                                         text = "Reply",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = chatBubbleReplyLabelStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     )
                                     Text(
                                         text = r.replyToContent.ifBlank { "Message" },
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = chatBubbleReplySnippetStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
@@ -513,20 +540,20 @@ fun ChatMessageBubble(
                             )
                             val capRx = message.content.trim()
                             if (capRx.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
                                 SelectionContainer {
                                     ChatLinkifyText(
                                         text = capRx,
                                         color = onBody,
                                         linkColor = linkC,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = chatBubbleMessageTextStyle(),
                                     )
                                 }
                             }
                             if (message.timeEdited != null) {
                                 Text(
                                     text = "(edited)",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = chatBubbleEditedFootnoteStyle(),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 )
                             }
@@ -534,11 +561,14 @@ fun ChatMessageBubble(
                     } else {
                     Box(
                         modifier = Modifier
-                            .widthIn(max = 300.dp)
+                            .widthIn(max = bubbleContentMaxWidth)
                             .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
                             .clip(receivedShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(
+                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
+                                vertical = ChatBubbleTokens.bubblePaddingVertical,
+                            ),
                     ) {
                         Column(
                             horizontalAlignment = Alignment.Start,
@@ -546,20 +576,23 @@ fun ChatMessageBubble(
                             replyRef?.let { r ->
                                 Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 6.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .widthIn(max = bubbleContentMaxWidth)
+                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
                                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(
+                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                        ),
                                 ) {
                                     Text(
                                         text = "Reply",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = chatBubbleReplyLabelStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     )
                                     Text(
                                         text = r.replyToContent.ifBlank { "Message" },
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = chatBubbleReplySnippetStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
@@ -581,16 +614,17 @@ fun ChatMessageBubble(
                                         secureError = if (encryptedMedia) secureSt?.error else null,
                                         onRequestDecrypt = onRequestSecureAudio,
                                         chromeKind = ChatAudioChromeKind.ReceivedBubble,
+                                        messageBubbleMaxWidth = bubbleContentMaxWidth,
                                     )
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
                                         SelectionContainer {
                                             ChatLinkifyText(
                                                 text = cap,
                                                 color = onBody,
                                                 linkColor = linkC,
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = chatBubbleMessageTextStyle(),
                                             )
                                         }
                                     }
@@ -600,6 +634,7 @@ fun ChatMessageBubble(
                                         envelope = attachmentEnvelope,
                                         isSent = false,
                                         onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                        maxCardWidth = bubbleContentMaxWidth,
                                     )
                                 }
                                 else -> {
@@ -610,7 +645,7 @@ fun ChatMessageBubble(
                                                     text = message.content,
                                                     color = onBody,
                                                     linkColor = linkC,
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    style = chatBubbleMessageTextStyle(),
                                                 )
                                             }
                                         }
@@ -620,7 +655,7 @@ fun ChatMessageBubble(
                             if (message.timeEdited != null) {
                                 Text(
                                     text = "(edited)",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = chatBubbleEditedFootnoteStyle(),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 )
                             }
@@ -631,14 +666,17 @@ fun ChatMessageBubble(
 
                 if (reactionGroups.isNotEmpty()) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(
+                            horizontal = ChatBubbleTokens.reactionRowPadH,
+                            vertical = ChatBubbleTokens.reactionRowPadV,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(ChatBubbleTokens.reactionChipGap),
                     ) {
                         reactionGroups.forEach { (emoji, count) ->
                             val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(ChatBubbleTokens.reactionChipCorner))
                                     .background(
                                         if (isOwnReaction) PrimaryBlue.copy(alpha = 0.25f)
                                         else Color.White.copy(alpha = 0.08f),
@@ -647,23 +685,26 @@ fun ChatMessageBubble(
                                         width = 1.dp,
                                         color = if (isOwnReaction) PrimaryBlue.copy(alpha = 0.5f)
                                         else Color.White.copy(alpha = 0.12f),
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
                                     )
                                     .clickable {
                                         PlatformHapticsPolicy.lightImpact()
                                         onToggleReaction(emoji)
                                     }
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    .padding(
+                                        horizontal = ChatBubbleTokens.reactionChipPadH,
+                                        vertical = ChatBubbleTokens.reactionChipPadV,
+                                    ),
                             ) {
                                 Text(
                                     text = if (count > 1) "$emoji $count" else emoji,
-                                    fontSize = 13.sp,
+                                    fontSize = ChatBubbleTokens.reactionFontSp.sp,
                                     color = Color.White,
                                 )
                             }
                         }
                     }
-                }
+                    }
                 }
                 }
                 if (isSent) {

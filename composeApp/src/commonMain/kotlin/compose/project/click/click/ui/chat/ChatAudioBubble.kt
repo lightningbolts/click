@@ -44,7 +44,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import compose.project.click.click.media.rememberChatAudioPlayer
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -102,8 +104,8 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
     }
 }
 
-private val ShellShape = RoundedCornerShape(16.dp)
-private val TrackShape = RoundedCornerShape(4.dp)
+private val ShellShape = RoundedCornerShape(chatBubbleScaledDp(24f))
+private val TrackShape = RoundedCornerShape(chatBubbleScaledDp(6f))
 
 @Composable
 private fun VoiceNoteChromeShell(
@@ -116,9 +118,9 @@ private fun VoiceNoteChromeShell(
             .clip(ShellShape)
             .border(1.dp, palette.shellBorder, ShellShape)
             .background(palette.shellBg, ShellShape)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(15f)),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(18f)),
         content = content,
     )
 }
@@ -144,6 +146,8 @@ fun ChatAudioBubble(
     /** @deprecated Use [chromeKind] instead; when true, maps to [ChatAudioChromeKind.ProfileSurface]. */
     compact: Boolean = false,
     chromeKind: ChatAudioChromeKind = ChatAudioChromeKind.ReceivedBubble,
+    /** Max width in chat bubbles; profile chrome ignores this (uses [fillMaxWidth]). */
+    messageBubbleMaxWidth: Dp = ChatBubbleTokens.contentMaxWidth,
 ) {
     val effectiveChrome = if (compact) ChatAudioChromeKind.ProfileSurface else chromeKind
     val palette = rememberVoiceChromePalette(effectiveChrome)
@@ -167,14 +171,14 @@ fun ChatAudioBubble(
     }
     val widthModifier = when (effectiveChrome) {
         ChatAudioChromeKind.ProfileSurface -> modifier.fillMaxWidth()
-        else -> modifier.widthIn(min = 200.dp, max = 280.dp)
+        else -> modifier.widthIn(max = messageBubbleMaxWidth)
     }
 
     if (!secureError.isNullOrBlank()) {
         VoiceNoteChromeShell(palette, widthModifier) {
             Text(
                 text = secureError,
-                style = MaterialTheme.typography.bodySmall,
+                style = chatBubbleReplySnippetStyle(),
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.weight(1f),
             )
@@ -186,26 +190,26 @@ fun ChatAudioBubble(
         VoiceNoteChromeShell(palette, widthModifier) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(chatBubbleScaledDp(60f))
                     .clip(CircleShape)
                     .background(palette.playFill, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(chatBubbleScaledDp(33f)),
+                    strokeWidth = chatBubbleScaledDp(2f),
                     color = palette.playIcon,
                 )
             }
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(36.dp),
+                    .height(chatBubbleScaledDp(54f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "Decrypting…",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = chatBubbleReplyLabelStyle(),
                     color = palette.timeColor,
                 )
             }
@@ -217,7 +221,7 @@ fun ChatAudioBubble(
         VoiceNoteChromeShell(palette, widthModifier) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(chatBubbleScaledDp(60f))
                     .clip(CircleShape)
                     .border(1.dp, palette.playBorder, CircleShape)
                     .background(palette.playFill, CircleShape)
@@ -232,18 +236,18 @@ fun ChatAudioBubble(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = "Decrypt and play",
                     tint = palette.playIcon,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(30f)),
                 )
             }
             Column(Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
+                        .height(chatBubbleScaledDp(12f))
                         .clip(TrackShape)
                         .background(palette.trackBg),
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(chatBubbleScaledDp(9f)))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -296,7 +300,7 @@ fun ChatAudioBubble(
         val playing = player.isPlaying
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(chatBubbleScaledDp(60f))
                 .clip(CircleShape)
                 .border(1.dp, palette.playBorder, CircleShape)
                 .background(palette.playFill, CircleShape)
@@ -311,7 +315,7 @@ fun ChatAudioBubble(
                 imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = if (playing) "Pause" else "Play",
                 tint = palette.playIcon,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(chatBubbleScaledDp(30f)),
             )
         }
         Column(Modifier.weight(1f)) {
@@ -323,7 +327,7 @@ fun ChatAudioBubble(
                     playerState.value.seekTo((fraction * durationMs).toLong().coerceIn(0L, durationMs))
                 },
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(chatBubbleScaledDp(9f)))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -345,13 +349,16 @@ fun ChatAudioBubble(
 }
 
 @Composable
-private fun timeStyle(): TextStyle =
-    MaterialTheme.typography.labelSmall.merge(
+private fun timeStyle(): TextStyle {
+    val base = MaterialTheme.typography.labelSmall
+    return base.merge(
         TextStyle(
             fontFeatureSettings = "tnum",
             fontWeight = FontWeight.Medium,
+            fontSize = (base.fontSize.value * chatBubbleAudioTimeTypeScale).sp,
         ),
     )
+}
 
 @Composable
 private fun AudioSeekTrack(
@@ -364,7 +371,7 @@ private fun AudioSeekTrack(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(8.dp)
+            .height(chatBubbleScaledDp(12f))
             .clip(TrackShape)
             .background(palette.trackBg)
             .pointerInput(durationMs) {

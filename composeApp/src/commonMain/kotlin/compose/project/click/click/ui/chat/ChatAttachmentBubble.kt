@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -62,6 +63,8 @@ fun ChatAttachmentBubble(
     envelope: AttachmentCrypto.Envelope,
     isSent: Boolean,
     onDownload: suspend () -> ChatAttachmentDownloadOutcome,
+    /** Caps card width (e.g. fraction of chat row from [ChatMessageBubble]). */
+    maxCardWidth: Dp = ChatBubbleTokens.contentMaxWidth,
 ) {
     val scope = rememberCoroutineScope()
     var state: ChatAttachmentUiState by remember(envelope.path) {
@@ -69,9 +72,19 @@ fun ChatAttachmentBubble(
     }
 
     val bubbleShape = if (isSent) {
-        RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 5.dp)
+        RoundedCornerShape(
+            topStart = ChatBubbleTokens.cornerMain,
+            topEnd = ChatBubbleTokens.cornerMain,
+            bottomStart = ChatBubbleTokens.cornerMain,
+            bottomEnd = ChatBubbleTokens.cornerTailSmall,
+        )
     } else {
-        RoundedCornerShape(topStart = 5.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
+        RoundedCornerShape(
+            topStart = ChatBubbleTokens.cornerTailSmall,
+            topEnd = ChatBubbleTokens.cornerMain,
+            bottomStart = ChatBubbleTokens.cornerMain,
+            bottomEnd = ChatBubbleTokens.cornerMain,
+        )
     }
     val container = if (isSent) {
         PrimaryBlue.copy(alpha = 0.14f)
@@ -84,19 +97,19 @@ fun ChatAttachmentBubble(
 
     Box(
         modifier = Modifier
-            .widthIn(max = 280.dp)
+            .widthIn(max = maxCardWidth)
             .clip(bubbleShape)
             .background(container)
             .border(width = 1.dp, color = borderColor, shape = bubbleShape)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = chatBubbleScaledDp(15f), vertical = chatBubbleScaledDp(12f)),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(15f)),
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(chatBubbleScaledDp(60f))
                     .clip(CircleShape)
                     .background(PrimaryBlue.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
@@ -105,13 +118,13 @@ fun ChatAttachmentBubble(
                     imageVector = iconForMime(envelope.mime),
                     contentDescription = null,
                     tint = PrimaryBlue,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(33f)),
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = envelope.name,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = chatBubbleMessageTextStyle(),
                     fontWeight = FontWeight.SemiBold,
                     color = titleColor,
                     maxLines = 1,
@@ -125,7 +138,7 @@ fun ChatAttachmentBubble(
                             append(envelope.mime)
                         }
                     },
-                    style = MaterialTheme.typography.labelSmall,
+                    style = chatBubbleReplyLabelStyle(),
                     color = subColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -133,39 +146,39 @@ fun ChatAttachmentBubble(
                 when (val s = state) {
                     ChatAttachmentUiState.Idle, ChatAttachmentUiState.Running -> Unit
                     is ChatAttachmentUiState.Done -> {
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(chatBubbleScaledDp(3f)))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(6f)),
                         ) {
                             Icon(
                                 Icons.Filled.CheckCircle,
                                 contentDescription = null,
                                 tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(chatBubbleScaledDp(21f)),
                             )
                             Text(
                                 text = "Saved · integrity verified",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = chatBubbleReplyLabelStyle(),
                                 color = Color(0xFF2E7D32),
                             )
                         }
                     }
                     is ChatAttachmentUiState.Error -> {
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(chatBubbleScaledDp(3f)))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(6f)),
                         ) {
                             Icon(
                                 Icons.Filled.ErrorOutline,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(chatBubbleScaledDp(21f)),
                             )
                             Text(
                                 text = s.message,
-                                style = MaterialTheme.typography.labelSmall,
+                                style = chatBubbleReplyLabelStyle(),
                                 color = MaterialTheme.colorScheme.error,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -178,8 +191,8 @@ fun ChatAttachmentBubble(
             when (state) {
                 ChatAttachmentUiState.Running -> {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(chatBubbleScaledDp(36f)),
+                        strokeWidth = chatBubbleScaledDp(3f),
                         color = PrimaryBlue,
                     )
                 }

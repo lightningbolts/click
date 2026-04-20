@@ -47,35 +47,35 @@ internal fun ChatDeliveryReceiptIcon(
                     imageVector = Icons.Outlined.ErrorOutline,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(22f)),
                 )
             m.deliveryState == MessageDeliveryState.PENDING ->
                 Icon(
                     imageVector = Icons.Filled.Done,
                     contentDescription = null,
                     tint = baseTint.copy(alpha = baseTint.alpha * 0.38f),
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(21f)),
                 )
             m.deliveryState == MessageDeliveryState.READ || m.readAt != null || m.isRead ->
                 Icon(
                     imageVector = Icons.Filled.DoneAll,
                     contentDescription = null,
                     tint = readTint,
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(25f)),
                 )
             m.deliveryState == MessageDeliveryState.DELIVERED ->
                 Icon(
                     imageVector = Icons.Filled.DoneAll,
                     contentDescription = null,
                     tint = baseTint,
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(25f)),
                 )
             else ->
                 Icon(
                     imageVector = Icons.Filled.Done,
                     contentDescription = null,
                     tint = baseTint,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(chatBubbleScaledDp(21f)),
                 )
         }
     }

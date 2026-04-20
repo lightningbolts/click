@@ -179,6 +179,11 @@ import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer
 import compose.project.click.click.ui.chat.ChatTimelineEntry
 import compose.project.click.click.ui.chat.ChatTypingDots
+import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle
+import compose.project.click.click.ui.chat.chatBubbleScaledDp
+import compose.project.click.click.ui.chat.ChatInterMessageListBaseCompact
+import compose.project.click.click.ui.chat.chatDeliveryReceiptGapBeforeTimeline
+import compose.project.click.click.ui.chat.chatTimelineRowTopPadding
 import compose.project.click.click.ui.chat.ConversationDaySeparator
 import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon
@@ -937,7 +942,7 @@ fun ChatView(
                                 modifier = Modifier.fillMaxSize(),
                                 reverseLayout = true,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                verticalArrangement = Arrangement.spacedBy(0.dp)
                             ) {
                                 if (newestSentMessage != null) {
                                     val receiptM = newestSentMessage
@@ -948,7 +953,10 @@ fun ChatView(
                                         Box(
                                             Modifier
                                                 .fillMaxWidth()
-                                                .padding(end = 10.dp, bottom = 0.dp),
+                                                .padding(
+                                                    top = chatDeliveryReceiptGapBeforeTimeline(ChatInterMessageListBaseCompact),
+                                                    end = 10.dp,
+                                                ),
                                             contentAlignment = Alignment.CenterEnd,
                                         ) {
                                             ChatDeliveryReceiptIcon(
@@ -959,10 +967,19 @@ fun ChatView(
                                         }
                                     }
                                 }
-                                items(timelineEntries, key = { it.key }) { entry ->
+                                items(
+                                    count = timelineEntries.size,
+                                    key = { timelineEntries[it].key },
+                                ) { index ->
+                                    val entry = timelineEntries[index]
+                                    val listGapTop = chatTimelineRowTopPadding(
+                                        index = index,
+                                        timelineEntries = timelineEntries,
+                                        baseCompact = ChatInterMessageListBaseCompact,
+                                    )
                                     when (entry) {
                                         is ChatTimelineEntry.DaySeparator -> {
-                                            Column {
+                                            Column(Modifier.padding(top = listGapTop)) {
                                                 ConversationDaySeparator(entry.label)
                                             }
                                         }
@@ -971,7 +988,7 @@ fun ChatView(
                                             val msgReactions =
                                                 reactionsMap[messageWithUser.message.id] ?: emptyList()
                                             val isCallLog = messageWithUser.message.messageType == "call_log"
-                                            Column {
+                                            Column(Modifier.padding(top = listGapTop)) {
                                                 ChatMessageRowWithTimestampGutter(
                                                     isCallLog = isCallLog,
                                                     isSent = messageWithUser.isSent,
@@ -1039,19 +1056,31 @@ fun ChatView(
                                     .border(
                                         width = 1.dp,
                                         color = PrimaryBlue.copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 14.dp)
+                                        shape = RoundedCornerShape(
+                                            topStart = chatBubbleScaledDp(6f),
+                                            topEnd = chatBubbleScaledDp(21f),
+                                            bottomStart = chatBubbleScaledDp(21f),
+                                            bottomEnd = chatBubbleScaledDp(21f),
+                                        )
                                     )
-                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 14.dp))
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = chatBubbleScaledDp(6f),
+                                            topEnd = chatBubbleScaledDp(21f),
+                                            bottomStart = chatBubbleScaledDp(21f),
+                                            bottomEnd = chatBubbleScaledDp(21f),
+                                        )
+                                    )
                                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(12f))
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f))
                                 ) {
                                     Text(
                                         text = typingPeerLabel,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = chatBubbleReplySnippetStyle(),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontStyle = FontStyle.Italic
                                     )

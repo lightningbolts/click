@@ -69,7 +69,7 @@ internal fun ChatBubblePhotoContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 220.dp),
+                        .heightIn(min = chatBubbleScaledDp(180f), max = chatBubbleScaledDp(330f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator()
@@ -80,7 +80,7 @@ internal fun ChatBubblePhotoContent(
                     text = secureState.error ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(chatBubbleScaledDp(18f)),
                 )
             }
             isEncrypted && secureState?.imageBytes != null -> {
@@ -101,22 +101,22 @@ internal fun ChatBubblePhotoContent(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 220.dp)
+                            .heightIn(max = chatBubbleScaledDp(330f))
                             .then(
                                 if (borderIfReceived) {
-                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
                                 } else {
                                     Modifier
                                 },
                             )
-                            .clip(RoundedCornerShape(16.dp)),
+                            .clip(RoundedCornerShape(chatBubbleScaledDp(24f))),
                     )
                 } else {
                     Text(
                         text = "Could not render image",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(chatBubbleScaledDp(18f)),
                     )
                 }
             }
@@ -124,7 +124,7 @@ internal fun ChatBubblePhotoContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 220.dp),
+                        .heightIn(min = chatBubbleScaledDp(180f), max = chatBubbleScaledDp(330f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator()
@@ -137,15 +137,15 @@ internal fun ChatBubblePhotoContent(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 220.dp)
+                        .heightIn(max = chatBubbleScaledDp(330f))
                         .then(
                             if (borderIfReceived) {
-                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
                             } else {
                                 Modifier
                             },
                         )
-                        .clip(RoundedCornerShape(16.dp)),
+                        .clip(RoundedCornerShape(chatBubbleScaledDp(24f))),
                 )
             }
         }

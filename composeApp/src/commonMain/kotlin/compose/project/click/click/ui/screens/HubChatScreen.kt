@@ -42,6 +42,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageBubble
 import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
+import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact
+import compose.project.click.click.ui.chat.chatHubMessageRowTopPadding
+import compose.project.click.click.ui.chat.chatHubReceiptRowTopPadding
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle
@@ -263,31 +266,41 @@ fun HubChatScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
-                    items(messages, key = { it.message.id }) { mwu ->
+                    items(
+                        count = messages.size,
+                        key = { messages[it].message.id },
+                    ) { index ->
+                        val mwu = messages[index]
                         val isCallLog = mwu.message.messageType == "call_log"
-                        ChatMessageRowWithTimestampGutter(
-                            isCallLog = isCallLog,
-                            isSent = mwu.isSent,
-                            timeCreated = mwu.message.timeCreated,
-                            stripVisualPx = displayTimestampPeekVisualPx,
-                            maxRevealPx = peekRevealPx,
+                        Column(
+                            Modifier.padding(
+                                top = chatHubMessageRowTopPadding(index, messages, ChatInterMessageHubBaseCompact),
+                            ),
                         ) {
-                            ChatMessageBubble(
-                                messageWithUser = mwu,
-                                currentUserId = currentUserId,
-                                reactions = emptyList(),
-                                onToggleReaction = {},
-                                onForward = {},
-                                onLongPress = {},
-                                onSwipeReply = {},
-                                showPeerAvatarInGroup = true,
-                                secureMediaHost = viewModel,
-                                secureMediaState = secureMediaLoadMap[mwu.message.id],
-                                activeChatId = hubIdForSecureMedia,
-                                enableMessageContextMenu = false,
-                            )
+                            ChatMessageRowWithTimestampGutter(
+                                isCallLog = isCallLog,
+                                isSent = mwu.isSent,
+                                timeCreated = mwu.message.timeCreated,
+                                stripVisualPx = displayTimestampPeekVisualPx,
+                                maxRevealPx = peekRevealPx,
+                            ) {
+                                ChatMessageBubble(
+                                    messageWithUser = mwu,
+                                    currentUserId = currentUserId,
+                                    reactions = emptyList(),
+                                    onToggleReaction = {},
+                                    onForward = {},
+                                    onLongPress = {},
+                                    onSwipeReply = {},
+                                    showPeerAvatarInGroup = true,
+                                    secureMediaHost = viewModel,
+                                    secureMediaState = secureMediaLoadMap[mwu.message.id],
+                                    activeChatId = hubIdForSecureMedia,
+                                    enableMessageContextMenu = false,
+                                )
+                            }
                         }
                     }
                     if (newestSentMessage != null) {
@@ -299,7 +312,10 @@ fun HubChatScreen(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(end = 10.dp, top = 0.dp),
+                                    .padding(
+                                        top = chatHubReceiptRowTopPadding(ChatInterMessageHubBaseCompact),
+                                        end = 10.dp,
+                                    ),
                                 contentAlignment = Alignment.CenterEnd,
                             ) {
                                 ChatDeliveryReceiptIcon(
