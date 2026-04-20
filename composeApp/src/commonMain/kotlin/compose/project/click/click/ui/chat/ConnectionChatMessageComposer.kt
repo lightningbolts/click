@@ -12,14 +12,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,7 +57,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -86,9 +81,8 @@ import kotlinx.coroutines.delay
  * field with platform-aware styling, attachment menu (photo library,
  * take photo, voice message), and send/confirm-edit button.
  *
- * Isolates [ChatViewModel.messageInput] and IME padding reads so
- * typing does not recompose the message list. Body moved verbatim
- * from ConnectionsScreen.kt; no behavior change.
+ * Isolates [ChatViewModel.messageInput] from the message list. IME insets are
+ * applied by the chat screen chrome so this composable stays layout-stable.
  */
 @Composable
 internal fun ConnectionChatMessageComposer(
@@ -118,14 +112,6 @@ internal fun ConnectionChatMessageComposer(
         keyboardController?.show()
     }
 
-    val density = LocalDensity.current
-    val imeBottomPx = WindowInsets.ime.getBottom(density)
-    val navBarBottomPx = WindowInsets.navigationBars.getBottom(density)
-    val bottomBarPx = with(density) { 80.dp.roundToPx() }
-    val effectiveImePadding = with(density) {
-        (imeBottomPx - navBarBottomPx - bottomBarPx).coerceAtLeast(0).toDp()
-    }
-
     val composerStyle = LocalPlatformStyle.current
     val replyBannerVisible = replyingTo != null && editingMessageId == null
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
@@ -151,8 +137,6 @@ internal fun ConnectionChatMessageComposer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .consumeWindowInsets(WindowInsets.ime)
-                .padding(bottom = effectiveImePadding)
                 .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
             Crossfade(

@@ -32,8 +32,8 @@ internal object ChatBubbleTokens {
     val contentMaxWidth: Dp = chatBubbleScaledDp(450f)
     val cornerMain: Dp = chatBubbleScaledDp(27f)
     val cornerTailSmall: Dp = chatBubbleScaledDp(8f)
-    val bubblePaddingHorizontal: Dp = chatBubbleScaledDp(12f)
-    val bubblePaddingVertical: Dp = chatBubbleScaledDp(9f)
+    val bubblePaddingHorizontal: Dp = chatBubbleScaledDp(15f)
+    val bubblePaddingVertical: Dp = chatBubbleScaledDp(12f)
     val replyBlockCorner: Dp = chatBubbleScaledDp(15f)
     val replyBlockPaddingH: Dp = chatBubbleScaledDp(12f)
     val replyBlockPaddingV: Dp = chatBubbleScaledDp(9f)
@@ -54,7 +54,7 @@ internal object ChatBubbleTokens {
     val reactionChipGap: Dp = chatBubbleScaledDp(6f)
 }
 
-private const val BODY_TYPE_SCALE = 1.5f * REL
+private const val BODY_TYPE_SCALE = 1.3f * REL
 private const val EDITED_TYPE_SCALE = 1.35f * REL
 
 @Composable

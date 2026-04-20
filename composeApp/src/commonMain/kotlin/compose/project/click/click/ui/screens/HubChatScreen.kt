@@ -37,14 +37,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
-import compose.project.click.click.ui.chat.ChatGlassComposerPlateTestTag
+import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
-import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
 import compose.project.click.click.ui.chat.chatSpringPressScale
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageBubble
@@ -111,19 +111,14 @@ fun HubChatScreen(
 
     val inLobby = occupantCount < 3
     val hubNavBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val hubListBottomPad = hubNavBottomDp + 96.dp
+    val hubListBottomPad = hubNavBottomDp + 72.dp
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .consumeWindowInsets(WindowInsets.ime)
-            .imePadding(),
-    ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                ChatLiquidGlassPlate(
-                    modifier = Modifier.matchParentSize(),
-                    testTag = ChatGlassHeaderPlateTestTag,
-                )
+    Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ChatGlassHeaderPlateTestTag),
+            ) {
                 TopAppBar(
                     title = {
                         Column {
@@ -357,10 +352,7 @@ fun HubChatScreen(
             }
 
             Box(modifier = Modifier.fillMaxWidth()) {
-                ChatLiquidGlassPlate(
-                    modifier = Modifier.matchParentSize(),
-                    testTag = ChatGlassComposerPlateTestTag,
-                )
+                ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                 HubChatInputBar(
                     viewModel = viewModel,
                     inLobby = inLobby,

@@ -147,18 +147,9 @@ fun ChatMessageBubble(
 
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
 
-    val sentShape = RoundedCornerShape(
-        topStart = ChatBubbleTokens.cornerMain,
-        topEnd = ChatBubbleTokens.cornerMain,
-        bottomStart = ChatBubbleTokens.cornerMain,
-        bottomEnd = ChatBubbleTokens.cornerTailSmall,
-    )
-    val receivedShape = RoundedCornerShape(
-        topStart = ChatBubbleTokens.cornerTailSmall,
-        topEnd = ChatBubbleTokens.cornerMain,
-        bottomStart = ChatBubbleTokens.cornerMain,
-        bottomEnd = ChatBubbleTokens.cornerMain,
-    )
+    val bubblePillShape = RoundedCornerShape(ChatBubbleTokens.cornerMain)
+    val sentShape = bubblePillShape
+    val receivedShape = bubblePillShape
 
     val reactionGroups = reactions.groupBy { it.reactionType }
         .mapValues { (_, list) -> list.size }

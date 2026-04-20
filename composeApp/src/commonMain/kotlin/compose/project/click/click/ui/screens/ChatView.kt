@@ -103,6 +103,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -111,7 +112,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
@@ -140,7 +140,6 @@ import compose.project.click.click.data.models.replySnippetForMetadata // pragma
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
@@ -191,9 +190,8 @@ import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
-import compose.project.click.click.ui.chat.ChatGlassComposerPlateTestTag
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
-import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
+import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay
 import compose.project.click.click.ui.chat.callLogLabel
 import compose.project.click.click.ui.chat.formatCallDurationForLog
 import compose.project.click.click.ui.chat.formatConnectionListTimestamp
@@ -487,16 +485,25 @@ fun ChatView(
                         },
                     )
 
-                    val navBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                    val imeBottomDp = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
                     val headerBlockHeight = topInset + 56.dp
-                    val replyExtra = if (replyingTo != null && editingMessageId == null) 54.dp else 0.dp
-                    val listBottomPad = navBottomDp + imeBottomDp + 96.dp + replyExtra
+                    /**
+                     * With [reverseLayout] = true, [PaddingValues.top] maps to the visual bottom of the
+                     * list (adjacent to the typing/composer block). Do not add [imePadding] on the
+                     * composer: the parent scaffold / UIKit layer already reserves keyboard space;
+                     * stacking IME insets here produced a visible gap (Android `adjustResize` + iOS).
+                     */
+                    val reverseListNewestEdgePad = 6.dp
                     val messageContentModifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
 
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // Prevent nested IME consumers (e.g. future imePadding) from double-counting
+                            // insets already reflected in the surrounding layout on iOS + Android.
+                            .consumeWindowInsets(WindowInsets.ime),
+                    ) {
                         ChatAmbientMeshBackground(
                             connection = chatDetails.connection,
                             isHubNeutral = false,
@@ -509,12 +516,9 @@ fun ChatView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(headerBlockHeight)
-                                .padding(horizontal = 20.dp),
+                                .padding(horizontal = 20.dp)
+                                .testTag(ChatGlassHeaderPlateTestTag),
                         ) {
-                            ChatLiquidGlassPlate(
-                                modifier = Modifier.fillMaxSize(),
-                                testTag = ChatGlassHeaderPlateTestTag,
-                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -976,8 +980,8 @@ fun ChatView(
                                 contentPadding = PaddingValues(
                                     start = 12.dp,
                                     end = 12.dp,
-                                    top = 10.dp,
-                                    bottom = 10.dp + listBottomPad,
+                                    top = 10.dp + reverseListNewestEdgePad,
+                                    bottom = 14.dp,
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(0.dp)
                             ) {
@@ -1076,66 +1080,6 @@ fun ChatView(
                     }
                     }
 
-                    // Typing indicator — label + bouncing dots (Realtime Broadcast)
-                    AnimatedVisibility(
-                        visible = isPeerTyping,
-                        enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                            slideInVertically(
-                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                initialOffsetY = { it / 2 },
-                            ),
-                        exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-                            slideOutVertically(
-                                animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                                targetOffsetY = { it / 2 },
-                            ),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .border(
-                                        width = 1.dp,
-                                        color = PrimaryBlue.copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(
-                                            topStart = chatBubbleScaledDp(6f),
-                                            topEnd = chatBubbleScaledDp(21f),
-                                            bottomStart = chatBubbleScaledDp(21f),
-                                            bottomEnd = chatBubbleScaledDp(21f),
-                                        )
-                                    )
-                                    .clip(
-                                        RoundedCornerShape(
-                                            topStart = chatBubbleScaledDp(6f),
-                                            topEnd = chatBubbleScaledDp(21f),
-                                            bottomStart = chatBubbleScaledDp(21f),
-                                            bottomEnd = chatBubbleScaledDp(21f),
-                                        )
-                                    )
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                                    .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(12f))
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f))
-                                ) {
-                                    Text(
-                                        text = typingPeerLabel,
-                                        style = chatBubbleReplySnippetStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontStyle = FontStyle.Italic
-                                    )
-                                    ChatTypingDots()
-                                }
-                            }
-                        }
-                    }
-
                     // Forward dialog
                     if (forwardMessageId != null) {
                         ForwardDialog(
@@ -1154,59 +1098,118 @@ fun ChatView(
                         )
                     }
 
-                    // Edit mode indicator strip
-                    if (editingMessageId != null) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = PrimaryBlue.copy(alpha = 0.12f)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Typing indicator — label + bouncing dots (Realtime Broadcast)
+                        AnimatedVisibility(
+                            visible = isPeerTyping,
+                            enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                                slideInVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    initialOffsetY = { it / 2 },
+                                ),
+                            exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                                slideOutVertically(
+                                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                    targetOffsetY = { it / 2 },
+                                ),
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
+                                horizontalArrangement = Arrangement.Start,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Filled.Edit,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = PrimaryBlue
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Editing message",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = PrimaryBlue
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
-                                IconButton(
-                                    onClick = { viewModel.cancelEditMessage() },
-                                    modifier = Modifier.size(28.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .border(
+                                            width = 1.dp,
+                                            color = PrimaryBlue.copy(alpha = 0.15f),
+                                            shape = RoundedCornerShape(
+                                                topStart = chatBubbleScaledDp(6f),
+                                                topEnd = chatBubbleScaledDp(21f),
+                                                bottomStart = chatBubbleScaledDp(21f),
+                                                bottomEnd = chatBubbleScaledDp(21f),
+                                            )
+                                        )
+                                        .clip(
+                                            RoundedCornerShape(
+                                                topStart = chatBubbleScaledDp(6f),
+                                                topEnd = chatBubbleScaledDp(21f),
+                                                bottomStart = chatBubbleScaledDp(21f),
+                                                bottomEnd = chatBubbleScaledDp(21f),
+                                            )
+                                        )
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                                        .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(12f))
                                 ) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "Cancel edit",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = PrimaryBlue
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f))
+                                    ) {
+                                        Text(
+                                            text = typingPeerLabel,
+                                            style = chatBubbleReplySnippetStyle(),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontStyle = FontStyle.Italic
+                                        )
+                                        ChatTypingDots()
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        ChatLiquidGlassPlate(
-                            modifier = Modifier.matchParentSize(),
-                            testTag = ChatGlassComposerPlateTestTag,
-                        )
-                        ConnectionChatMessageComposer(
-                            viewModel = viewModel,
-                            chatDetails = chatDetails,
-                            isGroupChat = isGroupChat,
-                            editingMessageId = editingMessageId,
-                            replyingTo = replyingTo,
-                            mediaPickers = mediaPickers,
-                        )
+                        // Edit mode indicator strip
+                        if (editingMessageId != null) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = PrimaryBlue.copy(alpha = 0.12f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = PrimaryBlue
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Editing message",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = PrimaryBlue
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { viewModel.cancelEditMessage() },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "Cancel edit",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = PrimaryBlue
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
+                            ConnectionChatMessageComposer(
+                                viewModel = viewModel,
+                                chatDetails = chatDetails,
+                                isGroupChat = isGroupChat,
+                                editingMessageId = editingMessageId,
+                                replyingTo = replyingTo,
+                                mediaPickers = mediaPickers,
+                            )
+                        }
                     }
                     }
                     }
