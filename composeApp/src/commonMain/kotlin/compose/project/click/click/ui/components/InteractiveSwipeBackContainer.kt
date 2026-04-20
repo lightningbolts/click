@@ -108,8 +108,8 @@ fun InteractiveSwipeBackContainer(
     /** Invoked when a horizontal back-swipe gesture begins (after jitter cancel / settle reset). */
     onHorizontalDragStarted: () -> Unit = {},
     /**
-     * Called whenever the foreground horizontal offset changes (drag + settling). Use to sync
-     * auxiliary UI such as the system keyboard on iOS ([compose.project.click.click.platform.InteractiveBackKeyboardFollow]).
+     * Called whenever the foreground horizontal offset changes (drag + settling). Use for any
+     * auxiliary UI that must track the swipe (e.g. custom chrome); not used for system IME.
      */
     onInteractiveSwipeOffsetChanged: (offsetPx: Float, widthPx: Float) -> Unit = { _, _ -> },
     /** Invoked when the swipe offset returns to rest (canceled or container disposed). */
@@ -144,7 +144,8 @@ fun InteractiveSwipeBackContainer(
         }
 
         fun notifySwipeOffset() {
-            onInteractiveSwipeOffsetChangedState.value.invoke(offsetPx.floatValue, widthPx)
+            val o = offsetPx.floatValue
+            onInteractiveSwipeOffsetChangedState.value.invoke(o, widthPx)
         }
 
         fun snapDragOffset(nextOffset: Float) {

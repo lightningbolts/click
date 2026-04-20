@@ -238,8 +238,13 @@ fun ConnectionsScreen(
                     InteractiveSwipeBackContainer(
                         enabled = true,
                         onBack = {
+                            // After the swipe commits: resign focus first so UIKit owns the keyboard
+                            // dismiss curve. On iOS, `SoftwareKeyboardController.hide()` tends to fight
+                            // that animation on later presentations; Android still needs an explicit hide.
                             focusManager.clearFocus()
-                            keyboardController?.hide()
+                            if (!isIOS) {
+                                keyboardController?.hide()
+                            }
                             closeActiveChat(ChatTransitionMode.Gesture)
                         },
                         opaquePreviousBackground = false,

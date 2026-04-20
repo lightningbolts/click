@@ -140,7 +140,7 @@ import compose.project.click.click.data.models.replySnippetForMetadata // pragma
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.geometry.Offset
@@ -296,13 +296,19 @@ fun ChatView(
     // Fresh scroll state per chat so opening a thread doesn't keep the previous scroll offset
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
-    val topInset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+    val density = LocalDensity.current
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
-    /** Dismisses the IME only on real user scrolling of the timeline (not programmatic scroll). */
-    val dismissKeyboardOnUserMessageScroll = remember {
+    /**
+     * Dismisses the IME only on deliberate user scrolling of the timeline (not programmatic scroll).
+     * A tiny threshold avoids spurious [clearFocus] calls when the IME opens/closes and the
+     * reverse [LazyColumn] reports small consumed deltas — a common source of simulator jank.
+     */
+    val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
+    val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
         object : NestedScrollConnection {
             override fun onPostScroll(
                 consumed: Offset,
@@ -310,7 +316,9 @@ fun ChatView(
                 source: NestedScrollSource,
             ): Offset {
                 if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
-                if (source == NestedScrollSource.UserInput && kotlin.math.abs(consumed.y) > 1f) {
+                if (source == NestedScrollSource.UserInput &&
+                    kotlin.math.abs(consumed.y) > keyboardDismissScrollThresholdPx
+                ) {
                     focusManagerState.value.clearFocus()
                 }
                 return Offset.Zero
@@ -518,8 +526,9 @@ fun ChatView(
                         if (chatChromeStyle.isIOS) Modifier.imePadding() else Modifier
 
                     /**
-                     * Full-screen ambient mesh behind header + thread. Status bar padding lives on the
-                     * header row only.
+                     * Full-screen ambient mesh behind header + thread. Top padding uses
+                     * [WindowInsets.statusBars] only so opening the IME does not push the header past the
+                     * top via [WindowInsets.safeDrawing] / display cutout coupling.
                      *
                      * Android uses [android:windowSoftInputMode=adjustResize]: the decor already
                      * shrinks for the IME, so [imePadding] on the composer would **double-count** the

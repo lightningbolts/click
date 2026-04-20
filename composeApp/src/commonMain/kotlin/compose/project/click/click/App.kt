@@ -1415,7 +1415,9 @@ fun App() {
                                             edgeSwipeWidth = 44.dp,
                                             onBack = {
                                                 hubFocusManager.clearFocus()
-                                                hubKeyboardController?.hide()
+                                                if (!isIOS) {
+                                                    hubKeyboardController?.hide()
+                                                }
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 hubChatArgs = null
                                             },
