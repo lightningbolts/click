@@ -1888,32 +1888,28 @@ class ChatViewModel(
     }
 
     fun commitStagedMediaToUpload() {
+        val connectionId = currentConnectionId ?: return
+        val userId = _currentUserId.value ?: return
         val batch = _stagedChatImages.value
         if (batch.isEmpty()) return
+        val caption = _messageInput.value.trim()
+        val replyTarget = _replyingTo.value
         _stagedChatImages.value = emptyList()
         _messageSendError.value = null
         viewModelScope.launch {
-            outboundChatMessageMutex.withLock {
-                _isMessageSubmitInProgress.value = true
-                try {
-                    val connectionId = currentConnectionId ?: run {
-                        _messageSendError.value = "Failed to send — no chat"
-                        return@withLock
-                    }
-                    val userId = _currentUserId.value ?: run {
-                        _messageSendError.value = "Failed to send — not signed in"
-                        return@withLock
-                    }
-                    val caption = _messageInput.value.trim()
-                    val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
-                        _messageSendError.value = "Failed to send — unable to start chat"
-                        return@withLock
-                    }
-                    val replyTarget = _replyingTo.value
-                    val currentUser = resolveMessageUser(userId, apiChatId)
-                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                        ?: User(id = userId, name = "You", createdAt = 0L)
-                    batch.forEachIndexed { index, item ->
+            val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                _stagedChatImages.value = batch
+                _messageSendError.value = "Failed to send — unable to start chat"
+                return@launch
+            }
+            val currentUser = resolveMessageUser(userId, apiChatId)
+                ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                ?: User(id = userId, name = "You", createdAt = 0L)
+            batch.forEachIndexed { index, item ->
+                var progressJob: Job? = null
+                outboundChatMessageMutex.withLock {
+                    _isMessageSubmitInProgress.value = true
+                    try {
                         val tempId = "temp-img-${item.id}"
                         val localMs = Clock.System.now().toEpochMilliseconds()
                         val optimistic = Message(
@@ -1941,7 +1937,7 @@ class ChatViewModel(
                                 )
                         }
                         var progress = 0f
-                        val progressJob = launch {
+                        progressJob = launch {
                             while (isActive && progress < 0.9f) {
                                 delay(110)
                                 progress = (progress + 0.045f).coerceAtMost(0.9f)
@@ -1963,14 +1959,14 @@ class ChatViewModel(
                             val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
                             val path = "$userId/$apiChatId/$unique.$ext"
                             val url = chatRepository.uploadChatMedia(item.bytes, path, item.mimeType) ?: run {
-                                progressJob.cancel()
+                                progressJob?.cancel()
                                 markOptimisticSendFailed(tempId)
                                 secureImageBytesCache.remove(tempId)
                                 _secureChatMediaLoadState.update { m -> m - tempId }
                                 _messageSendError.value = "Failed to upload photo"
-                                return@forEachIndexed
+                                return@withLock
                             }
-                            progressJob.cancel()
+                            progressJob?.cancel()
                             _secureChatMediaLoadState.update {
                                 val cur = it[tempId]
                                 val bytes = cur?.imageBytes ?: item.bytes
@@ -2025,15 +2021,16 @@ class ChatViewModel(
                                 _messageSendError.value = "Failed to send photo"
                             }
                         } catch (e: Exception) {
-                            progressJob.cancel()
+                            progressJob?.cancel()
                             markOptimisticSendFailed(tempId)
                             secureImageBytesCache.remove(tempId)
                             _secureChatMediaLoadState.update { m -> m - tempId }
                             _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
                         }
+                    } finally {
+                        progressJob?.cancel()
+                        _isMessageSubmitInProgress.value = false
                     }
-                } finally {
-                    _isMessageSubmitInProgress.value = false
                 }
             }
         }

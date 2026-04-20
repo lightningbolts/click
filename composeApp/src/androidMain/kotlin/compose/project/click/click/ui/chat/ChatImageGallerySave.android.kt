@@ -60,6 +60,19 @@ actual suspend fun saveChatImageToGallery(
     }
 }
 
+actual suspend fun fetchImageBytesFromUrl(imageUrl: String): ByteArray? =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val connection = URL(imageUrl).openConnection() as HttpURLConnection
+            connection.connectTimeout = 25_000
+            connection.readTimeout = 60_000
+            connection.connect()
+            val bytes = connection.inputStream.use { it.readBytes() }
+            connection.disconnect()
+            bytes.takeIf { it.isNotEmpty() }
+        }.getOrNull()
+    }
+
 actual fun shareDecryptedImage(imageBytes: ByteArray, fileName: String) {
     val ctx = AndroidChatImageSaveContext.applicationContext
     val safeName = fileName.trim().ifEmpty { "click_share.jpg" }.replace(Regex("[^a-zA-Z0-9._-]"), "_")

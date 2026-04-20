@@ -12,3 +12,6 @@ expect suspend fun saveChatImageToGallery(
 
 /** Share decrypted image bytes via the system sheet (cache-scoped temp file on Android). */
 expect fun shareDecryptedImage(imageBytes: ByteArray, fileName: String)
+
+/** Download image bytes from a URL (e.g. signed Supabase URL for non-E2EE profile media). */
+expect suspend fun fetchImageBytesFromUrl(imageUrl: String): ByteArray?

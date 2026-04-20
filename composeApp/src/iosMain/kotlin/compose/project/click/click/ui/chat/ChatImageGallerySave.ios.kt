@@ -39,6 +39,19 @@ private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
     m
 }
 
+actual suspend fun fetchImageBytesFromUrl(imageUrl: String): ByteArray? =
+    withContext(Dispatchers.Default) {
+        runCatching {
+            val client = HttpClient(Darwin)
+            try {
+                val bytes = client.get(imageUrl).bodyAsBytes()
+                bytes.takeIf { it.isNotEmpty() }
+            } finally {
+                client.close()
+            }
+        }.getOrNull()
+    }
+
 @OptIn(ExperimentalForeignApi::class)
 actual fun shareDecryptedImage(imageBytes: ByteArray, fileName: String) {
     val data = imageBytes.toNSData()

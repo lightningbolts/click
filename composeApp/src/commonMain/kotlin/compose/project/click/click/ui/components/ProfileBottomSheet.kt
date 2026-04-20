@@ -87,6 +87,7 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.ui.chat.ChatAudioBubble
 import compose.project.click.click.ui.chat.ChatAudioChromeKind
+import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
 import compose.project.click.click.ui.chat.shareDecryptedImage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
@@ -632,17 +633,24 @@ fun ProfileBottomSheet(
                                             media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
                                             else -> "jpg"
                                         }
-                                        if (url.isNotBlank() && media.isEncrypted &&
-                                            !connectionChatId.isNullOrBlank() &&
-                                            !effectiveViewerUserId.isNullOrBlank()
-                                        ) {
-                                            val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                                                chatId = connectionChatId!!,
-                                                viewerUserId = effectiveViewerUserId!!,
-                                                mediaUrl = url,
-                                            )
-                                            if (bytes != null && bytes.isNotEmpty()) {
-                                                shareDecryptedImage(bytes, "click_share.$ext")
+                                        if (url.isNotBlank()) {
+                                            if (media.isEncrypted &&
+                                                !connectionChatId.isNullOrBlank() &&
+                                                !effectiveViewerUserId.isNullOrBlank()
+                                            ) {
+                                                val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                                                    chatId = connectionChatId!!,
+                                                    viewerUserId = effectiveViewerUserId!!,
+                                                    mediaUrl = url,
+                                                )
+                                                if (bytes != null && bytes.isNotEmpty()) {
+                                                    shareDecryptedImage(bytes, "click_share.$ext")
+                                                }
+                                            } else {
+                                                val bytes = fetchImageBytesFromUrl(url)
+                                                if (bytes != null && bytes.isNotEmpty()) {
+                                                    shareDecryptedImage(bytes, "click_share.$ext")
+                                                }
                                             }
                                         }
                                         selectedMediaForPreview = null
