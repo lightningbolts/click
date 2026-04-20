@@ -1,6 +1,12 @@
 package compose.project.click.click.calls
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,17 +24,24 @@ private const val CALL_STATE_DID_CHANGE_NOTIFICATION = "ClickCallStateDidChange"
 
 @OptIn(ExperimentalForeignApi::class)
 actual class CallManager {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val _callState = MutableStateFlow<CallState>(CallState.Idle)
     actual val callState: StateFlow<CallState> = _callState.asStateFlow()
     private val notificationCenter = NSNotificationCenter.defaultCenter
     private var videoRequested = false
     private var stateObserver: Any? = null
+    /** When true, ignore native updates that would map to [CallState.Idle] so hang-up can hold [Ended] for the UI fade. */
+    private var endCallGraceActive: Boolean = false
+    private var deferIdleAfterEndJob: Job? = null
 
     init {
         observeNativeCallState()
     }
 
     actual fun startCall(roomName: String, token: String, wsUrl: String, videoEnabled: Boolean) {
+        deferIdleAfterEndJob?.cancel()
+        deferIdleAfterEndJob = null
+        endCallGraceActive = false
         videoRequested = videoEnabled
         _callState.value = CallState.Connecting(videoRequested = videoEnabled)
         notificationCenter.postNotificationName(
@@ -69,8 +82,18 @@ actual class CallManager {
     }
 
     actual fun endCall() {
+        deferIdleAfterEndJob?.cancel()
+        endCallGraceActive = true
         notificationCenter.postNotificationName(aName = CALL_END_NOTIFICATION, `object` = null)
-        _callState.value = CallState.Idle
+        _callState.value = CallState.Ended("Call ended")
+        deferIdleAfterEndJob = scope.launch {
+            delay(420)
+            deferIdleAfterEndJob = null
+            endCallGraceActive = false
+            if (_callState.value is CallState.Ended) {
+                _callState.value = CallState.Idle
+            }
+        }
     }
 
     private fun observeNativeCallState() {
@@ -91,18 +114,27 @@ actual class CallManager {
             val reportedVideoRequested = userInfo.boolValue("videoRequested") ?: videoRequested
             val reason = userInfo["reason"] as? String
 
-            _callState.value = when (status) {
-                "connecting" -> CallState.Connecting(videoRequested = reportedVideoRequested)
-                "connected" -> CallState.Connected(
-                    videoRequested = reportedVideoRequested,
-                    microphoneEnabled = microphoneEnabled,
-                    speakerEnabled = speakerEnabled,
-                    cameraEnabled = cameraEnabled,
-                    remoteVideoAvailable = remoteVideoAvailable,
-                    localVideoAvailable = localVideoAvailable,
-                )
-                "ended" -> CallState.Ended(reason)
-                else -> CallState.Idle
+            when (status) {
+                "connecting" -> {
+                    _callState.value = CallState.Connecting(videoRequested = reportedVideoRequested)
+                }
+                "connected" -> {
+                    _callState.value = CallState.Connected(
+                        videoRequested = reportedVideoRequested,
+                        microphoneEnabled = microphoneEnabled,
+                        speakerEnabled = speakerEnabled,
+                        cameraEnabled = cameraEnabled,
+                        remoteVideoAvailable = remoteVideoAvailable,
+                        localVideoAvailable = localVideoAvailable,
+                    )
+                }
+                "ended" -> {
+                    _callState.value = CallState.Ended(reason)
+                }
+                else -> {
+                    if (endCallGraceActive) return@addObserverForName
+                    _callState.value = CallState.Idle
+                }
             }
         }
     }

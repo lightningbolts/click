@@ -105,6 +105,15 @@ fun InteractiveSwipeBackContainer(
      * still drive interactive back everywhere this container is used.
      */
     rightToLeftPeek: InteractiveSwipeBackRightToLeftPeek? = null,
+    /** Invoked when a horizontal back-swipe gesture begins (after jitter cancel / settle reset). */
+    onHorizontalDragStarted: () -> Unit = {},
+    /**
+     * Called whenever the foreground horizontal offset changes (drag + settling). Use to sync
+     * auxiliary UI such as the system keyboard on iOS ([compose.project.click.click.platform.InteractiveBackKeyboardFollow]).
+     */
+    onInteractiveSwipeOffsetChanged: (offsetPx: Float, widthPx: Float) -> Unit = { _, _ -> },
+    /** Invoked when the swipe offset returns to rest (canceled or container disposed). */
+    onInteractiveSwipeFinished: () -> Unit = {},
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit
 ) {
@@ -116,6 +125,8 @@ fun InteractiveSwipeBackContainer(
     val settleScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val dragJitterThresholdPx = remember(density) { with(density) { 0.75.dp.toPx() } }
+    val onInteractiveSwipeOffsetChangedState = rememberUpdatedState(onInteractiveSwipeOffsetChanged)
+    val onInteractiveSwipeFinishedState = rememberUpdatedState(onInteractiveSwipeFinished)
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
@@ -124,10 +135,16 @@ fun InteractiveSwipeBackContainer(
         SideEffect {
             onBehindLayersVisibleChanged(showPreviousLayer)
         }
+
         DisposableEffect(Unit) {
             onDispose {
                 onBehindLayersVisibleChanged(false)
+                onInteractiveSwipeFinishedState.value.invoke()
             }
+        }
+
+        fun notifySwipeOffset() {
+            onInteractiveSwipeOffsetChangedState.value.invoke(offsetPx.floatValue, widthPx)
         }
 
         fun snapDragOffset(nextOffset: Float) {
@@ -135,6 +152,7 @@ fun InteractiveSwipeBackContainer(
             val movedEnough = abs(clampedOffset - offsetPx.floatValue) >= dragJitterThresholdPx
             if (movedEnough || clampedOffset == 0f || clampedOffset == widthPx) {
                 offsetPx.floatValue = clampedOffset
+                notifySwipeOffset()
             }
         }
 
@@ -142,9 +160,11 @@ fun InteractiveSwipeBackContainer(
             val currentOffset = offsetPx.floatValue
             if (currentOffset <= 0f) {
                 offsetPx.floatValue = 0f
+                notifySwipeOffset()
                 isGestureActive = false
                 isSettling = false
                 settleJob = null
+                onInteractiveSwipeFinishedState.value.invoke()
                 return
             }
 
@@ -165,6 +185,7 @@ fun InteractiveSwipeBackContainer(
                     )
                 ) { value, _ ->
                     offsetPx.floatValue = value
+                    notifySwipeOffset()
                 }
 
                 if (shouldComplete) {
@@ -174,8 +195,11 @@ fun InteractiveSwipeBackContainer(
                     // flash the chat full-screen. External mirrors are cleared after removal via
                     // [LaunchedEffect] in the parent.
                     kotlinx.coroutines.delay(34)
+                    onInteractiveSwipeFinishedState.value.invoke()
                 } else {
                     offsetPx.floatValue = 0f
+                    notifySwipeOffset()
+                    onInteractiveSwipeFinishedState.value.invoke()
                 }
                 isGestureActive = false
                 isSettling = false
@@ -183,8 +207,9 @@ fun InteractiveSwipeBackContainer(
             }
         }
 
-        val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
-        val dragState = rememberDraggableState { delta ->
+    val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
+    val onHorizontalDragStartedState = rememberUpdatedState(onHorizontalDragStarted)
+    val dragState = rememberDraggableState { delta ->
             if (!isGestureActive || isSettling) return@rememberDraggableState
             val offset = offsetPx.floatValue
             when {
@@ -212,6 +237,7 @@ fun InteractiveSwipeBackContainer(
                     settleJob = null
                     isSettling = false
                     isGestureActive = true
+                    onHorizontalDragStartedState.value.invoke()
                     rightToLeftPeekState.value?.onGestureStart?.invoke()
                 },
                 onDragStopped = { velocity ->

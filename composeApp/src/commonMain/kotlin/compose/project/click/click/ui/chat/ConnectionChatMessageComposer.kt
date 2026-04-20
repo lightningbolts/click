@@ -57,7 +57,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -74,7 +73,6 @@ import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.ChatViewModel
-import kotlinx.coroutines.delay
 
 /**
  * Message composer strip for the chat screen: reply banner, text
@@ -97,7 +95,6 @@ internal fun ConnectionChatMessageComposer(
     val isSending by viewModel.isSending.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val composerFocusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
     var hadSubmitInFlight by remember { mutableStateOf(false) }
 
     LaunchedEffect(isSending) {
@@ -107,9 +104,8 @@ internal fun ConnectionChatMessageComposer(
         }
         if (!hadSubmitInFlight) return@LaunchedEffect
         hadSubmitInFlight = false
-        delay(48)
+        // Keep the IME session stable during rapid sends — avoid show() + extra frames that delay bubbles.
         composerFocusRequester.requestFocus()
-        keyboardController?.show()
     }
 
     val composerStyle = LocalPlatformStyle.current
@@ -220,10 +216,10 @@ internal fun ConnectionChatMessageComposer(
             }
             val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
             val fieldSideInset = auxButtonSize + composerGap
-            val attachTint = PrimaryBlue.copy(alpha = if (isSending) 0.35f else 0.92f)
+            val attachTint = PrimaryBlue.copy(alpha = 0.92f)
             val attachInteraction = remember { MutableInteractionSource() }
             val sendInteraction = remember { MutableInteractionSource() }
-            val canSend = messageInput.trim().isNotEmpty() && !isSending
+            val canSend = messageInput.trim().isNotEmpty()
             val sendGradient = Brush.linearGradient(
                 colors = if (canSend) {
                     listOf(PrimaryBlue, LightBlue)
@@ -338,7 +334,7 @@ internal fun ConnectionChatMessageComposer(
                             .clickable(
                                 interactionSource = attachInteraction,
                                 indication = null,
-                                enabled = !isSending,
+                                enabled = true,
                                 onClick = { attachmentMenuExpanded = true },
                             ),
                         contentAlignment = Alignment.Center,

@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
@@ -541,6 +542,21 @@ fun App() {
             val globalCallOverlayState by CallSessionManager.overlayState.collectAsState()
             val globalCallState by CallSessionManager.callState.collectAsState()
             val activeInvite by CallSessionManager.activeInvite.collectAsState()
+            // While [AnimatedVisibility] exits, [globalCallState] may already be [CallState.Idle]; keep the
+            // last in-room state so [ActiveCallOverlay] does not snap to an empty Idle layout mid-fade.
+            val lastActiveCallPresentedState = remember { mutableStateOf<CallState>(CallState.Idle) }
+            val lastPreviewOverlayPresentedState = remember { mutableStateOf<CallOverlayState>(CallOverlayState.Idle) }
+            var suppressEndedPreviewAfterActiveCall by remember { mutableStateOf(false) }
+            SideEffect {
+                if (globalCallState !is CallState.Idle) {
+                    lastActiveCallPresentedState.value = globalCallState
+                }
+                if (globalCallOverlayState !is CallOverlayState.Idle) {
+                    lastPreviewOverlayPresentedState.value = globalCallOverlayState
+                }
+            }
+            val activeCallUiState =
+                if (globalCallState !is CallState.Idle) globalCallState else lastActiveCallPresentedState.value
             val profileApi = remember { ApiClient() }
             var remoteBirthdayMissing by remember { mutableStateOf<Boolean?>(null) }
             var remoteFirstNameMissing by remember { mutableStateOf<Boolean?>(null) }
@@ -1100,6 +1116,7 @@ fun App() {
             ) { paddingValues ->
                 Box(modifier = Modifier
                     .padding(paddingValues)
+                    .consumeWindowInsets(paddingValues)
                     .fillMaxSize()
                     .graphicsLayer { alpha = homeSurfaceAlpha }
                 ) {
@@ -1391,10 +1408,14 @@ fun App() {
                                     }
 
                                     if (interactive) {
+                                        val hubKeyboardController = LocalSoftwareKeyboardController.current
+                                        val hubFocusManager = LocalFocusManager.current
                                         InteractiveSwipeBackContainer(
                                             enabled = true,
                                             edgeSwipeWidth = 44.dp,
                                             onBack = {
+                                                hubFocusManager.clearFocus()
+                                                hubKeyboardController?.hide()
                                                 transitionMode = NavigationTransitionMode.GestureBack
                                                 hubChatArgs = null
                                             },
@@ -1732,80 +1753,116 @@ fun App() {
                         }
 
                         val overlayState = globalCallOverlayState
-                        val callPreviewVisible =
+                        val inPreviewOnlyOverlay =
                             overlayState is CallOverlayState.Outgoing ||
                                 overlayState is CallOverlayState.Incoming ||
-                                overlayState is CallOverlayState.Connecting ||
-                                overlayState is CallOverlayState.Ended
+                                overlayState is CallOverlayState.Connecting
+                        // In-call / hang-up: use [CallState] (incl. a short [CallState.Ended] tail from
+                        // [CallManager.endCall]) so the active layer can exit while the room tears down.
+                        // [inPreviewOnlyOverlay] keeps the ring / connect card on the preview layer.
                         val activeCallVisible =
-                            overlayState is CallOverlayState.Idle && globalCallState !is CallState.Idle
-                        val callOverlayEnter =
-                            fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-                                scaleIn(
-                                    initialScale = 0.94f,
-                                    animationSpec = tween(220, easing = FastOutSlowInEasing),
-                                )
-                        val callOverlayExit =
-                            fadeOut(tween(180, easing = LinearOutSlowInEasing)) +
-                                scaleOut(
-                                    targetScale = 0.96f,
-                                    animationSpec = tween(180, easing = LinearOutSlowInEasing),
-                                )
+                            !inPreviewOnlyOverlay &&
+                                (globalCallState is CallState.Connected || globalCallState is CallState.Ended)
+                        LaunchedEffect(overlayState, globalCallState) {
+                            if (
+                                overlayState is CallOverlayState.Ended &&
+                                (
+                                    lastActiveCallPresentedState.value is CallState.Connected ||
+                                        lastActiveCallPresentedState.value is CallState.Ended
+                                    )
+                            ) {
+                                suppressEndedPreviewAfterActiveCall = true
+                            } else if (overlayState is CallOverlayState.Idle && globalCallState is CallState.Idle) {
+                                suppressEndedPreviewAfterActiveCall = false
+                            }
+                        }
+                        val callPreviewVisible =
+                            !activeCallVisible &&
+                                (overlayState is CallOverlayState.Outgoing ||
+                                    overlayState is CallOverlayState.Incoming ||
+                                    overlayState is CallOverlayState.Connecting ||
+                                    (
+                                        overlayState is CallOverlayState.Ended &&
+                                            !suppressEndedPreviewAfterActiveCall
+                                        ))
+                        val previewOverlayUiState =
+                            if (overlayState !is CallOverlayState.Idle) overlayState
+                            else lastPreviewOverlayPresentedState.value
+                        val callPreviewAlpha by animateFloatAsState(
+                            targetValue = if (callPreviewVisible) 1f else 0f,
+                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            label = "callPreviewOverlayAlpha",
+                        )
+                        val callPreviewScale by animateFloatAsState(
+                            targetValue = if (callPreviewVisible) 1f else 0.96f,
+                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            label = "callPreviewOverlayScale",
+                        )
+                        val activeCallAlpha by animateFloatAsState(
+                            targetValue = if (activeCallVisible) 1f else 0f,
+                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            label = "activeCallOverlayAlpha",
+                        )
+                        LaunchedEffect(
+                            overlayState,
+                            activeCallVisible,
+                            activeCallAlpha,
+                            suppressEndedPreviewAfterActiveCall,
+                        ) {
+                            if (
+                                suppressEndedPreviewAfterActiveCall &&
+                                overlayState is CallOverlayState.Ended &&
+                                !activeCallVisible &&
+                                activeCallAlpha <= 0.01f
+                            ) {
+                                suppressEndedPreviewAfterActiveCall = false
+                                CallSessionManager.dismissEndedCall()
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .zIndex(11_000f),
                         ) {
-                            AnimatedVisibility(
-                                visible = callPreviewVisible,
-                                modifier = Modifier.fillMaxSize(),
-                                enter = callOverlayEnter,
-                                exit = callOverlayExit,
+                            if (
+                                (callPreviewVisible || callPreviewAlpha > 0.01f) &&
+                                previewOverlayUiState !is CallOverlayState.Idle
                             ) {
-                                when (val st = overlayState) {
-                                    is CallOverlayState.Outgoing,
-                                    is CallOverlayState.Incoming,
-                                    is CallOverlayState.Connecting,
-                                    is CallOverlayState.Ended,
-                                    -> {
-                                        CallPreviewOverlay(
-                                            overlayState = st,
-                                            currentUserId = appDataUser?.id,
-                                            onAccept = { CallSessionManager.acceptIncomingCall() },
-                                            onDecline = { CallSessionManager.declineIncomingCall() },
-                                            onCancel = { CallSessionManager.cancelCurrentCall() },
-                                            onDismissEnded = { CallSessionManager.dismissEndedCall() },
-                                        )
-                                    }
-
-                                    CallOverlayState.Idle -> {
-                                        Box(modifier = Modifier)
-                                    }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            alpha = callPreviewAlpha
+                                            scaleX = callPreviewScale
+                                            scaleY = callPreviewScale
+                                        },
+                                ) {
+                                    CallPreviewOverlay(
+                                        overlayState = previewOverlayUiState,
+                                        currentUserId = appDataUser?.id,
+                                        onAccept = { CallSessionManager.acceptIncomingCall() },
+                                        onDecline = { CallSessionManager.declineIncomingCall() },
+                                        onCancel = { CallSessionManager.cancelCurrentCall() },
+                                        onDismissEnded = { CallSessionManager.dismissEndedCall() },
+                                    )
                                 }
                             }
 
-                            AnimatedVisibility(
-                                visible = activeCallVisible,
-                                modifier = Modifier.fillMaxSize(),
-                                enter =
-                                    fadeIn(tween(240, easing = FastOutSlowInEasing)) +
-                                        scaleIn(
-                                            initialScale = 0.96f,
-                                            animationSpec = tween(240, easing = FastOutSlowInEasing),
-                                        ),
-                                exit =
-                                    fadeOut(tween(200, easing = LinearOutSlowInEasing)) +
-                                        scaleOut(
-                                            targetScale = 0.98f,
-                                            animationSpec = tween(200, easing = LinearOutSlowInEasing),
-                                        ),
-                            ) {
-                                ActiveCallOverlay(
-                                    callManager = CallSessionManager.callManager,
-                                    otherUserName = activeInvite?.counterpartName(appDataUser?.id) ?: "Connection",
-                                    state = globalCallState,
-                                    onEndCall = { CallSessionManager.endActiveCall() },
-                                )
+                            if (activeCallVisible || activeCallAlpha > 0.01f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            alpha = activeCallAlpha
+                                        },
+                                ) {
+                                    ActiveCallOverlay(
+                                        callManager = CallSessionManager.callManager,
+                                        otherUserName = activeInvite?.counterpartName(appDataUser?.id) ?: "Connection",
+                                        state = activeCallUiState,
+                                        onEndCall = { CallSessionManager.endActiveCall() },
+                                    )
+                                }
                             }
                         }
 

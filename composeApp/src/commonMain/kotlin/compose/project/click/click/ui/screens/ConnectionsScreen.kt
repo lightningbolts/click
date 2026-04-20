@@ -26,9 +26,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
+
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.User
 import compose.project.click.click.getPlatform
@@ -230,10 +233,15 @@ fun ConnectionsScreen(
             ) {
                 val activeChatId = lastOpenChatIdForIosOverlay
                 if (activeChatId != null) {
+                    val keyboardController = LocalSoftwareKeyboardController.current
+                    val focusManager = LocalFocusManager.current
                     InteractiveSwipeBackContainer(
                         enabled = true,
-                        onBack = { closeActiveChat(ChatTransitionMode.Gesture) },
-                        // Persistent ConnectionsListView is composed below; do not duplicate the list.
+                        onBack = {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                            closeActiveChat(ChatTransitionMode.Gesture)
+                        },
                         opaquePreviousBackground = false,
                         externalDragOffsetPx = iosChatSwipeDragPx,
                         onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },

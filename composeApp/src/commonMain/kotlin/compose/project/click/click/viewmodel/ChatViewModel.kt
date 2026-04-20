@@ -33,6 +33,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository // pra
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
@@ -72,6 +73,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlin.random.Random
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Serializable
 private data class ConnectionRealtimeRow(
@@ -253,6 +256,9 @@ class ChatViewModel(
     private var lastTypingSent: Long = 0L
     private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
     private val prefetchedChatLimit = 3
+
+    /** Serializes outbound chat POSTs so optimistic rows stay ordered; text sends can queue without blocking the composer UI. */
+    private val outboundChatMessageMutex = Mutex()
 
     /**
      * Connection ids for which the inbox row should show zero unread immediately after
@@ -1742,10 +1748,17 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         val content = _messageInput.value.trim()
         if (content.isEmpty()) return
-        if (_isMessageSubmitInProgress.value) return
 
         _messageSendError.value = null
-        _isMessageSubmitInProgress.value = true
+        val replyTargetCaptured = _replyingTo.value
+        val metadataCaptured = if (replyTargetCaptured != null) {
+            buildJsonObject {
+                put("reply_to_id", replyTargetCaptured.message.id)
+                put("reply_to_content", replySnippetForMessage(replyTargetCaptured.message))
+            }
+        } else {
+            null
+        }
         _messageInput.value = ""
         localTypingIdleJob?.cancel()
         localTypingIdleJob = null
@@ -1757,29 +1770,15 @@ class ChatViewModel(
             onUserStoppedTyping(typingChatId)
         }
 
-        viewModelScope.launch {
-            try {
-                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
-                    _messageSendError.value = "Failed to send — unable to start chat"
-                    _messageInput.value = content
-                    updateMessageInput(content)
-                    return@launch
-                }
-                onUserStoppedTyping(apiChatId)
-                val replyTarget = _replyingTo.value
-                val metadata = if (replyTarget != null) {
-                    buildJsonObject {
-                        put("reply_to_id", replyTarget.message.id)
-                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
-                    }
-                } else {
-                    null
-                }
-                val localMs = Clock.System.now().toEpochMilliseconds()
-                val tempId = "temp-$localMs-${Random.nextInt(1_000_000_000)}"
-                val currentUser = resolveMessageUser(userId, apiChatId)
-                    ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                    ?: User(id = userId, name = "You", createdAt = 0L)
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            val provisionalChatId = successState?.chatDetails?.chat?.id?.takeIf { it.isNotBlank() }
+                ?: currentApiChatId?.takeIf { it.isNotBlank() }
+            val localMs = Clock.System.now().toEpochMilliseconds()
+            val tempId = "temp-$localMs-${Random.nextLong()}"
+            val currentUserFast = AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                ?: User(id = userId, name = "You", createdAt = 0L)
+
+            if (provisionalChatId != null) {
                 val optimistic = Message(
                     id = tempId,
                     user_id = userId,
@@ -1787,61 +1786,96 @@ class ChatViewModel(
                     timeCreated = localMs,
                     isRead = false,
                     messageType = ChatMessageType.TEXT,
-                    metadata = metadata,
+                    metadata = metadataCaptured,
+                    localSentAt = localMs,
+                    readAt = null,
+                    deliveryState = MessageDeliveryState.PENDING,
+                )
+                appendOutgoingOptimistic(optimistic, currentUserFast)
+            }
+
+            val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                if (provisionalChatId != null) {
+                    markOptimisticSendFailed(tempId)
+                }
+                _messageSendError.value = "Failed to send — unable to start chat"
+                _messageInput.value = content
+                updateMessageInput(content)
+                return@launch
+            }
+            onUserStoppedTyping(apiChatId)
+            val currentUser = resolveMessageUser(userId, apiChatId) ?: currentUserFast
+
+            if (provisionalChatId == null) {
+                val optimistic = Message(
+                    id = tempId,
+                    user_id = userId,
+                    content = content,
+                    timeCreated = localMs,
+                    isRead = false,
+                    messageType = ChatMessageType.TEXT,
+                    metadata = metadataCaptured,
                     localSentAt = localMs,
                     readAt = null,
                     deliveryState = MessageDeliveryState.PENDING,
                 )
                 appendOutgoingOptimistic(optimistic, currentUser)
-                val message = chatRepository.sendMessage(
-                    chatId = apiChatId,
-                    userId = userId,
-                    content = content,
-                    metadata = metadata,
-                    clientLocalSentAtMs = localMs,
-                )
-                if (message != null) {
-                    _replyingTo.value = null
-                    applyInsertedMessage(message, currentUser, userId)
-                    activateConnectionIfPending(connectionId)
-                } else {
+            }
+
+            outboundChatMessageMutex.withLock {
+                _isMessageSubmitInProgress.value = true
+                try {
+                    val message = chatRepository.sendMessage(
+                        chatId = apiChatId,
+                        userId = userId,
+                        content = content,
+                        metadata = metadataCaptured,
+                        clientLocalSentAtMs = localMs,
+                    )
+                    if (message != null) {
+                        _replyingTo.value = null
+                        applyInsertedMessage(message, currentUser, userId)
+                        activateConnectionIfPending(connectionId)
+                    } else {
+                        markOptimisticSendFailed(tempId)
+                        _messageSendError.value = "Failed to send message"
+                        _messageInput.value = content
+                        updateMessageInput(content)
+                        println("Failed to send message")
+                    }
+                } catch (e: Exception) {
                     markOptimisticSendFailed(tempId)
-                    _messageSendError.value = "Failed to send message"
+                    _messageSendError.value = "Failed to send — ${e.message ?: "encryption or network error"}"
                     _messageInput.value = content
                     updateMessageInput(content)
-                    println("Failed to send message")
+                    println("Error sending message: ${e.redactedRestMessage()}")
+                } finally {
+                    _isMessageSubmitInProgress.value = false
                 }
-            } catch (e: Exception) {
-                _messageSendError.value = "Failed to send — ${e.message ?: "encryption or network error"}"
-                _messageInput.value = content
-                updateMessageInput(content)
-                println("Error sending message: ${e.redactedRestMessage()}")
-            } finally {
-                _isMessageSubmitInProgress.value = false
             }
         }
     }
 
     fun sendChatImage(bytes: ByteArray, mimeType: String) {
         if (bytes.isEmpty()) return
-        if (_isMessageSubmitInProgress.value) return
         val connectionId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
         val caption = _messageInput.value.trim()
         _messageSendError.value = null
-        _isMessageSubmitInProgress.value = true
         viewModelScope.launch {
-            try {
+            outboundChatMessageMutex.withLock {
+                _isMessageSubmitInProgress.value = true
+                try {
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
                     _messageSendError.value = "Failed to send — unable to start chat"
-                    return@launch
+                    return@withLock
                 }
                 val ext = extensionForChatMedia(mimeType, isImage = true)
                 val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
                 val path = "$userId/$apiChatId/$unique.$ext"
                 val url = chatRepository.uploadChatMedia(bytes, path, mimeType) ?: run {
                     _messageSendError.value = "Failed to upload photo"
-                    return@launch
+                    return@withLock
                 }
                 val replyTarget = _replyingTo.value
                 val meta = if (replyTarget != null) {
@@ -1876,34 +1910,35 @@ class ChatViewModel(
                 } else {
                     _messageSendError.value = "Failed to send photo"
                 }
-            } catch (e: Exception) {
-                _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
-            } finally {
-                _isMessageSubmitInProgress.value = false
+                } catch (e: Exception) {
+                    _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
+                } finally {
+                    _isMessageSubmitInProgress.value = false
+                }
             }
         }
     }
 
     fun sendChatAudio(bytes: ByteArray, mimeType: String, durationSeconds: Int?) {
         if (bytes.isEmpty()) return
-        if (_isMessageSubmitInProgress.value) return
         val connectionId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
         val caption = _messageInput.value.trim()
         _messageSendError.value = null
-        _isMessageSubmitInProgress.value = true
         viewModelScope.launch {
-            try {
+            outboundChatMessageMutex.withLock {
+                _isMessageSubmitInProgress.value = true
+                try {
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
                     _messageSendError.value = "Failed to send — unable to start chat"
-                    return@launch
+                    return@withLock
                 }
                 val ext = extensionForChatMedia(mimeType, isImage = false)
                 val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
                 val path = "$userId/$apiChatId/$unique.$ext"
                 val url = chatRepository.uploadChatMedia(bytes, path, mimeType) ?: run {
                     _messageSendError.value = "Failed to upload audio"
-                    return@launch
+                    return@withLock
                 }
                 val replyTarget = _replyingTo.value
                 val meta = if (replyTarget != null) {
@@ -1940,10 +1975,11 @@ class ChatViewModel(
                 } else {
                     _messageSendError.value = "Failed to send voice message"
                 }
-            } catch (e: Exception) {
-                _messageSendError.value = "Failed to send audio — ${e.message ?: "error"}"
-            } finally {
-                _isMessageSubmitInProgress.value = false
+                } catch (e: Exception) {
+                    _messageSendError.value = "Failed to send audio — ${e.message ?: "error"}"
+                } finally {
+                    _isMessageSubmitInProgress.value = false
+                }
             }
         }
     }
@@ -1956,7 +1992,6 @@ class ChatViewModel(
      */
     fun sendChatFile(bytes: ByteArray, mimeType: String, fileName: String) {
         if (bytes.isEmpty()) return
-        if (_isMessageSubmitInProgress.value) return
         val connectionId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
         val trimmedName = fileName.trim().ifEmpty { "attachment" }
@@ -1972,12 +2007,13 @@ class ChatViewModel(
         }
 
         _messageSendError.value = null
-        _isMessageSubmitInProgress.value = true
         viewModelScope.launch {
-            try {
+            outboundChatMessageMutex.withLock {
+                _isMessageSubmitInProgress.value = true
+                try {
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
                     _messageSendError.value = "Failed to send — unable to start chat"
-                    return@launch
+                    return@withLock
                 }
                 val uploaded = chatRepository.uploadEncryptedBlob(
                     bucketName = CHAT_ATTACHMENTS_BUCKET,
@@ -1988,7 +2024,7 @@ class ChatViewModel(
                     fileName = trimmedName,
                 ) ?: run {
                     _messageSendError.value = "Failed to upload attachment"
-                    return@launch
+                    return@withLock
                 }
                 val envelope = AttachmentCrypto.Envelope(
                     v = 1,
@@ -2031,11 +2067,12 @@ class ChatViewModel(
                 } else {
                     _messageSendError.value = "Failed to send attachment"
                 }
-            } catch (e: Exception) {
-                _messageSendError.value = "Failed to send attachment — ${e.message ?: "error"}"
-                println("Error sending attachment: ${e.redactedRestMessage()}")
-            } finally {
-                _isMessageSubmitInProgress.value = false
+                } catch (e: Exception) {
+                    _messageSendError.value = "Failed to send attachment — ${e.message ?: "error"}"
+                    println("Error sending attachment: ${e.redactedRestMessage()}")
+                } finally {
+                    _isMessageSubmitInProgress.value = false
+                }
             }
         }
     }

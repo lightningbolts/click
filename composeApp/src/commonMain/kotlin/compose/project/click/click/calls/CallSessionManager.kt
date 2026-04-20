@@ -145,7 +145,8 @@ object CallSessionManager {
                         }
                         if (_overlayState.value !is CallOverlayState.Incoming &&
                             _overlayState.value !is CallOverlayState.Outgoing &&
-                            _overlayState.value !is CallOverlayState.Connecting
+                            _overlayState.value !is CallOverlayState.Connecting &&
+                            _overlayState.value !is CallOverlayState.Ended
                         ) {
                             activeInviteValue = null
                         }
@@ -359,9 +360,14 @@ object CallSessionManager {
             PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "ended")
         }
         internalCallManager.endCall()
-        activeInviteValue = null
-        _overlayState.value = CallOverlayState.Idle
         CallRingtonePlayer.stop()
+        if (invite != null) {
+            activeInviteValue = invite
+            _overlayState.value = CallOverlayState.Ended(invite, "Call ended")
+        } else {
+            activeInviteValue = null
+            _overlayState.value = CallOverlayState.Idle
+        }
     }
 
     fun dismissEndedCall() {

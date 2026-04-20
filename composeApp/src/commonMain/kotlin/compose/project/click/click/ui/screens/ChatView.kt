@@ -139,8 +139,14 @@ import compose.project.click.click.data.models.replyRef // pragma: allowlist sec
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -290,7 +296,27 @@ fun ChatView(
     // Fresh scroll state per chat so opening a thread doesn't keep the previous scroll offset
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topInset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+    val focusManager = LocalFocusManager.current
+    val focusManagerState = rememberUpdatedState(focusManager)
+    /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
+    val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
+    /** Dismisses the IME only on real user scrolling of the timeline (not programmatic scroll). */
+    val dismissKeyboardOnUserMessageScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
+                if (source == NestedScrollSource.UserInput && kotlin.math.abs(consumed.y) > 1f) {
+                    focusManagerState.value.clearFocus()
+                }
+                return Offset.Zero
+            }
+        }
+    }
 
     // Connection action sheet (archive, delete, report, block)
     var showConnectionSheet by remember { mutableStateOf(false) }
@@ -339,7 +365,10 @@ fun ChatView(
         if (successMessages.isEmpty()) return@LaunchedEffect
         repeat(50) {
             if (listState.layoutInfo.totalItemsCount > 0) {
+                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
                 listState.scrollToItem(0)
+                delay(120)
+                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
                 return@LaunchedEffect
             }
             delay(16L)
@@ -484,46 +513,41 @@ fun ChatView(
                             coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
                         },
                     )
+                    val chatChromeStyle = LocalPlatformStyle.current
+                    val composerImeLiftModifier =
+                        if (chatChromeStyle.isIOS) Modifier.imePadding() else Modifier
 
-                    val headerBlockHeight = topInset + 56.dp
                     /**
-                     * With [reverseLayout] = true, [PaddingValues.top] maps to the visual bottom of the
-                     * list (adjacent to the typing/composer block). Do not add [imePadding] on the
-                     * composer: the parent scaffold / UIKit layer already reserves keyboard space;
-                     * stacking IME insets here produced a visible gap (Android `adjustResize` + iOS).
+                     * Full-screen ambient mesh behind header + thread. Status bar padding lives on the
+                     * header row only.
+                     *
+                     * Android uses [android:windowSoftInputMode=adjustResize]: the decor already
+                     * shrinks for the IME, so [imePadding] on the composer would **double-count** the
+                     * keyboard height and leave a large gap. iOS keeps [imePadding] on the composer strip
+                     * only so the field stays above the keyboard without pushing the header off-screen.
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val messageContentModifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            // Prevent nested IME consumers (e.g. future imePadding) from double-counting
-                            // insets already reflected in the surrounding layout on iOS + Android.
-                            .consumeWindowInsets(WindowInsets.ime),
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
                         ChatAmbientMeshBackground(
                             connection = chatDetails.connection,
                             isHubNeutral = false,
                             modifier = Modifier.fillMaxSize(),
                         )
-
-                    // Match ConnectionsListView: list rows + composer are full width; only the top bar uses 20.dp gutters.
                     Column(modifier = Modifier.fillMaxSize()) {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(headerBlockHeight)
+                                .padding(top = topInset)
+                                .height(56.dp)
                                 .padding(horizontal = 20.dp)
                                 .testTag(ChatGlassHeaderPlateTestTag),
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .align(Alignment.BottomCenter)
-                                    .height(56.dp),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = onBackPressed) {
@@ -808,6 +832,19 @@ fun ChatView(
                             }
                         }
 
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        ) {
+
+                    Column(modifier = Modifier.fillMaxSize()) {
+
                     // Icebreaker Prompts Panel
                     if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
                         IcebreakerPanel(
@@ -975,7 +1012,9 @@ fun ChatView(
                         ) {
                             LazyColumn(
                                 state = listState,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .nestedScroll(dismissKeyboardOnUserMessageScroll),
                                 reverseLayout = true,
                                 contentPadding = PaddingValues(
                                     start = 12.dp,
@@ -1199,7 +1238,11 @@ fun ChatView(
                             }
                         }
 
-                        Box(modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(composerImeLiftModifier),
+                        ) {
                             ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                             ConnectionChatMessageComposer(
                                 viewModel = viewModel,
@@ -1210,6 +1253,9 @@ fun ChatView(
                                 mediaPickers = mediaPickers,
                             )
                         }
+                        }
+                    }
+                    }
                     }
                     }
                     }
