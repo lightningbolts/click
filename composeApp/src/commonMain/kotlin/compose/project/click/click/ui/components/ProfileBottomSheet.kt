@@ -2,7 +2,6 @@ package compose.project.click.click.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -52,6 +51,7 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -92,8 +92,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.api.ConnectionTabMessage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -162,7 +164,7 @@ fun ProfileBottomSheet(
             null -> {
                 if (mediaPreviewModel != null) {
                     mediaPreviewVisible = false
-                    delay(280)
+                    delay(360)
                     if (selectedMediaForPreview == null) {
                         mediaPreviewModel = null
                     }
@@ -342,55 +344,57 @@ fun ProfileBottomSheet(
 
     LaunchedEffect(effectiveMedia, connectionChatId, effectiveViewerUserId) {
         profileMediaResolving = true
+        resolvedMediaUrls = emptyMap()
+        resolvedMediaBitmaps = emptyMap()
+        resolvedAudioLocalPaths = emptyMap()
         try {
-        val resolvedUrls = mutableMapOf<String, String>()
-        val resolvedBitmaps = mutableMapOf<String, ImageBitmap>()
-        val resolvedAudioPaths = mutableMapOf<String, String>()
+            effectiveMedia.forEach { media ->
+                val direct = media.mediaUrl?.trim().orEmpty()
+                val fromPath = media.storagePath?.trim().orEmpty()
+                val url = when {
+                    direct.isNotBlank() -> direct
+                    fromPath.isNotBlank() -> connectionRepository.getSignedChatAttachmentUrl(fromPath).orEmpty()
+                    else -> ""
+                }
+                if (url.isBlank()) {
+                    delay(10)
+                    return@forEach
+                }
 
-        effectiveMedia.forEach { media ->
-            val direct = media.mediaUrl?.trim().orEmpty()
-            val fromPath = media.storagePath?.trim().orEmpty()
-            val url = when {
-                direct.isNotBlank() -> direct
-                fromPath.isNotBlank() -> connectionRepository.getSignedChatAttachmentUrl(fromPath).orEmpty()
-                else -> ""
-            }
-            if (url.isBlank()) return@forEach
-
-            if (media.isEncrypted && !connectionChatId.isNullOrBlank() && !effectiveViewerUserId.isNullOrBlank()) {
-                val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                    chatId = connectionChatId.orEmpty(),
-                    viewerUserId = effectiveViewerUserId,
-                    mediaUrl = url,
-                )
-                if (bytes != null && bytes.isNotEmpty()) {
-                    if (media.mediaType == ProfileSheetMediaType.Image) {
-                        val bitmap = runCatching { bytes.toImageBitmap() }.getOrNull()
-                        if (bitmap != null) {
-                            resolvedBitmaps[media.id] = bitmap
-                            return@forEach
-                        }
-                    } else {
-                        val ext = extensionFromMimeType(media.mimeType)
-                        val localPath = writeSecureChatAudioTempFile(media.id, bytes, ext)
-                        if (!localPath.isNullOrBlank()) {
-                            resolvedAudioPaths[media.id] = localPath
-                            return@forEach
+                if (media.isEncrypted && !connectionChatId.isNullOrBlank() && !effectiveViewerUserId.isNullOrBlank()) {
+                    val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                        chatId = connectionChatId.orEmpty(),
+                        viewerUserId = effectiveViewerUserId,
+                        mediaUrl = url,
+                    )
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        if (media.mediaType == ProfileSheetMediaType.Image) {
+                            val bitmap = runCatching { bytes.toImageBitmap() }.getOrNull()
+                            if (bitmap != null) {
+                                resolvedMediaBitmaps = resolvedMediaBitmaps + (media.id to bitmap)
+                                delay(14)
+                                return@forEach
+                            }
+                        } else {
+                            val ext = extensionFromMimeType(media.mimeType)
+                            val localPath = writeSecureChatAudioTempFile(media.id, bytes, ext)
+                            if (!localPath.isNullOrBlank()) {
+                                resolvedAudioLocalPaths = resolvedAudioLocalPaths + (media.id to localPath)
+                                delay(14)
+                                return@forEach
+                            }
                         }
                     }
                 }
+
+                if (media.isEncrypted) {
+                    delay(12)
+                    return@forEach
+                }
+
+                resolvedMediaUrls = resolvedMediaUrls + (media.id to url)
+                delay(14)
             }
-
-            if (media.mediaType == ProfileSheetMediaType.Audio && media.isEncrypted) {
-                return@forEach
-            }
-
-            resolvedUrls[media.id] = url
-        }
-
-        resolvedMediaUrls = resolvedUrls
-        resolvedMediaBitmaps = resolvedBitmaps
-        resolvedAudioLocalPaths = resolvedAudioPaths
         } finally {
             profileMediaResolving = false
         }
@@ -556,7 +560,8 @@ fun ProfileBottomSheet(
                     resolvedUrls = resolvedMediaUrls,
                     resolvedBitmaps = resolvedMediaBitmaps,
                     resolvedAudioLocalPaths = resolvedAudioLocalPaths,
-                    isLoading = profileTabsHydrating || profileMediaResolving,
+                    isLoading = profileTabsHydrating || (effectiveMedia.isEmpty() && profileMediaResolving),
+                    isResolvingMedia = profileMediaResolving,
                     onOpenMedia = { selectedMediaForPreview = it },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
@@ -573,7 +578,10 @@ fun ProfileBottomSheet(
                 when (media.mediaType) {
                     ProfileSheetMediaType.Image -> {
                         if (!mediaPreviewVisible) {
-                            previewImageFade.snapTo(0f)
+                            previewImageFade.animateTo(
+                                0f,
+                                tween(280, easing = FastOutSlowInEasing),
+                            )
                         } else if (bitmapForPreview != null) {
                             previewImageFade.snapTo(0f)
                             previewImageFade.animateTo(
@@ -594,8 +602,8 @@ fun ProfileBottomSheet(
                 val reveal by animateFloatAsState(
                     targetValue = if (mediaPreviewVisible) 1f else 0f,
                     animationSpec = tween(
-                        durationMillis = if (mediaPreviewVisible) 280 else 220,
-                        easing = if (mediaPreviewVisible) FastOutSlowInEasing else LinearOutSlowInEasing,
+                        durationMillis = 320,
+                        easing = FastOutSlowInEasing,
                     ),
                     label = "profile_media_preview",
                 )
@@ -688,6 +696,7 @@ fun ProfileBottomSheet(
                                         secureLoading = false,
                                         secureError = null,
                                         onRequestDecrypt = {},
+                                        mimeTypeHint = media.mimeType,
                                         modifier = Modifier.fillMaxWidth(),
                                         chromeKind = ChatAudioChromeKind.ProfileSurface,
                                     )
@@ -1061,6 +1070,7 @@ private fun MediaPanel(
     resolvedBitmaps: Map<String, ImageBitmap>,
     resolvedAudioLocalPaths: Map<String, String>,
     isLoading: Boolean,
+    isResolvingMedia: Boolean,
     onOpenMedia: (ProfileSheetMedia) -> Unit,
 ) {
     val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
@@ -1115,22 +1125,19 @@ private fun MediaPanel(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        if (isLoading) {
-            item(key = "media_tab_top_progress") {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    color = PrimaryBlue,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-            }
-        }
         items(imageRows, key = { row -> row.firstOrNull()?.id ?: "row" }) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { media ->
                     val bitmap = resolvedBitmaps[media.id]
                     val resolvedUrl = resolvedUrls[media.id] ?: media.mediaUrl
+                    val thumbUnlocking = media.isEncrypted && bitmap == null && isResolvingMedia
+                    val thumbReady = bitmap != null ||
+                        (!media.isEncrypted && !resolvedUrl.isNullOrBlank())
+                    val thumbReveal by animateFloatAsState(
+                        targetValue = if (thumbReady) 1f else if (thumbUnlocking) 0.55f else 0.38f,
+                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                        label = "media_thumb_${media.id}",
+                    )
                     val thumbInteraction = remember(media.id) { MutableInteractionSource() }
                     val thumbPressed by thumbInteraction.collectIsPressedAsState()
                     val thumbScale by animateFloatAsState(
@@ -1144,27 +1151,42 @@ private fun MediaPanel(
                         .graphicsLayer {
                             scaleX = thumbScale
                             scaleY = thumbScale
+                            alpha = thumbReveal
                         }
                         .clip(RoundedCornerShape(10.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable(
                             interactionSource = thumbInteraction,
                             indication = ripple(bounded = true, radius = 52.dp),
+                            enabled = thumbReady,
                         ) { onOpenMedia(media) }
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = thumbModifier,
-                        )
-                    } else {
-                        AsyncImage(
-                            model = resolvedUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = thumbModifier,
-                        )
+                    Box(modifier = thumbModifier, contentAlignment = Alignment.Center) {
+                        when {
+                            bitmap != null -> {
+                                Image(
+                                    bitmap = bitmap,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            thumbUnlocking -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 2.dp,
+                                    color = PrimaryBlue,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                )
+                            }
+                            !resolvedUrl.isNullOrBlank() && !media.isEncrypted -> {
+                                AsyncImage(
+                                    model = resolvedUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
                     }
                 }
                 repeat(3 - row.size) {
@@ -1183,32 +1205,77 @@ private fun MediaPanel(
                 val local = resolvedAudioLocalPaths[media.id]
                 val canPlay = !local.isNullOrBlank() ||
                     (stream?.isNotBlank() == true && !media.isEncrypted)
+                val unlockingAudio = media.isEncrypted && local.isNullOrBlank() && isResolvingMedia
+                val failedEncryptedAudio =
+                    media.isEncrypted && local.isNullOrBlank() && !isResolvingMedia
+                val rowReveal by animateFloatAsState(
+                    targetValue = if (canPlay || unlockingAudio || failedEncryptedAudio) 1f else 0.4f,
+                    animationSpec = tween(200, easing = FastOutSlowInEasing),
+                    label = "media_audio_${media.id}",
+                )
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = rowReveal },
                 ) {
-                    if (canPlay) {
-                        ChatAudioBubble(
-                            mediaUrl = stream.orEmpty(),
-                            durationSeconds = media.durationSeconds,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            accentColor = PrimaryBlue,
-                            isEncrypted = false,
-                            localFilePathForPlayback = local,
-                            secureLoading = false,
-                            secureError = null,
-                            onRequestDecrypt = {},
-                            modifier = Modifier.fillMaxWidth(),
-                            chromeKind = ChatAudioChromeKind.ProfileSurface,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.ErrorOutline,
-                            contentDescription = "Voice note unavailable",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier
-                                .padding(vertical = 10.dp)
-                                .size(36.dp),
-                        )
+                    when {
+                        canPlay -> {
+                            ChatAudioBubble(
+                                mediaUrl = stream.orEmpty(),
+                                durationSeconds = media.durationSeconds,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                accentColor = PrimaryBlue,
+                                isEncrypted = false,
+                                localFilePathForPlayback = local,
+                                secureLoading = false,
+                                secureError = null,
+                                onRequestDecrypt = {},
+                                mimeTypeHint = media.mimeType,
+                                modifier = Modifier.fillMaxWidth(),
+                                chromeKind = ChatAudioChromeKind.ProfileSurface,
+                            )
+                        }
+                        unlockingAudio -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(26.dp),
+                                    strokeWidth = 2.dp,
+                                    color = PrimaryBlue,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                )
+                                Text(
+                                    text = "Unlocking voice note…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        failedEncryptedAudio -> {
+                            Text(
+                                text = "This voice note could not be unlocked for playback.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
+                            )
+                        }
+                        else -> {
+                            Icon(
+                                imageVector = Icons.Outlined.ErrorOutline,
+                                contentDescription = "Voice note unavailable",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .padding(vertical = 10.dp)
+                                    .size(36.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -1381,10 +1448,14 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
         mimeType = meta.stringAt("original_mime_type")
             ?: meta.stringAt("mime_type")
             ?: meta.stringAt("content_type"),
-        isEncrypted = meta.booleanAt("is_encrypted_media")
-            ?: meta.booleanAt("isEncryptedMedia")
-            ?: meta.booleanAt("encrypted_media")
-            ?: false,
+        isEncrypted = Message(
+            id = id,
+            user_id = "",
+            content = content.trim().ifBlank { " " },
+            timeCreated = 0L,
+            messageType = lowerType,
+            metadata = metadata,
+        ).isEncryptedMedia(),
         mediaType = mediaType,
         captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() },
@@ -1412,10 +1483,14 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
         mimeType = meta?.stringAt("original_mime_type")
             ?: meta?.stringAt("mime_type")
             ?: meta?.stringAt("content_type"),
-        isEncrypted = meta?.booleanAt("is_encrypted_media")
-            ?: meta?.booleanAt("isEncryptedMedia")
-            ?: meta?.booleanAt("encrypted_media")
-            ?: false,
+        isEncrypted = Message(
+            id = id,
+            user_id = userId,
+            content = content.trim().ifBlank { " " },
+            timeCreated = timeCreated,
+            messageType = lowerType,
+            metadata = metadata,
+        ).isEncryptedMedia(),
         mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
         captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() },

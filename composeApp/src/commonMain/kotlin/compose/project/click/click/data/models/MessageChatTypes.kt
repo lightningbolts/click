@@ -73,12 +73,55 @@ fun Message.parsedMediaMetadata(): MessageMediaMetadata? {
 
 fun Message.mediaUrlOrNull(): String? = parsedMediaMetadata()?.mediaUrl
 
+/**
+ * click-web stores **plaintext** blobs under `chat-media/web/<userId>/...`. Those URLs must
+ * never be routed through ciphertext decrypt, including legacy rows that omitted MIME flags.
+ */
+fun mediaUrlLooksLikePlaintextWebChatMediaUpload(url: String?): Boolean {
+    val u = url?.lowercase() ?: return false
+    if (u.contains("/web/") || u.contains("%2fweb%2f")) return true
+    // click-web uses `chat-media/web/<userId>/...`; app ciphertext uses `chat-media/<userId>/<chatId>/...`.
+    val markers = listOf(
+        "/object/public/chat-media/",
+        "/object/sign/chat-media/",
+        "/storage/v1/object/public/chat-media/",
+        "/storage/v1/object/sign/chat-media/",
+    )
+    for (m in markers) {
+        val idx = u.indexOf(m)
+        if (idx < 0) continue
+        val tail = u.drop(idx + m.length).trimStart('/')
+        val firstSeg = tail.substringBefore('/').substringBefore('?')
+        if (firstSeg == "web") return true
+    }
+    return false
+}
+
 fun Message.isEncryptedMedia(): Boolean {
-    val root = metadata as? JsonObject ?: return false
-    return root["is_encrypted_media"]?.jsonPrimitive?.booleanOrNull == true ||
-    root["is_encrypted_media"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true ||
-    root["isEncryptedMedia"]?.jsonPrimitive?.booleanOrNull == true ||
-    root["isEncryptedMedia"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true
+    val root = metadata as? JsonObject
+    if (root != null) {
+        val explicitFalse =
+            root["is_encrypted_media"]?.jsonPrimitive?.booleanOrNull == false ||
+                root["is_encrypted_media"]?.jsonPrimitive?.contentOrNull?.equals("false", ignoreCase = true) == true ||
+                root["isEncryptedMedia"]?.jsonPrimitive?.booleanOrNull == false ||
+                root["isEncryptedMedia"]?.jsonPrimitive?.contentOrNull?.equals("false", ignoreCase = true) == true
+        if (explicitFalse) return false
+        val explicitTrue =
+            root["is_encrypted_media"]?.jsonPrimitive?.booleanOrNull == true ||
+                root["is_encrypted_media"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true ||
+                root["isEncryptedMedia"]?.jsonPrimitive?.booleanOrNull == true ||
+                root["isEncryptedMedia"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true) == true
+        if (explicitTrue) return true
+    }
+    if (mediaUrlLooksLikePlaintextWebChatMediaUpload(mediaUrlOrNull())) {
+        return false
+    }
+    // Early app builds uploaded ciphertext to chat-media for voice but omitted the metadata flag.
+    // Treat those rows as encrypted when we still have an original MIME hint; web/plain uploads
+    // either omit the hint or set is_encrypted_media=false explicitly.
+    return messageType.lowercase() == ChatMessageType.AUDIO &&
+        !mediaUrlOrNull().isNullOrBlank() &&
+        originalMimeTypeOrNull() != null
 }
 
 fun Message.originalMimeTypeOrNull(): String? {

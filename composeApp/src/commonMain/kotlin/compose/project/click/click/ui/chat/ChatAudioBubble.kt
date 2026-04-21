@@ -36,9 +36,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,6 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.data.models.mediaUrlLooksLikePlaintextWebChatMediaUpload
+import compose.project.click.click.getPlatform
 import compose.project.click.click.media.rememberChatAudioPlayer
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -142,6 +146,8 @@ fun ChatAudioBubble(
     secureLoading: Boolean,
     secureError: String?,
     onRequestDecrypt: () -> Unit,
+    /** From message metadata (`original_mime_type`) — used for iOS WebM/Opus web voices. */
+    mimeTypeHint: String? = null,
     modifier: Modifier = Modifier,
     /** @deprecated Use [chromeKind] instead; when true, maps to [ChatAudioChromeKind.ProfileSurface]. */
     compact: Boolean = false,
@@ -151,6 +157,12 @@ fun ChatAudioBubble(
 ) {
     val effectiveChrome = if (compact) ChatAudioChromeKind.ProfileSurface else chromeKind
     val palette = rememberVoiceChromePalette(effectiveChrome)
+    var pendingAutoPlayAfterDecrypt by remember(mediaUrl, isEncrypted) { mutableStateOf(false) }
+    LaunchedEffect(secureError) {
+        if (!secureError.isNullOrBlank()) {
+            pendingAutoPlayAfterDecrypt = false
+        }
+    }
     val hintMs = remember(durationSeconds) {
         durationSeconds?.takeIf { it > 0 }?.times(1000L) ?: 0L
     }
@@ -164,8 +176,8 @@ fun ChatAudioBubble(
     val playbackUrl = remember(mediaUrl, localFilePathForPlayback, needsDecryptBeforePlay) {
         when {
             needsDecryptBeforePlay -> "secure-audio-pending"
-            mediaUrl.isNotBlank() -> mediaUrl
             !localFilePathForPlayback.isNullOrBlank() -> "file://${localFilePathForPlayback.trim()}"
+            mediaUrl.isNotBlank() -> mediaUrl
             else -> "audio-empty"
         }
     }
@@ -228,7 +240,10 @@ fun ChatAudioBubble(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = onRequestDecrypt,
+                        onClick = {
+                            pendingAutoPlayAfterDecrypt = true
+                            onRequestDecrypt()
+                        },
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -269,11 +284,39 @@ fun ChatAudioBubble(
         return
     }
 
+    if (
+        shouldUseIosSafariForWebVoice(
+            isEncrypted = isEncrypted,
+            localFilePathForPlayback = localFilePathForPlayback,
+            mediaUrl = mediaUrl,
+            mimeTypeHint = mimeTypeHint,
+        )
+    ) {
+        SafariBackedWebVoiceRow(
+            palette = palette,
+            widthModifier = widthModifier,
+            mediaUrl = mediaUrl,
+            totalLabel = totalLabel,
+        )
+        return
+    }
+
     val player = rememberChatAudioPlayer(
         mediaUrl = playbackUrl,
         durationHintMs = hintMs,
         localFilePathForPlayback = localFilePathForPlayback,
     )
+    LaunchedEffect(secureLoading, localFilePathForPlayback, needsDecryptBeforePlay, pendingAutoPlayAfterDecrypt) {
+        if (needsDecryptBeforePlay) return@LaunchedEffect
+        if (secureLoading) return@LaunchedEffect
+        if (localFilePathForPlayback.isNullOrBlank()) return@LaunchedEffect
+        if (!pendingAutoPlayAfterDecrypt) return@LaunchedEffect
+        pendingAutoPlayAfterDecrypt = false
+        delay(72)
+        if (!player.isPlaying) {
+            player.togglePlayPause()
+        }
+    }
     val durationMs = remember(player.durationMs, hintMs) {
         when {
             player.durationMs > 0 -> player.durationMs
@@ -340,6 +383,115 @@ fun ChatAudioBubble(
                 )
                 Text(
                     text = endTimeLabel,
+                    style = timeStyle(),
+                    color = palette.timeColor,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * AVPlayer on iOS does not decode WebM/Opus from the web; Safari can play the same HTTPS URL.
+ * Signed Supabase URLs often omit `*.webm` and MIME metadata, so we also treat **plaintext
+ * click-web** chat-media objects as Safari-backed when AVPlayer is unlikely to handle them.
+ */
+private fun shouldUseIosSafariForWebVoice(
+    isEncrypted: Boolean,
+    localFilePathForPlayback: String?,
+    mediaUrl: String,
+    mimeTypeHint: String?,
+): Boolean {
+    if (isEncrypted) return false
+    if (!localFilePathForPlayback.isNullOrBlank()) return false
+    val m = mediaUrl.trim()
+    if (m.isBlank()) return false
+    if (!getPlatform().name.contains("ios", ignoreCase = true)) return false
+    val pathOnly = m.substringBefore('?').lowercase()
+    val mime = mimeTypeHint?.lowercase().orEmpty()
+    if (avPlayerLikelySupportsRemoteAudio(pathOnly, mime)) return false
+    val webmish =
+        pathOnly.endsWith(".webm") ||
+            "webm" in mime ||
+            mime.contains("codecs=opus") ||
+            ("opus" in mime && "audio" in mime)
+    if (webmish) return true
+    return mediaUrlLooksLikePlaintextWebChatMediaUpload(m)
+}
+
+/** Conservative: when true, keep in-app AVPlayer instead of opening Safari. */
+private fun avPlayerLikelySupportsRemoteAudio(pathOnly: String, mime: String): Boolean {
+    if (pathOnly.endsWith(".mp3") || pathOnly.endsWith(".m4a") || pathOnly.endsWith(".aac") ||
+        pathOnly.endsWith(".wav") || pathOnly.endsWith(".caf")
+    ) {
+        return true
+    }
+    if (mime.contains("mpeg") && !mime.contains("opus")) return true
+    if (mime.contains("aac")) return true
+    if (mime.contains("wav")) return true
+    if (mime.contains("x-m4a") || mime.contains("m4a")) return true
+    if (mime.contains("mp4") && "audio" in mime) return true
+    return false
+}
+
+@Composable
+private fun SafariBackedWebVoiceRow(
+    palette: VoiceChromePalette,
+    widthModifier: Modifier,
+    mediaUrl: String,
+    totalLabel: String,
+) {
+    val uriHandler = LocalUriHandler.current
+    val safeUrl = remember(mediaUrl) { mediaUrl.trim() }
+    VoiceNoteChromeShell(palette, widthModifier) {
+        Box(
+            modifier = Modifier
+                .size(chatBubbleScaledDp(60f))
+                .clip(CircleShape)
+                .border(1.dp, palette.playBorder, CircleShape)
+                .background(palette.playFill, CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { runCatching { uriHandler.openUri(safeUrl) } },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = "Play voice (opens in browser)",
+                tint = palette.playIcon,
+                modifier = Modifier.size(chatBubbleScaledDp(30f)),
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(chatBubbleScaledDp(12f))
+                    .clip(TrackShape)
+                    .background(palette.trackBg),
+            )
+            Spacer(Modifier.height(chatBubbleScaledDp(6f)))
+            Text(
+                text = "Tap play to open in Safari (web audio)",
+                style = chatBubbleReplyLabelStyle(),
+                color = palette.timeColor.copy(alpha = 0.88f),
+                maxLines = 2,
+            )
+            Spacer(Modifier.height(chatBubbleScaledDp(3f)))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "0:00",
+                    style = timeStyle(),
+                    color = palette.timeColor,
+                )
+                Text(
+                    text = totalLabel,
                     style = timeStyle(),
                     color = palette.timeColor,
                 )

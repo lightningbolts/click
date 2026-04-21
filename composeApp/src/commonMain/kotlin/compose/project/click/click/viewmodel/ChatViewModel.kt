@@ -2064,6 +2064,7 @@ class ChatViewModel(
                     buildJsonObject {
                         put("media_url", url)
                         put("original_mime_type", mimeType)
+                        put("is_encrypted_media", true)
                         if (durationSeconds != null) put("duration_seconds", durationSeconds)
                         put("reply_to_id", replyTarget.message.id)
                         put("reply_to_content", replySnippetForMessage(replyTarget.message))
@@ -2072,6 +2073,7 @@ class ChatViewModel(
                     buildJsonObject {
                         put("media_url", url)
                         put("original_mime_type", mimeType)
+                        put("is_encrypted_media", true)
                         if (durationSeconds != null) put("duration_seconds", durationSeconds)
                     }
                 }

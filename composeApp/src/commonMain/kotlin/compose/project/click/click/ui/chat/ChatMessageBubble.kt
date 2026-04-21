@@ -61,6 +61,7 @@ import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
+import compose.project.click.click.data.models.originalMimeTypeOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.theme.LightBlue
@@ -141,6 +142,7 @@ fun ChatMessageBubble(
         if (encryptedMedia && secureMediaHost != null && chatId != null && viewer != null) {
             when (mt) {
                 ChatMessageType.IMAGE -> secureMediaHost.ensureSecureChatImageLoaded(chatId, viewer, message)
+                ChatMessageType.AUDIO -> secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
             }
         }
     }
@@ -439,6 +441,7 @@ fun ChatMessageBubble(
                                         secureLoading = encryptedMedia && secureSt?.loading == true,
                                         secureError = if (encryptedMedia) secureSt?.error else null,
                                         onRequestDecrypt = onRequestSecureAudio,
+                                        mimeTypeHint = message.originalMimeTypeOrNull(),
                                         chromeKind = ChatAudioChromeKind.SentBubble,
                                         messageBubbleMaxWidth = bubbleContentMaxWidth,
                                     )
@@ -604,6 +607,7 @@ fun ChatMessageBubble(
                                         secureLoading = encryptedMedia && secureSt?.loading == true,
                                         secureError = if (encryptedMedia) secureSt?.error else null,
                                         onRequestDecrypt = onRequestSecureAudio,
+                                        mimeTypeHint = message.originalMimeTypeOrNull(),
                                         chromeKind = ChatAudioChromeKind.ReceivedBubble,
                                         messageBubbleMaxWidth = bubbleContentMaxWidth,
                                     )

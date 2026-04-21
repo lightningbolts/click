@@ -92,6 +92,14 @@ private class IosChatAudioPlayer(
     }
 
     private fun refreshProgressFromPlayer() {
+        val item = avPlayer.currentItem
+        if (item != null && item.error != null) {
+            if (isPlayingState.value) {
+                isPlayingState.value = false
+            }
+            avPlayer.pause()
+            return
+        }
         val t = avPlayer.currentTime()
         val sec = CMTimeGetSeconds(t)
         if (!sec.isNaN() && sec.isFinite()) {
@@ -160,7 +168,58 @@ private fun resolvePlaybackNsUrl(localPath: String?, remote: String): NSURL? {
     }
     val r = remote.trim()
     if (r.isNotEmpty()) {
-        return NSURL.URLWithString(r)
+        return nsUrlFromHttpString(r)
     }
     return null
 }
+
+private fun nsUrlFromHttpString(url: String): NSURL? {
+    val t = url.trim()
+    if (t.isEmpty()) return null
+    NSURL.URLWithString(t)?.let { return it }
+    // Foundation's `NSString.stringByAddingPercentEncoding...` / `NSCharacterSet` are not
+    // consistently exported in Kotlin/Native; re-encode only characters that typically make
+    // `NSURL.URLWithString` return null (spaces, controls, non-ASCII), preserving valid %HH.
+    val encoded = percentEncodeHttpUrlStringPreservingExistingPctEncoding(t)
+    return NSURL.URLWithString(encoded)
+}
+
+private fun percentEncodeHttpUrlStringPreservingExistingPctEncoding(s: String): String {
+    val hex = "0123456789ABCDEF"
+    return buildString(s.length + 16) {
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '%' && i + 2 < s.length && s[i + 1].isHexDigit() && s[i + 2].isHexDigit()) {
+                append(c).append(s[i + 1]).append(s[i + 2])
+                i += 3
+                continue
+            }
+            val mustEncode = c.isISOControl() ||
+                c == ' ' ||
+                c.code > 127 ||
+                c == '|' ||
+                c == '"' ||
+                c == '<' ||
+                c == '>' ||
+                c == '{' ||
+                c == '}' ||
+                c == '\\' ||
+                c == '`'
+            if (!mustEncode) {
+                append(c)
+                i++
+                continue
+            }
+            for (b in c.toString().encodeToByteArray()) {
+                append('%')
+                append(hex[b.toInt() shr 4 and 15])
+                append(hex[b.toInt() and 15])
+            }
+            i++
+        }
+    }
+}
+
+private fun Char.isHexDigit(): Boolean =
+    this in '0'..'9' || this in 'A'..'F' || this in 'a'..'f'
