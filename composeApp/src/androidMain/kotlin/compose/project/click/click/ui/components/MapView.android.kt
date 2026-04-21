@@ -1,9 +1,12 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.RectF
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -105,6 +108,9 @@ actual fun PlatformMap(
         )
     }
 
+    val density = LocalDensity.current
+    val clusterIconCache = remember { mutableMapOf<Int, BitmapDescriptor>() }
+
     GoogleMap(
         modifier = modifier,
         cameraPositionState = cameraPositionState,
@@ -116,17 +122,13 @@ actual fun PlatformMap(
     ) {
         // Render individual pins
         pins.forEach { pin ->
-            val markerColor = when (pin.timeState) {
-                TimeState.LIVE -> BitmapDescriptorFactory.HUE_AZURE
-                TimeState.RECENT -> BitmapDescriptorFactory.HUE_CYAN
-                TimeState.ARCHIVE -> BitmapDescriptorFactory.HUE_VIOLET
-            }
-            
+            val markerHue = pinHue(pin)
             Marker(
                 state = MarkerState(position = LatLng(pin.latitude, pin.longitude)),
                 title = pin.title,
                 alpha = pin.opacity,
-                icon = BitmapDescriptorFactory.defaultMarker(markerColor),
+                zIndex = pin.zIndex,
+                icon = BitmapDescriptorFactory.defaultMarker(markerHue),
                 onClick = {
                     onPinTapped(pin)
                     true // Consume the click
@@ -136,32 +138,66 @@ actual fun PlatformMap(
 
         // Render cluster pins
         clusters.forEach { cluster ->
-            val markerColor = if (cluster.hasLiveConnections) {
-                BitmapDescriptorFactory.HUE_AZURE
-            } else {
-                BitmapDescriptorFactory.HUE_ORANGE
+            val bmp = clusterIconCache.getOrPut(cluster.count) {
+                val px = with(density) { 52.dp.roundToPx() }
+                bitmapDescriptorFromClusterCount(cluster.count, px)
             }
-            
             Marker(
                 state = MarkerState(position = LatLng(cluster.latitude, cluster.longitude)),
-                title = "${cluster.count} memories",
-                icon = BitmapDescriptorFactory.defaultMarker(markerColor),
+                title = "${cluster.count}",
+                zIndex = cluster.zIndex,
+                icon = bmp,
                 onClick = {
                     onClusterTapped(cluster)
                     true
                 }
             )
-            
-            // Add a circle around clusters for visual effect
-            Circle(
-                center = LatLng(cluster.latitude, cluster.longitude),
-                radius = 100.0 * cluster.count, // Radius based on count
-                fillColor = Color(0x2200A3FF), // Semi-transparent blue
-                strokeColor = Color(0x6600A3FF),
-                strokeWidth = 2f
-            )
         }
     }
+}
+
+private fun pinHue(pin: MapPin): Float =
+    when (pin.kind) {
+        MapPinKind.CONNECTION -> when (pin.timeState) {
+            TimeState.LIVE -> BitmapDescriptorFactory.HUE_AZURE
+            TimeState.RECENT -> BitmapDescriptorFactory.HUE_CYAN
+            TimeState.ARCHIVE -> BitmapDescriptorFactory.HUE_VIOLET
+        }
+        MapPinKind.BEACON_SOUNDTRACK -> BitmapDescriptorFactory.HUE_GREEN
+        MapPinKind.BEACON_ALERT -> BitmapDescriptorFactory.HUE_RED
+        MapPinKind.BEACON_SOCIAL -> BitmapDescriptorFactory.HUE_MAGENTA
+        MapPinKind.BEACON_OTHER -> BitmapDescriptorFactory.HUE_YELLOW
+    }
+
+private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int): BitmapDescriptor {
+    val d = sizePx.coerceIn(48, 128)
+    val bmp = Bitmap.createBitmap(d, d, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(230, 0, 163, 255)
+        style = android.graphics.Paint.Style.FILL
+    }
+    val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(255, 255, 255, 255)
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = d * 0.06f
+    }
+    val r = RectF(0f, 0f, d.toFloat(), d.toFloat())
+    val pad = d * 0.06f
+    r.inset(pad, pad)
+    canvas.drawOval(r, fill)
+    canvas.drawOval(r, stroke)
+    val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        textAlign = android.graphics.Paint.Align.CENTER
+        textSize = d * 0.36f
+        isFakeBoldText = true
+    }
+    val label = if (count > 99) "99+" else count.toString()
+    val cx = d / 2f
+    val cy = d / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+    canvas.drawText(label, cx, cy, textPaint)
+    return BitmapDescriptorFactory.fromBitmap(bmp)
 }
 
 // Dark map style JSON matching the Glass & Neon aesthetic (Zinc-950 base)

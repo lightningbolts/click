@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -114,10 +114,16 @@ actual fun PlatformMap(
                 // Add individual pins with color based on time state
                 pins.forEach { pin ->
                     val ann = MKPointAnnotation()
-                    val displayTitle = when (pin.timeState) {
-                        TimeState.LIVE -> "🔵 ${pin.title}"
-                        TimeState.RECENT -> "💠 ${pin.title}"
-                        TimeState.ARCHIVE -> "⚪ ${pin.title}"
+                    val displayTitle = when (pin.kind) {
+                        MapPinKind.CONNECTION -> when (pin.timeState) {
+                            TimeState.LIVE -> "🔵 ${pin.title}"
+                            TimeState.RECENT -> "💠 ${pin.title}"
+                            TimeState.ARCHIVE -> "⚪ ${pin.title}"
+                        }
+                        MapPinKind.BEACON_SOUNDTRACK -> "🎵 ${pin.title}"
+                        MapPinKind.BEACON_ALERT -> "⚠️ ${pin.title}"
+                        MapPinKind.BEACON_SOCIAL -> "✨ ${pin.title}"
+                        MapPinKind.BEACON_OTHER -> "📍 ${pin.title}"
                     }
                     ann.setTitle(displayTitle)
                     ann.setSubtitle(pin.id)
@@ -129,8 +135,7 @@ actual fun PlatformMap(
                 // Add cluster pins
                 clusters.forEach { cluster ->
                     val ann = MKPointAnnotation()
-                    val icon = if (cluster.hasLiveConnections) "🔵" else "⭕"
-                    ann.setTitle("$icon ${cluster.count} memories")
+                    ann.setTitle("${cluster.count}")
                     ann.setSubtitle("cluster:${cluster.id}")
                     ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
                     map.addAnnotation(ann)
@@ -455,7 +460,14 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     @kotlinx.cinterop.ObjCSignatureOverride
     override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
         if (viewForAnnotation is MKUserLocation) return null
-        val identifier = "ClickPinMarker"
+        val pointAnn = viewForAnnotation as? MKPointAnnotation
+        val pin = pointAnn?.let { pa -> pinEntries.firstOrNull { it.first === pa }?.second }
+        val cluster = pointAnn?.let { pa -> clusterEntries.firstOrNull { it.first === pa }?.second }
+        val identifier = when {
+            cluster != null -> "ClickClusterMarker"
+            pin != null -> "ClickPinMarker"
+            else -> "ClickPinMarker"
+        }
         val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
         val view = (reused as? MKMarkerAnnotationView)
             ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
@@ -463,6 +475,33 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         view.canShowCallout = false
         view.setEnabled(true)
         view.setSelected(false, animated = false)
+        when {
+            cluster != null -> {
+                val label = if (cluster.count > 99) "99+" else cluster.count.toString()
+                view.glyphText = label
+                view.markerTintColor = if (cluster.hasLiveConnections) {
+                    UIColor.blueColor
+                } else {
+                    UIColor.orangeColor
+                }
+                view.zPriority = cluster.zIndex
+            }
+            pin != null -> {
+                view.glyphText = ""
+                view.markerTintColor = when (pin.kind) {
+                    MapPinKind.CONNECTION -> when (pin.timeState) {
+                        TimeState.LIVE -> UIColor.blueColor
+                        TimeState.RECENT -> UIColor.cyanColor
+                        TimeState.ARCHIVE -> UIColor.purpleColor
+                    }
+                    MapPinKind.BEACON_SOUNDTRACK -> UIColor.greenColor
+                    MapPinKind.BEACON_ALERT -> UIColor.redColor
+                    MapPinKind.BEACON_SOCIAL -> UIColor.magentaColor
+                    MapPinKind.BEACON_OTHER -> UIColor.yellowColor
+                }
+                view.zPriority = pin.zIndex
+            }
+        }
         return view
     }
 

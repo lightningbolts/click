@@ -3,7 +3,14 @@ package compose.project.click.click.data.models
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
 data class GeoLocation(
@@ -667,3 +674,158 @@ data class MessageWithUser(
     val user: User,
     val isSent: Boolean
 )
+
+// --- Map beacons (community pins: soundtracks, SOS, utilities, social vibes) ---
+
+/**
+ * Beacon category from API / DB `kind` column.
+ * Values are normalized to lowercase for comparison.
+ */
+enum class MapBeaconKind(val apiValue: String) {
+    SOUNDTRACK("soundtrack"),
+    SOS("sos"),
+    HAZARD("hazard"),
+    UTILITY("utility"),
+    STUDY("study"),
+    SOCIAL_VIBE("social_vibe"),
+    OTHER("other"),
+    ;
+
+    companion object {
+        fun fromRaw(value: String?): MapBeaconKind {
+            val v = value?.trim()?.lowercase().orEmpty()
+            return entries.firstOrNull { it.apiValue == v }
+                ?: when {
+                    v.contains("sound") || v == "music" -> SOUNDTRACK
+                    v.contains("sos") || v.contains("emergency") -> SOS
+                    v.contains("hazard") || v.contains("danger") -> HAZARD
+                    v.contains("util") || v.contains("amenity") -> UTILITY
+                    v.contains("study") -> STUDY
+                    v.contains("social") || v.contains("vibe") -> SOCIAL_VIBE
+                    else -> OTHER
+                }
+        }
+    }
+}
+
+/**
+ * Parsed JSONB `metadata` for map beacons (flexible keys).
+ */
+data class MapBeaconMetadata(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val musicUrl: String? = null,
+    val description: String? = null,
+    val raw: JsonObject? = null,
+)
+
+private val beaconMetadataJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
+
+fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
+    if (element == null) return MapBeaconMetadata()
+    val obj = element as? JsonObject ?: return MapBeaconMetadata()
+    fun str(vararg keys: String): String? {
+        for (k in keys) {
+            val p = obj[k] as? JsonPrimitive ?: continue
+            val s = p.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            if (s != null) return s
+        }
+        return null
+    }
+    return MapBeaconMetadata(
+        title = str("title", "track_title", "name", "track"),
+        artist = str("artist", "track_artist"),
+        album = str("album"),
+        musicUrl = str("music_url", "url", "link", "spotify_url", "apple_music_url"),
+        description = str("description", "text", "body", "message"),
+        raw = obj,
+    )
+}
+
+@Serializable
+data class MapBeaconInsert(
+    val kind: String,
+    val lat: Double,
+    val lon: Double,
+    val metadata: JsonObject? = null,
+)
+
+/**
+ * One row from `public.map_beacons` (or Edge Function projection).
+ */
+data class MapBeacon(
+    val id: String,
+    val kind: MapBeaconKind,
+    val latitude: Double,
+    val longitude: Double,
+    val metadata: MapBeaconMetadata,
+    val createdByUserId: String? = null,
+    val createdAtEpochMs: Long? = null,
+)
+
+fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
+    return when (element) {
+        is JsonArray -> element.mapNotNull { parseMapBeaconRow(it) }
+        is JsonObject -> {
+            val single = parseMapBeaconRow(element)
+            if (single != null) listOf(single) else emptyList()
+        }
+        is JsonPrimitive -> {
+            val text = element.contentOrNull?.trim().orEmpty()
+            if (text.isEmpty()) emptyList()
+            else parseMapBeaconRows(beaconMetadataJson.parseToJsonElement(text))
+        }
+        else -> emptyList()
+    }
+}
+
+private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
+    val obj = element as? JsonObject ?: return null
+    fun dbl(vararg keys: String): Double? {
+        for (k in keys) {
+            when (val v = obj[k]) {
+                is JsonPrimitive -> v.contentOrNull?.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { return it }
+                else -> continue
+            }
+        }
+        return null
+    }
+    fun strKey(vararg keys: String): String? {
+        for (k in keys) {
+            val p = obj[k] as? JsonPrimitive
+            val s = p?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            if (s != null) return s
+        }
+        return null
+    }
+    val id = strKey("id", "beacon_id") ?: return null
+    val kindRaw = strKey("kind", "type", "category")
+    val kind = MapBeaconKind.fromRaw(kindRaw)
+    val lat = dbl("lat", "latitude") ?: return null
+    val lon = dbl("lon", "longitude", "lng") ?: return null
+    val metaEl = obj["metadata"] ?: obj["meta"]
+    val meta = parseMapBeaconMetadata(metaEl as? JsonElement)
+    val createdBy = strKey("created_by", "user_id", "author_id")
+    val createdAt = strKey("created_at")?.let { parseEpochMs(it) }
+        ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+    return MapBeacon(
+        id = id,
+        kind = kind,
+        latitude = lat,
+        longitude = lon,
+        metadata = meta,
+        createdByUserId = createdBy,
+        createdAtEpochMs = createdAt,
+    )
+}
+
+private fun parseEpochMs(value: String): Long? {
+    val n = value.toLongOrNull()
+    if (n != null) return n
+    // ISO-8601 not parsed here; optional enhancement
+    return null
+}

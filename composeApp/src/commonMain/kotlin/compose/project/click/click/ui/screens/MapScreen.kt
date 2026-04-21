@@ -1,9 +1,11 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +16,9 @@ import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -21,25 +26,30 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.components.AdaptiveButton
-import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.LiquidGlassPill
-import compose.project.click.click.ui.components.PlatformMap
-import compose.project.click.click.ui.components.MapPin
-import compose.project.click.click.ui.components.MapClusterPin
-import compose.project.click.click.ui.components.toClusterPin
-import compose.project.click.click.ui.components.ProfileBottomSheet
-import compose.project.click.click.ui.components.ProfileSheetBadge
-import compose.project.click.click.ui.components.ProfileSheetState
-import compose.project.click.click.ui.components.ProfileSheetTimelineItem
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileSheetTimelineItem // pragma: allowlist secret
 import androidx.compose.ui.graphics.graphicsLayer
-import compose.project.click.click.ui.utils.*
+import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.viewmodel.MapViewModel
-import compose.project.click.click.viewmodel.MapState
-import compose.project.click.click.viewmodel.MapSelection
-import compose.project.click.click.data.models.User
+import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.util.openMusicStreamingUrl // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 /**
@@ -66,6 +76,8 @@ fun MapScreen(
     val selection by viewModel.selection.collectAsState()
     val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
     val cameraTarget by viewModel.cameraTarget.collectAsState()
+    val layerFilters by viewModel.selectedLayerFilters.collectAsState()
+    val beaconInsertError by viewModel.beaconInsertError.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
@@ -90,12 +102,22 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(beaconInsertError) {
+        beaconInsertError?.let { msg ->
+            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            viewModel.clearBeaconInsertError()
+        }
+    }
+
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+    val beaconSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
     // Pin taps update this directly (in addition to the view-model selection state) so
     // sheet visibility is decoupled from any race in the selection StateFlow.
     var selectedProfileId by remember { mutableStateOf<String?>(null) }
+    var showBeaconDropSheet by remember { mutableStateOf(false) }
     val showBottomSheet = selectedProfileId != null && selection is MapSelection.ConnectionSelected
+    val showBeaconDetailSheet = selection is MapSelection.BeaconSelected
 
     LaunchedEffect(selection) {
         val sel = selection
@@ -111,7 +133,7 @@ fun MapScreen(
     // whole view gains a subtle depth effect. Kept intentionally small (-56.dp) to
     // avoid fighting the map's own gesture handling.
     val parallaxOffset by animateFloatAsState(
-        targetValue = if (showBottomSheet) -56f else 0f,
+        targetValue = if (showBottomSheet || showBeaconDetailSheet) -56f else 0f,
         animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
         label = "profile_sheet_map_parallax",
     )
@@ -142,18 +164,10 @@ fun MapScreen(
                         ghostMode = ghostModeEnabled,
                         cameraTarget = cameraTarget,
                         onPinTapped = { pin ->
-                            selectedProfileId = pin.id
-                            val points = when (val rd = renderData) {
-                                is MapRenderData.IndividualPins -> rd.points
-                                is MapRenderData.Clusters -> rd.clusters.flatMap { it.points }
+                            if (pin.kind == MapPinKind.CONNECTION) {
+                                selectedProfileId = pin.id
                             }
-                            points.find { it.connection.id == pin.id }?.let { p ->
-                                viewModel.onConnectionTapped(p)
-                                // Explicit state mutation per directive C12: the pin
-                                // tap *itself* opens the new ProfileBottomSheet rather
-                                // than relying solely on the selection StateFlow.
-                                selectedProfileId = p.connection.id
-                            }
+                            viewModel.onMapPinTapped(pin)
                         },
                         onClusterTapped = { clusterPin ->
                             viewModel.onClusterTappedFromMap(clusterPin.id)
@@ -183,6 +197,27 @@ fun MapScreen(
                         )
                     }
 
+                    MapLayerFilterRow(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            .padding(top = 12.dp),
+                        selected = layerFilters,
+                        onToggle = { viewModel.toggleLayerFilter(it) },
+                    )
+
+                    FloatingActionButton(
+                        onClick = { showBeaconDropSheet = true },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 16.dp, bottom = 24.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
+                    }
+
                     ZoomControls(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
@@ -192,6 +227,46 @@ fun MapScreen(
                     )
                 }
             }
+        }
+    }
+
+    if (showBeaconDropSheet) {
+        AdaptiveBottomSheet(
+            onDismissRequest = { showBeaconDropSheet = false },
+            adaptiveSheetState = beaconSheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+        ) {
+            BeaconDropSheetContent(
+                errorMessage = beaconInsertError,
+                onDismissError = { viewModel.clearBeaconInsertError() },
+                onSubmit = { kind, text ->
+                    viewModel.submitBeaconDrop(kind, text) { ok ->
+                        if (ok) showBeaconDropSheet = false
+                    }
+                },
+            )
+        }
+    }
+
+    if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
+        val beaconSel = selection as MapSelection.BeaconSelected
+        AdaptiveBottomSheet(
+            onDismissRequest = { viewModel.clearSelection() },
+            adaptiveSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+        ) {
+            BeaconDetailSheetContent(
+                beacon = beaconSel.beacon,
+                distanceMeters = beaconSel.distanceMeters,
+                onListen = {
+                    beaconSel.beacon.metadata.musicUrl?.let { openMusicStreamingUrl(it) }
+                },
+                onDismiss = { viewModel.clearSelection() },
+            )
         }
     }
 
@@ -277,6 +352,123 @@ private fun buildProfileSheetState(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapLayerFilterRow(
+    modifier: Modifier = Modifier,
+    selected: Set<MapLayerFilter>,
+    onToggle: (MapLayerFilter) -> Unit,
+) {
+    LazyRow(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(MapLayerFilter.entries.toList()) { filter ->
+            val isSelected = when (filter) {
+                MapLayerFilter.ALL -> MapLayerFilter.ALL in selected
+                else -> filter in selected
+            }
+            LiquidGlassPill(
+                cornerRadiusDp = 20,
+                modifier = Modifier.height(40.dp),
+            ) {
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onToggle(filter) },
+                    label = { Text(filter.label, style = MaterialTheme.typography.labelMedium) },
+                    border = null,
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Color.Transparent,
+                        selectedContainerColor = PrimaryBlue.copy(alpha = 0.22f),
+                        labelColor = MaterialTheme.colorScheme.onSurface,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BeaconDetailSheetContent(
+    beacon: MapBeacon,
+    distanceMeters: Double?,
+    onListen: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    LiquidGlassPill(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        cornerRadiusDp = 20,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when (beacon.kind) {
+                MapBeaconKind.SOUNDTRACK -> {
+                    Text(
+                        text = beacon.metadata.title ?: "Soundtrack",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    val artist = beacon.metadata.artist
+                    if (!artist.isNullOrBlank()) {
+                        Text(
+                            text = artist,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    val url = beacon.metadata.musicUrl
+                    if (!url.isNullOrBlank()) {
+                        Button(
+                            onClick = onListen,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Listen")
+                        }
+                    }
+                }
+                else -> {
+                    Text(
+                        text = beacon.metadata.description?.trim().orEmpty().ifBlank { "Community beacon" },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    distanceMeters?.let { d ->
+                        Text(
+                            text = formatBeaconDistance(d),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+private fun formatBeaconDistance(meters: Double): String {
+    if (!meters.isFinite() || meters < 0) return ""
+    return if (meters < 1000) {
+        "${meters.toInt()} m away"
+    } else {
+        val km = meters / 1000.0
+        val tenths = ((km * 10.0) + 0.5).toInt().coerceAtLeast(1)
+        val whole = tenths / 10
+        val frac = tenths % 10
+        "$whole.$frac km away"
+    }
+}
+
 @Composable
 private fun MemoriesPillContent(
     memories: Int,
@@ -350,7 +542,11 @@ private fun MapContent(
     onCameraAnimationComplete: () -> Unit,
 ) {
     val pins = when (renderData) {
-        is MapRenderData.IndividualPins -> renderData.points.map { MapPin.fromConnectionPoint(it) }
+        is MapRenderData.IndividualPins -> {
+            val conn = renderData.points.map { MapPin.fromConnectionPoint(it) }
+            val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
+            (conn + bc).sortedByDescending { it.zIndex }
+        }
         is MapRenderData.Clusters -> emptyList()
     }
 

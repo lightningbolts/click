@@ -1,7 +1,9 @@
-package compose.project.click.click.ui.utils
+package compose.project.click.click.ui.utils // pragma: allowlist secret
 
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.GeoLocation
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.GeoLocation // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlin.math.*
 
@@ -81,17 +83,26 @@ data class MapCluster(
     val centerLat: Double,
     val centerLon: Double,
     val points: List<ConnectionMapPoint>,
-    val count: Int = points.size,
+    val beaconPoints: List<MapBeacon> = emptyList(),
+    val count: Int = points.size + beaconPoints.size,
     val semanticIcon: SemanticIcon = SemanticIcon.DEFAULT
 ) {
     val boundingBox: BoundingBox
         get() {
-            val minLat = points.minOfOrNull { it.latitude } ?: centerLat
-            val maxLat = points.maxOfOrNull { it.latitude } ?: centerLat
-            val minLon = points.minOfOrNull { it.longitude } ?: centerLon
-            val maxLon = points.maxOfOrNull { it.longitude } ?: centerLon
+            val allLats = points.map { it.latitude } + beaconPoints.map { it.latitude }
+            val allLons = points.map { it.longitude } + beaconPoints.map { it.longitude }
+            val minLat = allLats.minOrNull() ?: centerLat
+            val maxLat = allLats.maxOrNull() ?: centerLat
+            val minLon = allLons.minOrNull() ?: centerLon
+            val maxLon = allLons.maxOrNull() ?: centerLon
             return BoundingBox(minLat, maxLat, minLon, maxLon)
         }
+}
+
+/** Single map item for unified clustering (connections + beacons). */
+private sealed class MapClusterMember {
+    data class Conn(val point: ConnectionMapPoint) : MapClusterMember()
+    data class Bcn(val beacon: MapBeacon) : MapClusterMember()
 }
 
 /**
@@ -112,7 +123,10 @@ data class BoundingBox(
  */
 sealed class MapRenderData {
     data class Clusters(val clusters: List<MapCluster>) : MapRenderData()
-    data class IndividualPins(val points: List<ConnectionMapPoint>) : MapRenderData()
+    data class IndividualPins(
+        val points: List<ConnectionMapPoint>,
+        val beacons: List<MapBeacon> = emptyList(),
+    ) : MapRenderData()
 }
 
 /**
@@ -200,42 +214,56 @@ private fun formatTimestamp(timestamp: Long): String {
 fun clusterPoints(
     points: List<ConnectionMapPoint>,
     clusterRadiusMeters: Double = 500.0
+): List<MapCluster> =
+    clusterUnifiedMembers(
+        members = points.map { MapClusterMember.Conn(it) },
+        clusterRadiusMeters = clusterRadiusMeters,
+    )
+
+private fun clusterUnifiedMembers(
+    members: List<MapClusterMember>,
+    clusterRadiusMeters: Double,
 ): List<MapCluster> {
-    if (points.isEmpty()) return emptyList()
-    
+    if (members.isEmpty()) return emptyList()
+
     val clusters = mutableListOf<MapCluster>()
     val assigned = mutableSetOf<String>()
-    
-    for (point in points) {
-        if (point.connection.id in assigned) continue
-        
-        // Find all points within radius
-        val nearbyPoints = points.filter { other ->
-            other.connection.id !in assigned &&
-            haversineDistance(
-                point.latitude, point.longitude,
-                other.latitude, other.longitude
-            ) <= clusterRadiusMeters
+
+    fun memberId(m: MapClusterMember): String = when (m) {
+        is MapClusterMember.Conn -> "c:${m.point.connection.id}"
+        is MapClusterMember.Bcn -> "b:${m.beacon.id}"
+    }
+
+    fun latLon(m: MapClusterMember): Pair<Double, Double> = when (m) {
+        is MapClusterMember.Conn -> m.point.latitude to m.point.longitude
+        is MapClusterMember.Bcn -> m.beacon.latitude to m.beacon.longitude
+    }
+
+    for (seed in members) {
+        val sid = memberId(seed)
+        if (sid in assigned) continue
+
+        val seedLat = latLon(seed).first
+        val seedLon = latLon(seed).second
+        val nearby = members.filter { other ->
+            memberId(other) !in assigned &&
+                haversineDistance(seedLat, seedLon, latLon(other).first, latLon(other).second) <= clusterRadiusMeters
         }
-        
-        // Mark as assigned
-        nearbyPoints.forEach { assigned.add(it.connection.id) }
-        
-        // Use cluster centroid for a spatially accurate zoomed-out position.
-        val centerLat = nearbyPoints.map { it.latitude }.average()
-        val centerLon = nearbyPoints.map { it.longitude }.average()
-        
-        // Determine the dominant semantic icon for this cluster
-        val iconCounts = nearbyPoints
+        nearby.forEach { assigned.add(memberId(it)) }
+
+        val connPts = nearby.filterIsInstance<MapClusterMember.Conn>().map { it.point }
+        val bcns = nearby.filterIsInstance<MapClusterMember.Bcn>().map { it.beacon }
+
+        val centerLat = nearby.map { latLon(it).first }.average()
+        val centerLon = nearby.map { latLon(it).second }.average()
+
+        val iconCounts = connPts
             .map { parseSemanticIcon(it.connection.semanticLocation) }
             .groupBy { it }
             .mapValues { it.value.size }
         val dominantIcon = iconCounts.maxByOrNull { it.value }?.key ?: SemanticIcon.DEFAULT
 
-        // Stable id from member connections so cluster identity survives recomposition / zoom
-        // nudges. Index-based ids (`cluster_0`, …) reshuffle when clustering order changes,
-        // which broke MapScreen's `find { it.id == clusterPin.id }` and dropped zoom-to-pins.
-        val memberKey = nearbyPoints.map { it.connection.id }.sorted().joinToString("|")
+        val memberKey = nearby.map { memberId(it) }.sorted().joinToString("|")
         val stableId = "cluster_${abs(memberKey.hashCode())}"
 
         clusters.add(
@@ -243,12 +271,13 @@ fun clusterPoints(
                 id = stableId,
                 centerLat = centerLat,
                 centerLon = centerLon,
-                points = nearbyPoints,
-                semanticIcon = dominantIcon
-            )
+                points = connPts,
+                beaconPoints = bcns,
+                semanticIcon = dominantIcon,
+            ),
         )
     }
-    
+
     return clusters
 }
 
@@ -262,6 +291,7 @@ fun clusterPoints(
  */
 fun determineMapRenderData(
     connections: List<Connection>,
+    beacons: List<MapBeacon>,
     zoomLevel: Double,
     clusterThreshold: Double = 12.0
 ): MapRenderData {
@@ -272,21 +302,31 @@ fun determineMapRenderData(
             null
         }
     }
-    
+
     return if (zoomLevel >= clusterThreshold) {
-        MapRenderData.IndividualPins(points)
+        MapRenderData.IndividualPins(points = points, beacons = beacons)
     } else {
-        // Adjust cluster radius based on zoom
-        // At lower zoom levels, use larger radius
         val clusterRadius = when {
-            zoomLevel < 6 -> 10000.0  // 10km
-            zoomLevel < 8 -> 5000.0   // 5km
-            zoomLevel < 10 -> 1000.0  // 1km
-            else -> 500.0             // 500m
+            zoomLevel < 6 -> 10000.0
+            zoomLevel < 8 -> 5000.0
+            zoomLevel < 10 -> 1000.0
+            else -> 500.0
         }
-        MapRenderData.Clusters(clusterPoints(points, clusterRadius))
+        val members = buildList {
+            points.forEach { add(MapClusterMember.Conn(it)) }
+            beacons.forEach { add(MapClusterMember.Bcn(it)) }
+        }
+        MapRenderData.Clusters(clusterUnifiedMembers(members, clusterRadius))
     }
 }
+
+/** Hazard / SOS pins must draw above generic markers (native map z-index). */
+fun beaconZIndex(beacon: MapBeacon): Float =
+    when (beacon.kind) {
+        MapBeaconKind.HAZARD, MapBeaconKind.SOS -> 10_000f
+        MapBeaconKind.SOUNDTRACK -> 100f
+        else -> 50f
+    }
 
 /**
  * Haversine formula to calculate distance between two coordinates in meters
