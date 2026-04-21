@@ -68,7 +68,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -141,7 +140,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -274,6 +272,12 @@ fun ChatView(
      */
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
+    /**
+     * When set (iOS chat overlay), matches [InteractiveSwipeBackContainer]'s drag pixels so the IME
+     * can hide after a short rightward threshold while the container's [graphicsLayer] carries the
+     * horizontal slide — avoid stacking a redundant [Modifier.offset] for the same translation.
+     */
+    parentInteractiveBackSwipePx: MutableFloatState? = null,
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
@@ -300,6 +304,8 @@ fun ChatView(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val keyboardControllerState = rememberUpdatedState(keyboardController)
     /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
     /**
@@ -322,6 +328,21 @@ fun ChatView(
                     focusManagerState.value.clearFocus()
                 }
                 return Offset.Zero
+            }
+        }
+    }
+
+    var imeClearedForInteractiveBackSwipe by remember { mutableStateOf(false) }
+    LaunchedEffect(parentInteractiveBackSwipePx) {
+        val ref = parentInteractiveBackSwipePx ?: return@LaunchedEffect
+        snapshotFlow { ref.floatValue }.collect { offset ->
+            when {
+                offset > 20f && !imeClearedForInteractiveBackSwipe -> {
+                    imeClearedForInteractiveBackSwipe = true
+                    keyboardControllerState.value?.hide()
+                    focusManagerState.value.clearFocus()
+                }
+                offset <= 0f -> imeClearedForInteractiveBackSwipe = false
             }
         }
     }

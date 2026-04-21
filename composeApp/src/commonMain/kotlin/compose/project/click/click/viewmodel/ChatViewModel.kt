@@ -540,7 +540,10 @@ class ChatViewModel(
         if (!isForced && _chatListState.value is ChatListState.Success) return
 
         viewModelScope.launch {
-            if (isForced) {
+            // Clearing junction caches during an in-session refresh (e.g. iOS tap-back from a
+            // thread) can yield transient empty/stale combine steps and make Archived tab counts
+            // flash to zero. Keep caches while we already have a painted inbox; cold paths still clear.
+            if (isForced && _chatListState.value !is ChatListState.Success) {
                 chatRepository.clearChatListLocalCaches()
             }
             val cachedConnections = AppDataManager.connections.value
@@ -569,10 +572,9 @@ class ChatViewModel(
             try {
                 val directChatsFlow: Flow<Pair<List<ChatWithDetails>, Boolean>> = flow {
                     val directChats = chatRepository.fetchDirectUserChatsWithDetails(userId)
-                    // Emit direct 1:1 rows first; archived can merge in a second pass.
-                    emit(directChats.distinctBy { it.connection.id } to true)
-
                     val archivedChats = chatRepository.fetchArchivedUserChatsWithDetails(userId)
+                    // Single emission: an intermediate "direct-only" payload made the Archived tab
+                    // count flicker to 0 until the archived fetch completed (tap-back + loadChats path).
                     emit((directChats + archivedChats).distinctBy { it.connection.id } to true)
                 }.onStart {
                     emit(emptyList<ChatWithDetails>() to false)

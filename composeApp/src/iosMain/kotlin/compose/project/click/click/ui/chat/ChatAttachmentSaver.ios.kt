@@ -14,7 +14,7 @@ import platform.Foundation.NSUserDomainMask
 import platform.Foundation.create
 import platform.Foundation.writeToFile
 import platform.UIKit.UIActivityViewController
-import platform.UIKit.UIApplication
+import compose.project.click.click.ui.utils.iosTopViewControllerForPresentation
 import platform.UIKit.UIViewController
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
@@ -91,11 +91,4 @@ private fun presentShareSheetForFile(url: NSURL) {
     root.presentViewController(sheet, animated = true, completion = null)
 }
 
-private fun topMostViewController(): UIViewController? {
-    val keyWindow = UIApplication.sharedApplication.keyWindow ?: return null
-    var vc: UIViewController? = keyWindow.rootViewController
-    while (vc?.presentedViewController != null) {
-        vc = vc.presentedViewController
-    }
-    return vc
-}
+private fun topMostViewController(): UIViewController? = iosTopViewControllerForPresentation()

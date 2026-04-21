@@ -90,9 +90,8 @@ actual fun rememberChatMediaPickers(
                 val results = didFinishPicking.mapNotNull { it as? PHPickerResult }
                 if (results.isEmpty()) return
 
-                fun loadAt(index: Int) {
-                    if (index >= results.size) return
-                    val provider = results[index].itemProvider
+                results.forEach { result ->
+                    val provider = result.itemProvider
                     provider.loadDataRepresentationForTypeIdentifier(UTTypeImage.identifier) { data, err ->
                         val nsErr = err as? NSError
                         if (nsErr != null) {
@@ -104,7 +103,6 @@ actual fun rememberChatMediaPickers(
                                 onMediaAccessBlockedState(
                                     "Cannot load image from iCloud. Please try a local photo.",
                                 )
-                                loadAt(index + 1)
                             }
                             return@loadDataRepresentationForTypeIdentifier
                         }
@@ -113,7 +111,6 @@ actual fun rememberChatMediaPickers(
                                 onMediaAccessBlockedState(
                                     "Cannot load image from iCloud. Please try a local photo.",
                                 )
-                                loadAt(index + 1)
                             }
                             return@loadDataRepresentationForTypeIdentifier
                         }
@@ -126,11 +123,9 @@ actual fun rememberChatMediaPickers(
                                     "Couldn't read that photo. Enable Photos access for Click in Settings.",
                                 )
                             }
-                            loadAt(index + 1)
                         }
                     }
                 }
-                loadAt(0)
             }
         }
     }

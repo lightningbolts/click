@@ -261,6 +261,7 @@ fun ConnectionsScreen(
                                 onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
                                 integrateTimestampPeekWithSwipeBackContainer = true,
                                 onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
+                                parentInteractiveBackSwipePx = iosChatSwipeDragPx,
                             )
                         }
                     )

@@ -1,7 +1,14 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -36,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
@@ -43,10 +52,10 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SecondaryTabRow
@@ -54,6 +63,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -72,12 +82,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
@@ -103,6 +116,7 @@ import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
@@ -140,6 +154,26 @@ fun ProfileBottomSheet(
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var selectedMediaForPreview by remember { mutableStateOf<ProfileSheetMedia?>(null) }
+    var mediaPreviewVisible by remember { mutableStateOf(false) }
+    var mediaPreviewModel by remember { mutableStateOf<ProfileSheetMedia?>(null) }
+
+    LaunchedEffect(selectedMediaForPreview) {
+        when (val m = selectedMediaForPreview) {
+            null -> {
+                if (mediaPreviewModel != null) {
+                    mediaPreviewVisible = false
+                    delay(280)
+                    if (selectedMediaForPreview == null) {
+                        mediaPreviewModel = null
+                    }
+                }
+            }
+            else -> {
+                mediaPreviewModel = m
+                mediaPreviewVisible = true
+            }
+        }
+    }
     val selectedUserId = state.userId?.trim().orEmpty()
     val connectionRepository = remember { ConnectionRepository() }
     val appViewerUserId = AppDataManager.currentUser.collectAsState().value?.id?.trim()
@@ -165,8 +199,12 @@ fun ProfileBottomSheet(
     var resolvedAudioLocalPaths by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<Map<String, String>>(emptyMap())
     }
+    var profileTabsHydrating by remember { mutableStateOf(false) }
+    var profileMediaResolving by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedUserId, state.connectionId, effectiveViewerUserId) {
+        profileTabsHydrating = true
+        try {
         val connectionId = state.connectionId?.trim().orEmpty()
         if (connectionId.isBlank()) {
             connectionLocalMessages = emptyList()
@@ -210,6 +248,9 @@ fun ProfileBottomSheet(
         connectionTabFiles = tabsPayload?.files
             ?.map { it.toProfileSheetFileFromTab() }
             .orEmpty()
+        } finally {
+            profileTabsHydrating = false
+        }
     }
 
     val profileLocalMessages = remember(state.localMessages, connectionLocalMessages) {
@@ -300,6 +341,8 @@ fun ProfileBottomSheet(
     }
 
     LaunchedEffect(effectiveMedia, connectionChatId, effectiveViewerUserId) {
+        profileMediaResolving = true
+        try {
         val resolvedUrls = mutableMapOf<String, String>()
         val resolvedBitmaps = mutableMapOf<String, ImageBitmap>()
         val resolvedAudioPaths = mutableMapOf<String, String>()
@@ -348,6 +391,9 @@ fun ProfileBottomSheet(
         resolvedMediaUrls = resolvedUrls
         resolvedMediaBitmaps = resolvedBitmaps
         resolvedAudioLocalPaths = resolvedAudioPaths
+        } finally {
+            profileMediaResolving = false
+        }
     }
 
     val handleOpenLink: (String) -> Unit = remember(onOpenLink, uriHandler) {
@@ -510,6 +556,7 @@ fun ProfileBottomSheet(
                     resolvedUrls = resolvedMediaUrls,
                     resolvedBitmaps = resolvedMediaBitmaps,
                     resolvedAudioLocalPaths = resolvedAudioLocalPaths,
+                    isLoading = profileTabsHydrating || profileMediaResolving,
                     onOpenMedia = { selectedMediaForPreview = it },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
@@ -517,170 +564,237 @@ fun ProfileBottomSheet(
             }
         }
 
-        selectedMediaForPreview?.let { media ->
-            AlertDialog(
-                onDismissRequest = { selectedMediaForPreview = null },
-                title = { Text("Media") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (media.mediaType == ProfileSheetMediaType.Image) {
-                            val bitmap = resolvedMediaBitmaps[media.id]
-                            val resolvedUrl = resolvedMediaUrls[media.id] ?: media.mediaUrl
-                            if (bitmap != null) {
-                                Image(
-                                    bitmap = bitmap,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(220.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                                )
-                            } else {
-                                AsyncImage(
-                                    model = resolvedUrl,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(220.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                                )
-                            }
+        val previewMedia = mediaPreviewModel
+        if (previewMedia != null) {
+            val media = previewMedia
+            val previewImageFade = remember(media.id) { Animatable(0f) }
+            val bitmapForPreview = resolvedMediaBitmaps[media.id]
+            LaunchedEffect(media.id, media.mediaType, mediaPreviewVisible, bitmapForPreview) {
+                when (media.mediaType) {
+                    ProfileSheetMediaType.Image -> {
+                        if (!mediaPreviewVisible) {
+                            previewImageFade.snapTo(0f)
+                        } else if (bitmapForPreview != null) {
+                            previewImageFade.snapTo(0f)
+                            previewImageFade.animateTo(
+                                1f,
+                                tween(420, easing = FastOutSlowInEasing),
+                            )
                         } else {
-                            val stream = resolvedMediaUrls[media.id] ?: media.mediaUrl
-                            val local = resolvedAudioLocalPaths[media.id]
-                            val canPlay = !local.isNullOrBlank() ||
-                                (stream?.isNotBlank() == true && !media.isEncrypted)
-                            if (canPlay) {
-                                ChatAudioBubble(
-                                    mediaUrl = stream.orEmpty(),
-                                    durationSeconds = media.durationSeconds,
-                                    contentColor = MaterialTheme.colorScheme.onSurface,
-                                    accentColor = PrimaryBlue,
-                                    isEncrypted = false,
-                                    localFilePathForPlayback = local,
-                                    secureLoading = false,
-                                    secureError = null,
-                                    onRequestDecrypt = {},
-                                    modifier = Modifier.fillMaxWidth(),
-                                    chromeKind = ChatAudioChromeKind.ProfileSurface,
-                                )
-                            } else {
-                                Text(
-                                    text = "This voice note could not be decrypted for playback.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            previewImageFade.snapTo(0f)
                         }
-                        Text(
-                            text = media.captionedAt
-                                ?: if (media.mediaType == ProfileSheetMediaType.Audio)
-                                    "Voice note"
-                                else if (media.isEncrypted)
-                                    "This photo is end-to-end encrypted. Save or share uses the decrypted copy on your device — not the raw cloud link."
-                                else
-                                    "Save a copy, share, or open the hosted image in your browser.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
-                },
-                confirmButton = {
-                    if (media.mediaType == ProfileSheetMediaType.Image) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { selectedMediaForPreview = null }) {
-                                Text("Close")
+                    else -> previewImageFade.snapTo(1f)
+                }
+            }
+            Dialog(
+                onDismissRequest = { selectedMediaForPreview = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+            ) {
+                val reveal by animateFloatAsState(
+                    targetValue = if (mediaPreviewVisible) 1f else 0f,
+                    animationSpec = tween(
+                        durationMillis = if (mediaPreviewVisible) 280 else 220,
+                        easing = if (mediaPreviewVisible) FastOutSlowInEasing else LinearOutSlowInEasing,
+                    ),
+                    label = "profile_media_preview",
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.52f * reveal.coerceIn(0f, 1f)))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { selectedMediaForPreview = null },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 22.dp)
+                            .graphicsLayer {
+                                val t = reveal.coerceIn(0f, 1f)
+                                scaleX = 0.88f + 0.12f * t
+                                scaleY = 0.88f + 0.12f * t
+                                alpha = t
+                            },
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 2.dp,
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (media.mediaType == ProfileSheetMediaType.Image) {
+                                val bitmap = bitmapForPreview
+                                val resolvedUrl = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                                if (bitmap != null) {
+                                    Image(
+                                        bitmap = bitmap,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 360.dp)
+                                            .graphicsLayer { alpha = previewImageFade.value }
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    )
+                                } else {
+                                    AsyncImage(
+                                        model = resolvedUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Fit,
+                                        onLoading = {
+                                            scope.launch {
+                                                previewImageFade.snapTo(0f)
+                                            }
+                                        },
+                                        onSuccess = {
+                                            scope.launch {
+                                                previewImageFade.snapTo(0f)
+                                                previewImageFade.animateTo(
+                                                    1f,
+                                                    tween(420, easing = FastOutSlowInEasing),
+                                                )
+                                            }
+                                        },
+                                        onError = {
+                                            scope.launch { previewImageFade.snapTo(0f) }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 360.dp)
+                                            .graphicsLayer { alpha = previewImageFade.value }
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    )
+                                }
+                            } else {
+                                val stream = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                                val local = resolvedAudioLocalPaths[media.id]
+                                val canPlay = !local.isNullOrBlank() ||
+                                    (stream?.isNotBlank() == true && !media.isEncrypted)
+                                if (canPlay) {
+                                    ChatAudioBubble(
+                                        mediaUrl = stream.orEmpty(),
+                                        durationSeconds = media.durationSeconds,
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                        accentColor = PrimaryBlue,
+                                        isEncrypted = false,
+                                        localFilePathForPlayback = local,
+                                        secureLoading = false,
+                                        secureError = null,
+                                        onRequestDecrypt = {},
+                                        modifier = Modifier.fillMaxWidth(),
+                                        chromeKind = ChatAudioChromeKind.ProfileSurface,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ErrorOutline,
+                                        contentDescription = "Playback unavailable",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier
+                                            .padding(vertical = 12.dp)
+                                            .size(40.dp),
+                                    )
+                                }
                             }
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                                        if (url.isNotBlank() && media.isEncrypted &&
-                                            !connectionChatId.isNullOrBlank() &&
-                                            !effectiveViewerUserId.isNullOrBlank()
+                            Spacer(Modifier.height(12.dp))
+                            if (media.mediaType == ProfileSheetMediaType.Image) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    TextButton(onClick = { selectedMediaForPreview = null }) {
+                                        Text("Close")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+                                                if (url.isNotBlank() && media.isEncrypted &&
+                                                    !connectionChatId.isNullOrBlank() &&
+                                                    !effectiveViewerUserId.isNullOrBlank()
+                                                ) {
+                                                    val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                                                        chatId = connectionChatId!!,
+                                                        viewerUserId = effectiveViewerUserId!!,
+                                                        mediaUrl = url,
+                                                    )
+                                                    if (bytes != null && bytes.isNotEmpty()) {
+                                                        saveChatImageToGallery(
+                                                            imageUrl = url,
+                                                            decryptedImageBytes = bytes,
+                                                            mimeTypeHint = media.mimeType,
+                                                        )
+                                                    }
+                                                } else if (url.isNotBlank()) {
+                                                    saveChatImageToGallery(imageUrl = url)
+                                                }
+                                                selectedMediaForPreview = null
+                                            }
+                                        },
+                                    ) {
+                                        Text("Save to gallery")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+                                                val ext = when {
+                                                    media.mimeType?.contains("png", ignoreCase = true) == true -> "png"
+                                                    media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
+                                                    else -> "jpg"
+                                                }
+                                                if (url.isNotBlank()) {
+                                                    if (media.isEncrypted &&
+                                                        !connectionChatId.isNullOrBlank() &&
+                                                        !effectiveViewerUserId.isNullOrBlank()
+                                                    ) {
+                                                        val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                                                            chatId = connectionChatId!!,
+                                                            viewerUserId = effectiveViewerUserId!!,
+                                                            mediaUrl = url,
+                                                        )
+                                                        if (bytes != null && bytes.isNotEmpty()) {
+                                                            shareDecryptedImage(bytes, "click_share.$ext")
+                                                        }
+                                                    } else {
+                                                        val bytes = fetchImageBytesFromUrl(url)
+                                                        if (bytes != null && bytes.isNotEmpty()) {
+                                                            shareDecryptedImage(bytes, "click_share.$ext")
+                                                        }
+                                                    }
+                                                }
+                                                selectedMediaForPreview = null
+                                            }
+                                        },
+                                    ) {
+                                        Text("Share")
+                                    }
+                                    if (!media.isEncrypted) {
+                                        TextButton(
+                                            onClick = {
+                                                val target = resolvedMediaUrls[media.id] ?: media.mediaUrl
+                                                if (!target.isNullOrBlank()) {
+                                                    handleOpenLink(target)
+                                                }
+                                                selectedMediaForPreview = null
+                                            },
                                         ) {
-                                            val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                                                chatId = connectionChatId!!,
-                                                viewerUserId = effectiveViewerUserId!!,
-                                                mediaUrl = url,
-                                            )
-                                            if (bytes != null && bytes.isNotEmpty()) {
-                                                saveChatImageToGallery(
-                                                    imageUrl = url,
-                                                    decryptedImageBytes = bytes,
-                                                    mimeTypeHint = media.mimeType,
-                                                )
-                                            }
-                                        } else if (url.isNotBlank()) {
-                                            saveChatImageToGallery(imageUrl = url)
+                                            Text("Open in browser")
                                         }
-                                        selectedMediaForPreview = null
                                     }
-                                },
-                            ) {
-                                Text("Save to gallery")
-                            }
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                                        val ext = when {
-                                            media.mimeType?.contains("png", ignoreCase = true) == true -> "png"
-                                            media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
-                                            else -> "jpg"
-                                        }
-                                        if (url.isNotBlank()) {
-                                            if (media.isEncrypted &&
-                                                !connectionChatId.isNullOrBlank() &&
-                                                !effectiveViewerUserId.isNullOrBlank()
-                                            ) {
-                                                val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                                                    chatId = connectionChatId!!,
-                                                    viewerUserId = effectiveViewerUserId!!,
-                                                    mediaUrl = url,
-                                                )
-                                                if (bytes != null && bytes.isNotEmpty()) {
-                                                    shareDecryptedImage(bytes, "click_share.$ext")
-                                                }
-                                            } else {
-                                                val bytes = fetchImageBytesFromUrl(url)
-                                                if (bytes != null && bytes.isNotEmpty()) {
-                                                    shareDecryptedImage(bytes, "click_share.$ext")
-                                                }
-                                            }
-                                        }
-                                        selectedMediaForPreview = null
-                                    }
-                                },
-                            ) {
-                                Text("Share")
-                            }
-                            if (!media.isEncrypted) {
-                                TextButton(
-                                    onClick = {
-                                        val target = resolvedMediaUrls[media.id] ?: media.mediaUrl
-                                        if (!target.isNullOrBlank()) {
-                                            handleOpenLink(target)
-                                        }
-                                        selectedMediaForPreview = null
-                                    },
-                                ) {
-                                    Text("Open in browser")
+                                }
+                            } else {
+                                TextButton(onClick = { selectedMediaForPreview = null }) {
+                                    Text("Close")
                                 }
                             }
                         }
-                    } else {
-                        TextButton(onClick = { selectedMediaForPreview = null }) {
-                            Text("Close")
-                        }
                     }
-                },
-                dismissButton = {},
-            )
+                }
+            }
         }
     }
 }
@@ -946,6 +1060,7 @@ private fun MediaPanel(
     resolvedUrls: Map<String, String>,
     resolvedBitmaps: Map<String, ImageBitmap>,
     resolvedAudioLocalPaths: Map<String, String>,
+    isLoading: Boolean,
     onOpenMedia: (ProfileSheetMedia) -> Unit,
 ) {
     val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
@@ -953,6 +1068,40 @@ private fun MediaPanel(
     val imageRows = imageItems.chunked(3)
 
     if (items.isEmpty()) {
+        if (isLoading) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 12.dp, start = 16.dp, end = 16.dp),
+            ) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = PrimaryBlue,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Spacer(Modifier.height(18.dp))
+                repeat(4) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(96.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+                                    ),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+            return
+        }
         EmptyTabState(
             icon = Icons.Outlined.Image,
             title = "No shared media",
@@ -966,34 +1115,55 @@ private fun MediaPanel(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
+        if (isLoading) {
+            item(key = "media_tab_top_progress") {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    color = PrimaryBlue,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+        }
         items(imageRows, key = { row -> row.firstOrNull()?.id ?: "row" }) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { media ->
                     val bitmap = resolvedBitmaps[media.id]
                     val resolvedUrl = resolvedUrls[media.id] ?: media.mediaUrl
+                    val thumbInteraction = remember(media.id) { MutableInteractionSource() }
+                    val thumbPressed by thumbInteraction.collectIsPressedAsState()
+                    val thumbScale by animateFloatAsState(
+                        targetValue = if (thumbPressed) 0.94f else 1f,
+                        animationSpec = tween(140, easing = FastOutSlowInEasing),
+                        label = "media_thumb_press",
+                    )
+                    val thumbModifier = Modifier
+                        .weight(1f)
+                        .height(110.dp)
+                        .graphicsLayer {
+                            scaleX = thumbScale
+                            scaleY = thumbScale
+                        }
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(
+                            interactionSource = thumbInteraction,
+                            indication = ripple(bounded = true, radius = 52.dp),
+                        ) { onOpenMedia(media) }
                     if (bitmap != null) {
                         Image(
                             bitmap = bitmap,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(110.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { onOpenMedia(media) },
+                            modifier = thumbModifier,
                         )
                     } else {
                         AsyncImage(
                             model = resolvedUrl,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(110.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { onOpenMedia(media) },
+                            modifier = thumbModifier,
                         )
                     }
                 }
@@ -1016,23 +1186,6 @@ private fun MediaPanel(
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        text = "Voice note",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 6.dp),
-                    )
-                    if (!media.captionedAt.isNullOrBlank()) {
-                        Text(
-                            text = media.captionedAt,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
-                    }
                     if (canPlay) {
                         ChatAudioBubble(
                             mediaUrl = stream.orEmpty(),
@@ -1048,11 +1201,13 @@ private fun MediaPanel(
                             chromeKind = ChatAudioChromeKind.ProfileSurface,
                         )
                     } else {
-                        Text(
-                            text = "Voice note unavailable",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 8.dp),
+                        Icon(
+                            imageVector = Icons.Outlined.ErrorOutline,
+                            contentDescription = "Voice note unavailable",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .padding(vertical = 10.dp)
+                                .size(36.dp),
                         )
                     }
                 }

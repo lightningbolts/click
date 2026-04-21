@@ -23,6 +23,7 @@ import platform.AVFAudio.AVAudioSessionCategoryPlayback
 import platform.AVFAudio.setActive
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
+import platform.Foundation.NSFileManager
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
@@ -34,21 +35,21 @@ actual fun rememberChatAudioPlayer(
     durationHintMs: Long,
     localFilePathForPlayback: String?,
 ): ChatAudioPlayer {
-    val resolvedUrl = localFilePathForPlayback?.takeIf { it.isNotBlank() }?.let { path ->
-        NSURL.fileURLWithPath(path).absoluteString ?: path
-    } ?: mediaUrl
-    val player = remember(resolvedUrl, durationHintMs) { IosChatAudioPlayer(resolvedUrl, durationHintMs) }
-    DisposableEffect(resolvedUrl) {
+    val remote = mediaUrl.trim()
+    val local = localFilePathForPlayback?.trim()?.takeIf { it.isNotEmpty() }
+    val player = remember(remote, local, durationHintMs) { IosChatAudioPlayer(remote, local, durationHintMs) }
+    DisposableEffect(remote, local) {
         onDispose { player.dispose() }
     }
     return player
 }
 
 private class IosChatAudioPlayer(
-    url: String,
+    private val remoteUrl: String,
+    private val localFilePath: String?,
     durationHintMs: Long,
 ) : ChatAudioPlayer {
-    private val avPlayer: AVPlayer = AVPlayer()
+    private val avPlayer: AVPlayer
     private val isPlayingState = mutableStateOf(false)
     private val positionMsState = mutableFloatStateOf(0f)
     private val durationMsState = mutableFloatStateOf(
@@ -64,7 +65,9 @@ private class IosChatAudioPlayer(
     override val durationMs: Long get() = durationMsState.floatValue.toLong()
 
     init {
-        val nsUrl = NSURL.URLWithString(url)
+        prepareAudioSessionForPlayback()
+        avPlayer = AVPlayer()
+        val nsUrl = resolvePlaybackNsUrl(localFilePath, remoteUrl)
         if (nsUrl != null) {
             val item = AVPlayerItem(uRL = nsUrl)
             avPlayer.replaceCurrentItemWithPlayerItem(item)
@@ -112,6 +115,7 @@ private class IosChatAudioPlayer(
     private fun prepareAudioSessionForPlayback(): Boolean {
         return try {
             val session = AVAudioSession.sharedInstance()
+            // Playback category only: `defaultToSpeaker` is invalid here (requires playAndRecord).
             session.setCategory(AVAudioSessionCategoryPlayback, error = null)
             session.setActive(true, error = null)
             true
@@ -141,4 +145,22 @@ private class IosChatAudioPlayer(
         avPlayer.pause()
         avPlayer.replaceCurrentItemWithPlayerItem(null)
     }
+}
+
+private fun resolvePlaybackNsUrl(localPath: String?, remote: String): NSURL? {
+    val trimmedLocal = localPath?.trim()?.takeIf { it.isNotEmpty() }
+    if (!trimmedLocal.isNullOrEmpty()) {
+        val fsPath = when {
+            trimmedLocal.startsWith("file://") -> trimmedLocal.removePrefix("file://")
+            else -> trimmedLocal
+        }
+        if (NSFileManager.defaultManager.fileExistsAtPath(fsPath)) {
+            return NSURL.fileURLWithPath(fsPath)
+        }
+    }
+    val r = remote.trim()
+    if (r.isNotEmpty()) {
+        return NSURL.URLWithString(r)
+    }
+    return null
 }

@@ -108,8 +108,11 @@ fun InteractiveSwipeBackContainer(
     /** Invoked when a horizontal back-swipe gesture begins (after jitter cancel / settle reset). */
     onHorizontalDragStarted: () -> Unit = {},
     /**
-     * Called whenever the foreground horizontal offset changes (drag + settling). Use for any
-     * auxiliary UI that must track the swipe (e.g. custom chrome); not used for system IME.
+     * Called whenever the foreground horizontal offset changes (drag + settling). Chat surfaces
+     * can mirror this (or observe `externalDragOffsetPx` with `snapshotFlow`) to dismiss the
+     * software keyboard after a small horizontal threshold (~20px) so IME teardown tracks the
+     * gesture. The foreground layer already uses [graphicsLayer.translationX] for the slide;
+     * do not apply a second horizontal [Modifier.offset] for the same motion.
      */
     onInteractiveSwipeOffsetChanged: (offsetPx: Float, widthPx: Float) -> Unit = { _, _ -> },
     /** Invoked when the swipe offset returns to rest (canceled or container disposed). */

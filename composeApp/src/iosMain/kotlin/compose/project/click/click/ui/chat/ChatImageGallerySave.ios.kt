@@ -22,10 +22,13 @@ import platform.Photos.PHAccessLevelAddOnly
 import platform.Photos.PHAuthorizationStatusAuthorized
 import platform.Photos.PHAuthorizationStatusLimited
 import platform.Photos.PHPhotoLibrary
+import compose.project.click.click.ui.utils.iosTopViewControllerForPresentation
+import platform.Foundation.NSURL
 import platform.UIKit.UIActivityViewController
-import platform.UIKit.UIApplication
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageWriteToSavedPhotosAlbum
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -54,11 +57,37 @@ actual suspend fun fetchImageBytesFromUrl(imageUrl: String): ByteArray? =
 
 @OptIn(ExperimentalForeignApi::class)
 actual fun shareDecryptedImage(imageBytes: ByteArray, fileName: String) {
-    val data = imageBytes.toNSData()
-    val image = UIImage.imageWithData(data) ?: return
-    val activityViewController = UIActivityViewController(listOf(image), null)
-    val window = UIApplication.sharedApplication.keyWindow
-    window?.rootViewController?.presentViewController(activityViewController, animated = true, completion = null)
+    if (imageBytes.isEmpty()) return
+    val safeName = fileName.trim().ifEmpty { "click_share.jpg" }.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+    val extFromName = safeName.substringAfterLast('.', "").lowercase()
+    val ext = when (extFromName) {
+        "jpg", "jpeg", "png", "webp", "heic" -> extFromName
+        else -> "jpg"
+    }
+    val base = safeName.substringBeforeLast(".", safeName).trim('.').ifEmpty { "click_share" }.take(48)
+    val path =
+        NSTemporaryDirectory().trimEnd('/') + "/click_share_${kotlin.random.Random.nextLong()}_${base}.$ext"
+    val f = fopen(path, "wb") ?: return
+    val wroteOk = imageBytes.usePinned { pinned ->
+        val n = fwrite(pinned.addressOf(0), 1u, imageBytes.size.toULong(), f)
+        n == imageBytes.size.toULong()
+    }
+    fclose(f)
+    if (!wroteOk) {
+        NSFileManager.defaultManager.removeItemAtPath(path, error = null)
+        return
+    }
+    val fileUrl = NSURL.fileURLWithPath(path) ?: run {
+        NSFileManager.defaultManager.removeItemAtPath(path, error = null)
+        return
+    }
+    // Share a file URL so the system sheet can build a proper image thumbnail (UIImage-only items
+    // often render as a generic glyph in the activity row on iOS 17+).
+    val activityViewController = UIActivityViewController(listOf(fileUrl), null)
+    dispatch_async(dispatch_get_main_queue()) {
+        val root = iosTopViewControllerForPresentation() ?: return@dispatch_async
+        root.presentViewController(activityViewController, animated = true, completion = null)
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class)
