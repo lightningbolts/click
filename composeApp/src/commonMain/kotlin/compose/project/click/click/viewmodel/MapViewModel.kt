@@ -344,6 +344,7 @@ class MapViewModel : ViewModel() {
         if (filter == MapLayerFilter.ALL) {
             if (MapLayerFilter.ALL in cur) {
                 cur.clear()
+                cur.addAll(defaultMapLayerFilters())
             } else {
                 cur.clear()
                 cur.add(MapLayerFilter.ALL)
@@ -857,6 +858,7 @@ class MapViewModel : ViewModel() {
         if (channel != null) {
             teardownBlocking { channel.unsubscribe() }
         }
+        mapBeaconRepository.close()
     }
 
     /**

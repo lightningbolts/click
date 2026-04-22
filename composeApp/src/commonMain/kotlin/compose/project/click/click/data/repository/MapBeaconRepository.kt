@@ -31,10 +31,15 @@ class MapBeaconRepository(
     private val tokenStorage: TokenStorage = createTokenStorage(),
     httpClient: HttpClient? = null,
 ) {
+    private val ownsClient = httpClient == null
     private val client = httpClient ?: HttpClient {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true; isLenient = true })
         }
+    }
+
+    fun close() {
+        if (ownsClient) client.close()
     }
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
