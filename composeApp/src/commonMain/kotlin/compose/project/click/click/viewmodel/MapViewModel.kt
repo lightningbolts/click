@@ -397,6 +397,11 @@ class MapViewModel : ViewModel() {
                     }
                 }
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
+                    if (trimmed.isEmpty()) {
+                        _beaconInsertError.value = "Please add a description."
+                        onFinished(false)
+                        return@launch
+                    }
                     if (trimmed.length > 140) {
                         _beaconInsertError.value = "Description must be 140 characters or less."
                         onFinished(false)
@@ -407,6 +412,11 @@ class MapViewModel : ViewModel() {
                     }
                 }
                 else -> {
+                    if (trimmed.isEmpty()) {
+                        _beaconInsertError.value = "Please add a description."
+                        onFinished(false)
+                        return@launch
+                    }
                     if (trimmed.length > 140) {
                         _beaconInsertError.value = "Description must be 140 characters or less."
                         onFinished(false)
@@ -446,11 +456,15 @@ class MapViewModel : ViewModel() {
     private fun isValidStreamingUrl(s: String): Boolean {
         val lower = s.lowercase()
         val schemeOk = lower.startsWith("http://") || lower.startsWith("https://")
-        return schemeOk && (
-            lower.contains("spotify.com") ||
-                lower.contains("music.apple.com") ||
-                lower.contains("itunes.apple.com")
-            )
+        if (!schemeOk) return false
+        // Extract host from URL to prevent domain spoofing via substring matching.
+        // e.g. "https://evil.com/path?q=spotify.com" must NOT pass.
+        val hostPart = lower.removePrefix("https://").removePrefix("http://")
+            .substringBefore("/").substringBefore("?").substringBefore("#")
+            .substringBefore(":")
+        return hostPart == "spotify.com" || hostPart.endsWith(".spotify.com") ||
+            hostPart == "music.apple.com" || hostPart.endsWith(".music.apple.com") ||
+            hostPart == "itunes.apple.com" || hostPart.endsWith(".itunes.apple.com")
     }
 
     /**

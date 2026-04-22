@@ -102,12 +102,6 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(beaconInsertError) {
-        beaconInsertError?.let { msg ->
-            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
-            viewModel.clearBeaconInsertError()
-        }
-    }
 
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val beaconSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)

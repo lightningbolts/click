@@ -15,6 +15,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -60,8 +61,8 @@ class MapBeaconRepository(
                 put("max_lon", JsonPrimitive(maxLon))
             }
             val response = client.post(SupabaseConfig.functionUrl("fetch-local-beacons")) {
+                contentType(ContentType.Application.Json)
                 headers {
-                    append(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     append("apikey", SupabaseConfig.supabaseAnonApiKey)
                     append(HttpHeaders.Authorization, "Bearer $jwt")
                 }
