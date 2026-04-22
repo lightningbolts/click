@@ -7,6 +7,7 @@ import compose.project.click.click.ui.chat.AndroidChatImageSaveContext // pragma
 actual fun openMusicStreamingUrl(url: String): Boolean {
     val trimmed = url.trim()
     if (trimmed.isEmpty()) return false
+    if (!isValidStreamingUrl(trimmed)) return false
     val ctx = AndroidChatImageSaveContext.applicationContext
     return try {
         val uri = trimmed.toUri()

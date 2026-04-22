@@ -17,6 +17,7 @@ import compose.project.click.click.data.storage.TokenStorage // pragma: allowlis
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
@@ -453,19 +454,7 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    private fun isValidStreamingUrl(s: String): Boolean {
-        val lower = s.lowercase()
-        val schemeOk = lower.startsWith("http://") || lower.startsWith("https://")
-        if (!schemeOk) return false
-        // Extract host from URL to prevent domain spoofing via substring matching.
-        // e.g. "https://evil.com/path?q=spotify.com" must NOT pass.
-        val hostPart = lower.removePrefix("https://").removePrefix("http://")
-            .substringBefore("/").substringBefore("?").substringBefore("#")
-            .substringBefore(":")
-        return hostPart == "spotify.com" || hostPart.endsWith(".spotify.com") ||
-            hostPart == "music.apple.com" || hostPart.endsWith(".music.apple.com") ||
-            hostPart == "itunes.apple.com" || hostPart.endsWith(".itunes.apple.com")
-    }
+    // URL validation is now in compose.project.click.click.util.isValidStreamingUrl
 
     /**
      * Update the current zoom level

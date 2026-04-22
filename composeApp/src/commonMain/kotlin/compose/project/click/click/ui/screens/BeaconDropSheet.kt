@@ -75,6 +75,8 @@ fun BeaconDropSheetContent(
                     selected = category.value == cat,
                     onClick = {
                         category.value = cat
+                        val newMaxLen = if (cat == BeaconDropCategory.SOUNDTRACK) 2000 else 140
+                        if (text.value.length > newMaxLen) text.value = text.value.take(newMaxLen)
                         onDismissError()
                     },
                     label = {
