@@ -23,9 +23,9 @@ fun isValidStreamingUrl(url: String): Boolean {
     if (!schemeOk) return false
     // Extract host from URL to prevent domain spoofing via substring matching.
     // e.g. "https://evil.com/path?q=spotify.com" must NOT pass.
-    val hostPart = lower.removePrefix("https://").removePrefix("http://")
+    val authority = lower.removePrefix("https://").removePrefix("http://")
         .substringBefore("/").substringBefore("?").substringBefore("#")
-        .substringBefore(":")
+    val hostPart = authority.substringAfterLast("@").substringBefore(":")
     return hostPart == "spotify.com" || hostPart.endsWith(".spotify.com") ||
         hostPart == "music.apple.com" || hostPart.endsWith(".music.apple.com") ||
         hostPart == "itunes.apple.com" || hostPart.endsWith(".itunes.apple.com")
