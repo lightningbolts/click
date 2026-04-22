@@ -122,8 +122,8 @@ android {
         applicationId = "compose.project.click.click"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 2
-        versionName = "gumbo"
+        versionCode = 3
+        versionName = "hotpot"
         // MapLibre doesn't require an API key
     }
     packaging {
