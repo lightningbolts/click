@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -67,6 +69,8 @@ kotlin {
             implementation("com.google.android.gms:play-services-maps:18.2.0")
             implementation("com.google.android.gms:play-services-location:21.0.1")
             implementation("com.google.firebase:firebase-messaging-ktx:23.4.1")
+
+            implementation("androidx.work:work-runtime-ktx:2.10.0")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -86,9 +90,14 @@ kotlin {
             implementation("io.github.jan-tennert.supabase:postgrest-kt")
             implementation("io.github.jan-tennert.supabase:auth-kt")
             implementation("io.github.jan-tennert.supabase:realtime-kt")
+            implementation("io.github.jan-tennert.supabase:storage-kt")
+
+            implementation("io.coil-kt.coil3:coil-compose:3.0.4")
+            implementation("io.coil-kt.coil3:coil-network-ktor3:3.0.4")
 
             // Ktor client dependencies
             implementation("io.ktor:ktor-client-core:3.0.1")
+            implementation("io.ktor:ktor-client-auth:3.0.1")
             implementation("io.ktor:ktor-client-content-negotiation:3.0.1")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
 
@@ -98,10 +107,12 @@ kotlin {
 
             // Kotlinx Serialization
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.krypto)
 
             implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
 
-            // Multiplatform Settings for persistent session storage
+            // Multiplatform Settings for persistent session storage (explicit core artifact for SharedPreferencesSettings / NSUserDefaultsSettings)
+            implementation("com.russhwolf:multiplatform-settings:1.2.0")
             implementation("com.russhwolf:multiplatform-settings-no-arg:1.2.0")
         }
         iosMain.dependencies {
@@ -110,6 +121,18 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        iosSimulatorArm64Test.dependencies {
+            implementation(compose.uiTest)
+        }
+        androidUnitTest.dependencies {
+            implementation(libs.junit)
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.robolectric)
+            implementation(libs.androidx.arch.core.testing)
+            implementation(libs.androidx.test.core)
         }
     }
 }
@@ -139,6 +162,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 }
 

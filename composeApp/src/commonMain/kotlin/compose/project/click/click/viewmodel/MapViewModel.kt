@@ -2,26 +2,37 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.ui.utils.*
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.pow
@@ -64,7 +75,7 @@ class MapViewModel : ViewModel() {
     private val _mapState = MutableStateFlow<MapState>(MapState.Loading)
     val mapState: StateFlow<MapState> = _mapState.asStateFlow()
 
-    // Current zoom level (drives cluster vs pin rendering)
+    // Current zoom level (logical; updated from native map readbacks and programmatic moves)
     private val _zoomLevel = MutableStateFlow(10.0)
     val zoomLevel: StateFlow<Double> = _zoomLevel.asStateFlow()
 
@@ -98,12 +109,38 @@ class MapViewModel : ViewModel() {
 
     // Cluster threshold - zoom level above which individual pins are shown
     private val clusterThreshold = 12.0
-    
+
+    /**
+     * After a cluster zoom-in, native map zoom readbacks often dip below [clusterThreshold] briefly
+     * or stay inconsistent with [metersForZoom]. Until the user clearly zooms out past the
+     * threshold, treat the map as "pin mode" for clustering decisions so [determineMapRenderData]
+     * does not snap back to hub markers while the camera is still on the cluster.
+     */
+    private val _pinRenderZoomFloor = MutableStateFlow<Double?>(null)
+
+    private fun zoomForClusteringRender(zoom: Double): Double {
+        val floor = _pinRenderZoomFloor.value ?: return zoom
+        return maxOf(zoom, floor)
+    }
+
+    /**
+     * Zoom passed to [PlatformMap] for camera span / meters. Sits above [_zoomLevel] while
+     * [_pinRenderZoomFloor] keeps pin mode so the map is not left at world scale with many
+     * markers stacked on one pixel.
+     */
+    val mapBindingZoom: StateFlow<Double> = combine(_zoomLevel, _pinRenderZoomFloor) { z, floor ->
+        floor?.let { maxOf(z, it) } ?: z
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = _zoomLevel.value,
+    )
+
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
 
     // Chat repository for nudge messages
-    private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
+    private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage())
 
     // Nudge result for snackbar feedback
     private val _nudgeResult = MutableStateFlow<String?>(null)
@@ -112,6 +149,8 @@ class MapViewModel : ViewModel() {
     // Guards against map callback feedback immediately canceling programmatic zoom animations.
     private var pendingProgrammaticZoomTarget: Double? = null
     private var pendingProgrammaticZoomSetAtMs: Long = 0L
+
+    private var renderDataJob: Job? = null
 
     init {
         observeAppData()
@@ -123,29 +162,36 @@ class MapViewModel : ViewModel() {
             combine(
                 AppDataManager.connections,
                 AppDataManager.connectedUsers,
+                AppDataManager.archivedConnectionIds,
+                AppDataManager.hiddenConnectionIds,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
                 AppDataManager.locationPreferences,
                 _zoomLevel,
                 _selectedFilter
             ) { values ->
-                // Using array-based combine for 5+ flows
                 @Suppress("UNCHECKED_CAST")
                 val connections = values[0] as List<Connection>
                 val connectedUsers = values[1] as Map<String, User>
-                val isDataLoaded = values[2] as Boolean
-                val isLoading = values[3] as Boolean
-                val locationPrefs = values[4] as compose.project.click.click.data.models.LocationPreferences
-                val zoom = values[5] as Double
-                val filter = values[6] as String
-                Septuple(connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter)
-            }.collectLatest { (connections, connectedUsers, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
+                val archivedIds = values[2] as Set<String>
+                val hiddenIds = values[3] as Set<String>
+                val isDataLoaded = values[4] as Boolean
+                val isLoading = values[5] as Boolean
+                val locationPrefs = values[6] as LocationPreferences
+                val zoom = values[7] as Double
+                val filter = values[8] as String
+                Nonuple(connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter)
+            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
                 when {
-                    isDataLoaded -> {
-                        _mapState.value = MapState.Success(connections)
-                        val mapVisibleConnections = if (locationPrefs.showOnMapEnabled) connections else emptyList()
+                    // `archivedIds` is read so archive/unarchive recomputes the map when the connections list is unchanged.
+                    isDataLoaded && (archivedIds.isNotEmpty() || archivedIds.isEmpty()) -> {
+                        // Memory map: show full history (incl. per-user archived) but never removed/hidden rows.
+                        val mapConnections = connections.filter { it.id !in hiddenIds }
+                        _mapState.value = MapState.Success(mapConnections)
+                        val mapVisibleConnections =
+                            if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
                         ensureDefaultCameraTarget(mapVisibleConnections)
-                        updateRenderData(mapVisibleConnections, zoom, filter)
+                        updateRenderData(mapVisibleConnections, zoomForClusteringRender(zoom), filter)
                         refreshSelectedConnectionUser(connectedUsers)
                     }
                     isLoading -> {
@@ -161,20 +207,32 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * Update render data based on connections, zoom level, and active filter
+     * Update render data based on connections, zoom level, and active filter.
+     *
+     * R1.4: cluster/pin computation can iterate hundreds of `Connection`s and call
+     * `haversineDistance` across every pair below the cluster-threshold zoom. Keep this
+     * off the Main dispatcher so scrolling / pinch-to-zoom gestures never block the UI
+     * thread. The resulting [MapRenderData] is immutable and safe to publish to a
+     * [MutableStateFlow] from any dispatcher.
      */
     private fun updateRenderData(connections: List<Connection>, zoom: Double, filter: String = "All") {
-        val filtered = if (filter == "All") {
-            connections
-        } else {
-            connections.filter { conn ->
-                val location = conn.semantic_location?.lowercase() ?: ""
-                val tag = conn.displayLocationLabel?.lowercase() ?: ""
-                val searchTerm = filter.lowercase()
-                location.contains(searchTerm) || tag.contains(searchTerm)
+        renderDataJob?.cancel()
+        renderDataJob = viewModelScope.launch {
+            val rendered = withContext(Dispatchers.Default) {
+                val filtered = if (filter == "All") {
+                    connections
+                } else {
+                    val searchTerm = filter.lowercase()
+                    connections.filter { conn ->
+                        val location = conn.semanticLocation?.lowercase() ?: ""
+                        val tag = conn.displayLocationLabel?.lowercase() ?: ""
+                        location.contains(searchTerm) || tag.contains(searchTerm)
+                    }
+                }
+                determineMapRenderData(filtered, zoom, clusterThreshold)
             }
+            _renderData.value = rendered
         }
-        _renderData.value = determineMapRenderData(filtered, zoom, clusterThreshold)
     }
 
     /**
@@ -183,21 +241,17 @@ class MapViewModel : ViewModel() {
     private fun ensureDefaultCameraTarget(connections: List<Connection>) {
         if (_defaultCameraTarget.value != null) return
 
-        val valid = connections.filter {
-            val lat = it.geo_location.lat
-            val lon = it.geo_location.lon
-            lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)
-        }
+        val valid = connections.mapNotNull { c -> c.connectionMapGeo()?.let { g -> c to g } }
 
         if (valid.isEmpty()) return
 
-        val minLat = valid.minOf { it.geo_location.lat }
-        val maxLat = valid.maxOf { it.geo_location.lat }
-        val minLon = valid.minOf { it.geo_location.lon }
-        val maxLon = valid.maxOf { it.geo_location.lon }
+        val minLat = valid.minOf { it.second.lat }
+        val maxLat = valid.maxOf { it.second.lat }
+        val minLon = valid.minOf { it.second.lon }
+        val maxLon = valid.maxOf { it.second.lon }
 
         val bounds = BoundingBox(minLat = minLat, maxLat = maxLat, minLon = minLon, maxLon = maxLon)
-        val targetZoom = calculateZoomForBounds(bounds).coerceIn(2.0, 16.0)
+        val targetZoom = calculateZoomForBounds(bounds).coerceIn(4.0, 16.0)
 
         val computedTarget = CameraTarget(
             latitude = bounds.centerLat,
@@ -222,6 +276,7 @@ class MapViewModel : ViewModel() {
      * Set the active tribe filter
      */
     fun setFilter(filter: String) {
+        _pinRenderZoomFloor.value = null
         _selectedFilter.value = filter
     }
 
@@ -229,27 +284,45 @@ class MapViewModel : ViewModel() {
      * Update the current zoom level
      */
     fun setZoomLevel(zoom: Double) {
+        if (!zoom.isFinite()) return
+        val coerced = zoom.coerceIn(2.0, 20.0)
+        // Drop single-shot readouts that would snap from a city-level view to ~world scale
+        // (bad spans during annotation churn / projection glitches on native maps).
+        if (coerced < 5.0 && _zoomLevel.value > 8.0 && (_zoomLevel.value - coerced) > 3.0) {
+            return
+        }
+
         val pendingTarget = pendingProgrammaticZoomTarget
         if (pendingTarget != null) {
             val now = Clock.System.now().toEpochMilliseconds()
             val ageMs = now - pendingProgrammaticZoomSetAtMs
-            val reachedPendingTarget = abs(zoom - pendingTarget) <= 0.25
-
-            if (reachedPendingTarget || ageMs > 1500L) {
+            // MapKit span → zoom can disagree with our metersForZoom ladder by ~1 level; keep the
+            // guard loose so we clear pending when the map has essentially arrived.
+            val reachedPendingTarget = abs(coerced - pendingTarget) <= 1.0
+            if (reachedPendingTarget) {
                 pendingProgrammaticZoomTarget = null
+            } else if (ageMs > 1500L) {
+                // Do not apply this stale reading: it often underestimates zoom on iOS and would
+                // snap _zoomLevel back below [clusterThreshold], reverting to cluster markers.
+                pendingProgrammaticZoomTarget = null
+                return
             } else {
                 return
             }
         }
 
-        if (abs(_zoomLevel.value - zoom) <= 0.01) return
-        _zoomLevel.value = zoom
+        if (abs(_zoomLevel.value - coerced) <= 0.01) return
+        _zoomLevel.value = coerced
+
+        if (pendingProgrammaticZoomTarget == null && coerced < clusterThreshold - 0.05) {
+            _pinRenderZoomFloor.value = null
+        }
 
         _visibleBounds.value?.let { bounds ->
             persistCameraTarget(
                 latitude = bounds.centerLat,
                 longitude = bounds.centerLon,
-                zoom = zoom
+                zoom = coerced
             )
         }
     }
@@ -258,6 +331,11 @@ class MapViewModel : ViewModel() {
      * Update visible bounds from outside (e.g., the platform map callback)
      */
     fun updateVisibleBounds(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) {
+        if (!minLat.isFinite() || !maxLat.isFinite() || !minLon.isFinite() || !maxLon.isFinite()) return
+        val latSpan = abs(maxLat - minLat)
+        val lonSpan = abs(maxLon - minLon)
+        if (latSpan < 1e-7 || lonSpan < 1e-7) return
+        if (latSpan > 160.0 || lonSpan > 340.0) return
         val bounds = BoundingBox(minLat, maxLat, minLon, maxLon)
         _visibleBounds.value = bounds
         persistCameraTarget(
@@ -269,11 +347,14 @@ class MapViewModel : ViewModel() {
 
     private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
         if (!latitude.isFinite() || !longitude.isFinite() || !zoom.isFinite()) return
+        val z = zoom.coerceIn(2.0, 20.0)
+        // Never persist continent/world scale; it becomes the next session's "restore camera".
+        if (z < 4.0) return
 
         val candidate = CameraTarget(
             latitude = latitude,
             longitude = longitude,
-            zoom = zoom.coerceIn(2.0, 20.0)
+            zoom = z
         )
 
         val previous = lastKnownCameraTarget
@@ -296,9 +377,8 @@ class MapViewModel : ViewModel() {
             val state = _mapState.value
             if (state !is MapState.Success) return emptyList()
             return state.connections.filter {
-                val lat = it.geo_location.lat
-                val lon = it.geo_location.lon
-                lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)
+                val g = it.connectionMapGeo()
+                g != null && g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
             }
         }
 
@@ -306,13 +386,13 @@ class MapViewModel : ViewModel() {
         val centerLat = center?.latitude ?: run {
             val connections = validConnections()
             if (connections.isNotEmpty()) {
-                connections.map { it.geo_location.lat }.average()
+                connections.mapNotNull { it.connectionMapGeo()?.lat }.average()
             } else return
         }
         val centerLon = center?.longitude ?: run {
             val connections = validConnections()
             if (connections.isNotEmpty()) {
-                connections.map { it.geo_location.lon }.average()
+                connections.mapNotNull { it.connectionMapGeo()?.lon }.average()
             } else return
         }
 
@@ -329,6 +409,18 @@ class MapViewModel : ViewModel() {
         )
     }
 
+    private fun anchorLatLonForProgrammaticCamera(): Pair<Double, Double>? {
+        lastKnownCameraTarget?.let { return it.latitude to it.longitude }
+        _visibleBounds.value?.let { return it.centerLat to it.centerLon }
+        _defaultCameraTarget.value?.let { return it.latitude to it.longitude }
+        val state = _mapState.value
+        if (state is MapState.Success) {
+            val geo = state.connections.firstNotNullOfOrNull { it.connectionMapGeo() }
+            if (geo != null) return geo.lat to geo.lon
+        }
+        return null
+    }
+
     /**
      * Zoom in
      */
@@ -336,6 +428,9 @@ class MapViewModel : ViewModel() {
         val target = minOf(_zoomLevel.value + 1.0, 20.0)
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        anchorLatLonForProgrammaticCamera()?.let { (lat, lon) ->
+            _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
+        }
         _zoomLevel.value = target
     }
 
@@ -344,9 +439,34 @@ class MapViewModel : ViewModel() {
      */
     fun zoomOut() {
         val target = maxOf(_zoomLevel.value - 1.0, 2.0)
+        if (target < clusterThreshold - 0.25) {
+            _pinRenderZoomFloor.value = null
+        }
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        anchorLatLonForProgrammaticCamera()?.let { (lat, lon) ->
+            _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
+        }
         _zoomLevel.value = target
+    }
+
+    /**
+     * Resolves a tapped cluster marker to [MapCluster] using the latest [renderData] snapshot
+     * inside the ViewModel (avoids races with Compose where [renderData] already flipped to pins).
+     */
+    fun onClusterTappedFromMap(clusterId: String) {
+        fun findCluster(): MapCluster? =
+            (_renderData.value as? MapRenderData.Clusters)?.clusters?.find { it.id == clusterId }
+
+        findCluster()?.let {
+            onClusterTapped(it)
+            return
+        }
+        // [updateRenderData] runs off the main thread; a tap can land between zoom update and publish.
+        viewModelScope.launch {
+            delay(64)
+            findCluster()?.let { onClusterTapped(it) }
+        }
     }
 
     /**
@@ -359,6 +479,7 @@ class MapViewModel : ViewModel() {
         // Calculate zoom level to fit the cluster bounds
         val bounds = cluster.boundingBox
         val targetZoom = maxOf(clusterThreshold + 1, calculateZoomForBounds(bounds))
+        _pinRenderZoomFloor.value = maxOf(clusterThreshold + 0.25, targetZoom)
         
         // Animate camera to cluster center with appropriate zoom
         _cameraTarget.value = CameraTarget(
@@ -416,7 +537,17 @@ class MapViewModel : ViewModel() {
      * Clear camera target after animation completes
      */
     fun onCameraAnimationComplete() {
+        pendingProgrammaticZoomTarget = null
+        val target = _cameraTarget.value
         _cameraTarget.value = null
+        // Re-assert zoom from the programmatic target so map readouts during the animation
+        // cannot leave _zoomLevel out of sync with pin-vs-cluster mode.
+        if (target != null) {
+            val z = target.zoom.coerceIn(2.0, 20.0)
+            if (abs(_zoomLevel.value - z) > 0.02) {
+                _zoomLevel.value = z
+            }
+        }
     }
 
     /**
@@ -425,12 +556,16 @@ class MapViewModel : ViewModel() {
     fun onMapScreenEntered() {
         if (_cameraTarget.value != null) return
 
-        val target = lastKnownCameraTarget ?: _defaultCameraTarget.value
-        if (target != null) {
-            _cameraTarget.value = target
-            if (abs(_zoomLevel.value - target.zoom) > 0.01) {
-                _zoomLevel.value = target.zoom
-            }
+        val raw = lastKnownCameraTarget ?: _defaultCameraTarget.value ?: return
+        val safeZoom = raw.zoom.coerceIn(4.0, 20.0)
+        val target = if (abs(raw.zoom - safeZoom) > 0.01) {
+            CameraTarget(latitude = raw.latitude, longitude = raw.longitude, zoom = safeZoom)
+        } else {
+            raw
+        }
+        _cameraTarget.value = target
+        if (abs(_zoomLevel.value - target.zoom) > 0.01) {
+            _zoomLevel.value = target.zoom
         }
     }
 
@@ -479,28 +614,36 @@ class MapViewModel : ViewModel() {
             try {
                 val channel = SupabaseConfig.client.channel("map:connections")
                 connectionsChannel = channel
-                
-                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "connections"
-                }.onEach {
+
+                merge(
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connections"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_archives"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_hidden"
+                    },
+                ).onEach {
                     AppDataManager.refresh(force = true)
                 }.launchIn(this)
-                
+
                 channel.subscribe()
             } catch (e: Exception) {
-                println("MapViewModel: Error subscribing to connections: ${e.message}")
+                println("MapViewModel: Error subscribing to connections: ${e.redactedRestMessage()}")
             }
         }
     }
     
     override fun onCleared() {
-        super.onCleared()
-        connectionsChannel?.let { channel ->
-            viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
-            }
-        }
+        // Grab the channel ref before super.onCleared() kills viewModelScope.
+        val channel = connectionsChannel
         connectionsChannel = null
+        super.onCleared()
+        if (channel != null) {
+            teardownBlocking { channel.unsubscribe() }
+        }
     }
 
     /**
@@ -590,4 +733,16 @@ private data class Septuple<A, B, C, D, E, F, G>(
     val fifth: E,
     val sixth: F,
     val seventh: G
+)
+
+private data class Nonuple<A, B, C, D, E, F, G, H, I>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+    val sixth: F,
+    val seventh: G,
+    val eighth: H,
+    val ninth: I,
 )

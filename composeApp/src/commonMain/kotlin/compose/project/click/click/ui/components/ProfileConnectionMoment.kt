@@ -1,0 +1,421 @@
+package compose.project.click.click.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BatteryStd
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.NightsStay
+import androidx.compose.material.icons.outlined.DirectionsRun
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
+import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.ConnectionEncounter
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import compose.project.click.click.data.models.HeightCategory
+import compose.project.click.click.data.models.NoiseLevelCategory
+import compose.project.click.click.data.models.WeatherSnapshot
+import compose.project.click.click.data.models.toMemoryCapsule
+import kotlin.math.floor
+import kotlin.math.roundToInt
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.Month
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
+private fun shortDay(d: DayOfWeek): String = when (d) {
+    DayOfWeek.MONDAY -> "Mon"
+    DayOfWeek.TUESDAY -> "Tue"
+    DayOfWeek.WEDNESDAY -> "Wed"
+    DayOfWeek.THURSDAY -> "Thu"
+    DayOfWeek.FRIDAY -> "Fri"
+    DayOfWeek.SATURDAY -> "Sat"
+    DayOfWeek.SUNDAY -> "Sun"
+}
+
+private fun shortMonth(m: Month): String = when (m) {
+    Month.JANUARY -> "Jan"
+    Month.FEBRUARY -> "Feb"
+    Month.MARCH -> "Mar"
+    Month.APRIL -> "Apr"
+    Month.MAY -> "May"
+    Month.JUNE -> "Jun"
+    Month.JULY -> "Jul"
+    Month.AUGUST -> "Aug"
+    Month.SEPTEMBER -> "Sep"
+    Month.OCTOBER -> "Oct"
+    Month.NOVEMBER -> "Nov"
+    Month.DECEMBER -> "Dec"
+}
+
+private fun formatNoiseCategory(cat: NoiseLevelCategory): String = when (cat) {
+    NoiseLevelCategory.VERY_QUIET -> "Very quiet"
+    NoiseLevelCategory.QUIET -> "Quiet"
+    NoiseLevelCategory.MODERATE -> "Moderate"
+    NoiseLevelCategory.LOUD -> "Loud"
+    NoiseLevelCategory.VERY_LOUD -> "Very loud"
+}
+
+/** Event / context line (emoji + label or legacy id). */
+fun Connection.profileContextLine(): String? {
+    val origin = originEncounter
+    origin?.toMemoryCapsule()?.contextTag?.let { tag ->
+        val e = tag.emoji.trim()
+        val l = tag.label.trim()
+        if (l.isEmpty()) return@let null
+        return if (e.isNotEmpty()) "$e $l" else l
+    }
+    if (origin != null) return null
+    memoryCapsule?.contextTag?.let { tag ->
+        val e = tag.emoji.trim()
+        val l = tag.label.trim()
+        if (l.isEmpty()) return@let null
+        return if (e.isNotEmpty()) "$e $l" else l
+    }
+    val id = contextTagId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return id
+}
+
+private val encounterSemanticLocationJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
+
+/**
+ * Parses `connection_encounters.semantic_location` string JSON and returns
+ * `address.neighbourhood` / `address.neighborhood` when present.
+ */
+internal fun neighbourhoodFromEncounterSemanticLocation(raw: String?): String? {
+    val s = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching {
+        val root = encounterSemanticLocationJson.parseToJsonElement(s).jsonObject
+        val addr = root["address"]?.jsonObject ?: return@runCatching null
+        (addr["neighbourhood"] ?: addr["neighborhood"])?.jsonPrimitive?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+}
+
+/** Place line for profile timeline when [Connection.originEncounter] is populated. */
+internal fun formatEncounterPlaceLine(
+    locationName: String?,
+    displayLocation: String?,
+    semanticLocationJson: String?,
+): String? {
+    val display = displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+    val locName = locationName?.trim()?.takeIf { it.isNotEmpty() }
+    val neighbourhood = neighbourhoodFromEncounterSemanticLocation(semanticLocationJson)
+    return when {
+        locName != null && neighbourhood != null && display != null ->
+            "$locName • $neighbourhood, $display"
+        locName != null && neighbourhood != null ->
+            "$locName • $neighbourhood"
+        neighbourhood != null && display != null ->
+            "$neighbourhood, $display"
+        locName != null && display != null && locName != display ->
+            "$locName · $display"
+        display != null -> display
+        locName != null -> locName
+        neighbourhood != null -> neighbourhood
+        else -> null
+    }
+}
+
+private fun structuredAddressFromFull(m: Map<String, String>?): String? {
+    if (m.isNullOrEmpty()) return null
+    val dn = m["display_name"]?.trim()?.takeIf { it.isNotEmpty() }
+        ?: m["displayName"]?.trim()?.takeIf { it.isNotEmpty() }
+        ?: m["formatted"]?.trim()?.takeIf { it.isNotEmpty() }
+    if (dn != null) return dn
+    val parts = listOf("road", "neighbourhood", "city", "town", "state", "country")
+        .mapNotNull { key -> m[key]?.trim()?.takeIf { it.isNotEmpty() } }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
+}
+
+fun Connection.profilePlaceLine(): String? {
+    val origin = originEncounter
+    val fromEncounter = origin?.let { enc ->
+        formatEncounterPlaceLine(
+            locationName = enc.locationName,
+            displayLocation = enc.displayLocation,
+            semanticLocationJson = enc.semanticLocation,
+        )
+    }
+    val sem = fromEncounter
+        ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
+    val fromFull = structuredAddressFromFull(full_location)
+    if (origin != null) return sem
+    return when {
+        sem != null && fromFull != null && sem != fromFull -> sem
+        sem != null -> sem
+        fromFull != null -> fromFull
+        else -> null
+    }
+}
+
+fun Connection.profileAddressDetailLine(): String? {
+    if (originEncounter != null) return null
+    val sem = semantic_location?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val fromFull = structuredAddressFromFull(full_location) ?: return null
+    return fromFull.takeIf { it != sem }
+}
+
+/** Local calendar + clock for one crossing (`connection_encounters.encountered_at` ISO). */
+fun formatEncounterTimelineWhenLine(encounteredAtIso: String): String? {
+    val instant = encounteredAtIso.trim().takeIf { it.isNotEmpty() }?.let { iso ->
+        runCatching { Instant.parse(iso) }.getOrNull()
+    } ?: return null
+    val ldt = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val datePart = "${shortDay(ldt.dayOfWeek)}, ${shortMonth(ldt.month)} ${ldt.dayOfMonth}, ${ldt.year}"
+    val hour24 = ldt.hour
+    val minute = ldt.minute
+    val ampm = if (hour24 < 12) "AM" else "PM"
+    val h12 = when {
+        hour24 == 0 -> 12
+        hour24 > 12 -> hour24 - 12
+        else -> hour24
+    }
+    val timePart = "$h12:${minute.toString().padStart(2, '0')} $ampm"
+    return "$datePart · $timePart"
+}
+
+fun Connection.profileWhenLine(): String? {
+    val origin = originEncounter
+    val originInstant = origin?.encounteredAt?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
+        runCatching { Instant.parse(iso) }.getOrNull()
+    }
+    if (origin != null && originInstant == null) return origin.encounteredAt.takeIf { it.isNotBlank() }
+    val instant: Instant? = originInstant ?: createdUtc?.trim()?.takeIf { it.isNotEmpty() }?.let { iso ->
+        runCatching { Instant.parse(iso) }.getOrNull()
+    } ?: if (created > 0L) Instant.fromEpochMilliseconds(created) else null
+    instant ?: return null
+    val ldt = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val datePart = "${shortDay(ldt.dayOfWeek)}, ${shortMonth(ldt.month)} ${ldt.dayOfMonth}, ${ldt.year}"
+    val hour24 = ldt.hour
+    val minute = ldt.minute
+    val ampm = if (hour24 < 12) "AM" else "PM"
+    val h12 = when {
+        hour24 == 0 -> 12
+        hour24 > 12 -> hour24 - 12
+        else -> hour24
+    }
+    val timePart = "$h12:${minute.toString().padStart(2, '0')} $ampm"
+    return "$datePart · $timePart"
+}
+
+private fun windCompassAbbrev(deg: Int): String {
+    val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    val x = ((deg % 360) + 360) % 360
+    val idx = (floor((x + 22.5) / 45.0).toInt() % 8 + 8) % 8
+    return dirs[idx]
+}
+
+private fun formatWeatherSnapshotLine(ws: WeatherSnapshot): String? {
+    val parts = mutableListOf<String>()
+    val cond = ws.condition?.trim()?.takeIf { it.isNotEmpty() }
+    val icon = ws.iconCode?.trim()?.takeIf { it.isNotEmpty() }
+    when {
+        cond != null -> parts.add(cond)
+        icon != null -> parts.add(icon.replaceFirstChar { it.titlecase() })
+    }
+    ws.temperatureCelsius?.takeIf { it.isFinite() }?.let { c ->
+        val f = (c * 9.0 / 5.0) + 32.0
+        if (f.isFinite()) {
+            parts.add("${f.roundToInt()}°F (${c.roundToInt()}°C)")
+        }
+    }
+    ws.windSpeedKph?.takeIf { it.isFinite() }?.let { k ->
+        val dir = ws.windDirectionDegrees?.takeIf { it in 0..359 }?.let { d -> " ${windCompassAbbrev(d)}" } ?: ""
+        parts.add("${k.roundToInt()} km/h$dir")
+    }
+    ws.pressureMslHpa?.takeIf { it.isFinite() }?.let { p ->
+        parts.add("${p.roundToInt()} hPa")
+    }
+    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+}
+
+fun Connection.profileWeatherLine(): String? {
+    val origin = originEncounter
+    origin?.weatherSnapshot?.let { ws ->
+        formatWeatherSnapshotLine(ws)?.let { return it }
+    }
+    if (origin != null) return null
+    memoryCapsule?.weatherSnapshot?.let { ws ->
+        formatWeatherSnapshotLine(ws)?.let { return it }
+    }
+    val col = weatherCondition?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return col
+}
+
+fun Connection.profileNoiseLine(): String? {
+    val origin = originEncounter
+    val parts = mutableListOf<String>()
+    val rawCat = if (origin != null) {
+        origin.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+    } else {
+        noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: memoryCapsule?.noiseLevelCategory?.name
+    }
+    if (rawCat != null) {
+        val enumCat = runCatching {
+            NoiseLevelCategory.valueOf(rawCat.uppercase().replace(' ', '_'))
+        }.getOrNull()
+        parts.add(
+            if (enumCat != null) formatNoiseCategory(enumCat)
+            else rawCat.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+        )
+    }
+    val exactNoise = if (origin != null) {
+        origin.exactNoiseLevelDb?.takeIf { it.isFinite() }
+    } else {
+        exactNoiseLevelDb?.takeIf { it.isFinite() }
+            ?: memoryCapsule?.exactNoiseLevelDb?.takeIf { it.isFinite() }
+    }
+    exactNoise?.let { parts.add("${it.roundToInt()} dB") }
+    if (parts.isEmpty()) return null
+    return parts.joinToString(" · ")
+}
+
+private fun formatElevationCategoryLabel(raw: String): String {
+    val enumCat = runCatching {
+        HeightCategory.valueOf(raw.uppercase().replace(' ', '_'))
+    }.getOrNull()
+    return when (enumCat) {
+        HeightCategory.BELOW_GROUND -> "Below ground"
+        HeightCategory.GROUND_LEVEL -> "Ground level"
+        HeightCategory.ELEVATED -> "Elevated"
+        HeightCategory.HIGH_RISE -> "High rise"
+        null -> raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+    }
+}
+
+/** Barometric / floor context: category label when present, plus meter snapshot. */
+fun Connection.profileBarometricLine(): String? {
+    val origin = originEncounter
+    val parts = mutableListOf<String>()
+    origin?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+        parts.add(formatElevationCategoryLabel(raw))
+    }
+    val meters = origin?.exactBarometricElevationM?.takeIf { it.isFinite() }
+        ?: exactBarometricElevationM?.takeIf { originEncounter == null && it.isFinite() }
+        ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { originEncounter == null && it.isFinite() }
+    meters?.let { parts.add("${it.roundToInt()} m") }
+    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+}
+
+fun ConnectionEncounter.metricLuxLabel(): String? =
+    luxLevel?.takeIf { it.isFinite() && it >= 0 }?.let { "${it.roundToInt()} lx" }
+
+fun ConnectionEncounter.metricMotionVarianceLabel(): String? =
+    motionVariance?.takeIf { it.isFinite() && it >= 0 }?.let { v ->
+        val rounded = (v * 100.0).roundToInt() / 100.0
+        "$rounded"
+    }
+
+fun ConnectionEncounter.metricCompassAzimuthLabel(): String? =
+    compassAzimuth?.takeIf { it.isFinite() }?.let {
+        var deg = it % 360.0
+        if (deg < 0) deg += 360.0
+        "${deg.roundToInt()}°"
+    }
+
+fun ConnectionEncounter.metricBatteryLabel(): String? =
+    batteryLevel?.takeIf { it in 0..100 }?.let { "$it%" }
+
+/**
+ * Compact pill used for environmental / hardware metrics (connections list + profile).
+ */
+@Composable
+fun SmallBadge(
+    icon: ImageVector,
+    iconTint: Color,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+    val bg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val body = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .border(1.dp, border, RoundedCornerShape(50))
+            .background(bg)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = body,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ConnectionHardwareVibeBadgesRow(
+    encounter: ConnectionEncounter?,
+    modifier: Modifier = Modifier,
+) {
+    if (encounter == null) return
+    val luxVal = encounter.luxLevel?.takeIf { it.isFinite() && it >= 0 }
+    val isDim = luxVal != null && luxVal < 15.0
+    val luxIcon = if (isDim) Icons.Outlined.NightsStay else Icons.Outlined.WbSunny
+    val luxTint = if (isDim) Color(0xFF90CAF9) else Color(0xFFFFE082)
+    val pills = buildList<Triple<ImageVector, Color, String>> {
+        encounter.metricLuxLabel()?.let { lbl ->
+            add(Triple(luxIcon, luxTint, lbl))
+        }
+        encounter.metricBatteryLabel()?.let { lbl ->
+            add(Triple(Icons.Outlined.BatteryStd, Color(0xFFA5D6A7), lbl))
+        }
+        encounter.metricCompassAzimuthLabel()?.let { lbl ->
+            add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), lbl))
+        }
+        encounter.metricMotionVarianceLabel()?.let { lbl ->
+            add(Triple(Icons.Outlined.DirectionsRun, Color(0xFFFFAB91), lbl))
+        }
+    }
+    if (pills.isEmpty()) return
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        pills.forEach { (ic, tint, lbl) ->
+            SmallBadge(icon = ic, iconTint = tint, label = lbl)
+        }
+    }
+}

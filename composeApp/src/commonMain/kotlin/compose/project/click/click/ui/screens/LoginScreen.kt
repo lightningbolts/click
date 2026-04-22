@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
@@ -39,6 +41,8 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onSignUpClick: () -> Unit,
     onEmailSignIn: (email: String, password: String) -> Unit,
+    onGoogleSignIn: (() -> Unit)? = null,
+    onAppleSignIn: (() -> Unit)? = null,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -46,6 +50,7 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val uriHandler = LocalUriHandler.current
     val scrollState = rememberScrollState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -179,9 +184,12 @@ fun LoginScreen(
                 )
             }
 
-            // Forgot Password
+            // Forgot Password — opens web dashboard reset flow in the system browser
             TextButton(
-                onClick = { /* TODO: Implement forgot password */ },
+                onClick = {
+                    val url = "${ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')}/reset-password"
+                    uriHandler.openUri(url)
+                },
                 modifier = Modifier.align(Alignment.End),
                 enabled = !isLoading
             ) {
@@ -227,6 +235,31 @@ fun LoginScreen(
                 }
             }
 
+            if (onGoogleSignIn != null || onAppleSignIn != null) {
+                Spacer(modifier = Modifier.height(24.dp))
+                OAuthDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+                if (onGoogleSignIn != null) {
+                    OAuthProviderButton(
+                        label = "Continue with Google",
+                        icon = null,
+                        onClick = onGoogleSignIn,
+                        enabled = !isLoading,
+                        isIOS = LocalPlatformStyle.current.isIOS,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                if (onAppleSignIn != null) {
+                    OAuthProviderButton(
+                        label = "Continue with Apple",
+                        icon = null,
+                        onClick = onAppleSignIn,
+                        enabled = !isLoading,
+                        isIOS = LocalPlatformStyle.current.isIOS,
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
 
             // Sign Up Link
@@ -251,6 +284,62 @@ fun LoginScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OAuthDivider() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+        Text(
+            "or",
+            modifier = Modifier.padding(horizontal = 12.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
+
+/**
+ * OAuth provider button used for Google / Apple sign-in (Phase 2 — C16).
+ *
+ * Visual language follows the platform — a soft-elevated outlined button on iOS and
+ * the default Material filled-tonal button on Android — so the action still reads as
+ * authenticated / trusted without hijacking the primary email sign-in button.
+ */
+@Composable
+private fun OAuthProviderButton(
+    label: String,
+    icon: ImageVector?,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    isIOS: Boolean,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        enabled = enabled,
+        shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+        Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 

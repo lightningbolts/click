@@ -40,6 +40,7 @@ class AndroidAmbientNoiseMonitor(
         if (minBufferSize <= 0) return@withContext null
 
         val audioRecord = try {
+            @Suppress("MissingPermission") // Guarded by hasPermission above
             AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 sampleRate,
@@ -93,12 +94,7 @@ class AndroidAmbientNoiseMonitor(
 
         val averageDb = readings.average().takeIf { !it.isNaN() } ?: return@withContext null
         AmbientNoiseSample(
-            category = when {
-                averageDb < 45.0 -> NoiseLevelCategory.QUIET
-                averageDb < 65.0 -> NoiseLevelCategory.MODERATE
-                averageDb < 80.0 -> NoiseLevelCategory.LOUD
-                else -> NoiseLevelCategory.VERY_LOUD
-            },
+            category = noiseLevelCategoryFromApproximateDb(averageDb),
             decibels = averageDb
         )
     }

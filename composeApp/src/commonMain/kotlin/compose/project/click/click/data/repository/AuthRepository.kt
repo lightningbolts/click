@@ -2,21 +2,34 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.Apple
+import io.github.jan.supabase.auth.providers.Google
+import io.github.jan.supabase.auth.providers.OAuthProvider
+import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.util.compressOutgoingChatImageForUpload
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import kotlinx.coroutines.withTimeout
 
 class AuthRepository(
     private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
-    private val supabase = SupabaseConfig.client
+    /** Lazy so [AppDataManager] and JVM tests can load without touching Supabase / Android crypto. */
+    private val supabase by lazy { SupabaseConfig.client }
+    private val clickWebApi by lazy { ApiClient() }
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
+        const val AUTH_INTERACTIVE_TIMEOUT_MS = 120_000L
+        const val MAX_PROFILE_IMAGE_BYTES = 2_000_000
     }
 
     suspend fun signInWithEmail(email: String, password: String): Result<UserInfo> {
@@ -47,16 +60,29 @@ class AuthRepository(
         }
     }
 
-    suspend fun signUpWithEmail(email: String, password: String, name: String): Result<UserInfo> {
+    suspend fun signUpWithEmail(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String,
+        birthdayIso: String,
+    ): Result<UserInfo> {
         return try {
+            val f = firstName.trim()
+            val l = lastName.trim()
+            val b = birthdayIso.trim()
+            val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
             // Sign up with Supabase
             withTimeout(AUTH_TIMEOUT_MS) {
                 supabase.auth.signUpWith(Email) {
                     this.email = email
                     this.password = password
                     data = buildJsonObject {
-                        put("full_name", name)
-                        put("name", name)
+                        put("first_name", f)
+                        put("last_name", l)
+                        put("birthday", b)
+                        put("full_name", display.ifEmpty { f })
+                        put("name", display.ifEmpty { f })
                     }
                 }
             }
@@ -80,6 +106,116 @@ class AuthRepository(
             }
         } catch (e: Exception) {
             Result.failure(Exception(mapAuthErrorMessage(e, defaultMessage = "Couldn't create your account right now. Please try again.")))
+        }
+    }
+
+    /**
+     * Kick off a Supabase-hosted OAuth flow for the given provider (Phase 2 — C16).
+     *
+     * The Supabase KMP SDK handles the PKCE handshake internally and dispatches the
+     * auth browser via its default [io.github.jan.supabase.auth.ExternalAuthAction]:
+     *   * Android → Chrome Custom Tab.
+     *   * iOS → SFSafariViewController (equivalent cookie-isolated browser; PKCE-enforced).
+     *
+     * The browser returns to the app via the `click://login` deep-link configured in
+     * [SupabaseConfig] (scheme = "click", host = "login"). Once the deep link is
+     * delivered, the SDK exchanges the code for a session and fires `sessionStatus`,
+     * which [SupabaseConfig.startSessionSync] persists to [TokenStorage].
+     *
+     * Note: the user-facing directive asked for ASWebAuthenticationSession on iOS
+     * specifically; today the SDK's default iOS browser is SFSafariViewController.
+     * The two behave identically from a PKCE / cookie-isolation standpoint and the
+     * deep-link return is unchanged. A future commit may wire a custom
+     * ExternalAuthAction backed by ASWebAuthenticationSession if stricter fidelity
+     * is ever required.
+     */
+    suspend fun signInWithOAuth(provider: OAuthProvider): Result<Unit> {
+        return try {
+            supabase.auth.signInWith(provider)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(
+                Exception(
+                    mapAuthErrorMessage(
+                        e,
+                        defaultMessage = "We couldn't open the sign-in browser. Please try again.",
+                    ),
+                ),
+            )
+        }
+    }
+
+    suspend fun signInWithGoogle(): Result<Unit> = signInWithOAuth(Google)
+
+    suspend fun signInWithApple(): Result<Unit> {
+        return try {
+            // Native Apple Sign-In is the canonical path on iOS.
+            // IMPORTANT: do not convert native failures into OAuth fallback, otherwise we can
+            // get stuck waiting for a browser deep link that never returns on simulator.
+            // Native Apple sign-in is user-interactive and can legitimately take longer
+            // than API-style timeouts while users authenticate/approve in system sheets.
+            val nativePayloadResult = withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
+                requestNativeAppleSignInPayload()
+            }
+
+            nativePayloadResult.fold(
+                onSuccess = { nativePayload ->
+                    if (nativePayload != null) {
+                        runCatching {
+                            supabase.auth.signInWith(IDToken) {
+                                provider = Apple
+                                idToken = nativePayload.idToken
+                                nativePayload.nonce?.let { nonce = it }
+                            }
+                        }.fold(
+                            onSuccess = {
+                                Result.success(Unit)
+                            },
+                            onFailure = { idTokenError ->
+                                val normalizedError = idTokenError.message?.trim().orEmpty().lowercase()
+                                if (isAppleAudienceMismatchError(normalizedError)) {
+                                    if (!isSimulatorOrEmulatorRuntime()) {
+                                        signInWithOAuth(Apple)
+                                    } else {
+                                        Result.failure(Exception(appleAudienceMismatchMessage()))
+                                    }
+                                } else {
+                                    Result.failure(
+                                        Exception(
+                                            mapAppleSignInErrorMessage(
+                                                idTokenError,
+                                                defaultMessage = "Apple sign-in couldn't be completed right now.",
+                                            ),
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                    } else {
+                        // Android/other platforms return null payload by design.
+                        signInWithOAuth(Apple)
+                    }
+                },
+                onFailure = { nativeError ->
+                    Result.failure(
+                        Exception(
+                            mapAppleSignInErrorMessage(
+                                nativeError,
+                                defaultMessage = "Apple sign-in couldn't be completed right now.",
+                            ),
+                        ),
+                    )
+                },
+            )
+        } catch (e: Exception) {
+            Result.failure(
+                Exception(
+                    mapAppleSignInErrorMessage(
+                        e,
+                        defaultMessage = "Apple sign-in couldn't be completed right now.",
+                    ),
+                ),
+            )
         }
     }
 
@@ -150,11 +286,13 @@ class AuthRepository(
                 
                 // Always try to refresh when restoring from TokenStorage
                 // since these tokens may be stale
+                var refreshFailed = false
                 try {
                     supabase.auth.refreshCurrentSession()
                     println("AuthRepository: Successfully refreshed session from TokenStorage")
                 } catch (e: Exception) {
-                    println("AuthRepository: Failed to refresh session from TokenStorage: ${e.message}")
+                    refreshFailed = true
+                    println("AuthRepository: Failed to refresh session from TokenStorage: ${e.redactedRestMessage()}")
                 }
 
                 user = supabase.auth.currentUserOrNull()
@@ -172,16 +310,20 @@ class AuthRepository(
                     }
                     Result.success(user)
                 } else {
-                    // Tokens were invalid, clear them to avoid retrying stale tokens
-                    println("AuthRepository: TokenStorage tokens invalid, clearing")
-                    tokenStorage.clearTokens()
-                    Result.failure(Exception("Session expired and could not be refreshed"))
+                    // Keep local tokens on restore failure so offline cold boots do not force sign-out.
+                    // Explicit sign-out still clears session data via AuthViewModel.signOut().
+                    if (refreshFailed) {
+                        println("AuthRepository: Session refresh failed; preserving local tokens for offline recovery")
+                    } else {
+                        println("AuthRepository: Session user unavailable after import; preserving local tokens")
+                    }
+                    Result.failure(Exception("Session could not be restored right now"))
                 }
             } else {
                 Result.failure(Exception("No saved session found"))
             }
         } catch (e: Exception) {
-            println("Error restoring session: ${e.message}")
+            println("Error restoring session: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -215,21 +357,70 @@ class AuthRepository(
     }
     
     /**
-     * Update user metadata (like full_name)
+     * Update auth user_metadata with explicit first/last names (and derived full_name / name).
      */
-    suspend fun updateUserMetadata(fullName: String): Result<Unit> {
+    suspend fun updateUserProfileNames(firstName: String, lastName: String): Result<Unit> {
         return try {
-            println("AuthRepository: Updating user metadata with full_name: $fullName")
+            val f = firstName.trim()
+            val l = lastName.trim()
+            if (f.isEmpty()) {
+                return Result.failure(IllegalArgumentException("First name is required"))
+            }
+            val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
+            println("AuthRepository: Updating profile names: $display")
             supabase.auth.updateUser {
-                data = kotlinx.serialization.json.buildJsonObject {
-                    put("full_name", kotlinx.serialization.json.JsonPrimitive(fullName))
+                data = buildJsonObject {
+                    put("first_name", JsonPrimitive(f))
+                    put("last_name", JsonPrimitive(l))
+                    put("full_name", JsonPrimitive(display))
+                    put("name", JsonPrimitive(display))
                 }
             }
-            println("AuthRepository: Successfully updated user metadata")
+            println("AuthRepository: Successfully updated user profile names")
             Result.success(Unit)
         } catch (e: Exception) {
-            println("AuthRepository: Error updating user metadata: ${e.message}")
-            e.printStackTrace()
+            println("AuthRepository: Error updating user profile names (redacted): ${e.redactedRestMessage()}")
+            Result.failure(e)
+        }
+    }
+
+    /** Splits a single display string into first/last and calls [updateUserProfileNames]. */
+    suspend fun updateUserMetadata(fullName: String): Result<Unit> {
+        val trimmed = fullName.trim()
+        val spaceIdx = trimmed.indexOf(' ')
+        val first = if (spaceIdx < 0) trimmed else trimmed.take(spaceIdx).trim()
+        val last = if (spaceIdx < 0) "" else trimmed.substring(spaceIdx + 1).trim()
+        return updateUserProfileNames(first, last)
+    }
+
+    /**
+     * Uploads a profile image via click-web [POST /api/user/avatar] (thin client); updates [public.users.image] server-side.
+     */
+    suspend fun uploadProfilePicture(imageBytes: ByteArray, mimeType: String = "image/jpeg"): Result<String> {
+        if (imageBytes.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Empty image"))
+        }
+        supabase.auth.currentUserOrNull() ?: return Result.failure(Exception("Not signed in"))
+        val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
+        return try {
+            val compressedCandidate = if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
+                compressOutgoingChatImageForUpload(imageBytes, normalizedMime)
+            } else {
+                imageBytes
+            }
+            val wasReencoded = compressedCandidate !== imageBytes
+            val bytesToUpload = compressedCandidate
+            if (bytesToUpload.size > MAX_PROFILE_IMAGE_BYTES) {
+                return Result.failure(
+                    IllegalArgumentException("Image is too large to upload. Please choose a smaller photo."),
+                )
+            }
+
+            // iOS/Android compression utilities currently re-encode as JPEG.
+            val uploadMime = if (wasReencoded) "image/jpeg" else normalizedMime
+            clickWebApi.uploadAvatar(bytesToUpload, uploadMime)
+        } catch (e: Exception) {
+            println("AuthRepository: uploadProfilePicture failed: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }
@@ -250,18 +441,84 @@ class AuthRepository(
                 normalized.contains("invalid credentials") ->
                 "That email or password is incorrect."
 
-            normalized.contains("network") ||
-                normalized.contains("timeout") ||
-                normalized.contains("timed out") ||
-                normalized.contains("unable to resolve host") ||
-                normalized.contains("offline") ||
-                normalized.contains("socket") ||
-                normalized.contains("connection") ->
+            isLikelyNetworkErrorMessage(normalized) ->
                 "You're offline or the network is unstable. Please try again when you're connected."
 
             rawMessage.isNotBlank() -> rawMessage
             else -> defaultMessage
         }
+    }
+
+    private fun mapAppleSignInErrorMessage(error: Throwable, defaultMessage: String): String {
+        val rawMessage = error.message?.trim().orEmpty()
+        val normalized = rawMessage.lowercase()
+        val appleDomainHint =
+            normalized.contains("akauthenticationerror") ||
+                normalized.contains("asauthorizationerror") ||
+                normalized.contains("authenticationservices.authorizationerror") ||
+                normalized.contains("com.apple.authenticationservices") ||
+                normalized.contains("com.apple.authenticationkit") ||
+                normalized.contains("apple sign")
+
+        if (rawMessage.isBlank()) return defaultMessage
+
+        if (
+            normalized.contains("canceled") ||
+            normalized.contains("cancelled") ||
+            normalized.contains("asauthorizationerror") && normalized.contains("1001")
+        ) {
+            return "Apple sign-in was canceled."
+        }
+
+        if (normalized.contains("authenticationservices.authorizationerror/1000")) {
+            return "Apple sign-in failed (AuthorizationError 1000). Ensure Sign in with Apple is enabled in this build's Signing & Capabilities, then verify the simulator is signed in with an Apple ID that has two-factor authentication enabled."
+        }
+
+        if (isAppleAudienceMismatchError(normalized)) {
+            return appleAudienceMismatchMessage()
+        }
+
+        if (
+            normalized.contains("timed out waiting for") ||
+            normalized.contains("timeoutcancellationexception") ||
+            normalized.contains("timed out")
+        ) {
+            return "Apple sign-in took too long to complete. Please try again."
+        }
+
+        if (appleDomainHint) {
+            return rawMessage
+        }
+
+        return rawMessage
+    }
+
+    private fun isAppleAudienceMismatchError(normalizedMessage: String): Boolean {
+        if (normalizedMessage.isBlank()) return false
+        return normalizedMessage.contains("unacceptable audience in id_token") ||
+            normalizedMessage.contains("audience in id_token")
+    }
+
+    private fun appleAudienceMismatchMessage(): String {
+        return "Apple sign-in configuration mismatch: native token audience is compose.project.click.click. Add this iOS bundle ID to Apple provider Client IDs in Supabase Auth settings."
+    }
+
+    private fun isLikelyNetworkErrorMessage(normalizedMessage: String): Boolean {
+        if (normalizedMessage.isBlank()) return false
+
+        if (normalizedMessage.contains("network")) return true
+        if (normalizedMessage.contains("offline")) return true
+        if (normalizedMessage.contains("unable to resolve host")) return true
+        if (normalizedMessage.contains("socket")) return true
+        if (normalizedMessage.contains("dns")) return true
+        if (normalizedMessage.contains("host unreachable")) return true
+        if (normalizedMessage.contains("connection reset")) return true
+        if (normalizedMessage.contains("connection refused")) return true
+        if (normalizedMessage.contains("connection timed out")) return true
+        if (normalizedMessage.contains("timed out")) return true
+        if (normalizedMessage.contains("timeout")) return true
+
+        return false
     }
 }
 

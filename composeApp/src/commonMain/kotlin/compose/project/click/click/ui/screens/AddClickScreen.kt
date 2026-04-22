@@ -4,10 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +32,8 @@ fun AddClickScreen(
     onNavigateToNfc: () -> Unit = {},
     onShowMyQRCode: () -> Unit = {},
     onScanQRCode: () -> Unit = {},
+    /** Hub slug from venue (e.g. local_point); runs proximity check then opens hub chat. */
+    onJoinCommunityHub: (hubId: String) -> Unit = {},
     onStartChatting: () -> Unit = {}
 ) {
     var isClicked by remember { mutableStateOf(false) }
@@ -45,7 +48,10 @@ fun AddClickScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Box(modifier = Modifier.padding(top = topInset)) {
-                PageHeader(title = "Add Click", subtitle = "Scan QR or use NFC to connect")
+                PageHeader(
+                    title = "Add Click",
+                    subtitle = "Connect with QR or Tap to Connect, or join a venue community hub",
+                )
             }
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -61,7 +67,8 @@ fun AddClickScreen(
                     },
                     onNavigateToNfc = onNavigateToNfc,
                     onShowMyQRCode = onShowMyQRCode,
-                    onScanQRCode = onScanQRCode
+                    onScanQRCode = onScanQRCode,
+                    onJoinCommunityHub = onJoinCommunityHub,
                 )
             } else {
                 ClickedSuccessContent(
@@ -77,14 +84,71 @@ fun AddClickScreen(
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddClickContent(
     modifier: Modifier = Modifier,
     onClickSuccess: (String) -> Unit,
     onNavigateToNfc: () -> Unit,
     onShowMyQRCode: () -> Unit,
-    onScanQRCode: () -> Unit
+    onScanQRCode: () -> Unit,
+    onJoinCommunityHub: (hubId: String) -> Unit = {},
 ) {
+    var showHubCodeDialog by remember { mutableStateOf(false) }
+    var hubCodeDraft by remember { mutableStateOf("") }
+
+    if (showHubCodeDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showHubCodeDialog = false
+                hubCodeDraft = ""
+            },
+            title = { Text("Join community hub") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Enter the hub code shown at the venue. You must be within range for location check.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = hubCodeDraft,
+                        onValueChange = { hubCodeDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("e.g. local_point") },
+                        label = { Text("Hub code") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val id = hubCodeDraft.trim()
+                        if (id.isNotEmpty()) {
+                            onJoinCommunityHub(id)
+                            showHubCodeDialog = false
+                            hubCodeDraft = ""
+                        }
+                    },
+                    enabled = hubCodeDraft.trim().isNotEmpty(),
+                ) {
+                    Text("Join hub")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showHubCodeDialog = false
+                        hubCodeDraft = ""
+                    },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -152,7 +216,7 @@ fun AddClickContent(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "Scan a friend's QR",
+                        "Friend or hub QR",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -160,7 +224,7 @@ fun AddClickContent(
             }
         }
 
-        // NFC Section - Full width card matching header width
+        // Tap to Connect (BLE + audio + GPS) — full width card
         AdaptiveCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -175,23 +239,61 @@ fun AddClickContent(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    Icons.Filled.Nfc,
-                    contentDescription = "NFC",
+                    Icons.Filled.BluetoothSearching,
+                    contentDescription = "Tap to Connect",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "Tap to use NFC",
+                    "Tap to Connect",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Hold phones together to connect",
+                    "Nearby handshake with Bluetooth and audio",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Ephemeral community hub (venue QR or code)
+        AdaptiveCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp),
+            onClick = { showHubCodeDialog = true },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Groups,
+                    contentDescription = "Community hub",
+                    tint = MaterialTheme.colorScheme.primary,
+                    // DO NOT REVERT: Fixed size per design specs
+                    modifier = Modifier.size(120.dp),
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Community hub",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "Enter a hub code or scan a hub QR with Scan Code",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                 )
             }
         }

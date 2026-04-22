@@ -1,5 +1,6 @@
 package compose.project.click.click.data.models
 
+import kotlin.random.Random
 import kotlinx.serialization.Serializable
 
 /**
@@ -28,7 +29,16 @@ data class IcebreakerPrompt(
  * Repository of icebreaker prompts organized by category
  */
 object IcebreakerRepository {
-    
+
+    /** Same inputs ⇒ same ordering on all platforms (unlike [String.hashCode]). */
+    private fun stableRandomSeed(selectionKey: String): Long {
+        var h = 1_982_739_817L
+        for (ch in selectionKey) {
+            h = h * 31 + ch.code
+        }
+        return h
+    }
+
     // Context-based prompts (will match against connection context_tag)
     private val contextPrompts = listOf(
         // Academic/Class contexts
@@ -254,33 +264,45 @@ object IcebreakerRepository {
     /**
      * Get icebreaker prompts based on connection context.
      * Returns contextual prompts if a matching context is found, otherwise returns general prompts.
-     * 
+     *
+     * @param stableSelectionKey When set (e.g. connection id), shuffles use a seeded [Random] so the
+     *   same chat always gets the same suggestions until the user taps Refresh. When null, selection
+     *   is different on each call (used for refresh and one-off sends).
      * @param contextTag The context_tag from the connection (e.g., "Met at Dawg Daze")
      * @param count Number of prompts to return
      * @return List of relevant icebreaker prompts
      */
-    fun getPromptsForContext(contextTag: String?, count: Int = 3): List<IcebreakerPrompt> {
+    fun getPromptsForContext(
+        contextTag: String?,
+        count: Int = 3,
+        stableSelectionKey: String? = null,
+    ): List<IcebreakerPrompt> {
+        val random = if (stableSelectionKey != null) {
+            Random(stableRandomSeed(stableSelectionKey))
+        } else {
+            Random.Default
+        }
         val result = mutableListOf<IcebreakerPrompt>()
-        
+
         // Try to find context-based prompts that match the tag
         if (!contextTag.isNullOrBlank()) {
             val lowercaseTag = contextTag.lowercase()
             val matchingPrompts = contextPrompts.filter { prompt ->
                 prompt.contextKeywords.any { keyword -> lowercaseTag.contains(keyword) }
             }
-            result.addAll(matchingPrompts.shuffled().take(count))
+            result.addAll(matchingPrompts.shuffled(random).take(count))
         }
-        
+
         // Fill remaining slots with random prompts from other categories
         val remaining = count - result.size
         if (remaining > 0) {
             val otherPrompts = (funPrompts + activityPrompts + gettingToKnowPrompts)
-                .shuffled()
+                .shuffled(random)
                 .take(remaining)
             result.addAll(otherPrompts)
         }
-        
-        return result.shuffled()
+
+        return result.shuffled(random)
     }
     
     /**

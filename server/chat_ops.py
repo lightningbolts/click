@@ -28,6 +28,8 @@ class ChatOperations:
             "created_at": message.get("time_created") or message.get("created_at") or 0,
             "updated_at": message.get("time_edited") or message.get("updated_at"),
             "is_read": bool(message.get("is_read", False)),
+            "message_type": message.get("message_type") or "text",
+            "metadata": message.get("metadata") if message.get("metadata") is not None else {},
         }
 
     def _normalize_user_for_api(self, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -170,7 +172,9 @@ class ChatOperations:
         self,
         chat_id: str,
         user_id: str,
-        content: str
+        content: str,
+        message_type: str = "text",
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Create a new message in a chat"""
         try:
@@ -180,7 +184,9 @@ class ChatOperations:
                 "user_id": user_id,
                 "content": content,
                 "time_created": now,
-                "is_read": False
+                "is_read": False,
+                "message_type": message_type,
+                "metadata": metadata if isinstance(metadata, dict) else {},
             }
             response = self.supabase.table("messages").insert(message_data).execute()
 

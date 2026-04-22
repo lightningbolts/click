@@ -25,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 
@@ -52,6 +53,7 @@ actual class CallManager {
     actual val callState: StateFlow<CallState> = _callState.asStateFlow()
     private var room: Room? = null
     private var eventsJob: Job? = null
+    private var deferIdleAfterEndJob: Job? = null
     private var microphoneEnabled = true
     private var speakerEnabled = false
     private var cameraEnabled = false
@@ -88,6 +90,8 @@ actual class CallManager {
             return
         }
 
+        deferIdleAfterEndJob?.cancel()
+        deferIdleAfterEndJob = null
         cleanupRoom()
         microphoneEnabled = true
         speakerEnabled = videoEnabled
@@ -184,8 +188,16 @@ actual class CallManager {
     }
 
     actual fun endCall() {
+        deferIdleAfterEndJob?.cancel()
         cleanupRoom()
-        _callState.value = CallState.Idle
+        _callState.value = CallState.Ended("Call ended")
+        deferIdleAfterEndJob = scope.launch {
+            delay(420)
+            deferIdleAfterEndJob = null
+            if (_callState.value is CallState.Ended) {
+                _callState.value = CallState.Idle
+            }
+        }
     }
 
     internal fun bindRenderer(renderer: TextureViewRenderer, isLocal: Boolean) {

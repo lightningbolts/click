@@ -43,12 +43,18 @@ import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.QRScanner
 import compose.project.click.click.ui.components.QrScannerDetection
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.datetime.Clock
 import kotlin.math.roundToInt
 
 /**
+ * QR scan UI only parses payloads and forwards them to the app shell; token redemption is performed
+ * in [compose.project.click.click.data.repository.ConnectionRepository] via the Next.js companion
+ * `/api/qr` route (never the Supabase `bind-proximity-connection` Edge Function).
+ *
  * Result types for QR code scanning.
  * Now supports both token-based (new) and userId-only (legacy) results.
  */
@@ -74,11 +80,20 @@ private enum class QrScannerPresentationState {
 @Composable
 fun QRScannerScreen(
     onQRCodeScanned: (String) -> Unit,
-    onQRCodeScannedWithToken: ((userId: String, token: String) -> Unit)? = null,
+    onQRCodeScannedWithToken: ((userId: String, token: String, venueId: String?) -> Unit)? = null,
+    onCommunityHubScanned: ((hubId: String) -> Unit)? = null,
     onNavigateBack: () -> Unit
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val scope = rememberCoroutineScope()
+    val locationService = remember { LocationService() }
+
+    // GPS warm-up: start high-accuracy polling as soon as the scanner is shown (non-blocking).
+    LaunchedEffect(Unit) {
+        launch(Dispatchers.Default) {
+            runCatching { locationService.getHighAccuracyLocation(4000L) }
+        }
+    }
     
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
@@ -127,7 +142,11 @@ fun QRScannerScreen(
 
                 if (onQRCodeScannedWithToken != null) {
                     lockAndContinue {
-                        onQRCodeScannedWithToken(result.payload.userId, result.payload.token)
+                        onQRCodeScannedWithToken(
+                            result.payload.userId,
+                            result.payload.token,
+                            result.payload.venueId,
+                        )
                     }
                 } else {
                     lockAndContinue {
@@ -138,6 +157,17 @@ fun QRScannerScreen(
             is QrParseResult.Legacy -> {
                 lockAndContinue {
                     onQRCodeScanned(result.userId)
+                }
+            }
+            is QrParseResult.CommunityHub -> {
+                if (onCommunityHubScanned != null) {
+                    lockAndContinue {
+                        onCommunityHubScanned(result.hubId)
+                    }
+                } else {
+                    lastScannedRaw = qrData
+                    errorMessage = "This hub QR needs a newer version of Click."
+                    showError = true
                 }
             }
             is QrParseResult.Invalid -> {

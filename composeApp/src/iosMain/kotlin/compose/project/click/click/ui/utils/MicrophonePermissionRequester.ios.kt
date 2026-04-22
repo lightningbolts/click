@@ -15,8 +15,11 @@ actual fun rememberMicrophonePermissionRequester(): ((onComplete: () -> Unit) ->
 
     return { onComplete ->
         when (session.recordPermission) {
-            AVAudioSessionRecordPermissionGranted,
-            AVAudioSessionRecordPermissionDenied -> onComplete()
+            AVAudioSessionRecordPermissionGranted -> onComplete()
+            AVAudioSessionRecordPermissionDenied -> {
+                openApplicationSystemSettings()
+                onComplete()
+            }
             else -> {
                 session.requestRecordPermission { _ ->
                     CoroutineScope(Dispatchers.Main).launch {

@@ -2,22 +2,11 @@ package compose.project.click.click.data.storage
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 class AndroidTokenStorage(private val context: Context) : TokenStorage {
 
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val sharedPreferences: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        "auth_prefs",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val sharedPreferences: SharedPreferences =
+        createEncryptedSharedPreferences(context, AUTH_PREFS_NAME)
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
         sharedPreferences.edit().apply {
@@ -47,10 +36,17 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
     }
 
     override suspend fun clearTokens() {
-        sharedPreferences.edit().clear().apply()
+        sharedPreferences.edit().apply {
+            remove(KEY_JWT)
+            remove(KEY_REFRESH_TOKEN)
+            remove(KEY_EXPIRES_AT)
+            remove(KEY_TOKEN_TYPE)
+            apply()
+        }
     }
 
     companion object {
+        internal const val AUTH_PREFS_NAME = "auth_prefs"
         private const val KEY_JWT = "jwt"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
@@ -61,10 +57,13 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
+        private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
+        private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
+        private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -157,6 +156,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         }
     }
 
+    override suspend fun saveBarometricContextOptIn(enabled: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_BAROMETRIC_CONTEXT_OPT_IN, enabled)
+            apply()
+        }
+    }
+
+    override suspend fun getBarometricContextOptIn(): Boolean? {
+        return if (sharedPreferences.contains(KEY_BAROMETRIC_CONTEXT_OPT_IN)) {
+            sharedPreferences.getBoolean(KEY_BAROMETRIC_CONTEXT_OPT_IN, true)
+        } else {
+            null
+        }
+    }
+
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         sharedPreferences.edit().apply {
             putBoolean(KEY_LOCATION_EXPLAINER_SEEN, seen)
@@ -183,6 +197,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         return sharedPreferences.getString(KEY_ONBOARDING_STATE, null)
     }
 
+    override suspend fun saveHasCompletedOnboarding(completed: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_HAS_COMPLETED_ONBOARDING, completed)
+            apply()
+        }
+    }
+
+    override suspend fun getHasCompletedOnboarding(): Boolean? {
+        return if (sharedPreferences.contains(KEY_HAS_COMPLETED_ONBOARDING)) {
+            sharedPreferences.getBoolean(KEY_HAS_COMPLETED_ONBOARDING, false)
+        } else {
+            null
+        }
+    }
+
     override suspend fun saveCachedAppSnapshot(snapshot: String?) {
         sharedPreferences.edit().apply {
             if (snapshot == null) remove(KEY_CACHED_APP_SNAPSHOT) else putString(KEY_CACHED_APP_SNAPSHOT, snapshot)
@@ -205,14 +234,30 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         return sharedPreferences.getString(KEY_PENDING_CONNECTION_QUEUE, null)
     }
 
+    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {
+        sharedPreferences.edit().apply {
+            if (queue == null) {
+                remove(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+            } else {
+                putString(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE, queue)
+            }
+            apply()
+        }
+    }
+
+    override suspend fun getPendingProximityHandshakeQueue(): String? {
+        return sharedPreferences.getString(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE, null)
+    }
+
     override suspend fun clearSessionData() {
         sharedPreferences.edit().apply {
             val sessionKeys = listOf(
                 KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
                 KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
                 KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
-                KEY_AMBIENT_NOISE_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
-                KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+                KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
+                KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+                KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
             )
             sessionKeys.forEach { remove(it) }
             apply()
@@ -224,13 +269,15 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
 private var contextInstance: Context? = null
 
 fun initTokenStorage(context: Context) {
-    contextInstance = context
+    contextInstance = context.applicationContext
 }
 
-actual fun createTokenStorage(): TokenStorage {
-    val context = contextInstance ?: throw IllegalStateException(
+internal fun androidStorageContextOrThrow(): Context =
+    contextInstance ?: throw IllegalStateException(
         "TokenStorage not initialized. Call initTokenStorage() from MainActivity first."
     )
-    return AndroidTokenStorage(context)
+
+actual fun createTokenStorage(): TokenStorage {
+    return AndroidTokenStorage(androidStorageContextOrThrow())
 }
 

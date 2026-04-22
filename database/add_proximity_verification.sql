@@ -10,8 +10,15 @@ CREATE TABLE IF NOT EXISTS public.qr_tokens (
     user_id UUID NOT NULL,
     created_at BIGINT NOT NULL,
     expires_at BIGINT NOT NULL,  -- created_at + 90_000 (90 seconds in ms)
-    redeemed BOOLEAN DEFAULT false
+    redeemed BOOLEAN DEFAULT false,
+    initiator_lat DOUBLE PRECISION,  -- GPS lat of the user who generated the QR
+    initiator_lon DOUBLE PRECISION   -- GPS lon of the user who generated the QR
 );
+
+-- Back-fill existing tables that lack the columns
+ALTER TABLE public.qr_tokens
+    ADD COLUMN IF NOT EXISTS initiator_lat DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS initiator_lon DOUBLE PRECISION;
 
 -- Index for cleanup cron and user lookups
 CREATE INDEX IF NOT EXISTS idx_qr_tokens_user_id ON public.qr_tokens(user_id);
@@ -37,9 +44,16 @@ ALTER TABLE public.connections
     ADD COLUMN IF NOT EXISTS connection_method TEXT DEFAULT 'qr',
     ADD COLUMN IF NOT EXISTS flagged BOOLEAN DEFAULT false;
 
--- 3. Atomic token redemption RPC
--- Uses FOR UPDATE to prevent race conditions (two simultaneous scans)
-CREATE OR REPLACE FUNCTION public.redeem_qr_token(p_token TEXT)
+-- 3. Atomic token redemption RPC with proximity enforcement
+-- Uses FOR UPDATE to prevent race conditions (two simultaneous scans).
+-- When both the initiator and scanner have GPS, rejects if they are
+-- more than 100 m apart (Haversine). The token is NOT consumed on
+-- proximity rejection so the initiator can retry in person.
+CREATE OR REPLACE FUNCTION public.redeem_qr_token(
+    p_token TEXT,
+    p_scanner_lat DOUBLE PRECISION DEFAULT NULL,
+    p_scanner_lon DOUBLE PRECISION DEFAULT NULL
+)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -47,11 +61,14 @@ AS $$
 DECLARE
     v_record RECORD;
     v_now BIGINT;
+    v_distance_m DOUBLE PRECISION;
+    v_max_distance_m CONSTANT DOUBLE PRECISION := 100.0;  -- 100-meter threshold
 BEGIN
     v_now := (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT;
 
     -- Lock the row for atomic update
-    SELECT token, user_id, created_at, expires_at, redeemed
+    SELECT token, user_id, created_at, expires_at, redeemed,
+           initiator_lat, initiator_lon
     INTO v_record
     FROM public.qr_tokens
     WHERE token = p_token
@@ -70,6 +87,34 @@ BEGIN
     -- Expired
     IF v_now > v_record.expires_at THEN
         RETURN jsonb_build_object('success', false, 'error', 'expired');
+    END IF;
+
+    -- ── Proximity gate ──
+    -- Only enforced when BOTH sides have valid GPS coordinates.
+    -- (0,0) is treated as missing/sentinel.
+    IF  v_record.initiator_lat IS NOT NULL
+        AND v_record.initiator_lon IS NOT NULL
+        AND p_scanner_lat IS NOT NULL
+        AND p_scanner_lon IS NOT NULL
+        AND NOT (v_record.initiator_lat = 0 AND v_record.initiator_lon = 0)
+        AND NOT (p_scanner_lat = 0 AND p_scanner_lon = 0)
+    THEN
+        -- Haversine distance in meters
+        v_distance_m := 6371000.0 * 2.0 * ASIN(SQRT(
+            POWER(SIN(RADIANS(p_scanner_lat - v_record.initiator_lat) / 2.0), 2)
+            + COS(RADIANS(v_record.initiator_lat))
+              * COS(RADIANS(p_scanner_lat))
+              * POWER(SIN(RADIANS(p_scanner_lon - v_record.initiator_lon) / 2.0), 2)
+        ));
+
+        IF v_distance_m > v_max_distance_m THEN
+            -- Do NOT mark the token as redeemed — allow retry when in person
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'proximity_failed',
+                'distance_meters', ROUND(v_distance_m)::INTEGER
+            );
+        END IF;
     END IF;
 
     -- Mark as redeemed

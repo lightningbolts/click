@@ -1,21 +1,55 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -27,19 +61,24 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.BackgroundDark
+import compose.project.click.click.ui.theme.DeepBlue
+import compose.project.click.click.ui.theme.GradientTextEnd
+import compose.project.click.click.ui.theme.GradientTextStart
+import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SurfaceDark
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
-import compose.project.click.click.viewmodel.GlobalSearchResults
-import compose.project.click.click.viewmodel.LocationSearchResult
-import compose.project.click.click.viewmodel.MessageSearchResult
+import compose.project.click.click.viewmodel.SearchResult
+import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 /**
- * Full-screen global search — unified results for People, Messages, and Locations.
- * Displayed as a route (no bottom nav bar) when the nav bar Search button is tapped.
+ * Full-screen global search — unified results across connections, archives, cliques,
+ * interests, memory context, intents, messages, and locations.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,22 +86,24 @@ fun GlobalSearchScreen(
     userId: String,
     onNavigateToChat: (connectionId: String) -> Unit,
     onNavigateToMap: () -> Unit,
-    onBack: () -> Unit,
-    viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() }
+    viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
 ) {
     val query by viewModel.searchQuery.collectAsState()
     val results by viewModel.results.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val visibleCategories by viewModel.visibleCategories.collectAsState()
+
+    val visibleResults = remember(results, visibleCategories) {
+        results.visible(visibleCategories)
+    }
 
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
-    // Auto-focus the search field when the screen opens
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
-    // Clean up search state when leaving
     DisposableEffect(Unit) {
         onDispose { viewModel.clear() }
     }
@@ -70,449 +111,445 @@ fun GlobalSearchScreen(
     Scaffold(
         containerColor = BackgroundDark,
         topBar = {
-            // ── Search Bar Header ───────────────────────────────────────────
             Surface(
                 color = SurfaceDark,
                 tonalElevation = 0.dp,
-                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
+                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
             ) {
-                Row(
-                    modifier = Modifier
+                Column(
+                    Modifier
                         .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .windowInsetsPadding(WindowInsets.statusBars),
                 ) {
-                    // Back button
-                    IconButton(onClick = { viewModel.clear(); onBack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
-                    }
-
-                    // Rounded search text field container
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White.copy(alpha = 0.08f)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Search text field
-                        TextField(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                        value = query,
-                        onValueChange = { viewModel.search(it) },
-                        singleLine = true,
-                        placeholder = {
-                            Text(
-                                "Search people, messages, places…",
-                                color = Color.White.copy(alpha = 0.4f)
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White.copy(alpha = 0.08f),
+                        ) {
+                            TextField(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequester),
+                                value = query,
+                                onValueChange = { viewModel.search(it, userId) },
+                                singleLine = true,
+                                placeholder = {
+                                    Text(
+                                        "Search people, places, interests, intents…",
+                                        color = Color.White.copy(alpha = 0.4f),
+                                    )
+                                },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = PrimaryBlue,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                             )
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            cursorColor = PrimaryBlue,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
-                    )
-                    } // end Surface wrapper around TextField
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        for (cat in SearchResultCategory.entries) {
+                            val selected = cat in visibleCategories
+                            FilterChip(
+                                selected = selected,
+                                onClick = { viewModel.toggleCategory(cat) },
+                                label = { Text(categoryLabel(cat)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.35f),
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color.White.copy(alpha = 0.06f),
+                                    labelColor = Color.White.copy(alpha = 0.85f),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
-        }
+        },
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues),
         ) {
             when {
-                // Loading indicator
                 isSearching -> {
                     AdaptiveCircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
-                        color = PrimaryBlue
+                        color = PrimaryBlue,
                     )
                 }
 
-                // Empty state when no query entered
                 query.isBlank() -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.White.copy(alpha = 0.2f)
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Search for people, messages,\nor locations you've visited",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.4f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
+                    EmptySearchHint(
+                        modifier = Modifier.align(Alignment.Center),
+                        icon = Icons.Default.Search,
+                        body = "Search for people, cliques, interests,\nintents, messages, or places you've visited",
+                    )
                 }
 
-                // No results
                 results.isEmpty -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SearchOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.White.copy(alpha = 0.2f)
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "No results for \"$query\"",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.4f)
-                        )
-                    }
+                    EmptySearchHint(
+                        modifier = Modifier.align(Alignment.Center),
+                        icon = Icons.Default.SearchOff,
+                        body = "No results for \"$query\"",
+                        dimmed = false,
+                    )
                 }
 
-                // Show unified results list
+                visibleResults.isEmpty() -> {
+                    EmptySearchHint(
+                        modifier = Modifier.align(Alignment.Center),
+                        icon = Icons.Default.SearchOff,
+                        body = "No results match the selected filters.\nTry enabling another tab above.",
+                        dimmed = false,
+                    )
+                }
+
                 else -> {
-                    SearchResultsList(
-                        results = results,
+                    UnifiedSearchResultsList(
+                        results = visibleResults,
                         onNavigateToChat = onNavigateToChat,
-                        onNavigateToMap = onNavigateToMap
+                        onNavigateToMap = onNavigateToMap,
                     )
                 }
             }
         }
     }
 }
-
-// ── Results List ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun SearchResultsList(
-    results: GlobalSearchResults,
+private fun categoryLabel(cat: SearchResultCategory): String =
+    when (cat) {
+        SearchResultCategory.Active -> "Active"
+        SearchResultCategory.Archived -> "Archived"
+        SearchResultCategory.Cliques -> "Cliques"
+        SearchResultCategory.Nearby -> "Nearby"
+    }
+
+@Composable
+private fun EmptySearchHint(
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    body: String,
+    dimmed: Boolean = true,
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = Color.White.copy(if (dimmed) 0.2f else 0.35f),
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White.copy(if (dimmed) 0.4f else 0.75f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun UnifiedSearchResultsList(
+    results: List<SearchResult>,
     onNavigateToChat: (String) -> Unit,
-    onNavigateToMap: () -> Unit
+    onNavigateToMap: () -> Unit,
 ) {
     val gradientBrush = Brush.horizontalGradient(
-        colors = listOf(GradientTextStart, GradientTextEnd)
+        colors = listOf(GradientTextStart, GradientTextEnd),
     )
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp)
+        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // ── People section ─────────────────────────────────────────────────────
-        if (results.people.isNotEmpty()) {
-            item {
-                SearchSectionHeader(label = "People", brush = gradientBrush)
-            }
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceDark.copy(alpha = 0.6f)
-                ) {
-                    Column {
-                        results.people.forEachIndexed { index, chatDetails ->
-                            PersonSearchRow(
-                                chatDetails = chatDetails,
-                                onClick = { onNavigateToChat(chatDetails.connection.id) }
-                            )
-                            if (index < results.people.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    color = Color.White.copy(alpha = 0.06f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+        item {
+            SearchSectionHeader(label = "Results", brush = gradientBrush)
         }
-
-        // ── Messages section ───────────────────────────────────────────────────
-        if (results.messages.isNotEmpty()) {
-            item {
-                SearchSectionHeader(label = "Messages", brush = gradientBrush)
-            }
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceDark.copy(alpha = 0.6f)
-                ) {
-                    Column {
-                        results.messages.forEachIndexed { index, msgResult ->
-                            MessageSearchRow(
-                                result = msgResult,
-                                onClick = { onNavigateToChat(msgResult.connectionId) }
-                            )
-                            if (index < results.messages.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    color = Color.White.copy(alpha = 0.06f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Locations section ──────────────────────────────────────────────────
-        if (results.locations.isNotEmpty()) {
-            item {
-                SearchSectionHeader(label = "Locations", brush = gradientBrush)
-            }
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SurfaceDark.copy(alpha = 0.6f)
-                ) {
-                    Column {
-                        results.locations.forEachIndexed { index, locResult ->
-                            LocationSearchRow(
-                                result = locResult,
-                                onClick = { onNavigateToMap() }
-                            )
-                            if (index < results.locations.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                    color = Color.White.copy(alpha = 0.06f)
-                                )
-                            }
-                        }
-                    }
-                }
+        items(results, key = { searchResultStableKey(it) }) { row ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SurfaceDark.copy(alpha = 0.6f),
+            ) {
+                SearchResultRow(
+                    result = row,
+                    onNavigateToChat = onNavigateToChat,
+                    onNavigateToMap = onNavigateToMap,
+                )
             }
         }
     }
 }
 
-// ── Section Header ─────────────────────────────────────────────────────────────
+private fun searchResultStableKey(r: SearchResult): String =
+    when (r) {
+        is SearchResult.ActiveConnection -> "a:${r.details.connection.id}"
+        is SearchResult.ArchivedConnection -> "ar:${r.details.connection.id}"
+        is SearchResult.Clique -> "g:${r.details.connection.id}"
+        is SearchResult.IntentMatch -> "i:${r.details.connection.id}:${r.intentLabel}"
+        is SearchResult.InterestMatch -> "t:${r.details.connection.id}:${r.matchedTags.joinToString()}"
+        is SearchResult.MemoryContextMatch -> "m:${r.details.connection.id}"
+        is SearchResult.MessageHit -> "msg:${r.result.message.id}"
+        is SearchResult.LocationBucket -> "loc:${r.result.location}"
+    }
 
 @Composable
 private fun SearchSectionHeader(label: String, brush: Brush) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp)
+            .padding(vertical = 8.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
-                brush = brush
-            )
+                brush = brush,
+            ),
         )
     }
 }
 
-// ── Person Row ─────────────────────────────────────────────────────────────────
-
 @Composable
-private fun PersonSearchRow(
-    chatDetails: ChatWithDetails,
-    onClick: () -> Unit
+private fun SearchResultRow(
+    result: SearchResult,
+    onNavigateToChat: (String) -> Unit,
+    onNavigateToMap: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Avatar circle with initials (gradient)
-        val initials = chatDetails.otherUser.name
-            ?.split(" ")
-            ?.take(2)
-            ?.mapNotNull { it.firstOrNull()?.uppercase() }
-            ?.joinToString("") ?: "?"
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
-            contentAlignment = Alignment.Center
+    val archivedLook = when (result) {
+        is SearchResult.ArchivedConnection -> true
+        is SearchResult.IntentMatch -> result.isArchivedChannel
+        is SearchResult.InterestMatch -> result.isArchivedChannel
+        is SearchResult.MemoryContextMatch -> result.isArchivedChannel
+        else -> false
+    }
+    val alpha = if (archivedLook) 0.7f else 1f
+    Column(Modifier.alpha(alpha)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    when (result) {
+                        is SearchResult.LocationBucket -> onNavigateToMap()
+                        is SearchResult.MessageHit -> onNavigateToChat(result.result.connectionId)
+                        is SearchResult.ActiveConnection -> onNavigateToChat(result.details.connection.id)
+                        is SearchResult.ArchivedConnection -> onNavigateToChat(result.details.connection.id)
+                        is SearchResult.Clique -> onNavigateToChat(result.details.connection.id)
+                        is SearchResult.IntentMatch -> onNavigateToChat(result.details.connection.id)
+                        is SearchResult.InterestMatch -> onNavigateToChat(result.details.connection.id)
+                        is SearchResult.MemoryContextMatch -> onNavigateToChat(result.details.connection.id)
+                    }
+                }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = initials,
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = chatDetails.otherUser.name ?: "Unknown",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold
-            )
-            chatDetails.connection.semantic_location?.let { location ->
-                Text(
-                    text = location,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.5f)
-                )
+            when (result) {
+                is SearchResult.MessageHit -> MessageLeadingIcon()
+                is SearchResult.LocationBucket -> LocationLeadingIcon()
+                is SearchResult.ActiveConnection -> PersonLeadingAvatar(result.details)
+                is SearchResult.ArchivedConnection -> PersonLeadingAvatar(result.details)
+                is SearchResult.Clique -> PersonLeadingAvatar(result.details)
+                is SearchResult.IntentMatch -> PersonLeadingAvatar(result.details)
+                is SearchResult.InterestMatch -> PersonLeadingAvatar(result.details)
+                is SearchResult.MemoryContextMatch -> PersonLeadingAvatar(result.details)
             }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                BadgeRow(result)
+                Spacer(Modifier.height(4.dp))
+                TitleAndSubtitle(result)
+            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.size(20.dp),
+            )
         }
+    }
+}
 
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.3f),
-            modifier = Modifier.size(20.dp)
+@Composable
+private fun BadgeRow(result: SearchResult) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        when (result) {
+            is SearchResult.ArchivedConnection -> TinyBadge("Archived")
+            is SearchResult.Clique -> TinyBadge("Clique")
+            is SearchResult.IntentMatch -> TinyBadge("Intent")
+            is SearchResult.InterestMatch -> TinyBadge("Interest")
+            is SearchResult.MemoryContextMatch -> TinyBadge("Context")
+            is SearchResult.MessageHit -> TinyBadge("Message")
+            is SearchResult.LocationBucket -> TinyBadge("Place")
+            is SearchResult.ActiveConnection -> {}
+        }
+    }
+}
+
+@Composable
+private fun TinyBadge(text: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color.White.copy(alpha = 0.1f),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.75f),
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
 
-// ── Message Row ─────────────────────────────────────────────────────────────────
-
 @Composable
-private fun MessageSearchRow(
-    result: MessageSearchResult,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Message icon
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(PrimaryBlue.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Chat,
-                contentDescription = null,
-                tint = LightBlue,
-                modifier = Modifier.size(22.dp)
+private fun TitleAndSubtitle(result: SearchResult) {
+    val titleStyle = MaterialTheme.typography.bodyLarge.copy(
+        color = Color.White,
+        fontWeight = FontWeight.SemiBold,
+    )
+    val subtitleStyle = MaterialTheme.typography.bodySmall.copy(
+        color = Color.White.copy(alpha = 0.55f),
+    )
+    when (result) {
+        is SearchResult.ActiveConnection -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            result.subtitle?.let { Text(it, style = subtitleStyle) }
+        }
+        is SearchResult.ArchivedConnection -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            result.subtitle?.let { Text(it, style = subtitleStyle) }
+        }
+        is SearchResult.Clique -> {
+            Text(result.details.groupClique?.name ?: "Clique", style = titleStyle)
+            Text("Group chat", style = subtitleStyle)
+        }
+        is SearchResult.IntentMatch -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            Text(
+                text = "Looking for ${result.intentLabel}" +
+                    (result.intentTimeframe?.let { " · $it" } ?: ""),
+                style = subtitleStyle,
             )
         }
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            // Chat name
+        is SearchResult.InterestMatch -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            Text("Shared: ${result.matchedTags.joinToString(", ")}", style = subtitleStyle)
+        }
+        is SearchResult.MemoryContextMatch -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            Text(result.matchLabel, style = subtitleStyle)
+        }
+        is SearchResult.MessageHit -> {
+            Text(result.result.chatName, style = titleStyle)
             Text(
-                text = result.chatName,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold
-            )
-            // Message snippet (truncated)
-            Text(
-                text = result.message.content,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
+                text = result.result.message.content,
+                style = subtitleStyle,
                 maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
-            // Timestamp
             Text(
-                text = formatSearchTime(result.message.timeCreated),
+                text = formatSearchTime(result.result.message.timeCreated),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.35f)
+                color = Color.White.copy(alpha = 0.35f),
             )
         }
-
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.3f),
-            modifier = Modifier.size(20.dp)
-        )
+        is SearchResult.LocationBucket -> {
+            Text(result.result.location, style = titleStyle)
+            val countLabel = if (result.result.connectionCount == 1) {
+                "1 connection"
+            } else {
+                "${result.result.connectionCount} connections"
+            }
+            Text(countLabel, style = subtitleStyle)
+        }
     }
 }
-
-// ── Location Row ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun LocationSearchRow(
-    result: LocationSearchResult,
-    onClick: () -> Unit
-) {
-    Row(
+private fun PersonLeadingAvatar(details: ChatWithDetails) {
+    val initials = details.otherUser.name
+        ?.split(" ")
+        ?.take(2)
+        ?.mapNotNull { it.firstOrNull()?.uppercase() }
+        ?.joinToString("") ?: "?"
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
+        contentAlignment = Alignment.Center,
     ) {
-        // Location pin icon
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(DeepBlue.copy(alpha = 0.3f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = LightBlue,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = result.location,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold
-            )
-            val countLabel = if (result.connectionCount == 1) "1 connection" else "${result.connectionCount} connections"
-            Text(
-                text = countLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.5f)
-            )
-        }
-
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.3f),
-            modifier = Modifier.size(20.dp)
+        Text(
+            text = initials,
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+@Composable
+private fun MessageLeadingIcon() {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PrimaryBlue.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Chat,
+            contentDescription = null,
+            tint = LightBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun LocationLeadingIcon() {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(DeepBlue.copy(alpha = 0.3f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.LocationOn,
+            contentDescription = null,
+            tint = LightBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
 
 private fun formatSearchTime(timestamp: Long): String {
     val instant = Instant.fromEpochMilliseconds(timestamp)
     val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-
     val hour = dateTime.hour
     val minute = dateTime.minute.toString().padStart(2, '0')
     val amPm = if (hour < 12) "AM" else "PM"
@@ -521,6 +558,5 @@ private fun formatSearchTime(timestamp: Long): String {
         hour > 12 -> hour - 12
         else -> hour
     }
-
     return "$displayHour:$minute $amPm"
 }

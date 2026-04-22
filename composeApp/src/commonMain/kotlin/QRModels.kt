@@ -1,5 +1,6 @@
 package compose.project.click.click.qr
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -29,7 +30,10 @@ data class TokenQrPayload(
     val userId: String,
     val exp: Long,
     val name: String? = null,
-    val issuedAt: Long? = null
+    val issuedAt: Long? = null,
+    /** B2B / Community Hub venue — server maps coordinates; scanner GPS is ignored when set. */
+    @SerialName("venue_id")
+    val venueId: String? = null,
 )
 
 private val json = Json { ignoreUnknownKeys = true }
@@ -69,6 +73,17 @@ fun String.toTokenQrPayloadOrNull(): TokenQrPayload? =
 private val HTTP_CONNECT_PATTERN = Regex("""https?://[^/]+/connect/([0-9a-fA-F\-]{36})""")
 private val DEEP_LINK_PATTERN    = Regex("""click://connect/([0-9a-fA-F\-]{36})""")
 
+/** Ephemeral community hub: click://hub/{hub_id} or https://…/hub/{hub_id} */
+private val HUB_ID_SEGMENT = """([a-zA-Z0-9][a-zA-Z0-9_\-]{0,127})"""
+private val HTTP_HUB_PATTERN = Regex("""https?://[^/]+/hub/$HUB_ID_SEGMENT""")
+private val DEEP_LINK_HUB_PATTERN = Regex("""click://hub/$HUB_ID_SEGMENT""")
+
+fun String.toHubIdFromClickHubUrl(): String? {
+    DEEP_LINK_HUB_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    HTTP_HUB_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    return null
+}
+
 fun String.toUserIdFromClickUrl(): String? {
     HTTP_CONNECT_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
     DEEP_LINK_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
@@ -84,6 +99,8 @@ sealed class QrParseResult {
     data class TokenBased(val payload: TokenQrPayload) : QrParseResult()
     /** Legacy format — userId extracted directly, no token validation. */
     data class Legacy(val userId: String) : QrParseResult()
+    /** Ephemeral community hub deep link — proximity check then hub chat. */
+    data class CommunityHub(val hubId: String) : QrParseResult()
     /** Unrecognized format — not a Click QR code. */
     object Invalid : QrParseResult()
 }
@@ -93,26 +110,34 @@ sealed class QrParseResult {
  *
  * Tries formats in order:
  * 1. Token-based JSON payload (new format with token field)
- * 2. URL format (https://.../connect/{uuid} or click://connect/{uuid})
- * 3. Legacy JSON payload ({"userId":"...", ...})
- * 4. Invalid
+ * 2. Hub deep link (click://hub/{id} or https://.../hub/{id})
+ * 3. URL format (https://.../connect/{uuid} or click://connect/{uuid})
+ * 4. Legacy JSON payload ({"userId":"...", ...})
+ * 5. Invalid
  */
 fun parseQrCode(rawData: String): QrParseResult {
+    val trimmed = rawData.trim()
+
     // 1. Try token-based JSON  
-    rawData.toTokenQrPayloadOrNull()?.let {
+    trimmed.toTokenQrPayloadOrNull()?.let {
         return QrParseResult.TokenBased(it)
     }
 
-    // 2. Try URL format
-    rawData.toUserIdFromClickUrl()?.let {
+    // 2. Community hub
+    trimmed.toHubIdFromClickHubUrl()?.let { hubId ->
+        return QrParseResult.CommunityHub(hubId)
+    }
+
+    // 3. Profile connect URL
+    trimmed.toUserIdFromClickUrl()?.let {
         return QrParseResult.Legacy(it)
     }
 
-    // 3. Try legacy JSON
-    rawData.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }?.let {
+    // 4. Legacy JSON
+    trimmed.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }?.let {
         return QrParseResult.Legacy(it)
     }
 
-    // 4. Invalid
+    // 5. Invalid
     return QrParseResult.Invalid
 }

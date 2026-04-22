@@ -1,22 +1,32 @@
 package compose.project.click.click.calls
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import compose.project.click.click.MainActivity
 
-private const val CLICK_CALLS_CHANNEL_ID = "click_calls"
-private const val CLICK_CALLS_CHANNEL_NAME = "Click calls"
+private const val TAG = "PlatformIncomingCallUi"
+private const val CLICK_CALLS_CHANNEL_ID = "click_calls_v2"
+private const val CLICK_CALLS_CHANNEL_NAME = "Incoming calls"
 
 actual object PlatformIncomingCallUi {
     actual fun showIncomingCall(invite: CallInvite) {
-        val context = AndroidCallRuntime.appContext() ?: return
+        val context = AndroidCallRuntime.appContext() ?: run {
+            Log.e(TAG, "showIncomingCall: no app context available")
+            return
+        }
         ensureIncomingCallChannel(context)
 
         val contentIntent = PendingIntent.getActivity(
@@ -48,10 +58,19 @@ actual object PlatformIncomingCallUi {
             .setOngoing(true)
             .setAutoCancel(false)
             .setFullScreenIntent(contentIntent, true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, declineIntent, answerIntent))
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+            .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
             .build()
 
-        NotificationManagerCompat.from(context).notify(notificationId(invite.callId), notification)
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId(invite.callId), notification)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Missing POST_NOTIFICATIONS permission", e)
+        }
+
+        triggerVibration(context)
     }
 
     actual fun dismissIncomingCall(callId: String, reason: String?) {
@@ -61,11 +80,43 @@ actual object PlatformIncomingCallUi {
 
     private fun notificationId(callId: String): Int = callId.hashCode()
 
+    private fun triggerVibration(context: Context) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(
+                    VibrationEffect.createWaveform(longArrayOf(0, 1000, 500, 1000, 500, 1000), 0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                val pattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(
+                        VibrationEffect.createWaveform(pattern, 0)
+                    )
+                } else {
+                    vibrator?.vibrate(pattern, 0)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to start vibration: ${e.message}")
+        }
+    }
+
     private fun ensureIncomingCallChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (notificationManager.getNotificationChannel(CLICK_CALLS_CHANNEL_ID) != null) return
+
+        val existingChannel = notificationManager.getNotificationChannel(CLICK_CALLS_CHANNEL_ID)
+        if (existingChannel != null) return
+
+        val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        val audioAttributes = AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .build()
 
         notificationManager.createNotificationChannel(
             NotificationChannel(
@@ -74,7 +125,11 @@ actual object PlatformIncomingCallUi {
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
                 description = "Incoming call alerts"
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setSound(ringtoneUri, audioAttributes)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+                setBypassDnd(true)
             }
         )
     }

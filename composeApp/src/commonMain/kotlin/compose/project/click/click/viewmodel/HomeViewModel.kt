@@ -2,18 +2,27 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.ConnectionInsights
-import compose.project.click.click.data.models.IcebreakerRepository
-import compose.project.click.click.data.models.PollPairSuggestion
-import compose.project.click.click.data.models.ReconnectHelper
-import compose.project.click.click.data.models.ReconnectReminder
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.ConnectionRepository
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
+import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
+import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
+import compose.project.click.click.data.models.ReconnectHelper // pragma: allowlist secret
+import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
+import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -24,8 +33,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 data class UserStats(
     val totalConnections: Int,
@@ -40,8 +53,9 @@ sealed class HomeState {
 }
 
 class HomeViewModel(
-    private val chatRepository: ChatRepository = ChatRepository(tokenStorage = createTokenStorage()),
-    private val connectionRepository: ConnectionRepository = ConnectionRepository()
+    private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
+    private val connectionRepository: ConnectionRepository = ConnectionRepository(),
+    private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
 ) : ViewModel() {
 
     private val _homeState = MutableStateFlow<HomeState>(HomeState.Loading)
@@ -78,16 +92,80 @@ class HomeViewModel(
     /** Single highlighted “Poll-Pair” reconnect suggestion (oldest stale chat). */
     private val _pollPairSuggestion = MutableStateFlow<PollPairSuggestion?>(null)
     val pollPairSuggestion: StateFlow<PollPairSuggestion?> = _pollPairSuggestion.asStateFlow()
+
+    /** Active availability intent rows for the signed-in user (home “I’m down for…” strip). */
+    private val _homeAvailabilityIntents = MutableStateFlow<List<AvailabilityIntentRow>>(emptyList())
+    val homeAvailabilityIntents: StateFlow<List<AvailabilityIntentRow>> = _homeAvailabilityIntents.asStateFlow()
+
+    /** One line per connection peer when mutual availability intents overlap (home only). */
+    private val _homeAvailabilityOverlapMessages = MutableStateFlow<List<String>>(emptyList())
+    val homeAvailabilityOverlapMessages: StateFlow<List<String>> = _homeAvailabilityOverlapMessages.asStateFlow()
     
     // Track if data has been loaded already
     private var dataLoaded = false
     
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
+    private var availabilityIntentRefreshJob: Job? = null
+    private var homeOverlapJob: Job? = null
 
     init {
         observeAppData()
         subscribeToConnectionChanges()
+    }
+
+    /**
+     * Reload intent posts from Supabase (e.g. after backend 24h expiry clears rows).
+     */
+    fun refreshHomeAvailabilityIntents() {
+        val uid = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch {
+            runCatching {
+                _homeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+            }
+            val arch = AppDataManager.archivedConnectionIds.value
+            val hid = AppDataManager.hiddenConnectionIds.value
+            val conns = AppDataManager.connections.value.filter { it.isActiveForUser(arch, hid) }
+            val cu = AppDataManager.connectedUsers.value
+            loadHomeAvailabilityOverlapMessages(uid, conns, cu)
+        }
+    }
+
+    private suspend fun loadHomeAvailabilityOverlapMessages(
+        userId: String,
+        activeConnections: List<Connection>,
+        connectedUsers: Map<String, User>,
+    ) {
+        if (userId.isBlank()) {
+            _homeAvailabilityOverlapMessages.value = emptyList()
+            return
+        }
+        try {
+            val mine = supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, userId)
+            val lines = LinkedHashSet<String>()
+            for (conn in activeConnections) {
+                val peerId = conn.user_ids.firstOrNull { it != userId } ?: continue
+                val theirs = runCatching {
+                    supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, peerId)
+                }.getOrElse { emptyList() }
+                val has = hasActiveAvailabilityIntentOverlap(mine, theirs)
+                AvailabilityOverlapCache.put(userId, peerId, has)
+                if (has) {
+                    val who = shortPeerAvailabilityFirstName(connectedUsers[peerId])
+                    lines.add("You and $who are both available right now!")
+                }
+            }
+            _homeAvailabilityOverlapMessages.value = lines.toList()
+        } catch (e: Exception) {
+            println("HomeViewModel: availability overlap lines: ${e.redactedRestMessage()}")
+            _homeAvailabilityOverlapMessages.value = emptyList()
+        }
+    }
+
+    private fun shortPeerAvailabilityFirstName(user: User?): String {
+        val a = user?.firstName?.trim()?.substringBefore(" ")?.ifBlank { null }
+        val b = user?.name?.trim()?.substringBefore(" ")?.ifBlank { null }
+        return (a ?: b) ?: "them"
     }
     
     /**
@@ -98,14 +176,22 @@ class HomeViewModel(
             var lastUserId: String? = null
 
             combine(
-                AppDataManager.currentUser,
-                AppDataManager.connections,
-                AppDataManager.connectedUsers,
+                combine(
+                    AppDataManager.currentUser,
+                    AppDataManager.connections,
+                    AppDataManager.connectedUsers,
+                ) { u, c, cu -> Triple(u, c, cu) },
+                combine(
+                    AppDataManager.archivedConnectionIds,
+                    AppDataManager.hiddenConnectionIds,
+                ) { a, h -> a to h },
                 AppDataManager.isLoading,
-                AppDataManager.isDataLoaded
-            ) { user, connections, connectedUsers, isLoading, isDataLoaded ->
-                HomeSnapshot(user, connections, connectedUsers, isLoading, isDataLoaded)
-            }.collectLatest { (user, connections, connectedUsers, isLoading, isDataLoaded) ->
+                AppDataManager.isDataLoaded,
+            ) { triple, archHidden, isLoading, isDataLoaded ->
+                val (user, connections, connectedUsers) = triple
+                val (archivedIds, hiddenIds) = archHidden
+                HomeSnapshot(user, connections, connectedUsers, archivedIds, hiddenIds, isLoading, isDataLoaded)
+            }.collectLatest { (user, connections, connectedUsers, archivedIds, hiddenIds, isLoading, isDataLoaded) ->
 
                 if (user?.id != lastUserId) {
                     lastUserId = user?.id
@@ -115,57 +201,106 @@ class HomeViewModel(
                     _pollPairSuggestion.value = null
                     _locationGroupedConnections.value = emptyMap()
                     _connectedUsers.value = emptyMap()
+                    _homeAvailabilityIntents.value = emptyList()
+                    _homeAvailabilityOverlapMessages.value = emptyList()
+                    AvailabilityOverlapCache.clear()
+                    availabilityIntentRefreshJob?.cancel()
+                    availabilityIntentRefreshJob = null
+                    homeOverlapJob?.cancel()
+                    homeOverlapJob = null
                 }
 
                 when {
-                    user != null && isDataLoaded -> {
-                        // Calculate stats
-                        val recentConnections = connections
+                    // Treat an authenticated, hydrated user as render-ready once the load cycle
+                    // is no longer active, even if isDataLoaded lags due a cancelled/restarted refresh.
+                    // Also allow immediate render when we already have active connections from cached
+                    // snapshot/state while a background refresh is still in-flight.
+                    user != null && (
+                        isDataLoaded ||
+                            !isLoading ||
+                            connections.any { it.isActiveForUser(archivedIds, hiddenIds) }
+                        ) -> {
+                        if (availabilityIntentRefreshJob == null) {
+                            availabilityIntentRefreshJob = viewModelScope.launch {
+                                while (isActive) {
+                                    runCatching {
+                                        val uid = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+                                            ?: return@runCatching
+                                        _homeAvailabilityIntents.value =
+                                            supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+                                        val arch = AppDataManager.archivedConnectionIds.value
+                                        val hid = AppDataManager.hiddenConnectionIds.value
+                                        val conns = AppDataManager.connections.value.filter {
+                                            it.isActiveForUser(arch, hid)
+                                        }
+                                        val cu = AppDataManager.connectedUsers.value
+                                        loadHomeAvailabilityOverlapMessages(uid, conns, cu)
+                                    }
+                                    delay(120_000L)
+                                }
+                            }
+                        }
+                        val activeConnections = connections.filter {
+                            it.isActiveForUser(archivedIds, hiddenIds)
+                        }
+                        val recentConnections = activeConnections
                             .sortedByDescending { it.created }
                             .take(3)
                         
-                        val uniqueLocations = connections
-                            .mapNotNull { it.semantic_location }
+                        val uniqueLocations = activeConnections
+                            .mapNotNull { it.semanticLocation }
                             .distinct()
                             .size
                         
                         val stats = UserStats(
-                            totalConnections = connections.size,
+                            totalConnections = activeConnections.size,
                             recentConnections = recentConnections,
                             uniqueLocations = uniqueLocations
                         )
 
-                        // Build location-grouped map (all connections, not just top 3)
-                        val grouped = connections
+                        val grouped = activeConnections
                             .sortedByDescending { it.created }
-                            .groupBy { it.semantic_location ?: "Somewhere New" }
+                            .groupBy { it.semanticLocation ?: "Somewhere New" }
                         _locationGroupedConnections.value = grouped
 
-                        // Expose connected users for name lookups
                         _connectedUsers.value = connectedUsers
 
-                        _pollPairSuggestion.value = connectionRepository.getPollPairSuggestion(
-                            userId = user.id,
-                            connections = connections,
-                            connectedUsers = connectedUsers
-                        )
+                        homeOverlapJob?.cancel()
+                        homeOverlapJob = viewModelScope.launch {
+                            loadHomeAvailabilityOverlapMessages(user.id, activeConnections, connectedUsers)
+                        }
+
+                        _pollPairSuggestion.value = try {
+                            connectionRepository.getPollPairSuggestion(
+                                userId = user.id,
+                                connections = activeConnections,
+                                connectedUsers = connectedUsers
+                            )
+                        } catch (e: Exception) {
+                            println("HomeViewModel: Error computing poll pair suggestion: ${e.redactedRestMessage()}")
+                            null
+                        }
                         
                         _homeState.value = HomeState.Success(user, stats)
                         
-                        // Load additional data only once
                         if (!dataLoaded) {
                             dataLoaded = true
                             viewModelScope.launch {
-                                preloadDerivedHomeData(user.id, connections)
+                                preloadDerivedHomeData(user.id, activeConnections)
                             }
                         }
                     }
-                    !isDataLoaded || isLoading -> {
+                    !isDataLoaded && isLoading -> {
                         _homeState.value = HomeState.Loading
                     }
                     else -> {
                         _pollPairSuggestion.value = null
-                        _homeState.value = HomeState.Error("Session expired. Please log in again.")
+                        val errorMsg = AppDataManager.error.value
+                        _homeState.value = if (errorMsg != null) {
+                            HomeState.Error("No internet connection. Your data will appear when you're back online.")
+                        } else {
+                            HomeState.Error("Session expired. Please log in again.")
+                        }
                     }
                 }
             }
@@ -188,7 +323,7 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
-            println("Error preloading home derived data: ${e.message}")
+            println("Error preloading home derived data: ${e.redactedRestMessage()}")
             _reconnectReminders.value = emptyList()
             _connectionInsights.value = null
         }
@@ -220,7 +355,7 @@ class HomeViewModel(
             
             _reconnectReminders.value = reminders
         } catch (e: Exception) {
-            println("Error loading reconnect reminders: ${e.message}")
+            println("Error loading reconnect reminders: ${e.redactedRestMessage()}")
             _reconnectReminders.value = emptyList()
         }
     }
@@ -245,7 +380,7 @@ class HomeViewModel(
             
             _connectionInsights.value = insights
         } catch (e: Exception) {
-            println("Error loading connection insights: ${e.message}")
+            println("Error loading connection insights: ${e.redactedRestMessage()}")
             _connectionInsights.value = null
         }
     }
@@ -325,6 +460,22 @@ class HomeViewModel(
     }
 
     /**
+     * Icebreaker from the archive / idle-window banner (same flow as poll-pair).
+     */
+    fun sendArchiveBannerIcebreaker(notice: ConnectionArchiveNotice) {
+        sendPollPairIcebreaker(
+            PollPairSuggestion(
+                connectionId = notice.connectionId,
+                otherUserId = "",
+                otherUserName = notice.chatLabel,
+                lastInteractionAt = 0L,
+                daysSinceContact = 0,
+                contextTag = null,
+            ),
+        )
+    }
+
+    /**
      * Dismiss a reconnect reminder
      */
     fun dismissReminder(connectionId: String) {
@@ -363,36 +514,51 @@ class HomeViewModel(
             try {
                 val channel = SupabaseConfig.client.channel("home:connections")
                 connectionsChannel = channel
-                
-                channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "connections"
-                }.onEach {
-                    // Any change to connections → refresh data
+
+                merge(
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connections"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_archives"
+                    },
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                        table = "connection_hidden"
+                    },
+                ).onEach {
                     AppDataManager.refresh(force = true)
                 }.launchIn(this)
-                
+
                 channel.subscribe()
             } catch (e: Exception) {
-                println("HomeViewModel: Error subscribing to connections: ${e.message}")
+                println("HomeViewModel: Error subscribing to connections: ${e.redactedRestMessage()}")
             }
         }
     }
     
     override fun onCleared() {
-        super.onCleared()
-        connectionsChannel?.let { channel ->
-            viewModelScope.launch {
-                try { channel.unsubscribe() } catch (_: Exception) {}
-            }
-        }
+        // Capture channel ref before super.onCleared() cancels viewModelScope, then
+        // use the bounded teardown helper so the unsubscribe actually runs even
+        // though the scope is already dead.
+        val channel = connectionsChannel
         connectionsChannel = null
+        availabilityIntentRefreshJob?.cancel()
+        availabilityIntentRefreshJob = null
+        homeOverlapJob?.cancel()
+        homeOverlapJob = null
+        super.onCleared()
+        if (channel != null) {
+            teardownBlocking { channel.unsubscribe() }
+        }
     }
 }
 
-private data class HomeSnapshot<A, B, C, D, E>(
+private data class HomeSnapshot<A, B, C, D, E, F, G>(
     val first: A,
     val second: B,
     val third: C,
     val fourth: D,
-    val fifth: E
+    val fifth: E,
+    val sixth: F,
+    val seventh: G,
 )

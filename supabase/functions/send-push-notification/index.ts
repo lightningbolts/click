@@ -3,11 +3,17 @@ import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5.9.6";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY =
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
   Deno.env.get("SUPABASE_SERVICE_KEY") ??
   Deno.env.get("SUPABASE_KEY")!;
 const FCM_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const APNS_URL = "https://api.push.apple.com/3/device";
+
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface PushRequestBody {
   recipient_user_id?: string;
@@ -39,7 +45,6 @@ interface NotificationPreferenceRow {
 
 interface UserProfileRow {
   name?: string | null;
-  full_name?: string | null;
   email?: string | null;
 }
 
@@ -55,7 +60,7 @@ type PushError = {
   error: string;
 };
 
-type PushCategory = "chat_message" | "incoming_call";
+type PushCategory = "chat_message" | "incoming_call" | "archive_warning";
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
@@ -103,7 +108,21 @@ async function getApnsJwt(): Promise<string> {
     throw new Error("Missing APNS_KEY, APNS_KEY_ID, or APNS_TEAM_ID secret");
   }
 
-  const privateKey = await importPKCS8(normalizePrivateKey(apnsKey), "ES256");
+  const base64Key = apnsKey
+    .replace(/-----BEGIN[^-]*-----/gi, "")
+    .replace(/-----END[^-]*-----/gi, "")
+    .replace(/\\n/g, "")
+    .replace(/[^A-Za-z0-9+/=]/g, "");
+
+  if (base64Key.length < 100) {
+    throw new Error(
+      `APNS_KEY appears truncated (${base64Key.length} base64 chars, expected ~200). ` +
+      "Ensure the key is on a single line in .env and re-set the Supabase secret.",
+    );
+  }
+
+  const formattedKey = `-----BEGIN PRIVATE KEY-----\n${base64Key}\n-----END PRIVATE KEY-----`;
+  const privateKey = await importPKCS8(formattedKey, "ES256");
   return new SignJWT({})
     .setProtectedHeader({ alg: "ES256", kid: apnsKeyId })
     .setIssuer(apnsTeamId)
@@ -118,9 +137,21 @@ async function sendAndroidPush(
   projectId: string,
 ): Promise<void> {
   const category = getPushCategory(requestBody);
-  const data = Object.fromEntries(
+  const data: Record<string, string> = Object.fromEntries(
     Object.entries(requestBody.data ?? {}).map(([key, value]) => [key, String(value)])
   );
+
+  if (category === "chat_message") {
+    // Data-only: Android client decrypts when possible; preview_text is always safe to show if decrypt fails.
+    delete data.title;
+    delete data.body;
+  } else if (category === "archive_warning") {
+    if (requestBody.title && !data.title) data.title = requestBody.title;
+    if (requestBody.body && !data.body) data.body = requestBody.body;
+  } else {
+    if (requestBody.title && !data.title) data.title = requestBody.title;
+    if (requestBody.body && !data.body) data.body = requestBody.body;
+  }
 
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -133,25 +164,9 @@ async function sendAndroidPush(
       body: JSON.stringify({
         message: {
           token: pushToken.token,
-          ...(category === "incoming_call"
-            ? {}
-            : {
-                notification: {
-                  title: requestBody.title,
-                  body: requestBody.body,
-                },
-              }),
           data,
           android: {
             priority: "high",
-            ...(category === "incoming_call"
-              ? {}
-              : {
-                  notification: {
-                    channel_id: "click_messages",
-                    sound: "default",
-                  },
-                }),
           },
         },
       }),
@@ -177,16 +192,25 @@ async function sendIosPush(
   const tokenType = pushToken.token_type ?? "standard";
   const isVoipToken = tokenType === "voip";
   const isIncomingCall = category === "incoming_call";
+  // Apple VoIP pushes require push-type voip, topic <bundleId>.voip, and apns-expiration 0 (no delay).
+  const isVoipIncomingCall = isVoipToken && isIncomingCall;
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     authorization: `bearer ${apnsJwt}`,
-    "apns-topic": isVoipToken ? `${bundleId}.voip` : bundleId,
-    "apns-push-type": isVoipToken && isIncomingCall ? "voip" : "alert",
-    "apns-priority": "10",
     "content-type": "application/json",
+    "apns-priority": "10",
   };
 
-  const body = isVoipToken && isIncomingCall
+  if (isVoipIncomingCall) {
+    headers["apns-topic"] = `${bundleId}.voip`;
+    headers["apns-push-type"] = "voip";
+    headers["apns-expiration"] = "0";
+  } else {
+    headers["apns-topic"] = bundleId;
+    headers["apns-push-type"] = "alert";
+  }
+
+  const body = isVoipIncomingCall
     ? {
         aps: {
           "content-available": 1,
@@ -200,10 +224,11 @@ async function sendIosPush(
             body: requestBody.body,
           },
           sound: "default",
+          // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
+          ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
           ...(isIncomingCall
             ? {
                 category: "CLICK_INCOMING_CALL",
-                "content-available": 1,
                 "interruption-level": "time-sensitive",
               }
             : {}),
@@ -211,25 +236,39 @@ async function sendIosPush(
         ...(requestBody.data ?? {}),
       };
 
-  const response = await fetch(`${APNS_URL}/${pushToken.token}`, {
+  const apnsRequestUrl = `${APNS_URL}/${pushToken.token}`;
+  if (isVoipIncomingCall) {
+    console.log("[APNs VoIP] APNs request URL:", apnsRequestUrl);
+  }
+
+  const response = await fetch(apnsRequestUrl, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
   });
 
+  const responseText = await response.text();
+  if (isVoipIncomingCall) {
+    console.log(
+      `[APNs VoIP] Apple response: status=${response.status}, body=${responseText || "(empty)"}`,
+    );
+  }
+
   if (!response.ok) {
-    throw new Error(`APNs send failed: ${response.status} ${await response.text()}`);
+    throw new Error(`APNs send failed: ${response.status} ${responseText}`);
   }
 }
 
 function getPushCategory(requestBody: PushRequestBody): PushCategory {
-  return requestBody.data?.type === "incoming_call" ? "incoming_call" : "chat_message";
+  const t = requestBody.data?.type;
+  if (t === "incoming_call") return "incoming_call";
+  if (t === "archive_warning") return "archive_warning";
+  return "chat_message";
 }
 
 function shouldSendToToken(
   requestBody: ResolvedPushRequestBody,
   pushToken: PushTokenRow,
-  hasVoipIosToken: boolean,
 ): boolean {
   const category = getPushCategory(requestBody);
 
@@ -238,12 +277,13 @@ function shouldSendToToken(
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  if (category === "chat_message") {
+  if (category === "chat_message" || category === "archive_warning") {
     return tokenType != "voip";
   }
 
-  if (hasVoipIosToken) {
-    return tokenType === "voip";
+  // incoming_call: send to every iOS token. VoIP wakes CallKit; standard APNs adds banner + sound if VoIP fails or is delayed.
+  if (category === "incoming_call") {
+    return true;
   }
 
   return tokenType != "voip";
@@ -254,7 +294,7 @@ function asNonEmptyString(value: unknown): string | null {
 }
 
 function resolveUserDisplayName(profile: UserProfileRow | null | undefined): string {
-  const candidates = [profile?.full_name, profile?.name, profile?.email?.split("@")[0]];
+  const candidates = [profile?.name, profile?.email?.split("@")[0]];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim().length > 0) {
       return candidate.trim();
@@ -272,6 +312,16 @@ function buildMessagePreview(content: string | null): string {
     return "Tap to view message";
   }
   return normalized.slice(0, 120);
+}
+
+/** FCM data payload limits — oversized ciphertext breaks client-side decrypt; omit and rely on preview_text. */
+const MAX_ENCRYPTED_CONTENT_FCM_CHARS = 3500;
+
+function encryptedContentForFcmPayload(raw: string): string {
+  if (!raw || raw.length <= MAX_ENCRYPTED_CONTENT_FCM_CHARS) {
+    return raw;
+  }
+  return "";
 }
 
 function getBearerToken(req: Request): string | null {
@@ -339,11 +389,57 @@ async function resolveChatMessageRequest(
   const providedBody = asNonEmptyString(requestBody.body);
 
   if (providedRecipientUserId && providedTitle && providedBody) {
+    const data = requestBody.data ?? {};
+    const senderUserId = asNonEmptyString(data.sender_user_id);
+    const messageId = asNonEmptyString(data.message_id);
+    const chatId = asNonEmptyString(data.chat_id);
+
+    let senderName = "Someone";
+    if (senderUserId) {
+      const { data: senderProfile } = await supabase
+        .from("users")
+        .select("name, email")
+        .eq("id", senderUserId)
+        .maybeSingle<UserProfileRow>();
+      senderName = resolveUserDisplayName(senderProfile);
+    }
+
+    let encryptedContent = "";
+    if (messageId) {
+      const { data: msg } = await supabase
+        .from("messages")
+        .select("content")
+        .eq("id", messageId)
+        .maybeSingle();
+      encryptedContent = msg?.content ?? "";
+    }
+
+    let connectionId = asNonEmptyString(data.connection_id);
+    if (!connectionId && chatId) {
+      const { data: chat } = await supabase
+        .from("chats")
+        .select("connection_id")
+        .eq("id", chatId)
+        .maybeSingle();
+      connectionId = chat?.connection_id ?? null;
+    }
+
+    const clientPreview = asNonEmptyString(data.message_preview);
+    const previewText = clientPreview ?? buildMessagePreview(encryptedContent);
+    const encryptedForFcm = encryptedContentForFcmPayload(encryptedContent);
+
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
-      body: providedBody,
-      data: requestBody.data,
+      body: clientPreview ?? providedBody,
+      data: {
+        ...data,
+        sender_name: senderName,
+        encrypted_content: encryptedForFcm,
+        preview_text: previewText,
+        recipient_user_id: providedRecipientUserId,
+        ...(connectionId ? { connection_id: connectionId } : {}),
+      },
     };
   }
 
@@ -361,6 +457,7 @@ async function resolveChatMessageRequest(
   const chatId = asNonEmptyString(data.chat_id);
   const senderUserId = asNonEmptyString(data.sender_user_id);
   const messageId = asNonEmptyString(data.message_id);
+  const clientMessagePreview = asNonEmptyString(data.message_preview);
 
   if (!chatId || !senderUserId) {
     throw new Error("chat_message pushes require chat_id and sender_user_id");
@@ -423,27 +520,52 @@ async function resolveChatMessageRequest(
     throw new Error("recipient_user_id does not belong to the chat connection");
   }
 
+  const { data: senderProfile, error: senderProfileError } = await supabase
+    .from("users")
+    .select("name, email")
+    .eq("id", senderUserId)
+    .maybeSingle<UserProfileRow>();
+
+  if (senderProfileError) {
+    throw new Error(`Unable to resolve sender display name: ${senderProfileError.message}`);
+  }
+
+  const senderDisplayName = resolveUserDisplayName(senderProfile);
+
   let resolvedTitle = providedTitle;
   if (!resolvedTitle) {
-    const { data: senderProfile, error: senderProfileError } = await supabase
-      .from("users")
-      .select("name, full_name, email")
-      .eq("id", senderUserId)
-      .maybeSingle<UserProfileRow>();
-
-    if (senderProfileError) {
-      throw new Error(`Unable to resolve sender display name: ${senderProfileError.message}`);
-    }
-
-    resolvedTitle = `New message from ${resolveUserDisplayName(senderProfile)}`;
+    resolvedTitle = `New message from ${senderDisplayName}`;
   }
+
+  const rawContent = messageContent ?? "";
+  const previewText = clientMessagePreview ?? buildMessagePreview(rawContent);
+  const encryptedForFcm = encryptedContentForFcmPayload(rawContent);
 
   return {
     recipient_user_id: recipientUserId,
     title: resolvedTitle,
-    body: buildMessagePreview(messageContent),
-    data: requestBody.data,
+    body: previewText,
+    data: {
+      ...(requestBody.data ?? {}),
+      chat_id: chatId,
+      connection_id: chat.connection_id,
+      sender_name: senderDisplayName,
+      encrypted_content: encryptedForFcm,
+      preview_text: previewText,
+      recipient_user_id: recipientUserId,
+    },
   };
+}
+
+function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
+  if (requestBody.data?.type !== "archive_warning") return false;
+  const provided = req.headers.get("x-archive-warning-secret");
+  const expected =
+    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET") ??
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+    Deno.env.get("SUPABASE_SERVICE_KEY") ??
+    Deno.env.get("SUPABASE_KEY");
+  return !!provided && !!expected && provided === expected;
 }
 
 async function resolvePushRequest(
@@ -451,6 +573,21 @@ async function resolvePushRequest(
   supabase: ReturnType<typeof createClient>,
   requestBody: PushRequestBody,
 ): Promise<ResolvedPushRequestBody> {
+  if (isArchiveWarningServiceRequest(req, requestBody)) {
+    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
+    const title = asNonEmptyString(requestBody.title);
+    const body = asNonEmptyString(requestBody.body);
+    if (!recipientUserId || !title || !body) {
+      throw new Error("archive_warning pushes require recipient_user_id, title, and body");
+    }
+    return {
+      recipient_user_id: recipientUserId,
+      title,
+      body,
+      data: requestBody.data,
+    };
+  }
+
   if (getPushCategory(requestBody) === "incoming_call") {
     await validateIncomingCallRequest(req, supabase, requestBody);
 
@@ -486,21 +623,28 @@ async function recipientAllowsPush(
     return true;
   }
 
-  return getPushCategory(requestBody) === "incoming_call"
-    ? data.call_push_enabled !== false
-    : data.message_push_enabled !== false;
+  const cat = getPushCategory(requestBody);
+  if (cat === "incoming_call") {
+    return data.call_push_enabled !== false;
+  }
+  return data.message_push_enabled !== false;
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ success: false, sent: 0, error: "Method not allowed" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
 
   try {
     const requestBody = await req.json() as PushRequestBody;
+    console.log("Received request body:", requestBody);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -511,7 +655,7 @@ Deno.serve(async (req: Request) => {
     if (!(await recipientAllowsPush(supabase, resolvedRequestBody))) {
       return new Response(JSON.stringify({ success: true, sent: 0, skipped: true }), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
@@ -527,7 +671,7 @@ Deno.serve(async (req: Request) => {
     if (!tokens || tokens.length === 0) {
       return new Response(JSON.stringify({ success: true, sent: 0 }), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
@@ -538,12 +682,10 @@ Deno.serve(async (req: Request) => {
     let sent = 0;
 
     const pushTokens = (tokens ?? []) as PushTokenRow[];
-    const hasVoipIosToken = getPushCategory(resolvedRequestBody) === "incoming_call" &&
-      pushTokens.some((token) => token.platform === "ios" && token.token_type === "voip");
 
     for (const token of pushTokens) {
       try {
-        if (!shouldSendToToken(resolvedRequestBody, token, hasVoipIosToken)) {
+        if (!shouldSendToToken(resolvedRequestBody, token)) {
           continue;
         }
 
@@ -560,8 +702,25 @@ Deno.serve(async (req: Request) => {
 
           await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken, fcmProjectId);
         } else {
+          const isVoipCallPush =
+            (token.token_type ?? "standard") === "voip" &&
+            getPushCategory(resolvedRequestBody) === "incoming_call";
+          if (isVoipCallPush) {
+            console.log(
+              "[APNs VoIP] VoIP token loaded from database for recipient",
+              resolvedRequestBody.recipient_user_id,
+            );
+          }
+
           if (!apnsJwt) {
-            apnsJwt = await getApnsJwt();
+            try {
+              apnsJwt = await getApnsJwt();
+            } catch (jwtError) {
+              if (isVoipCallPush) {
+                console.error("[APNs VoIP] JWT signing error:", jwtError);
+              }
+              throw jwtError;
+            }
           }
 
           await sendIosPush(token, resolvedRequestBody, apnsJwt);
@@ -584,13 +743,13 @@ Deno.serve(async (req: Request) => {
       errors,
     }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (error) {
     console.error("Fatal error in send-push-notification", error);
     return new Response(JSON.stringify({ success: false, sent: 0, error: String(error) }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
 });

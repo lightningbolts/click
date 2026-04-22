@@ -3,18 +3,49 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		0037657B2F5B73FC0085C54A /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0037657A2F5B73FC0085C54A /* LiveKit */; };
+		008D49D42F75AFAE006AD3B5 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 008D49CD2F75AFAE006AD3B5 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		008D49D22F75AFAE006AD3B5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA4C51A4D03626637697394B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 008D49CC2F75AFAE006AD3B5;
+			remoteInfo = NotificationService;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		008D49D52F75AFAE006AD3B5 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				008D49D42F75AFAE006AD3B5 /* NotificationService.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		008D49CD2F75AFAE006AD3B5 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C5F0582113B3BBBAE701F1D /* click.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = click.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		008D49D92F75AFAE006AD3B5 /* Exceptions for "NotificationService" folder in "NotificationService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 008D49CC2F75AFAE006AD3B5 /* NotificationService */;
+		};
 		6F72BBB0867B407BC7C94B06 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -25,6 +56,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		008D49CE2F75AFAE006AD3B5 /* NotificationService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				008D49D92F75AFAE006AD3B5 /* Exceptions for "NotificationService" folder in "NotificationService" target */,
+			);
+			path = NotificationService;
+			sourceTree = "<group>";
+		};
 		33D81A3716AF6A964EF4070E /* iosApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -41,13 +80,16 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		008D49CA2F75AFAE006AD3B5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		FAAD06260E9526EB0DCEF325 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				0037657B2F5B73FC0085C54A /* LiveKit in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -56,6 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				5C5F0582113B3BBBAE701F1D /* click.app */,
+				008D49CD2F75AFAE006AD3B5 /* NotificationService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -65,6 +108,7 @@
 			children = (
 				7E395A86858E543D5F52EA70 /* Configuration */,
 				33D81A3716AF6A964EF4070E /* iosApp */,
+				008D49CE2F75AFAE006AD3B5 /* NotificationService */,
 				DB33206E757D8E631C55F65D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -72,6 +116,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		008D49CC2F75AFAE006AD3B5 /* NotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 008D49D82F75AFAE006AD3B5 /* Build configuration list for PBXNativeTarget "NotificationService" */;
+			buildPhases = (
+				008D49C92F75AFAE006AD3B5 /* Sources */,
+				008D49CA2F75AFAE006AD3B5 /* Frameworks */,
+				008D49CB2F75AFAE006AD3B5 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				008D49CE2F75AFAE006AD3B5 /* NotificationService */,
+			);
+			name = NotificationService;
+			productName = NotificationService;
+			productReference = 008D49CD2F75AFAE006AD3B5 /* NotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		8731910DD8E1D0F2B5BFC353 /* iosApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 17D9E80FD5D1FB0E1ECCFD6E /* Build configuration list for PBXNativeTarget "iosApp" */;
@@ -80,10 +142,12 @@
 				2625563A87CFFCAD009D948F /* Sources */,
 				FAAD06260E9526EB0DCEF325 /* Frameworks */,
 				A774A904F6121A4DCE9176A3 /* Resources */,
+				008D49D52F75AFAE006AD3B5 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				008D49D32F75AFAE006AD3B5 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				33D81A3716AF6A964EF4070E /* iosApp */,
@@ -103,9 +167,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					008D49CC2F75AFAE006AD3B5 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					8731910DD8E1D0F2B5BFC353 = {
 						CreatedOnToolsVersion = 16.2;
 					};
@@ -123,23 +190,27 @@
 			packageReferences = (
 				003765792F5B73FC0085C54A /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
 			);
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = DB33206E757D8E631C55F65D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				8731910DD8E1D0F2B5BFC353 /* iosApp */,
+				008D49CC2F75AFAE006AD3B5 /* NotificationService */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A774A904F6121A4DCE9176A3 /* Resources */ = {
+		008D49CB2F75AFAE006AD3B5 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A774A904F6121A4DCE9176A3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
 		};
 /* End PBXResourcesBuildPhase section */
 
@@ -147,36 +218,112 @@
 		26BA05D700DD77FFB2EEDF56 /* Compile Kotlin Framework */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
 			name = "Compile Kotlin Framework";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = (
+				"if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then",
+				"  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"",
+				"  exit 0",
+				"fi",
+				"cd \"$SRCROOT/..\"",
+				"./gradlew :composeApp:embedAndSignAppleFrameworkForXcode",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		2625563A87CFFCAD009D948F /* Sources */ = {
+		008D49C92F75AFAE006AD3B5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2625563A87CFFCAD009D948F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		008D49D32F75AFAE006AD3B5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 008D49CC2F75AFAE006AD3B5 /* NotificationService */;
+			targetProxy = 008D49D22F75AFAE006AD3B5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		5A10A93A45AEFFA5E344ED43 /* Debug */ = {
+		008D49D62F75AFAE006AD3B5 /* Debug configuration for PBXNativeTarget "NotificationService" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.1;
+				DEVELOPMENT_TEAM = W4C3V9Z2N4;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NotificationService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "NotificationService/NotificationService-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		008D49D72F75AFAE006AD3B5 /* Release configuration for PBXNativeTarget "NotificationService" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.1;
+				DEVELOPMENT_TEAM = W4C3V9Z2N4;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NotificationService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "NotificationService/NotificationService-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5A10A93A45AEFFA5E344ED43 /* Debug configuration for PBXProject "iosApp" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
@@ -243,8 +390,10 @@
 			};
 			name = Debug;
 		};
-		88D962984758A3E274BC423A /* Debug */ = {
+		88D962984758A3E274BC423A /* Debug configuration for PBXNativeTarget "iosApp" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -253,15 +402,17 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
+				DEVELOPMENT_TEAM = W4C3V9Z2N4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Click uses NFC to quickly connect you with nearby users by tapping phones together.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -272,14 +423,17 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		C36A449234A2EEB8C24C65F8 /* Release */ = {
+		C36A449234A2EEB8C24C65F8 /* Release configuration for PBXNativeTarget "iosApp" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -288,15 +442,17 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
+				DEVELOPMENT_TEAM = W4C3V9Z2N4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Click uses NFC to quickly connect you with nearby users by tapping phones together.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -307,13 +463,14 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
-		E90A7B39F2494D17DEE363DD /* Release */ = {
+		E90A7B39F2494D17DEE363DD /* Release configuration for PBXProject "iosApp" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
@@ -376,22 +533,28 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		008D49D82F75AFAE006AD3B5 /* Build configuration list for PBXNativeTarget "NotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				008D49D62F75AFAE006AD3B5 /* Debug configuration for PBXNativeTarget "NotificationService" */,
+				008D49D72F75AFAE006AD3B5 /* Release configuration for PBXNativeTarget "NotificationService" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		17D9E80FD5D1FB0E1ECCFD6E /* Build configuration list for PBXNativeTarget "iosApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				88D962984758A3E274BC423A /* Debug */,
-				C36A449234A2EEB8C24C65F8 /* Release */,
+				88D962984758A3E274BC423A /* Debug configuration for PBXNativeTarget "iosApp" */,
+				C36A449234A2EEB8C24C65F8 /* Release configuration for PBXNativeTarget "iosApp" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		C60D3532BBE90980A2B5EECF /* Build configuration list for PBXProject "iosApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5A10A93A45AEFFA5E344ED43 /* Debug */,
-				E90A7B39F2494D17DEE363DD /* Release */,
+				5A10A93A45AEFFA5E344ED43 /* Debug configuration for PBXProject "iosApp" */,
+				E90A7B39F2494D17DEE363DD /* Release configuration for PBXProject "iosApp" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

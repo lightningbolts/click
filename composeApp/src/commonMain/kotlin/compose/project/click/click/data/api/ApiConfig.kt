@@ -1,6 +1,7 @@
 package compose.project.click.click.data.api
 
 import compose.project.click.click.getPlatform
+import compose.project.click.click.qr.CLICK_WEB_BASE_URL as QrClickWebBaseUrl
 
 /**
  * API Configuration for different environments
@@ -46,4 +47,10 @@ object ApiConfig {
      * Supabase configuration (for Realtime only)
      */
     const val SUPABASE_REALTIME_ENABLED = true
+
+    /**
+     * Next.js companion (`click-web`) — profile QR, secure API tunnel, LiveKit token, etc.
+     * Single source of truth lives in [compose.project.click.click.qr.CLICK_WEB_BASE_URL].
+     */
+    val CLICK_WEB_BASE_URL: String get() = QrClickWebBaseUrl
 }

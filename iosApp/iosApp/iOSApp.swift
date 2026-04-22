@@ -5,6 +5,7 @@ import ComposeApp
 
 private let clickNotificationPrefsSuite = "click_auth_prefs"
 private let clickRequestPushPermissionNotification = Notification.Name("ClickRequestNotificationPermission")
+private let clickRegisterRemoteNotificationsNotification = Notification.Name("ClickRegisterForRemoteNotifications")
 private let clickRuntimeMessageNotificationsKey = "runtime_message_notifications_enabled"
 private let clickRuntimeCallNotificationsKey = "runtime_call_notifications_enabled"
 private let clickRuntimeActiveChatIdKey = "runtime_active_chat_id"
@@ -31,6 +32,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         ClickCallKitManager.shared.start()
         ClickVoipPushManager.shared.start()
 
+        // Incoming call from notification tap / cold start: report CallKit immediately (no async deferral).
+        if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+            _ = handleIncomingCallNotification(remote)
+        }
+
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.delegate = self
         requestPermissionObserver = NotificationCenter.default.addObserver(
@@ -55,6 +61,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
 
+        NotificationCenter.default.addObserver(
+            forName: clickRegisterRemoteNotificationsNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+
         notificationCenter.getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
@@ -69,7 +83,61 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        if url.scheme?.lowercased() == "click", url.host?.lowercased() == "login" {
+            MainViewControllerKt.handleSupabaseAuthDeepLink(url: url)
+            return true
+        }
+        if let hubId = Self.communityHubId(from: url) {
+            ClickKt.setCommunityHubDeepLink(hubId: hubId)
+            return true
+        }
+        return false
+    }
+
+    private static func communityHubId(from url: URL) -> String? {
+        if url.scheme?.lowercased() == "click", url.host?.lowercased() == "hub" {
+            let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if path.isEmpty { return nil }
+            if path.contains("/") { return nil }
+            return path
+        }
+        if url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
+            guard url.host?.lowercased() == "click-us.vercel.app" else { return nil }
+            let parts = url.path.split(separator: "/").map(String.init)
+            guard parts.count >= 2, parts[0].lowercased() == "hub" else { return nil }
+            let id = parts[1]
+            return id.isEmpty ? nil : id
+        }
+        return nil
+    }
+
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        // Re-register early when returning from background so APNs can refresh the device token if needed.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                DispatchQueue.main.async {
+                    application.registerForRemoteNotifications()
+                }
+            default:
+                break
+            }
+        }
+    }
+
     func applicationDidBecomeActive(_ application: UIApplication) {
+        ClickKt.onApplicationDidBecomeActive()
+
+        // FORCE SYNC: Kotlin is definitely awake now. Push the cached VoIP token!
+        if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
+            ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")
+        }
+        
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
@@ -88,6 +156,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         ClickKt.savePushToken(token: token, platform: "ios", tokenType: "standard")
+        
+        // PIGGYBACK: Standard token worked. Push the VoIP token right behind it!
+        if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
+            ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")
+        }
     }
 
     func application(
@@ -119,6 +192,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
 
         completionHandler([.banner, .sound, .badge])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let chatId = userInfo["chat_id"] as? String, !chatId.isEmpty {
+            ClickKt.setChatDeepLink(chatId: chatId)
+        } else if let connectionId = userInfo["connection_id"] as? String, !connectionId.isEmpty {
+            ClickKt.setChatDeepLink(chatId: connectionId)
+        }
+        completionHandler()
     }
 
     func application(
@@ -160,7 +247,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         guard let type = userInfo["type"] as? String, type == "incoming_call" else { return false }
             guard let payload = ClickIncomingCallPayload(userInfo) else { return false }
 
-        ClickCallKitManager.shared.reportIncomingCall(payload)
+        ClickCallKitManager.shared.reportIncomingCall(payload, voipPushCompletion: nil)
         return true
     }
 }

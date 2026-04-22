@@ -1,25 +1,27 @@
 package compose.project.click.click.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,13 +29,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.sensors.AmbientNoiseMonitor
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.utils.openApplicationSystemSettings
+import compose.project.click.click.utils.LocationService
 
 data class PermissionsOnboardingSelection(
     val connectionSnapEnabled: Boolean,
@@ -41,7 +50,13 @@ data class PermissionsOnboardingSelection(
     val includeInInsightsEnabled: Boolean,
     val notificationsEnabled: Boolean,
     val ambientNoiseEnabled: Boolean,
+    val barometricContextEnabled: Boolean,
 )
+
+private enum class PermissionsOnboardingPhase {
+    PickPreferences,
+    MicrophoneExplainer,
+}
 
 @Composable
 fun PermissionsOnboardingScreen(
@@ -50,6 +65,11 @@ fun PermissionsOnboardingScreen(
     initialIncludeInInsightsEnabled: Boolean,
     initialNotificationsEnabled: Boolean,
     initialAmbientNoiseEnabled: Boolean,
+    initialBarometricContextEnabled: Boolean,
+    locationService: LocationService,
+    ambientNoiseMonitor: AmbientNoiseMonitor,
+    requestLocationPermissionThen: ((onComplete: () -> Unit) -> Unit),
+    requestMicrophonePermissionThen: ((onComplete: () -> Unit) -> Unit),
     isLoading: Boolean = false,
     onContinue: (PermissionsOnboardingSelection) -> Unit,
 ) {
@@ -58,208 +78,380 @@ fun PermissionsOnboardingScreen(
     var includeInInsightsEnabled by remember { mutableStateOf(initialIncludeInInsightsEnabled) }
     var notificationsEnabled by remember { mutableStateOf(initialNotificationsEnabled) }
     var ambientNoiseEnabled by remember { mutableStateOf(initialAmbientNoiseEnabled) }
+    var barometricContextEnabled by remember { mutableStateOf(initialBarometricContextEnabled) }
+
+    var phase by remember { mutableStateOf(PermissionsOnboardingPhase.PickPreferences) }
+    var committedSelection by remember { mutableStateOf<PermissionsOnboardingSelection?>(null) }
+    var locationPermissionFlowRunning by remember { mutableStateOf(false) }
+
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)
+    fun selectionFromToggles() = PermissionsOnboardingSelection(
+        connectionSnapEnabled = connectionSnapEnabled,
+        showOnMapEnabled = showOnMapEnabled,
+        includeInInsightsEnabled = includeInInsightsEnabled,
+        notificationsEnabled = notificationsEnabled,
+        ambientNoiseEnabled = ambientNoiseEnabled,
+        barometricContextEnabled = barometricContextEnabled,
+    )
+
+    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        when (phase) {
+            PermissionsOnboardingPhase.PickPreferences -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                        .padding(top = topInset, bottom = 24.dp),
+                ) {
+                    PageHeader(
+                        title = "Set up your permissions",
+                        subtitle = "Choose how Click works before your first connection. You can change these anytime in Settings.",
                     )
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = topInset + 28.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Set up your permissions",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Choose how Click works before your first connection. You can change these anytime in Settings.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            PermissionPreferenceCard(
-                icon = Icons.Default.Place,
-                title = "Connection location snap",
-                description = "Capture a single GPS snapshot when you connect. No background tracking.",
-                checked = connectionSnapEnabled,
-                onCheckedChange = {
-                    connectionSnapEnabled = it
-                    if (!it) {
-                        showOnMapEnabled = false
-                        includeInInsightsEnabled = false
+                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                        ) {
+                            PermissionToggleRow(
+                                icon = Icons.Default.Place,
+                                title = "Connection location snap",
+                                description = "One GPS point when you connect so your Memory Map and connection context stay accurate. " +
+                                    "No background tracking—the system permission dialog appears when you continue if this is on.",
+                                checked = connectionSnapEnabled,
+                                enabled = true,
+                                onCheckedChange = {
+                                    connectionSnapEnabled = it
+                                    if (!it) {
+                                        showOnMapEnabled = false
+                                        includeInInsightsEnabled = false
+                                    }
+                                },
+                            )
+                            PermissionCardDivider()
+                            PermissionToggleRow(
+                                icon = Icons.Default.Map,
+                                title = "Show on my Memory Map",
+                                description = "Save your own connections to a private map you can revisit later.",
+                                checked = showOnMapEnabled,
+                                enabled = connectionSnapEnabled,
+                                onCheckedChange = { showOnMapEnabled = it },
+                            )
+                            PermissionCardDivider()
+                            PermissionToggleRow(
+                                icon = Icons.Default.Terrain,
+                                title = "Movement & elevation context",
+                                description = "During a connection, optionally read barometric pressure once to infer a coarse height band. No continuous fitness or health tracking.",
+                                checked = barometricContextEnabled,
+                                enabled = connectionSnapEnabled,
+                                onCheckedChange = { barometricContextEnabled = it },
+                            )
+                            PermissionCardDivider()
+                            PermissionToggleRow(
+                                icon = Icons.Default.Mic,
+                                title = "Enable ambient sound enrichment",
+                                description = "Store only a 2-second sound category for each encounter. No raw audio is saved.",
+                                checked = ambientNoiseEnabled,
+                                enabled = connectionSnapEnabled,
+                                onCheckedChange = { ambientNoiseEnabled = it },
+                            )
+                            PermissionCardDivider()
+                            PermissionToggleRow(
+                                icon = Icons.Default.PrivacyTip,
+                                title = "Include in business insights",
+                                description = "Share only anonymized venue and campus trends. Never your identity or raw path.",
+                                checked = includeInInsightsEnabled,
+                                enabled = connectionSnapEnabled,
+                                onCheckedChange = { includeInInsightsEnabled = it },
+                            )
+                            PermissionCardDivider()
+                            PermissionToggleRow(
+                                icon = Icons.Default.Notifications,
+                                title = "Allow message and call alerts",
+                                description = "Get notified when connections message or call you.",
+                                checked = notificationsEnabled,
+                                enabled = true,
+                                onCheckedChange = { notificationsEnabled = it },
+                            )
+                            PermissionCardDivider()
+                            PermissionInfoRow(
+                                icon = Icons.Default.BluetoothSearching,
+                                title = "Bluetooth for nearby Connect",
+                                description = "Tap Connect uses Bluetooth Low Energy to prove you are in the same room. " +
+                                    "Keep Bluetooth on; the system will ask for permission when you start your first handshake.",
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Next you'll pick at least 5 interests so Click can personalize your connections.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    val btnStyle = LocalPlatformStyle.current
+                    Button(
+                        onClick = {
+                            val sel = selectionFromToggles()
+                            fun proceedAfterLocation() {
+                                when {
+                                    sel.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission -> {
+                                        committedSelection = sel
+                                        phase = PermissionsOnboardingPhase.MicrophoneExplainer
+                                    }
+                                    else -> onContinue(sel)
+                                }
+                            }
+                            when {
+                                sel.connectionSnapEnabled && !locationService.hasLocationPermission() -> {
+                                    locationPermissionFlowRunning = true
+                                    requestLocationPermissionThen {
+                                        locationPermissionFlowRunning = false
+                                        proceedAfterLocation()
+                                    }
+                                }
+                                else -> proceedAfterLocation()
+                            }
+                        },
+                        enabled = !isLoading && !locationPermissionFlowRunning,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
+                        elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    ) {
+                        if (isLoading || locationPermissionFlowRunning) {
+                            AdaptiveCircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
-            )
+            }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            PermissionPreferenceCard(
-                icon = Icons.Default.Map,
-                title = "Show on my Memory Map",
-                description = "Save your own connections to a private map you can revisit later.",
-                checked = showOnMapEnabled,
-                enabled = connectionSnapEnabled,
-                onCheckedChange = { showOnMapEnabled = it }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            PermissionPreferenceCard(
-                icon = Icons.Default.PrivacyTip,
-                title = "Include in business insights",
-                description = "Share only anonymized venue and campus trends. Never your identity or raw path.",
-                checked = includeInInsightsEnabled,
-                enabled = connectionSnapEnabled,
-                onCheckedChange = { includeInInsightsEnabled = it }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            PermissionPreferenceCard(
-                icon = Icons.Default.Notifications,
-                title = "Allow message and call alerts",
-                description = "Get notified when connections message or call you.",
-                checked = notificationsEnabled,
-                onCheckedChange = { notificationsEnabled = it }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            PermissionPreferenceCard(
-                icon = Icons.Default.Mic,
-                title = "Enable ambient sound enrichment",
-                description = "Store only a 2-second sound category for each encounter. No raw audio is saved.",
-                checked = ambientNoiseEnabled,
-                onCheckedChange = { ambientNoiseEnabled = it }
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Next you'll pick at least 5 interests so Click can personalize your connections.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            val btnStyle = LocalPlatformStyle.current
-            Button(
-                onClick = {
-                    onContinue(
-                        PermissionsOnboardingSelection(
-                            connectionSnapEnabled = connectionSnapEnabled,
-                            showOnMapEnabled = showOnMapEnabled,
-                            includeInInsightsEnabled = includeInInsightsEnabled,
-                            notificationsEnabled = notificationsEnabled,
-                            ambientNoiseEnabled = ambientNoiseEnabled,
-                        )
-                    )
-                },
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
-                elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-            ) {
-                if (isLoading) {
-                    AdaptiveCircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                }
+            PermissionsOnboardingPhase.MicrophoneExplainer -> {
+                val sel = committedSelection ?: return@AdaptiveBackground
+                MicrophonePermissionExplainerContent(
+                    topInset = topInset,
+                    requestMicrophonePermissionThen = requestMicrophonePermissionThen,
+                    onAllowComplete = { onContinue(sel) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun PermissionPreferenceCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun MicrophonePermissionExplainerContent(
+    topInset: Dp,
+    requestMicrophonePermissionThen: ((onComplete: () -> Unit) -> Unit),
+    onAllowComplete: () -> Unit,
+) {
+    var micPermissionFlowRunning by remember { mutableStateOf(false) }
+    val btnStyle = LocalPlatformStyle.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(top = topInset, bottom = 24.dp),
+    ) {
+        PageHeader(
+            title = "Ambient sound",
+            subtitle = "A short mic sample at connect time helps categorize background noise. No recordings are stored—only a rough category.",
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                PermissionInfoRow(
+                    icon = Icons.Default.Mic,
+                    title = "Microphone permission",
+                    description = "Tap the button below to open the system dialog. You can change this anytime in Settings.",
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = {
+                if (micPermissionFlowRunning) return@Button
+                micPermissionFlowRunning = true
+                requestMicrophonePermissionThen {
+                    micPermissionFlowRunning = false
+                    onAllowComplete()
+                }
+            },
+            enabled = !micPermissionFlowRunning,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
+            elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+        ) {
+            if (micPermissionFlowRunning) {
+                AdaptiveCircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Allow microphone", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        TextButton(
+            onClick = { openApplicationSystemSettings() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "Open Settings",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionCardDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+    )
+}
+
+@Composable
+private fun PermissionInfoRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = PrimaryBlue,
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
+            )
+        }
+    }
+}
+
+/**
+ * Same row geometry as [compose.project.click.click.ui.screens.SettingsToggleRow]: icon vertically centered with text block.
+ */
+@Composable
+private fun PermissionToggleRow(
+    icon: ImageVector,
     title: String,
     description: String,
     checked: Boolean,
-    enabled: Boolean = true,
+    enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val style = LocalPlatformStyle.current
-    val cornerRadius = if (style.isIOS) 16.dp else 20.dp
+    val iconTint = when {
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        checked -> PrimaryBlue
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val titleColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
+    val descriptionColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(cornerRadius),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(
-                alpha = if (enabled) {
-                    if (style.isIOS) 0.92f else 0.96f
-                } else {
-                    if (style.isIOS) 0.65f else 0.72f
-                }
-            )
-        )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (enabled) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .size(24.dp)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = iconTint,
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = titleColor,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp
-                )
-            }
-            AdaptiveSwitch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = onCheckedChange
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = descriptionColor,
+                lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
             )
         }
+        Spacer(modifier = Modifier.width(12.dp))
+        AdaptiveSwitch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = PrimaryBlue,
+                checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f),
+            ),
+        )
     }
 }

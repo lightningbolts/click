@@ -1,6 +1,8 @@
 package compose.project.click.click.data.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlin.math.pow
 
 @Serializable
@@ -18,18 +20,33 @@ data class MemoryCapsule(
     val exactBarometricElevationMeters: Double? = null
 )
 
+/**
+ * Canonical wire format for [connection_encounters.weather_snapshot] and QR / proximity payloads:
+ * a stringified JSON object with these keys (camelCase).
+ */
 @Serializable
 data class WeatherSnapshot(
-    val condition: String,
-    val temperatureCelsius: Float,
-    val iconCode: String? = null,
-    val windSpeedKph: Float? = null,
+    val iconCode: String = "",
+    val condition: String = "",
+    val windSpeedKph: Double? = null,
+    val pressureMslHpa: Double? = null,
+    val temperatureCelsius: Double? = null,
     val windDirectionDegrees: Int? = null,
-    val pressureMslHpa: Double? = null
 )
+
+private val weatherPayloadJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    encodeDefaults = false
+}
+
+/** Stringified JSON for API / DB `weather_snapshot` text or jsonb. */
+fun WeatherSnapshot.toConnectionPayloadWeatherJson(): String =
+    weatherPayloadJson.encodeToString(WeatherSnapshot.serializer(), this)
 
 @Serializable
 enum class NoiseLevelCategory {
+    VERY_QUIET,
     QUIET,
     MODERATE,
     LOUD,

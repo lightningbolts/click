@@ -47,5 +47,8 @@ local.properties
 .env
 .env.*
 *.pycache/
+
+### Python ###
+server/venv/
 .DS_Store
 local.properties

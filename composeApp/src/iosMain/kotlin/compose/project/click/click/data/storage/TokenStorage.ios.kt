@@ -44,18 +44,19 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
+        private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
+        private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
+        private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
     private val userDefaults = NSUserDefaults(suiteName = PREFS_SUITE_NAME) ?: NSUserDefaults.standardUserDefaults
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
-        println("IosTokenStorage: Saving tokens...")
-        
         // Save to NSUserDefaults (primary - always works)
         userDefaults.setObject(jwt, KEY_JWT)
         userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
@@ -70,13 +71,11 @@ class IosTokenStorage : TokenStorage {
             userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
         }
         userDefaults.synchronize()
-        println("IosTokenStorage: Saved to NSUserDefaults")
-        
+
         // Also save to Keychain (for update persistence)
-        val jwtSaved = setKeychainItem(KEY_JWT, jwt)
-        val refreshSaved = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
-        println("IosTokenStorage: Keychain save - jwt: $jwtSaved, refresh: $refreshSaved")
-        
+        setKeychainItem(KEY_JWT, jwt)
+        setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
+
         if (expiresAt != null) {
             setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
         }
@@ -89,13 +88,11 @@ class IosTokenStorage : TokenStorage {
         // Try Keychain first (survives updates), then NSUserDefaults
         val keychainValue = getKeychainItem(KEY_JWT)
         if (!keychainValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got JWT from Keychain")
             return keychainValue
         }
-        
+
         val defaultsValue = userDefaults.stringForKey(KEY_JWT)
         if (!defaultsValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got JWT from NSUserDefaults")
             // Sync to Keychain for future updates
             setKeychainItem(KEY_JWT, defaultsValue)
         }
@@ -105,13 +102,11 @@ class IosTokenStorage : TokenStorage {
     override suspend fun getRefreshToken(): String? {
         val keychainValue = getKeychainItem(KEY_REFRESH_TOKEN)
         if (!keychainValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got refresh token from Keychain")
             return keychainValue
         }
-        
+
         val defaultsValue = userDefaults.stringForKey(KEY_REFRESH_TOKEN)
         if (!defaultsValue.isNullOrBlank()) {
-            println("IosTokenStorage: Got refresh token from NSUserDefaults")
             setKeychainItem(KEY_REFRESH_TOKEN, defaultsValue)
         }
         return defaultsValue
@@ -136,17 +131,11 @@ class IosTokenStorage : TokenStorage {
     }
 
     override suspend fun clearTokens() {
-        println("IosTokenStorage: Clearing tokens...")
-        
-        // Clear NSUserDefaults
+        // Clear token keys in NSUserDefaults
         userDefaults.removeObjectForKey(KEY_JWT)
         userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
         userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
         userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
-        userDefaults.removeObjectForKey(KEY_TAGS_INITIALIZED)
-        userDefaults.removeObjectForKey(KEY_ONBOARDING_STATE)
-        userDefaults.removeObjectForKey(KEY_CACHED_APP_SNAPSHOT)
-        userDefaults.removeObjectForKey(KEY_PENDING_CONNECTION_QUEUE)
         userDefaults.synchronize()
         
         // Clear Keychain
@@ -155,7 +144,6 @@ class IosTokenStorage : TokenStorage {
         deleteKeychainItem(KEY_EXPIRES_AT)
         deleteKeychainItem(KEY_TOKEN_TYPE)
         
-        println("IosTokenStorage: Tokens cleared from both storages")
     }
 
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -236,6 +224,19 @@ class IosTokenStorage : TokenStorage {
         }
     }
 
+    override suspend fun saveBarometricContextOptIn(enabled: Boolean) {
+        userDefaults.setBool(enabled, KEY_BAROMETRIC_CONTEXT_OPT_IN)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getBarometricContextOptIn(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN) != null) {
+            userDefaults.boolForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN)
+        } else {
+            null
+        }
+    }
+
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         userDefaults.setBool(seen, KEY_LOCATION_EXPLAINER_SEEN)
         userDefaults.synchronize()
@@ -260,6 +261,19 @@ class IosTokenStorage : TokenStorage {
 
     override suspend fun getOnboardingState(): String? {
         return userDefaults.stringForKey(KEY_ONBOARDING_STATE)
+    }
+
+    override suspend fun saveHasCompletedOnboarding(completed: Boolean) {
+        userDefaults.setBool(completed, KEY_HAS_COMPLETED_ONBOARDING)
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getHasCompletedOnboarding(): Boolean? {
+        return if (userDefaults.objectForKey(KEY_HAS_COMPLETED_ONBOARDING) != null) {
+            userDefaults.boolForKey(KEY_HAS_COMPLETED_ONBOARDING)
+        } else {
+            null
+        }
     }
 
     override suspend fun saveCachedAppSnapshot(snapshot: String?) {
@@ -288,13 +302,27 @@ class IosTokenStorage : TokenStorage {
         return userDefaults.stringForKey(KEY_PENDING_CONNECTION_QUEUE)
     }
 
+    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {
+        if (queue == null) {
+            userDefaults.removeObjectForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+        } else {
+            userDefaults.setObject(queue, KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getPendingProximityHandshakeQueue(): String? {
+        return userDefaults.stringForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+    }
+
     override suspend fun clearSessionData() {
         val sessionKeys = listOf(
             KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
             KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
             KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
-            KEY_AMBIENT_NOISE_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
-            KEY_ONBOARDING_STATE, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+            KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
+            KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
+            KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
         )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
         userDefaults.synchronize()
@@ -317,6 +345,8 @@ class IosTokenStorage : TokenStorage {
             return false
         }
 
+        // AfterFirstUnlock*: session reads succeed after first device unlock each boot (background refresh / post-update).
+        // ThisDeviceOnly: tokens are not included in iTunes/Finder backups. Updates use delete+add (no SecItemUpdate path).
         val query = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to SERVICE_NAME,

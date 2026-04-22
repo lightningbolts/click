@@ -22,6 +22,8 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.utils.LocationService
 import compose.project.click.click.utils.toImageBitmap
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.*
@@ -31,6 +33,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -59,6 +62,7 @@ private const val TOKEN_TTL_SECONDS = 90
 @Composable
 fun UserQrCode(
     user: User,
+    locationService: LocationService? = null,
     size: Dp = 200.dp,
     onShare: () -> Unit = {}
 ) {
@@ -81,7 +85,20 @@ fun UserQrCode(
             val session = SupabaseConfig.client.auth.currentSessionOrNull()
             val token = session?.accessToken
 
-            val response = httpClient.get(QR_API_URL) {
+            // Capture initiator's GPS to store alongside the token for proximity verification
+            val location = try {
+                locationService?.getHighAccuracyLocation(4000L)
+            } catch (_: Exception) {
+                null
+            }
+
+            var url = QR_API_URL
+            if (location != null && location.latitude.isFinite() && location.longitude.isFinite()
+                && !(location.latitude == 0.0 && location.longitude == 0.0)) {
+                url += "?lat=${location.latitude}&lon=${location.longitude}"
+            }
+
+            val response = httpClient.get(url) {
                 if (token != null) {
                     header(HttpHeaders.Authorization, "Bearer $token")
                 }
@@ -106,7 +123,7 @@ fun UserQrCode(
                 if (hasEverFetched) fetchError = true
             }
         } catch (e: Exception) {
-            println("UserQrCode: Failed to fetch token: ${e.message}")
+            println("UserQrCode: Failed to fetch token: ${e.redactedRestMessage()}")
             if (hasEverFetched) fetchError = true
             // Keep showing the last valid QR rather than going blank
         } finally {
@@ -117,6 +134,11 @@ fun UserQrCode(
 
     // Initial fetch + auto-refresh loop
     LaunchedEffect(user.id) {
+        // Warm up GPS while the "show my QR" surface is visible (non-blocking).
+        launch(Dispatchers.Default) {
+            runCatching { locationService?.getHighAccuracyLocation(4000L) }
+        }
+
         fetchToken()
 
         // Countdown and auto-refresh

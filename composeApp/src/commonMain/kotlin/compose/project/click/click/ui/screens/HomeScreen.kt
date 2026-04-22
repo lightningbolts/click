@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,41 +22,55 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.AdaptiveButton
-import compose.project.click.click.ui.components.GlassCard
-import compose.project.click.click.ui.components.GlassCardCompact
-import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.components.OnlineFriendItem
-import compose.project.click.click.ui.components.PollPairCard
-import compose.project.click.click.ui.components.RecentClickCard
-import compose.project.click.click.ui.components.StatCard
-import compose.project.click.click.ui.components.getAdaptiveCornerRadius
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCardCompact // pragma: allowlist secret
+import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.OnlineFriendItem // pragma: allowlist secret
+import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.RecentClickCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppShimmerVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.StatCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.getAdaptiveCornerRadius // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.viewmodel.HomeViewModel
-import compose.project.click.click.viewmodel.HomeState
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.ConnectionInsights
-import compose.project.click.click.data.models.ReconnectReminder
-import compose.project.click.click.data.models.User
+import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
+import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 // Spacing constants matching app's consistent 20.dp horizontal padding
 private val ScreenPaddingHorizontal = 20.dp
@@ -87,9 +102,43 @@ fun HomeScreen(
     val connectedUsers by viewModel.connectedUsers.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by viewModel.pollPairSuggestion.collectAsState()
+    val homeAvailabilityIntents by viewModel.homeAvailabilityIntents.collectAsState()
+    val homeAvailabilityOverlapMessages by viewModel.homeAvailabilityOverlapMessages.collectAsState()
+    val archivedForHome by AppDataManager.archivedConnectionIds.collectAsState()
+    val hiddenForHome by AppDataManager.hiddenConnectionIds.collectAsState()
+    val connectionsForArchiveBanner by AppDataManager.connections.collectAsState()
+    var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            delay(60_000)
+            archiveBannerNow = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+
+    val archiveBannerNotice = remember(
+        homeState,
+        connectionsForArchiveBanner,
+        archiveBannerNow,
+        connectedUsers,
+        archivedForHome,
+        hiddenForHome,
+    ) {
+        val success = homeState as? HomeState.Success ?: return@remember null
+        connectionsForArchiveBanner
+            .filter { it.isActiveForUser(archivedForHome, hiddenForHome) }
+            .mostUrgentArchiveNotice(archiveBannerNow) { conn ->
+            val otherId = conn.user_ids.firstOrNull { it != success.user.id }
+            otherId?.let { connectedUsers[it]?.name?.trim() }?.takeIf { it.isNotBlank() }
+                ?: conn.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }
+                ?: "this connection"
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    val availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
+    var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
 
     // Show nudge feedback as a snackbar
     LaunchedEffect(nudgeResult) {
@@ -102,6 +151,12 @@ fun HomeScreen(
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
+    LaunchedEffect(showAvailabilityIntentSheet) {
+        if (!showAvailabilityIntentSheet) {
+            viewModel.refreshHomeAvailabilityIntents()
+        }
+    }
+
     // Apply deep dark background (Zinc-950)
     Box(
         modifier = Modifier
@@ -110,12 +165,12 @@ fun HomeScreen(
     ) {
         when (val state = homeState) {
             is HomeState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
-                }
+                AppShimmerScreen(
+                    isDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                    variant = AppShimmerVariant.HomeReveal,
+                    titleOverride = "Loading your home",
+                    subtitleOverride = "Bringing in your latest updates...",
+                )
             }
             is HomeState.Error -> {
                 Column(
@@ -154,7 +209,10 @@ fun HomeScreen(
                 }
             }
             is HomeState.Success -> {
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
                     Box(
                         modifier = Modifier.padding(
                             start = ScreenPaddingHorizontal,
@@ -178,6 +236,16 @@ fun HomeScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(CardSpacing)
                     ) {
+                        archiveBannerNotice?.let { notice ->
+                            item(key = "archive_banner") {
+                                ConnectionArchiveWarningBanner(
+                                    notice = notice,
+                                    onOpenChat = { onNavigateToChat(notice.connectionId) },
+                                    onSendIcebreaker = { viewModel.sendArchiveBannerIcebreaker(notice) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
                         pollPairSuggestion?.let { suggestion ->
                             item(key = "poll_pair_card") {
                                 PollPairCard(
@@ -185,6 +253,36 @@ fun HomeScreen(
                                     onOpenChat = { onNavigateToChat(suggestion.connectionId) },
                                     onSendIcebreaker = { viewModel.sendPollPairIcebreaker(suggestion) }
                                 )
+                            }
+                        }
+
+                        item(key = "availability_intents_strip") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                HomeAvailabilityIntentsRow(
+                                    intents = homeAvailabilityIntents,
+                                    onOpenSheet = {
+                                        availabilityViewModel.resetAvailabilityIntentSheet()
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                )
+                                if (homeAvailabilityOverlapMessages.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        homeAvailabilityOverlapMessages.forEach { line ->
+                                            Text(
+                                                text = line,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color(0xFFFFE8A8),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -303,6 +401,16 @@ fun HomeScreen(
         }
 
         // Snackbar for nudge feedback
+        if (showAvailabilityIntentSheet) {
+            AvailabilitySheet(
+                viewModel = availabilityViewModel,
+                onDismiss = {
+                    showAvailabilityIntentSheet = false
+                    availabilityViewModel.resetAvailabilityIntentSheet()
+                },
+            )
+        }
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
@@ -644,7 +752,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             // Content
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    connection.semantic_location ?: "Connection",
+                    connection.semanticLocation ?: "Connection",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -944,5 +1052,82 @@ private fun InsightRow(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+private fun HomeAvailabilityIntentsRow(
+    intents: List<AvailabilityIntentRow>,
+    onOpenSheet: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        GradientSectionHeader(text = "I'm down for…")
+        Spacer(modifier = Modifier.height(10.dp))
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(
+                count = intents.size,
+                key = { idx ->
+                    val row = intents[idx]
+                    row.id ?: "${row.intentTag}_${row.expiresAt}"
+                },
+            ) { idx ->
+                val row = intents[idx]
+                val label = row.intentTag?.trim().orEmpty().ifEmpty { "Intent" }
+                val sub = row.activeUntilLabel()
+                AssistChip(
+                    onClick = onOpenSheet,
+                    label = {
+                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (sub.isNotBlank()) {
+                                Text(
+                                    sub,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.35f)),
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        labelColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            }
+            item(key = "add_intent") {
+                AssistChip(
+                    onClick = onOpenSheet,
+                    label = {
+                        Text(
+                            if (intents.isEmpty()) "Set what you're down for" else "Edit intents",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                        labelColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+            }
+        }
     }
 }

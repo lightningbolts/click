@@ -1,13 +1,39 @@
 import Foundation
 
 #if canImport(CallKit) && canImport(AVFAudio)
+import UIKit
 import CallKit
 import AVFAudio
+import UserNotifications
 import ComposeApp
+
+/// Lock-screen / banner fallback when CallKit cannot be shown (malformed VoIP payload, CallKit errors).
+enum ClickIncomingCallFallbackNotifier {
+    static func present(callerName: String, videoEnabled: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = videoEnabled ? "Incoming video call" : "Incoming call"
+        content.body = callerName.isEmpty ? "Open Click to answer" : "From \(callerName)"
+        content.sound = .default
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+        let request = UNNotificationRequest(
+            identifier: "click.incoming-call.fallback.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    static func presentGenericIncomingCall() {
+        present(callerName: "", videoEnabled: false)
+    }
+}
 
 private enum ClickNativeCallNotifications {
     static let incoming = Notification.Name("ClickNativeIncomingCall")
     static let end = Notification.Name("ClickNativeEndCall")
+    static let answer = Notification.Name("ClickNativeAnswerCall")
 }
 
 struct ClickIncomingCallPayload {
@@ -21,15 +47,58 @@ struct ClickIncomingCallPayload {
     let videoEnabled: Bool
     let createdAt: Int64
 
+    /// Coerces APNs / PushKit values (String, NSString, NSNumber) so payloads are not dropped on type mismatch.
+    private static func string(_ userInfo: [AnyHashable: Any], _ camel: String, _ snake: String) -> String? {
+        func coerce(_ raw: Any?) -> String? {
+            guard let raw else { return nil }
+            if let s = raw as? String {
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.nilIfEmpty
+            }
+            if let s = raw as? NSString {
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (t as String).nilIfEmpty
+            }
+            if let n = raw as? NSNumber {
+                return n.stringValue.nilIfEmpty
+            }
+            return nil
+        }
+        return coerce(userInfo[camel]) ?? coerce(userInfo[snake])
+    }
+
+    private static func displayName(_ userInfo: [AnyHashable: Any], _ camel: String, _ snake: String) -> String {
+        string(userInfo, camel, snake) ?? "Someone"
+    }
+
+    private static func int64(_ userInfo: [AnyHashable: Any], _ camel: String, _ snake: String) -> Int64 {
+        let v: Any? = userInfo[camel] ?? userInfo[snake]
+        if let n = v as? NSNumber { return n.int64Value }
+        if let s = v as? String { return Int64(s) ?? 0 }
+        return 0
+    }
+
+    /// Merges nested `data` / `custom` dictionaries so APNs and VoIP layouts both work.
+    static func normalizedUserInfo(_ raw: [AnyHashable: Any]) -> [AnyHashable: Any] {
+        var out: [AnyHashable: Any] = [:]
+        raw.forEach { out[$0.key] = $0.value }
+        if let data = raw["data"] as? [AnyHashable: Any] {
+            data.forEach { out[$0.key] = $0.value }
+        }
+        if let custom = raw["custom"] as? [AnyHashable: Any] {
+            custom.forEach { out[$0.key] = $0.value }
+        }
+        return out
+    }
+
     init?(_ userInfo: [AnyHashable: Any]) {
+        let info = Self.normalizedUserInfo(userInfo)
         guard
-            let callId = userInfo["callId"] as? String ?? userInfo["call_id"] as? String,
-            let connectionId = userInfo["connectionId"] as? String ?? userInfo["connection_id"] as? String,
-            let roomName = userInfo["roomName"] as? String ?? userInfo["room_name"] as? String,
-            let callerId = userInfo["callerId"] as? String ?? userInfo["caller_id"] as? String,
-            let callerName = userInfo["callerName"] as? String ?? userInfo["caller_name"] as? String,
-            let calleeId = userInfo["calleeId"] as? String ?? userInfo["callee_id"] as? String,
-            let calleeName = userInfo["calleeName"] as? String ?? userInfo["callee_name"] as? String
+            let callId = Self.string(info, "callId", "call_id"),
+            let connectionId = Self.string(info, "connectionId", "connection_id"),
+            let roomName = Self.string(info, "roomName", "room_name"),
+            let callerId = Self.string(info, "callerId", "caller_id"),
+            let calleeId = Self.string(info, "calleeId", "callee_id")
         else {
             return nil
         }
@@ -38,21 +107,55 @@ struct ClickIncomingCallPayload {
         self.connectionId = connectionId
         self.roomName = roomName
         self.callerId = callerId
+        self.callerName = Self.displayName(info, "callerName", "caller_name")
+        self.calleeId = calleeId
+        self.calleeName = Self.displayName(info, "calleeName", "callee_name")
+        let vidRaw = info["videoEnabled"] ?? info["video_enabled"]
+        if let b = vidRaw as? Bool {
+            self.videoEnabled = b
+        } else if let n = vidRaw as? NSNumber {
+            self.videoEnabled = n.boolValue
+        } else {
+            self.videoEnabled = false
+        }
+        self.createdAt = Self.int64(info, "createdAt", "created_at")
+    }
+
+    /// VoIP / PushKit: rebuild after reading top-level `caller_id` / `caller_name` from `dictionaryPayload`.
+    init(
+        callId: String,
+        connectionId: String,
+        roomName: String,
+        callerId: String,
+        callerName: String,
+        calleeId: String,
+        calleeName: String,
+        videoEnabled: Bool,
+        createdAt: Int64
+    ) {
+        self.callId = callId
+        self.connectionId = connectionId
+        self.roomName = roomName
+        self.callerId = callerId
         self.callerName = callerName
         self.calleeId = calleeId
         self.calleeName = calleeName
-        self.videoEnabled = (userInfo["videoEnabled"] as? Bool) ?? (userInfo["video_enabled"] as? Bool) ?? false
-        self.createdAt = (userInfo["createdAt"] as? NSNumber)?.int64Value
-            ?? (userInfo["created_at"] as? NSNumber)?.int64Value
-            ?? 0
+        self.videoEnabled = videoEnabled
+        self.createdAt = createdAt
     }
 }
 
-@MainActor
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}
+
 final class ClickCallKitManager: NSObject, CXProviderDelegate {
     static let shared = ClickCallKitManager()
 
     private let provider: CXProvider
+    private let callController = CXCallController()
     private var observers: [NSObjectProtocol] = []
     private var payloadsByCallId: [String: ClickIncomingCallPayload] = [:]
     private var uuidsByCallId: [String: UUID] = [:]
@@ -65,7 +168,12 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
         configuration.supportedHandleTypes = [.generic]
         configuration.maximumCallsPerCallGroup = 1
         configuration.maximumCallGroups = 1
-        configuration.includesCallsInRecents = false
+        configuration.includesCallsInRecents = true
+        if #available(iOS 14.0, *) {
+            configuration.iconTemplateImageData = UIImage(systemName: "phone.circle.fill")?
+                .withRenderingMode(.alwaysTemplate)
+                .pngData()
+        }
         provider = CXProvider(configuration: configuration)
         super.init()
         provider.setDelegate(self, queue: nil)
@@ -78,7 +186,7 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: ClickNativeCallNotifications.incoming, object: nil, queue: .main) { [weak self] notification in
             guard let payload = ClickIncomingCallPayload(notification.userInfo ?? [:]) else { return }
-            self?.reportIncomingCall(payload)
+            self?.reportIncomingCall(payload, voipPushCompletion: nil)
         })
         observers.append(center.addObserver(forName: ClickNativeCallNotifications.end, object: nil, queue: .main) { [weak self] notification in
             guard let callId = notification.userInfo?["callId"] as? String ?? notification.userInfo?["call_id"] as? String else {
@@ -86,11 +194,32 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
             }
             self?.endCall(callId: callId)
         })
+        observers.append(center.addObserver(forName: ClickNativeCallNotifications.answer, object: nil, queue: .main) { [weak self] notification in
+            guard let callId = notification.userInfo?["callId"] as? String ?? notification.userInfo?["call_id"] as? String else {
+                return
+            }
+            self?.requestAnswerForCall(callId: callId)
+        })
     }
 
-    func reportIncomingCall(_ payload: ClickIncomingCallPayload) {
+    /// In-app Accept must drive CallKit answer; otherwise the native incoming UI stays active and can send End → decline.
+    func requestAnswerForCall(callId: String) {
+        guard let uuid = uuidsByCallId[callId] else { return }
+        let action = CXAnswerCallAction(call: uuid)
+        let transaction = CXTransaction(action: action)
+        callController.request(transaction) { error in
+            if let error {
+                print("CallKit request answer failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// - Parameter voipPushCompletion: When non-nil (PushKit path), **must** be invoked after `reportNewIncomingCall` finishes so iOS can wake the app reliably.
+    /// PushKit: call synchronously from `PKPushRegistryDelegate` — do not dispatch async or await network before this method.
+    func reportIncomingCall(_ payload: ClickIncomingCallPayload, voipPushCompletion: (() -> Void)?) {
         if uuidsByCallId[payload.callId] != nil {
             payloadsByCallId[payload.callId] = payload
+            voipPushCompletion?()
             return
         }
 
@@ -108,12 +237,20 @@ final class ClickCallKitManager: NSObject, CXProviderDelegate {
         update.supportsUngrouping = false
         update.supportsDTMF = false
 
-        provider.reportNewIncomingCall(with: uuid, update: update) { error in
+        // Invoked synchronously from the caller; completion runs when CallKit finishes registration.
+        provider.reportNewIncomingCall(with: uuid, update: update) { [weak self] error in
             if let error {
                 print("CallKit report incoming call failed: \(error.localizedDescription)")
-                self.clear(callId: payload.callId)
+                self?.clear(callId: payload.callId)
+                ClickIncomingCallFallbackNotifier.present(callerName: payload.callerName, videoEnabled: payload.videoEnabled)
             }
+            voipPushCompletion?()
         }
+    }
+
+    func reportUnparseableIncomingCall(voipPushCompletion: (() -> Void)?) {
+        ClickIncomingCallFallbackNotifier.presentGenericIncomingCall()
+        voipPushCompletion?()
     }
 
     func endCall(callId: String) {
@@ -212,7 +349,10 @@ final class ClickCallKitManager {
     func start() {
     }
 
-    func reportIncomingCall(_ payload: ClickIncomingCallPayload) {
+    func reportIncomingCall(_ payload: ClickIncomingCallPayload, voipPushCompletion: (() -> Void)?) {
+    }
+
+    func reportUnparseableIncomingCall(voipPushCompletion: (() -> Void)?) {
     }
 }
 

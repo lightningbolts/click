@@ -1,6 +1,7 @@
 package compose.project.click.click.data
 
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.CachedAppSnapshot
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
@@ -13,19 +14,27 @@ import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
+import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -40,14 +49,23 @@ object AppDataManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var presenceHeartbeatJob: Job? = null
     private var pendingSyncJob: Job? = null
+    private var pendingSyncPausedForAuth: Boolean = false
     
-    private val authRepository = AuthRepository()
-    private val supabaseRepository = SupabaseRepository()
-    private val chatRepository = ChatRepository(tokenStorage = createTokenStorage())
-    private val notificationPreferencesRepository = NotificationPreferencesRepository()
-    private val connectionRepository = ConnectionRepository()
-    private val tokenStorage = createTokenStorage() // For local preferences storage
-    private val pushNotificationService = createPushNotificationService()
+    /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
+    private val tokenStorage by lazy { createTokenStorage() }
+    private val authRepository by lazy { AuthRepository(tokenStorage = tokenStorage) }
+    private val supabaseRepository by lazy { SupabaseRepository() }
+    private val chatRepository by lazy { SupabaseChatRepository(tokenStorage = tokenStorage) }
+
+    /** Supabase Realtime Presence on channel `room:presence` (user IDs with an active app session). */
+    val onlineUsers: StateFlow<Set<String>> get() = chatRepository.onlineUsers
+
+    /** Coarse health of the shared presence channel; see [compose.project.click.click.data.repository.PresenceHealth]. */
+    val presenceHealth: StateFlow<compose.project.click.click.data.repository.PresenceHealth>
+        get() = chatRepository.presenceHealth
+    private val notificationPreferencesRepository by lazy { NotificationPreferencesRepository() }
+    private val connectionRepository by lazy { ConnectionRepository() }
+    private val pushNotificationService by lazy { createPushNotificationService() }
     private val json = Json { ignoreUnknownKeys = true }
     
     // Current user state
@@ -57,6 +75,25 @@ object AppDataManager {
     // User's connections
     private val _connections = MutableStateFlow<List<Connection>>(emptyList())
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
+
+    /** Per-user archive rows ([connection_archives]); excludes these from Active surfaces. */
+    private val _archivedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val archivedConnectionIds: StateFlow<Set<String>> = _archivedConnectionIds.asStateFlow()
+
+    /** Per-user hidden rows ([connection_hidden]); excluded everywhere. */
+    private val _hiddenConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenConnectionIds: StateFlow<Set<String>> = _hiddenConnectionIds.asStateFlow()
+
+    /**
+     * Incremented when a verified group ("click") is created elsewhere so [ConnectionsScreen]
+     * can force-refresh its [ChatViewModel] chat list (separate repository instance).
+     */
+    private val _chatListRefreshEpoch = MutableStateFlow(0)
+    val chatListRefreshEpoch: StateFlow<Int> = _chatListRefreshEpoch.asStateFlow()
+
+    fun bumpChatListRefresh() {
+        _chatListRefreshEpoch.value = _chatListRefreshEpoch.value + 1
+    }
     
     // Connected users info
     private val _connectedUsers = MutableStateFlow<Map<String, User>>(emptyMap())
@@ -80,7 +117,12 @@ object AppDataManager {
     private const val PRESENCE_HEARTBEAT_MS = 30_000L
     private const val PENDING_SYNC_RETRY_MS = 15_000L
     private const val STARTUP_TIMEOUT_MS = 15_000L
-    
+    private const val TOKEN_REFRESH_SKEW_MS = 60_000L
+    private const val FOREGROUND_RECOVERY_DEBOUNCE_MS = 900L
+
+    private var loadAllDataJob: Job? = null
+    private var lastForegroundRecoveryMs: Long = 0L
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -88,9 +130,36 @@ object AppDataManager {
     private val _pendingConnectionsCount = MutableStateFlow(0)
     val pendingConnectionsCount: StateFlow<Int> = _pendingConnectionsCount.asStateFlow()
 
-    private val _usingCachedData = MutableStateFlow(false)
-    val usingCachedData: StateFlow<Boolean> = _usingCachedData.asStateFlow()
-    
+    private val _proximityHandshakeRecovered = MutableSharedFlow<ProximityHandshakeRecoveryPayload>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val proximityHandshakeRecovered: SharedFlow<ProximityHandshakeRecoveryPayload> =
+        _proximityHandshakeRecovered.asSharedFlow()
+
+    /** One-shot UI messages (e.g. profile or notification settings save failed). */
+    private val _transientUserMessages = MutableSharedFlow<String>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val transientUserMessages: SharedFlow<String> = _transientUserMessages.asSharedFlow()
+
+    /**
+     * Emitted after [handleApplicationForegrounded] refreshes the Supabase session and Realtime
+     * socket so [ChatViewModel] can re-attach Postgres channels without waiting for heartbeat timeouts.
+     */
+    private val _foregroundRealtimeRecovery = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val foregroundRealtimeRecovery: SharedFlow<Unit> = _foregroundRealtimeRecovery.asSharedFlow()
+
+    /** Surfaces a one-shot message to UI collectors (e.g. onboarding before the main scaffold exists). */
+    fun postTransientUserMessage(message: String) {
+        if (message.isBlank()) return
+        scope.launch { _transientUserMessages.emit(message.trim()) }
+    }
+
     // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
     private val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
@@ -116,6 +185,35 @@ object AppDataManager {
         _ghostModeEnabled.value = newValue
         println("AppDataManager: Ghost Mode ${if (newValue) "ENABLED - halting background sync" else "DISABLED - resuming background sync"}")
     }
+
+    /**
+     * OS resumed the UI (foreground). Cancels any in-flight [loadAllData] work, drops stale Ktor /
+     * Realtime sockets, refreshes the GoTrue session, and starts a fresh load without waiting for
+     * [STARTUP_TIMEOUT_MS] on half-open connections (common after iOS backgrounding).
+     */
+    fun handleApplicationForegrounded() {
+        if (_ghostModeEnabled.value) return
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (now - lastForegroundRecoveryMs < FOREGROUND_RECOVERY_DEBOUNCE_MS) return
+        lastForegroundRecoveryMs = now
+        loadAllDataJob?.cancel()
+        scope.launch {
+            runCatching { SupabaseForegroundRecovery.recoverAfterBackground(SupabaseConfig.client) }
+                .onFailure { e ->
+                    println("AppDataManager: foreground Supabase recovery failed: ${e.redactedRestMessage()}")
+                }
+            _foregroundRealtimeRecovery.emit(Unit)
+            lastRefreshTime = 0L
+            startLoadAllDataJob()
+        }
+    }
+
+    private fun startLoadAllDataJob() {
+        loadAllDataJob?.cancel()
+        loadAllDataJob = scope.launch {
+            loadAllData()
+        }
+    }
     
     /**
      * Initialize app data - call this once when the app starts
@@ -127,9 +225,7 @@ object AppDataManager {
         }
         startPendingConnectionSync()
         
-        scope.launch {
-            loadAllData()
-        }
+        startLoadAllDataJob()
     }
     
     /**
@@ -138,16 +234,14 @@ object AppDataManager {
     private suspend fun loadAllData() {
         _isLoading.value = true
         _error.value = null
-        val restoredFromCache = restoreCachedSnapshot()
-        
+        restoreCachedSnapshot()
+
         try {
             // Get current user from auth
             val authUser = authRepository.getCurrentUser()
             if (authUser == null) {
                 println("AppDataManager: No auth user found")
-                if (!restoredFromCache) {
-                    _isDataLoaded.value = false
-                }
+                _isDataLoaded.value = true
                 _isLoading.value = false
                 return
             }
@@ -155,29 +249,51 @@ object AppDataManager {
             println("AppDataManager: Loading data for user ${authUser.id}")
 
             withTimeout(STARTUP_TIMEOUT_MS) {
-                // Extract name from auth metadata (prefer full_name over name, set during signup/update)
-                val fullName = authUser.userMetadata?.get("full_name")?.toString()?.removeSurrounding("\"")
-                val legacyName = authUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"")
-                val authName = fullName ?: legacyName
-                println("AppDataManager: Auth metadata - full_name: $fullName, name: $legacyName, using: $authName")
+                val snapshotDeferred = async {
+                    runCatching { supabaseRepository.fetchUserConnectionsSnapshot(authUser.id) }
+                        .onFailure { println("AppDataManager: Connection snapshot fetch failed: ${it.message}") }
+                        .getOrNull()
+                }
+
+                val meta = authUser.userMetadata
+                fun metaStr(key: String) =
+                    meta?.get(key)?.toString()?.removeSurrounding("\"")?.trim()?.takeIf { it.isNotEmpty() }
+                val metaFirst = metaStr("first_name")
+                val metaLast = metaStr("last_name")
+                val metaBirthday = metaStr("birthday")
+                val cachedSessionUser = _currentUser.value?.takeIf { it.id == authUser.id }
+                val cachedImage = cachedSessionUser?.image?.trim()?.takeIf { it.isNotEmpty() }
+                val authDisplay = authUser.displayNameFromMetadata()
+                println(
+                    "AppDataManager: Auth metadata — first/last: $metaFirst / $metaLast, display: $authDisplay"
+                )
 
                 // Fetch user data from database
                 var user = supabaseRepository.fetchUserById(authUser.id)
                 println("AppDataManager: Fetched user from DB: ${user?.name}")
 
                 if (user == null) {
+                    val resolvedFirst = metaFirst ?: cachedSessionUser?.firstName
+                    val resolvedLast = metaLast ?: cachedSessionUser?.lastName
+                    val resolvedBirthday = metaBirthday ?: cachedSessionUser?.birthday
+                    val resolvedImage = cachedImage
                     // Create user in database if not exists
                     val newUser = User(
                         id = authUser.id,
                         name = resolveDisplayName(
-                            fullName = authName,
+                            firstName = resolvedFirst,
+                            lastName = resolvedLast,
+                            fullName = metaStr("full_name") ?: authDisplay,
                             name = null,
                             email = authUser.email
                         ),
                         email = authUser.email,
-                        image = null,
+                        image = resolvedImage,
                         createdAt = Clock.System.now().toEpochMilliseconds(),
                         lastPolled = null,
+                        firstName = resolvedFirst,
+                        lastName = resolvedLast,
+                        birthday = resolvedBirthday,
                         connections = emptyList(),
                         paired_with = emptyList(),
                         connection_today = 0,
@@ -188,14 +304,21 @@ object AppDataManager {
                     user = newUser
                 } else {
                     val desiredName = resolveDisplayName(
-                        fullName = authName,
+                        firstName = metaFirst ?: user.firstName,
+                        lastName = metaLast ?: user.lastName,
+                        fullName = metaStr("full_name") ?: authDisplay,
                         name = user.name,
                         email = authUser.email ?: user.email
                     )
                     val desiredEmail = authUser.email ?: user.email
+                    val resolvedImage = user.image?.trim()?.takeIf { it.isNotEmpty() } ?: cachedImage
                     val syncedUser = user.copy(
                         name = desiredName,
-                        email = desiredEmail
+                        email = desiredEmail,
+                        image = resolvedImage,
+                        firstName = metaFirst ?: user.firstName ?: cachedSessionUser?.firstName,
+                        lastName = metaLast ?: user.lastName ?: cachedSessionUser?.lastName,
+                        birthday = metaBirthday ?: user.birthday ?: cachedSessionUser?.birthday,
                     )
                     if (syncedUser != user) {
                         println("AppDataManager: Syncing current user profile to users table: ${syncedUser.name}")
@@ -206,7 +329,22 @@ object AppDataManager {
 
                 _currentUser.value = user
                 println("AppDataManager: Current user set to: ${user.name}")
+                runCatching { chatRepository.startGlobalPresence(user.id) }
+                    .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.redactedRestMessage()}") }
                 startPresenceHeartbeat(user.id)
+
+                // Interest tags are not required for first Home paint.
+                scope.launch {
+                    runCatching { supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty() }
+                        .onSuccess { tags ->
+                            if (_currentUser.value?.id == user.id) {
+                                _currentUser.value = _currentUser.value?.copy(tags = tags)
+                            }
+                        }
+                        .onFailure { e ->
+                            println("AppDataManager: Interest tags fetch failed: ${e.redactedRestMessage()}")
+                        }
+                }
 
                 // Load location preferences from Supabase
                 runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
@@ -273,14 +411,27 @@ object AppDataManager {
 
                     // Prioritize connections and connected-user hydration so the Home/Map/Chats
                     // screens are ready before slower auxiliary startup work completes.
-                    val userConnections = supabaseRepository.fetchUserConnections(user.id)
-                    _connections.value = userConnections
-                    refreshConnectedUsers(userConnections, user.id)
+                    val snapshot = snapshotDeferred.await()
+                    if (snapshot != null) {
+                        _connections.value = snapshot.connections
+                        _archivedConnectionIds.value = snapshot.archivedConnectionIds
+                        _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+                    }
 
                     _isDataLoaded.value = true
-                    _usingCachedData.value = false
                     lastRefreshTime = Clock.System.now().toEpochMilliseconds()
                     persistSnapshot()
+
+                    // Keep first paint fast: hydrate connected users in background instead of
+                    // blocking Home readiness on this network call.
+                    scope.launch {
+                        if (_currentUser.value?.id == user.id) {
+                            runCatching { refreshConnectedUsers(_connections.value, user.id) }
+                                .onFailure { e ->
+                                    println("AppDataManager: Background connected-user hydration failed: ${e.redactedRestMessage()}")
+                                }
+                        }
+                    }
 
                     // Apply availability after the primary connection data is visible.
                     val availability = availabilityDeferred.await()
@@ -294,14 +445,15 @@ object AppDataManager {
                 }
             }
             
+        } catch (e: CancellationException) {
+            // Replacing an in-flight load (foreground recovery, refresh) cancels this job; must not
+            // treat that as an offline / sync failure or the banner shows until the next full load.
+            throw e
         } catch (e: Exception) {
-            println("Error loading app data: ${e.message}")
-            e.printStackTrace()
-            _error.value = e.message ?: "Offline mode is active."
-            if (restoredFromCache) {
-                _isDataLoaded.value = true
-                _usingCachedData.value = true
-            }
+            println("Error loading app data: ${e.redactedRestMessage()}")
+            // Do not printStackTrace() — RestException.message embeds Authorization/apikey headers.
+            _error.value = mapStartupErrorMessage(e.redactedRestMessage())
+            _isDataLoaded.value = true
         } finally {
             _isLoading.value = false
         }
@@ -323,19 +475,27 @@ object AppDataManager {
             return
         }
         
-        scope.launch {
-            loadAllData()
-        }
+        startLoadAllDataJob()
     }
     
     /**
      * Clear all data (on logout)
      */
-    fun clearData() {
+    suspend fun clearData() {
+        loadAllDataJob?.cancel()
+        loadAllDataJob = null
+        // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
+        // group master keys AND stops global presence, so this single call
+        // replaces the old stopGlobalPresence() + leaks derived keys into the
+        // next signed-in user of the same device.
+        runCatching { chatRepository.clearSessionCaches() }
+            .onFailure { e -> println("AppDataManager: chat session cache clear failed: ${e.redactedRestMessage()}") }
         presenceHeartbeatJob?.cancel()
         presenceHeartbeatJob = null
         _currentUser.value = null
         _connections.value = emptyList()
+        _archivedConnectionIds.value = emptySet()
+        _hiddenConnectionIds.value = emptySet()
         _connectedUsers.value = emptyMap()
         _userAvailability.value = null
         _isDataLoaded.value = false
@@ -344,7 +504,6 @@ object AppDataManager {
         _notificationPreferences.value = NotificationPreferences()
         _locationPreferences.value = LocationPreferences()
         _pendingConnectionsCount.value = 0
-        _usingCachedData.value = false
         NotificationRuntimeState.setNotificationPreferences(messageEnabled = true, callEnabled = true)
     }
 
@@ -354,8 +513,9 @@ object AppDataManager {
      * chats, and other data are fetched fresh.
      */
     fun resetAndReload() {
-        clearData()
-        scope.launch {
+        loadAllDataJob?.cancel()
+        loadAllDataJob = scope.launch {
+            clearData()
             loadAllData()
         }
     }
@@ -408,6 +568,48 @@ object AppDataManager {
         }
     }
 
+    /** Optimistic hide: used after [connection_hidden] insert or when blocking. */
+    fun hideConnectionLocally(connectionId: String) {
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value + connectionId
+        removeConnection(connectionId)
+    }
+
+    fun unhideConnectionLocally(connectionId: String) {
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    /**
+     * Revert an optimistic [hideConnectionLocally]: removes the ID from hidden set and
+     * restores the [Connection] back into the connections list. Used when the server call
+     * to [connection_hidden] fails and we need to undo the local hide.
+     */
+    fun revertHideConnectionLocally(connectionId: String, connection: Connection) {
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
+        _connections.value = (_connections.value + connection).distinctBy { it.id }
+        scope.launch { persistSnapshot() }
+    }
+
+    fun markConnectionArchivedLocally(connectionId: String) {
+        _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    fun markConnectionUnarchivedLocally(connectionId: String) {
+        _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    /**
+     * After QR/NFC reconnect: clear local junction bookkeeping and replace the in-memory row.
+     */
+    fun applyRestoredConnection(connection: Connection) {
+        _archivedConnectionIds.value = _archivedConnectionIds.value - connection.id
+        _hiddenConnectionIds.value = _hiddenConnectionIds.value - connection.id
+        _connections.value = (_connections.value.filter { it.id != connection.id } + connection).distinctBy { it.id }
+        scope.launch { persistSnapshot() }
+    }
+
     fun replaceLocalConnection(localId: String, syncedConnection: Connection, otherUser: User? = null) {
         _connections.value = _connections.value
             .filterNot { it.id == localId }
@@ -419,6 +621,32 @@ object AppDataManager {
         scope.launch {
             persistSnapshot()
         }
+    }
+
+    /**
+     * Patch in-memory [Connection] rows when chat activity changes so [connections] consumers
+     * see fresh [Connection.last_message_at] and optional preview text without a full reload.
+     */
+    fun updateConnectionChatActivity(
+        connectionId: String,
+        lastMessageAt: Long,
+        lastMessagePreview: Message? = null
+    ) {
+        _connections.value = _connections.value.map { c ->
+            if (c.id != connectionId) return@map c
+            val mergedAt = listOfNotNull(c.last_message_at, lastMessageAt).maxOrNull()
+            val cachedPreviewTs = c.chat.messages.lastOrNull()?.timeCreated
+            val newChat = if (lastMessagePreview != null) {
+                c.chat.copy(messages = listOf(lastMessagePreview))
+            } else if (mergedAt != null && cachedPreviewTs != null && cachedPreviewTs < mergedAt) {
+                // Keep state immutable and clear stale preview text when we only know activity advanced.
+                c.chat.copy(messages = emptyList())
+            } else {
+                c.chat
+            }
+            c.copy(last_message_at = mergedAt, chat = newChat)
+        }
+        scope.launch { persistSnapshot() }
     }
 
     fun setPendingConnectionsCount(count: Int) {
@@ -450,6 +678,7 @@ object AppDataManager {
 
     private fun updateNotificationPreferences(preferences: NotificationPreferences) {
         val userId = _currentUser.value?.id ?: return
+        val previousPreferences = _notificationPreferences.value
         _notificationPreferences.value = preferences
         NotificationRuntimeState.setNotificationPreferences(
             messageEnabled = preferences.messagePushEnabled,
@@ -459,7 +688,20 @@ object AppDataManager {
         scope.launch {
             tokenStorage.saveMessageNotificationsEnabled(preferences.messagePushEnabled)
             tokenStorage.saveCallNotificationsEnabled(preferences.callPushEnabled)
-            notificationPreferencesRepository.savePreferences(userId, preferences)
+            val saveResult = notificationPreferencesRepository.savePreferences(userId, preferences)
+            if (saveResult.isFailure) {
+                _notificationPreferences.value = previousPreferences
+                NotificationRuntimeState.setNotificationPreferences(
+                    messageEnabled = previousPreferences.messagePushEnabled,
+                    callEnabled = previousPreferences.callPushEnabled,
+                )
+                tokenStorage.saveMessageNotificationsEnabled(previousPreferences.messagePushEnabled)
+                tokenStorage.saveCallNotificationsEnabled(previousPreferences.callPushEnabled)
+                val msg = saveResult.exceptionOrNull()?.message?.trim().orEmpty()
+                    .ifBlank { "Couldn't save notification settings. Please try again." }
+                _transientUserMessages.emit(msg)
+                return@launch
+            }
 
             if (preferences.messagePushEnabled || preferences.callPushEnabled) {
                 runCatching { pushNotificationService.requestPermission() }
@@ -520,7 +762,7 @@ object AppDataManager {
                 tokenStorage.saveFreeThisWeek(newStatus)
                 println("toggleFreeThisWeek: Saved to local storage: $newStatus")
             } catch (e: Exception) {
-                println("toggleFreeThisWeek: Error saving to local storage: ${e.message}")
+                println("toggleFreeThisWeek: Error saving to local storage: ${e.redactedRestMessage()}")
             }
         }
         
@@ -532,7 +774,7 @@ object AppDataManager {
                 // Note: We don't rollback on failure since local storage has the truth
                 // Next app launch will attempt to sync again
             } catch (e: Exception) {
-                println("toggleFreeThisWeek: Error updating Supabase: ${e.message}")
+                println("toggleFreeThisWeek: Error updating Supabase: ${e.redactedRestMessage()}")
                 e.printStackTrace()
                 // Don't rollback - keep local state as truth, will sync later
             }
@@ -681,48 +923,137 @@ object AppDataManager {
     }
     
     /**
-     * Update the current user's full name
-     * Updates local state immediately, syncs with Supabase Auth metadata AND database
+     * Update the current user's first and last name in auth metadata and [public.users].
      */
-    fun updateUsername(newName: String) {
+    fun updateProfileName(firstName: String, lastName: String) {
         val user = _currentUser.value ?: run {
-            println("updateUsername: No current user")
+            println("updateProfileName: No current user")
             return
         }
-        
-        println("updateUsername: Changing name from '${user.name}' to '$newName' for user ${user.id}")
-        
-        val previousName = user.name
-        val updatedUser = user.copy(name = newName)
+
+        val f = firstName.trim()
+        val l = lastName.trim()
+        if (f.isEmpty()) {
+            println("updateProfileName: First name is required")
+            return
+        }
+
+        val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
+        println("updateProfileName: Changing profile to '$display' for user ${user.id}")
+
+        val previousUser = user
+        val updatedUser = user.copy(
+            name = display,
+            firstName = f,
+            lastName = l.ifEmpty { null },
+        )
         _currentUser.value = updatedUser
-        
+
         scope.launch {
             try {
-                // 1. Update auth metadata (this persists after app restart)
-                val authResult = authRepository.updateUserMetadata(newName)
+                val authResult = authRepository.updateUserProfileNames(f, l)
                 if (authResult.isFailure) {
-                    println("updateUsername: Warning - failed to update auth metadata")
+                    println("updateProfileName: Warning - failed to update auth metadata")
                 }
-                
-                // 2. Ensure user exists in database
-                val upsertResult = supabaseRepository.upsertUser(updatedUser)
-                println("updateUsername: Upsert user result: $upsertResult")
-                
-                // 3. Update user name in database  
-                val success = supabaseRepository.updateUserName(user.id, newName)
-                if (!success) {
-                    println("updateUsername: Failed to update name in database, but auth metadata was updated")
+
+                val dbResult = supabaseRepository.updateUserProfileNames(user.id, f, l)
+                if (dbResult.isFailure) {
+                    println("updateProfileName: Failed to update names in database: ${dbResult.exceptionOrNull()?.message}")
+                    _currentUser.value = previousUser
+                    val msg = dbResult.exceptionOrNull()?.message?.trim().orEmpty()
+                        .ifBlank { "Couldn't update your profile. Please try again." }
+                    _transientUserMessages.emit(msg)
                 } else {
-                    println("updateUsername: Successfully updated full name to: $newName")
+                    println("updateProfileName: Successfully updated profile to: $display")
+                    persistSnapshot()
                 }
-                persistSnapshot()
             } catch (e: Exception) {
-                println("updateUsername: Error updating name: ${e.message}")
+                println("updateProfileName: Error updating profile: ${e.redactedRestMessage()}")
                 e.printStackTrace()
-                // Only revert if we couldn't update auth metadata either
-                _currentUser.value = user.copy(name = previousName)
+                _currentUser.value = previousUser
+                _transientUserMessages.emit(
+                    e.message?.trim().orEmpty().ifBlank { "Couldn't update your profile. Please try again." },
+                )
             }
         }
+    }
+
+    /**
+     * Updates the in-memory current user avatar URL after a successful storage upload + DB update.
+     */
+    fun applyProfilePictureUrl(publicUrl: String) {
+        val latest = _currentUser.value ?: return
+        _currentUser.value = latest.copy(image = publicUrl)
+        scope.launch {
+            runCatching { persistSnapshot() }
+                .onFailure { println("applyProfilePictureUrl: snapshot failed: ${it.message}") }
+        }
+    }
+
+    private fun mapStartupErrorMessage(rawMessage: String): String {
+        val trimmed = rawMessage.trim()
+        val normalized = trimmed.lowercase()
+        return when {
+            normalized.contains("401") ||
+                normalized.contains("403") ||
+                normalized.contains("unauthorized") ||
+                normalized.contains("not authorized") ||
+                normalized.contains("invalid jwt") ->
+                "Your session expired. Please sign in again to resume sync."
+            trimmed.isBlank() -> "No internet connection"
+            else -> trimmed
+        }
+    }
+
+    private fun Throwable.isAuthorizationFailure(): Boolean {
+        val normalized = message?.lowercase().orEmpty()
+        return normalized.contains("401") ||
+            normalized.contains("403") ||
+            normalized.contains("unauthorized") ||
+            normalized.contains("not authorized") ||
+            normalized.contains("invalid jwt") ||
+            normalized.contains("jwt expired")
+    }
+
+    private fun pausePendingSyncForAuth() {
+        if (!pendingSyncPausedForAuth) {
+            println("AppDataManager: Pending sync paused until a valid auth session is restored.")
+        }
+        pendingSyncPausedForAuth = true
+    }
+
+    private fun resumePendingSyncIfPaused() {
+        if (pendingSyncPausedForAuth) {
+            println("AppDataManager: Pending sync resumed after auth recovery.")
+        }
+        pendingSyncPausedForAuth = false
+    }
+
+    private suspend fun resolveJwtForPendingSync(forceRefresh: Boolean = false): String? {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val existingJwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val expiresAt = tokenStorage.getExpiresAt()
+        val needsRefresh = forceRefresh ||
+            existingJwt == null ||
+            (expiresAt != null && expiresAt <= now + TOKEN_REFRESH_SKEW_MS)
+
+        if (!needsRefresh) return existingJwt
+
+        authRepository.refreshSession()
+            .onFailure { println("AppDataManager: Session refresh for pending sync failed: ${it.message}") }
+
+        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+
+        val restoreResult = authRepository.restoreSession()
+        if (restoreResult.isFailure) {
+            println("AppDataManager: Session restore for pending sync failed: ${restoreResult.exceptionOrNull()?.message}")
+            return null
+        }
+
+        authRepository.refreshSession()
+            .onFailure { println("AppDataManager: Session refresh after restore failed: ${it.message}") }
+
+        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun startPendingConnectionSync() {
@@ -734,10 +1065,86 @@ object AppDataManager {
                 val currentUserId = _currentUser.value?.id
                 if (currentUserId.isNullOrBlank()) continue
 
-                runCatching { connectionRepository.syncPendingConnections() }
-                    .onFailure { println("AppDataManager: Pending sync attempt failed: ${it.message}") }
+                val jwt = resolveJwtForPendingSync()
+                if (jwt.isNullOrBlank()) {
+                    pausePendingSyncForAuth()
+                    refreshPendingConnectionCount()
+                    continue
+                }
+
+                runCatching {
+                    connectionRepository.syncPendingConnections()
+                    var proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+                    if (proximity.authorizationFailed) {
+                        val refreshedJwt = resolveJwtForPendingSync(forceRefresh = true)
+                        if (refreshedJwt.isNullOrBlank()) {
+                            pausePendingSyncForAuth()
+                            return@runCatching
+                        }
+                        proximity = connectionRepository.syncPendingProximityHandshakes(refreshedJwt)
+                        if (proximity.authorizationFailed) {
+                            pausePendingSyncForAuth()
+                            return@runCatching
+                        }
+                    }
+
+                    resumePendingSyncIfPaused()
+
+                    val recovered = proximity.recoveredUsers
+                    if (!recovered.isNullOrEmpty()) {
+                        _proximityHandshakeRecovered.emit(
+                            ProximityHandshakeRecoveryPayload(
+                                users = recovered,
+                                encounterLogged = proximity.recoveredEncounterLogged,
+                                groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
+                            ),
+                        )
+                    }
+                }
+                    .onFailure {
+                        if (it.isAuthorizationFailure()) {
+                            pausePendingSyncForAuth()
+                        } else {
+                            println("AppDataManager: Pending sync attempt failed: ${it.message}")
+                        }
+                    }
                 refreshPendingConnectionCount()
             }
+        }
+    }
+
+    suspend fun flushPendingProximityHandshakesFromBackgroundWorker() {
+        val jwt = resolveJwtForPendingSync(forceRefresh = true)
+        if (jwt.isNullOrBlank()) {
+            pausePendingSyncForAuth()
+            return
+        }
+
+        var proximity = connectionRepository.syncPendingProximityHandshakes(jwt)
+        if (proximity.authorizationFailed) {
+            val refreshedJwt = resolveJwtForPendingSync(forceRefresh = true)
+            if (refreshedJwt.isNullOrBlank()) {
+                pausePendingSyncForAuth()
+                return
+            }
+            proximity = connectionRepository.syncPendingProximityHandshakes(refreshedJwt)
+            if (proximity.authorizationFailed) {
+                pausePendingSyncForAuth()
+                return
+            }
+        }
+
+        resumePendingSyncIfPaused()
+
+        val recovered = proximity.recoveredUsers
+        if (!recovered.isNullOrEmpty()) {
+            _proximityHandshakeRecovered.emit(
+                ProximityHandshakeRecoveryPayload(
+                    users = recovered,
+                    encounterLogged = proximity.recoveredEncounterLogged,
+                    groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
+                ),
+            )
         }
     }
 
@@ -751,8 +1158,9 @@ object AppDataManager {
             _connections.value = snapshot.connections
             _connectedUsers.value = snapshot.connectedUsers.associateBy { it.id }
             _locationPreferences.value = snapshot.locationPreferences
+            _archivedConnectionIds.value = snapshot.archivedConnectionIds
+            _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
             _isDataLoaded.value = snapshot.currentUser != null || snapshot.connections.isNotEmpty()
-            _usingCachedData.value = _isDataLoaded.value
             snapshot
         }.onFailure {
             println("AppDataManager: Failed to restore cached snapshot: ${it.message}")
@@ -764,7 +1172,9 @@ object AppDataManager {
             currentUser = _currentUser.value,
             connections = _connections.value,
             connectedUsers = _connectedUsers.value.values.toList(),
-            locationPreferences = _locationPreferences.value
+            locationPreferences = _locationPreferences.value,
+            archivedConnectionIds = _archivedConnectionIds.value,
+            hiddenConnectionIds = _hiddenConnectionIds.value,
         )
         runCatching {
             tokenStorage.saveCachedAppSnapshot(json.encodeToString(snapshot))

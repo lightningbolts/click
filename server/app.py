@@ -237,11 +237,25 @@ def send_message(chat_id):
 
         user_id = data.get('user_id')
         content = data.get('content')
+        message_type = data.get('message_type') or 'text'
+        metadata = data.get('metadata')
 
-        if not user_id or not content:
-            return jsonify({"error": "user_id and content are required"}), 400
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
 
-        message = chat_ops.create_message(chat_id, user_id, content)
+        if message_type != 'call_log' and not content:
+            return jsonify({"error": "content is required"}), 400
+
+        if message_type == 'call_log':
+            content = content if isinstance(content, str) else ''
+
+        message = chat_ops.create_message(
+            chat_id,
+            user_id,
+            content,
+            message_type=message_type,
+            metadata=metadata if isinstance(metadata, dict) else {},
+        )
         if not message:
             return jsonify({"error": "Failed to create message"}), 500
 

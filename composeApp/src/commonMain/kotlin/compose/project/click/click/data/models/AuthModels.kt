@@ -12,7 +12,10 @@ data class LoginRequest(
 data class SignUpRequest(
     val email: String,
     val password: String,
-    val name: String
+    val first_name: String,
+    val last_name: String,
+    /** ISO-8601 calendar date (yyyy-MM-dd). */
+    val birthday: String
 )
 
 @Serializable
@@ -23,7 +26,10 @@ data class GoogleAuthRequest(
 @Serializable
 data class UserInfo(
     val email: String,
-    val name: String? = null
+    val name: String? = null,
+    val first_name: String? = null,
+    val last_name: String? = null,
+    val birthday: String? = null
 )
 
 @Serializable

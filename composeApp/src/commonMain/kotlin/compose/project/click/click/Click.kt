@@ -5,6 +5,7 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.PushTokenRepository
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
+import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.savePendingPushToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,15 @@ import kotlinx.coroutines.launch
 
 private val pushTokenScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 private val pushTokenRepository = PushTokenRepository()
+
+/**
+ * Called from iOS `AppDelegate.applicationDidBecomeActive` so Compose re-reads
+ * `CLLocationManager.authorizationStatus()` and notification settings after returning from the system UI.
+ */
+fun onApplicationDidBecomeActive() {
+    notifyPlatformApplicationForeground()
+    AppDataManager.handleApplicationForegrounded()
+}
 
 fun savePushToken(token: String, platform: String) {
     savePushToken(token, platform, "standard")
@@ -33,6 +43,15 @@ fun savePushToken(token: String, platform: String, tokenType: String) {
             tokenType = tokenType,
         )
     }
+}
+
+fun setChatDeepLink(chatId: String) {
+    ChatDeepLinkManager.setPendingChat(chatId)
+}
+
+/** iOS (and tests): open ephemeral hub from `click://hub/{id}` or universal link. */
+fun setCommunityHubDeepLink(hubId: String) {
+    ChatDeepLinkManager.setPendingCommunityHub(hubId)
 }
 
 fun handleIncomingCallPush(

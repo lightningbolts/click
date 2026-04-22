@@ -144,15 +144,14 @@ fun getOpacityForTimeState(timeState: TimeState): Float {
  * Converts a Connection to a ConnectionMapPoint with visual metadata
  */
 fun Connection.toMapPoint(): ConnectionMapPoint {
-    val lat = geo_location.lat
-    val lon = geo_location.lon
-    if (!lat.isFinite() || !lon.isFinite() || (lat == 0.0 && lon == 0.0)) {
-        throw IllegalArgumentException("Invalid geo_location for connection $id")
-    }
+    val geo = this.connectionMapGeo()
+        ?: throw IllegalArgumentException("Invalid geo for connection $id")
+    val lat = geo.lat
+    val lon = geo.lon
 
     val timeState = calculateTimeState(created)
     
-    val displayName = semantic_location 
+    val displayName = semanticLocation
         ?: displayLocationLabel
         ?: "Connection"
     
@@ -228,14 +227,20 @@ fun clusterPoints(
         
         // Determine the dominant semantic icon for this cluster
         val iconCounts = nearbyPoints
-            .map { parseSemanticIcon(it.connection.semantic_location) }
+            .map { parseSemanticIcon(it.connection.semanticLocation) }
             .groupBy { it }
             .mapValues { it.value.size }
         val dominantIcon = iconCounts.maxByOrNull { it.value }?.key ?: SemanticIcon.DEFAULT
 
+        // Stable id from member connections so cluster identity survives recomposition / zoom
+        // nudges. Index-based ids (`cluster_0`, …) reshuffle when clustering order changes,
+        // which broke MapScreen's `find { it.id == clusterPin.id }` and dropped zoom-to-pins.
+        val memberKey = nearbyPoints.map { it.connection.id }.sorted().joinToString("|")
+        val stableId = "cluster_${abs(memberKey.hashCode())}"
+
         clusters.add(
             MapCluster(
-                id = "cluster_${clusters.size}",
+                id = stableId,
                 centerLat = centerLat,
                 centerLon = centerLon,
                 points = nearbyPoints,
