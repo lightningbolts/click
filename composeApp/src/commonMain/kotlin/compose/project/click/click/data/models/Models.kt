@@ -777,7 +777,11 @@ fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
         is JsonPrimitive -> {
             val text = element.contentOrNull?.trim().orEmpty()
             if (text.isEmpty()) emptyList()
-            else parseMapBeaconRows(beaconMetadataJson.parseToJsonElement(text))
+            else {
+                val parsed = beaconMetadataJson.parseToJsonElement(text)
+                if (parsed is JsonPrimitive) emptyList()
+                else parseMapBeaconRows(parsed)
+            }
         }
         else -> emptyList()
     }
