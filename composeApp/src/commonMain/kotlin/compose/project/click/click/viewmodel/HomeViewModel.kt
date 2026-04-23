@@ -39,6 +39,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
 
 data class UserStats(
     val totalConnections: Int,
@@ -88,6 +91,13 @@ class HomeViewModel(
     // Nudge feedback toast
     private val _nudgeResult = MutableStateFlow<String?>(null)
     val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
+
+    /** Countdown for Home Poll-Pair / archive-banner “Icebreaker” sends (15s after each success). */
+    private val _icebreakerSendCooldownRemainingSec = MutableStateFlow(0)
+    val icebreakerSendCooldownRemainingSec: StateFlow<Int> = _icebreakerSendCooldownRemainingSec.asStateFlow()
+
+    private var icebreakerSendCooldownTickerJob: Job? = null
+    private val homeIcebreakerSendMutex = Mutex()
 
     /** Single highlighted “Poll-Pair” reconnect suggestion (oldest stale chat). */
     private val _pollPairSuggestion = MutableStateFlow<PollPairSuggestion?>(null)
@@ -433,6 +443,24 @@ class HomeViewModel(
         _nudgeResult.value = null
     }
 
+    private fun icebreakerSendCooldownRemainingSecCeil(endEpochMs: Long): Int =
+        ((endEpochMs - Clock.System.now().toEpochMilliseconds() + 999L) / 1000L).toInt().coerceAtLeast(0)
+
+    private fun armHomeIcebreakerSendCooldown() {
+        icebreakerSendCooldownTickerJob?.cancel()
+        val end = Clock.System.now().toEpochMilliseconds() + 15_000L
+        _icebreakerSendCooldownRemainingSec.value = icebreakerSendCooldownRemainingSecCeil(end)
+        icebreakerSendCooldownTickerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1_000L)
+                val rem = icebreakerSendCooldownRemainingSecCeil(end)
+                _icebreakerSendCooldownRemainingSec.value = rem
+                if (rem <= 0) break
+            }
+            _icebreakerSendCooldownRemainingSec.value = 0
+        }
+    }
+
     /**
      * Send one contextual icebreaker as a chat message (same catalog as in-chat icebreakers).
      */
@@ -440,21 +468,31 @@ class HomeViewModel(
         val currentUser = AppDataManager.currentUser.value ?: return
         val name = suggestion.otherUserName ?: "them"
         viewModelScope.launch {
-            try {
-                val details = chatRepository.fetchChatWithDetails(suggestion.connectionId, currentUser.id)
-                val chatId = details?.chat?.id ?: chatRepository.ensureChatForConnection(suggestion.connectionId)?.id
-                if (chatId == null) {
-                    _nudgeResult.value = "Couldn't open chat"
-                    return@launch
+            homeIcebreakerSendMutex.withLock {
+                if (_icebreakerSendCooldownRemainingSec.value > 0) {
+                    _nudgeResult.value = "Icebreaker on cooldown — ${_icebreakerSendCooldownRemainingSec.value}s"
+                } else {
+                    try {
+                        val details = chatRepository.fetchChatWithDetails(suggestion.connectionId, currentUser.id)
+                        val chatId = details?.chat?.id ?: chatRepository.ensureChatForConnection(suggestion.connectionId)?.id
+                        if (chatId == null) {
+                            _nudgeResult.value = "Couldn't open chat"
+                        } else {
+                            val contextTag = details?.connection?.context_tag ?: suggestion.contextTag
+                            val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
+                                ?: IcebreakerRepository.getRandomPrompt()
+                            val msg = chatRepository.sendMessage(chatId, currentUser.id, prompt.text)
+                            if (msg != null) {
+                                _nudgeResult.value = "Icebreaker sent to $name!"
+                                armHomeIcebreakerSendCooldown()
+                            } else {
+                                _nudgeResult.value = "Failed to send icebreaker"
+                            }
+                        }
+                    } catch (_: Exception) {
+                        _nudgeResult.value = "Failed to send icebreaker"
+                    }
                 }
-                val contextTag = details?.connection?.context_tag ?: suggestion.contextTag
-                val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
-                    ?: IcebreakerRepository.getRandomPrompt()
-                val msg = chatRepository.sendMessage(chatId, currentUser.id, prompt.text)
-                _nudgeResult.value =
-                    if (msg != null) "Icebreaker sent to $name!" else "Failed to send icebreaker"
-            } catch (_: Exception) {
-                _nudgeResult.value = "Failed to send icebreaker"
             }
         }
     }
@@ -546,6 +584,8 @@ class HomeViewModel(
         availabilityIntentRefreshJob = null
         homeOverlapJob?.cancel()
         homeOverlapJob = null
+        icebreakerSendCooldownTickerJob?.cancel()
+        icebreakerSendCooldownTickerJob = null
         super.onCleared()
         if (channel != null) {
             teardownBlocking { channel.unsubscribe() }
