@@ -14,7 +14,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.utils.TimeState
+import compose.project.click.click.ui.components.markerHueDegrees
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -109,7 +109,7 @@ actual fun PlatformMap(
     }
 
     val density = LocalDensity.current
-    val clusterIconCache = remember { mutableMapOf<Int, BitmapDescriptor>() }
+    val clusterIconCache = remember { mutableMapOf<String, BitmapDescriptor>() }
 
     GoogleMap(
         modifier = modifier,
@@ -122,25 +122,41 @@ actual fun PlatformMap(
     ) {
         // Render individual pins
         pins.forEach { pin ->
-            val markerHue = pinHue(pin)
-            Marker(
-                state = MarkerState(position = LatLng(pin.latitude, pin.longitude)),
-                title = pin.title,
-                alpha = pin.opacity,
-                zIndex = pin.zIndex,
-                icon = BitmapDescriptorFactory.defaultMarker(markerHue),
-                onClick = {
-                    onPinTapped(pin)
-                    true // Consume the click
-                }
-            )
+            key(pin.id) {
+                val markerHue = pin.markerHueDegrees()
+                Marker(
+                    state = MarkerState(position = LatLng(pin.latitude, pin.longitude)),
+                    title = pin.title,
+                    alpha = pin.opacity,
+                    zIndex = pin.zIndex,
+                    icon = BitmapDescriptorFactory.defaultMarker(markerHue),
+                    onClick = {
+                        onPinTapped(pin)
+                        true // Consume the click
+                    },
+                )
+            }
         }
 
         // Render cluster pins
         clusters.forEach { cluster ->
-            val bmp = clusterIconCache.getOrPut(cluster.count) {
+            val cacheKey = buildString {
+                append(cluster.count)
+                append('|')
+                when {
+                    cluster.isConnectionOnly -> append("conn")
+                    cluster.hasLiveConnections -> append("live")
+                    else -> append("mix")
+                }
+            }
+            val bmp = clusterIconCache.getOrPut(cacheKey) {
                 val px = with(density) { 52.dp.roundToPx() }
-                bitmapDescriptorFromClusterCount(cluster.count, px)
+                val fill = when {
+                    cluster.isConnectionOnly -> android.graphics.Color.argb(230, 220, 0, 200)
+                    cluster.hasLiveConnections -> android.graphics.Color.argb(230, 0, 163, 255)
+                    else -> android.graphics.Color.argb(230, 255, 150, 50)
+                }
+                bitmapDescriptorFromClusterCount(cluster.count, px, fill)
             }
             Marker(
                 state = MarkerState(position = LatLng(cluster.latitude, cluster.longitude)),
@@ -156,25 +172,12 @@ actual fun PlatformMap(
     }
 }
 
-private fun pinHue(pin: MapPin): Float =
-    when (pin.kind) {
-        MapPinKind.CONNECTION -> when (pin.timeState) {
-            TimeState.LIVE -> BitmapDescriptorFactory.HUE_AZURE
-            TimeState.RECENT -> BitmapDescriptorFactory.HUE_CYAN
-            TimeState.ARCHIVE -> BitmapDescriptorFactory.HUE_VIOLET
-        }
-        MapPinKind.BEACON_SOUNDTRACK -> BitmapDescriptorFactory.HUE_GREEN
-        MapPinKind.BEACON_ALERT -> BitmapDescriptorFactory.HUE_RED
-        MapPinKind.BEACON_SOCIAL -> BitmapDescriptorFactory.HUE_MAGENTA
-        MapPinKind.BEACON_OTHER -> BitmapDescriptorFactory.HUE_YELLOW
-    }
-
-private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int): BitmapDescriptor {
+private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int, fillArgb: Int): BitmapDescriptor {
     val d = sizePx.coerceIn(48, 128)
     val bmp = Bitmap.createBitmap(d, d, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
     val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(230, 0, 163, 255)
+        color = fillArgb
         style = android.graphics.Paint.Style.FILL
     }
     val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {

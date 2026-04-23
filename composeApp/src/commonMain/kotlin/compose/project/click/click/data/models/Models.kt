@@ -717,6 +717,13 @@ data class MapBeaconMetadata(
     val album: String? = null,
     val musicUrl: String? = null,
     val description: String? = null,
+    /** Canonical share URL persisted by click-web for soundtrack beacons. */
+    val originalUrl: String? = null,
+    /** iTunes / Apple Music 30-second preview stream (.m4a). */
+    val previewUrl: String? = null,
+    val trackName: String? = null,
+    val artistName: String? = null,
+    val albumArtUrl: String? = null,
     val raw: JsonObject? = null,
 )
 
@@ -737,11 +744,16 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
         return null
     }
     return MapBeaconMetadata(
-        title = str("title", "track_title", "name", "track"),
-        artist = str("artist", "track_artist"),
+        title = str("title", "track_title", "name", "track", "track_name"),
+        artist = str("artist", "track_artist", "artist_name"),
         album = str("album"),
-        musicUrl = str("music_url", "url", "link", "spotify_url", "apple_music_url"),
+        musicUrl = str("music_url", "url", "link", "spotify_url", "apple_music_url", "original_url"),
         description = str("description", "text", "body", "message"),
+        originalUrl = str("original_url"),
+        previewUrl = str("preview_url"),
+        trackName = str("track_name"),
+        artistName = str("artist_name"),
+        albumArtUrl = str("album_art_url", "artworkUrl100"),
         raw = obj,
     )
 }
@@ -752,6 +764,8 @@ data class MapBeaconInsert(
     val lat: Double,
     val lon: Double,
     val metadata: JsonObject? = null,
+    /** For non-soundtrack beacons: TTL from creation; omit for soundtrack (server default 7 days). */
+    @SerialName("ttl_ms") val ttlMs: Long? = null,
 )
 
 /**
@@ -765,6 +779,9 @@ data class MapBeacon(
     val metadata: MapBeaconMetadata,
     val createdByUserId: String? = null,
     val createdAtEpochMs: Long? = null,
+    val expiresAtEpochMs: Long? = null,
+    /** Raw `beacon_type` from PostgREST / API (e.g. `hazard_utility`) for tint + labels. */
+    val sourceBeaconType: String? = null,
 )
 
 fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
@@ -806,8 +823,11 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         }
         return null
     }
-    val id = strKey("id", "beacon_id") ?: return null
-    val kindRaw = strKey("kind", "type", "category")
+    val id = strKey("id", "beacon_id", "beaconId") ?: return null
+    // Prefer canonical `beacon_type` over a generic `kind` column — some projections send the same
+    // `kind` for every row while `beacon_type` stays specific (fixes uniform marker tint on the map).
+    val sourceBeaconType = strKey("beacon_type", "beaconType")
+    val kindRaw = sourceBeaconType ?: strKey("kind", "type", "category")
     val kind = MapBeaconKind.fromRaw(kindRaw)
     val lat = dbl("lat", "latitude") ?: return null
     val lon = dbl("lon", "longitude", "lng") ?: return null
@@ -816,6 +836,7 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     val createdBy = strKey("created_by", "user_id", "author_id")
     val createdAt = strKey("created_at")?.let { parseEpochMs(it) }
         ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+    val expiresAt = strKey("expires_at", "expiresAt")?.let { parseEpochMs(it) }
     return MapBeacon(
         id = id,
         kind = kind,
@@ -824,12 +845,13 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         metadata = meta,
         createdByUserId = createdBy,
         createdAtEpochMs = createdAt,
+        expiresAtEpochMs = expiresAt,
+        sourceBeaconType = sourceBeaconType,
     )
 }
 
 private fun parseEpochMs(value: String): Long? {
     val n = value.toLongOrNull()
     if (n != null) return n
-    // ISO-8601 not parsed here; optional enhancement
-    return null
+    return runCatching { Instant.parse(value).toEpochMilliseconds() }.getOrNull()
 }

@@ -1,47 +1,23 @@
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
-import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import io.github.jan.supabase.postgrest.from
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.headers
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.contentType
-import io.ktor.http.isSuccess
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.put
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
- * Fetches community map beacons and inserts new drops via Supabase Edge Function + PostgREST.
+ * Proximity map beacons via click-web `/api/beacons` (JWT); no direct `map_beacons` access.
  */
 class MapBeaconRepository(
-    private val tokenStorage: TokenStorage = createTokenStorage(),
-    httpClient: HttpClient? = null,
+    private val apiClient: ApiClient = ApiClient(),
 ) {
-    private val ownsClient = httpClient == null
-    private val client = httpClient ?: HttpClient {
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true; isLenient = true })
-        }
-    }
-
-    fun close() {
-        if (ownsClient) client.close()
-    }
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -50,42 +26,22 @@ class MapBeaconRepository(
         maxLat: Double,
         minLon: Double,
         maxLon: Double,
+        beaconTypeFilters: String? = null,
     ): Result<List<MapBeacon>> {
-        val jwt = tokenStorage.getJwt()
-            ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val body = buildJsonObject {
-                put("min_lat", JsonPrimitive(minLat))
-                put("max_lat", JsonPrimitive(maxLat))
-                put("min_lon", JsonPrimitive(minLon))
-                put("max_lon", JsonPrimitive(maxLon))
-            }
-            val response = client.post(SupabaseConfig.functionUrl("fetch-local-beacons")) {
-                contentType(ContentType.Application.Json)
-                headers {
-                    append("apikey", SupabaseConfig.supabaseAnonApiKey)
-                    append(HttpHeaders.Authorization, "Bearer $jwt")
-                }
-                setBody(body)
-            }
-            val text = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                return Result.failure(IllegalStateException("fetch-local-beacons: ${response.status.value} $text"))
-            }
-            val rows = parseBeaconResponsePayload(text)
-            Result.success(rows)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        val (lat, lon, radius) = bboxToCenterRadiusMeters(minLat, maxLat, minLon, maxLon)
+        return apiClient.getMapBeacons(
+            lat = lat,
+            lon = lon,
+            radiusMeters = radius,
+            filters = beaconTypeFilters,
+        ).fold(
+            onSuccess = { text -> Result.success(parseBeaconResponsePayload(text)) },
+            onFailure = { Result.failure(it) },
+        )
     }
 
     suspend fun insertBeacon(insert: MapBeaconInsert): Result<Unit> =
-        try {
-            SupabaseConfig.client.from("map_beacons").insert(insert)
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        apiClient.postMapBeacon(insert)
 
     private fun parseBeaconResponsePayload(text: String): List<MapBeacon> {
         val trimmed = text.trim()
@@ -97,7 +53,7 @@ class MapBeaconRepository(
                     val rows = root["beacons"] ?: root["data"] ?: root["rows"] ?: root["items"]
                     when (rows) {
                         null -> {
-                            if (root.keys.any { it.equals("id", true) || it == "kind" }) {
+                            if (root.keys.any { it.equals("id", true) || it == "kind" || it == "beacon_type" }) {
                                 parseMapBeaconRows(root)
                             } else {
                                 emptyList()
@@ -111,5 +67,34 @@ class MapBeaconRepository(
         }.getOrElse {
             runCatching { parseMapBeaconRows(json.parseToJsonElement(trimmed)) }.getOrDefault(emptyList())
         }
+    }
+
+    private fun bboxToCenterRadiusMeters(
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+    ): Triple<Double, Double, Double> {
+        val cLat = (minLat + maxLat) / 2.0
+        val cLon = (minLon + maxLon) / 2.0
+        val diag = haversineMeters(minLat, minLon, maxLat, maxLon)
+        val radius = (diag / 2.0 * 1.2).coerceIn(250.0, 50_000.0)
+        return Triple(cLat, cLon, radius)
+    }
+
+    private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val earthRadius = 6371000.0
+        val dLat = (lat2 - lat1) * PI / 180.0
+        val dLon = (lon2 - lon1) * PI / 180.0
+        val lat1Rad = lat1 * PI / 180.0
+        val lat2Rad = lat2 * PI / 180.0
+        val a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(lat1Rad) * cos(lat2Rad) * (sin(dLon / 2) * sin(dLon / 2))
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return earthRadius * c
+    }
+
+    fun close() {
+        apiClient.close()
     }
 }

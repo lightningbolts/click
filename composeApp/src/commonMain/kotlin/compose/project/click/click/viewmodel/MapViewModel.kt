@@ -283,6 +283,29 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Optional `filters` query for `/api/beacons` derived from the active layer chips.
+     */
+    private fun beaconTypesQueryForLayers(layers: Set<MapLayerFilter>): String? {
+        if (layers.contains(MapLayerFilter.ALL)) return null
+        val types = LinkedHashSet<String>()
+        if (layers.contains(MapLayerFilter.SOUNDTRACKS)) types.add("soundtrack")
+        if (layers.contains(MapLayerFilter.ALERTS_UTILITIES)) {
+            types.add("sos")
+            types.add("study")
+            types.add("hazard_utility")
+        }
+        if (layers.contains(MapLayerFilter.SOCIAL_VIBES)) {
+            types.add("recreation")
+            types.add("hobby")
+            types.add("swag")
+            types.add("capacity")
+            types.add("transit")
+            types.add("scavenger")
+        }
+        return if (types.isEmpty()) null else types.joinToString(",")
+    }
+
     private fun filterBeaconsForLayers(
         beacons: List<MapBeacon>,
         layers: Set<MapLayerFilter>,
@@ -376,7 +399,12 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    fun submitBeaconDrop(kind: MapBeaconKind, text: String, onFinished: (Boolean) -> Unit = {}) {
+    fun submitBeaconDrop(
+        kind: MapBeaconKind,
+        text: String,
+        ttlMs: Long? = null,
+        onFinished: (Boolean) -> Unit = {},
+    ) {
         viewModelScope.launch {
             _beaconInsertError.value = null
             val loc = locationService.getHighAccuracyLocation(6000L)
@@ -389,7 +417,7 @@ class MapViewModel : ViewModel() {
             val metadata: JsonObject? = when (kind) {
                 MapBeaconKind.SOUNDTRACK -> {
                     if (!isValidStreamingUrl(trimmed)) {
-                        _beaconInsertError.value = "Enter a valid Spotify or Apple Music link."
+                        _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
                         onFinished(false)
                         return@launch
                     }
@@ -433,6 +461,7 @@ class MapViewModel : ViewModel() {
                 lat = loc.latitude,
                 lon = loc.longitude,
                 metadata = metadata,
+                ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
             )
             mapBeaconRepository.insertBeacon(insert).fold(
                 onSuccess = {
@@ -442,6 +471,7 @@ class MapViewModel : ViewModel() {
                             maxLat = b.maxLat,
                             minLon = b.minLon,
                             maxLon = b.maxLon,
+                            beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
                         ).onSuccess { list -> _mapBeacons.value = list }
                     }
                     onFinished(true)
@@ -541,6 +571,7 @@ class MapViewModel : ViewModel() {
                 maxLat = bounds.maxLat,
                 minLon = bounds.minLon,
                 maxLon = bounds.maxLon,
+                beaconTypeFilters = beaconTypesQueryForLayers(layers),
             )
             result.onSuccess { list -> _mapBeacons.value = list }
         }

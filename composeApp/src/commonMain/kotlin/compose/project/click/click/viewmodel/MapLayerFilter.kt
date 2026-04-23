@@ -13,4 +13,9 @@ enum class MapLayerFilter(val label: String) {
 }
 
 fun defaultMapLayerFilters(): Set<MapLayerFilter> =
-    setOf(MapLayerFilter.MY_CONNECTIONS, MapLayerFilter.SOUNDTRACKS)
+    setOf(
+        MapLayerFilter.MY_CONNECTIONS,
+        MapLayerFilter.SOUNDTRACKS,
+        MapLayerFilter.ALERTS_UTILITIES,
+        MapLayerFilter.SOCIAL_VIBES,
+    )

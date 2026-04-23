@@ -50,12 +50,21 @@ import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.util.openMusicStreamingUrl // pragma: allowlist secret
+import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
+import compose.project.click.click.openBeaconOriginalMediaUrl // pragma: allowlist secret
+import coil3.compose.AsyncImage // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import compose.project.click.click.ui.utils.displayTypeTitle
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -109,8 +118,6 @@ fun MapScreen(
 
 
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
-    // Partial expansion (≈ half screen) is allowed; avoid skipPartiallyExpanded=true (full jump).
-    val beaconSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
     // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
     // Pin taps update this directly (in addition to the view-model selection state) so
     // sheet visibility is decoupled from any race in the selection StateFlow.
@@ -125,15 +132,6 @@ fun MapScreen(
             sel.point.connection.id
         } else {
             null
-        }
-    }
-
-    LaunchedEffect(showBeaconDropSheet) {
-        if (showBeaconDropSheet) {
-            try {
-                beaconSheetState.show()
-            } catch (_: Exception) {
-            }
         }
     }
 
@@ -243,25 +241,40 @@ fun MapScreen(
 
     if (showBeaconDropSheet) {
         val dropSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        val onDropSheet = MaterialTheme.colorScheme.onSurface
+        // Single large detent avoids iOS UISheet medium/large gaps that read as light bands in dark mode.
+        val beaconSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+        LaunchedEffect(Unit) {
+            try {
+                beaconSheetState.show()
+            } catch (_: Exception) {
+            }
+        }
         AdaptiveBottomSheet(
             onDismissRequest = { showBeaconDropSheet = false },
             adaptiveSheetState = beaconSheetState,
             containerColor = dropSheetColor,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            dragHandle = { BottomSheetDefaults.DragHandle() },
+            contentColor = onDropSheet,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            // Native iOS grabber is a separate light strip; we draw a themed handle inside [MapDialogChrome].
+            dragHandle = null,
         ) {
-            // Full-bleed background for the detent: avoids native sheet showing a light band in dark mode.
-            Box(
+            MapDialogChrome(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight()
-                    .background(dropSheetColor),
+                    .weight(1f, fill = true),
+                sheetColor = dropSheetColor,
+                onSurface = onDropSheet,
             ) {
                 BeaconDropSheetContent(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
-                    onSubmit = { kind, text ->
-                        viewModel.submitBeaconDrop(kind, text) { ok ->
+                    onSubmit = { kind, text, ttlMs ->
+                        viewModel.submitBeaconDrop(kind, text, ttlMs) { ok ->
                             if (ok) showBeaconDropSheet = false
                         }
                     },
@@ -272,21 +285,45 @@ fun MapScreen(
 
     if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
         val beaconSel = selection as MapSelection.BeaconSelected
+        val detailSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+        LaunchedEffect(beaconSel.beacon.id) {
+            try {
+                detailSheetState.show()
+            } catch (_: Exception) {
+            }
+        }
+        val detailSurface = MaterialTheme.colorScheme.surfaceContainerHigh
+        val onDetailSurface = MaterialTheme.colorScheme.onSurface
         AdaptiveBottomSheet(
             onDismissRequest = { viewModel.clearSelection() },
-            adaptiveSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            dragHandle = { BottomSheetDefaults.DragHandle() },
+            adaptiveSheetState = detailSheetState,
+            containerColor = detailSurface,
+            contentColor = onDetailSurface,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            dragHandle = null,
         ) {
-            BeaconDetailSheetContent(
-                beacon = beaconSel.beacon,
-                distanceMeters = beaconSel.distanceMeters,
-                onListen = {
-                    beaconSel.beacon.metadata.musicUrl?.let { openMusicStreamingUrl(it) }
-                },
-                onDismiss = { viewModel.clearSelection() },
-            )
+            MapDialogChrome(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+                sheetColor = detailSurface,
+                onSurface = onDetailSurface,
+            ) {
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val cap = maxHeight * if (beaconSel.beacon.kind == MapBeaconKind.SOUNDTRACK) 0.55f else 0.5f
+                    BeaconDetailSheetContent(
+                        beacon = beaconSel.beacon,
+                        distanceMeters = beaconSel.distanceMeters,
+                        onDismiss = { viewModel.clearSelection() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = cap)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
+            }
         }
     }
 
@@ -297,33 +334,78 @@ fun MapScreen(
         val sheetData = remember(connectionSelection, viewerUserId) {
             buildProfileSheetState(connectionSelection, viewerUserId)
         }
+        val profileSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        val onProfileSheet = MaterialTheme.colorScheme.onSurface
         AdaptiveBottomSheet(
             onDismissRequest = {
                 selectedProfileId = null
                 viewModel.clearSelection()
             },
             adaptiveSheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = profileSheetColor,
+            contentColor = onProfileSheet,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            dragHandle = null,
         ) {
-            ProfileBottomSheet(
-                state = sheetData,
-                onMessage = {
-                    selectedProfileId = null
-                    viewModel.clearSelection()
-                    onNavigateToChat?.invoke(connectionSelection.point.connection.id)
-                },
-                onNudge = {
-                    viewModel.sendNudge(
-                        connectionId = connectionSelection.point.connection.id,
-                        otherUserName = connectionSelection.otherUser?.name ?: "Someone",
-                    )
-                    selectedProfileId = null
-                    viewModel.clearSelection()
-                },
-            )
+            MapDialogChrome(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+                sheetColor = profileSheetColor,
+                onSurface = onProfileSheet,
+            ) {
+                ProfileBottomSheet(
+                    state = sheetData,
+                    onMessage = {
+                        selectedProfileId = null
+                        viewModel.clearSelection()
+                        onNavigateToChat?.invoke(connectionSelection.point.connection.id)
+                    },
+                    onNudge = {
+                        viewModel.sendNudge(
+                            connectionId = connectionSelection.point.connection.id,
+                            otherUserName = connectionSelection.otherUser?.name ?: "Someone",
+                        )
+                        selectedProfileId = null
+                        viewModel.clearSelection()
+                    },
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun MapDialogChrome(
+    modifier: Modifier = Modifier,
+    sheetColor: Color,
+    onSurface: Color,
+    useGrabber: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(sheetColor),
+    ) {
+        if (useGrabber) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(onSurface.copy(alpha = 0.3f)),
+                )
+            }
+        }
+        content()
     }
 }
 
@@ -502,66 +584,259 @@ private fun MapLayerFilterDropdown(
 private fun BeaconDetailSheetContent(
     beacon: MapBeacon,
     distanceMeters: Double?,
-    onListen: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    LiquidGlassPill(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        cornerRadiusDp = 20,
+    when (beacon.kind) {
+        MapBeaconKind.SOUNDTRACK -> MusicPreviewCard(
+            beacon = beacon,
+            distanceMeters = distanceMeters,
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+        else -> CommunityBeaconDetail(
+            beacon = beacon,
+            distanceMeters = distanceMeters,
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun CommunityBeaconDetail(
+    beacon: MapBeacon,
+    distanceMeters: Double?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when (beacon.kind) {
-                MapBeaconKind.SOUNDTRACK -> {
-                    Text(
-                        text = beacon.metadata.title ?: "Soundtrack",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    val artist = beacon.metadata.artist
-                    if (!artist.isNullOrBlank()) {
-                        Text(
-                            text = artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    val url = beacon.metadata.musicUrl
-                    if (!url.isNullOrBlank()) {
-                        Button(
-                            onClick = onListen,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Listen")
-                        }
-                    }
-                }
-                else -> {
-                    Text(
-                        text = beacon.metadata.description?.trim().orEmpty().ifBlank { "Community beacon" },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    distanceMeters?.let { d ->
-                        Text(
-                            text = formatBeaconDistance(d),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                Text("Close")
-            }
+        Text(
+            text = beacon.displayTypeTitle(),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "Expires · ${formatBeaconInstant(beacon.expiresAtEpochMs)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text(
+            text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        distanceMeters?.let { d ->
+            Text(
+                text = formatBeaconDistance(d),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+            Text("Close")
         }
     }
+}
+
+@Composable
+private fun MusicPreviewCard(
+    beacon: MapBeacon,
+    distanceMeters: Double?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val trackTitle = beacon.metadata.trackName ?: beacon.metadata.title ?: "Soundtrack"
+    val artistLine = beacon.metadata.artistName ?: beacon.metadata.artist
+    val art = beacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
+    val preview = beacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
+    val original = (beacon.metadata.originalUrl ?: beacon.metadata.musicUrl)?.takeIf { it.isNotBlank() }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = beacon.displayTypeTitle(),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "Expires · ${formatBeaconInstant(beacon.expiresAtEpochMs)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (art != null) {
+                AsyncImage(
+                    model = art,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = trackTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!artistLine.isNullOrBlank()) {
+                    Text(
+                        text = artistLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
+        if (preview != null) {
+            val player = rememberChatAudioPlayer(mediaUrl = preview, durationHintMs = 30_000L)
+            var tick by remember(preview) { mutableIntStateOf(0) }
+            LaunchedEffect(player.isPlaying) {
+                while (player.isPlaying) {
+                    delay(220)
+                    tick++
+                }
+            }
+            val pos = player.positionMs
+            val dur = player.durationMs.takeIf { it > 0 } ?: 30_000L
+            val frac = remember(tick, pos, dur) {
+                (pos.toFloat() / dur.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FilledIconButton(
+                    onClick = { player.togglePlayPause() },
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (player.isPlaying) "Pause preview" else "Play preview",
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(frac)
+                                .fillMaxHeight()
+                                .background(PrimaryBlue),
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = formatBeaconPreviewClock(pos),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = formatBeaconPreviewClock(dur),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (original != null) {
+            OutlinedButton(
+                onClick = { openBeaconOriginalMediaUrl(original) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Play full song")
+            }
+        }
+
+        distanceMeters?.let { d ->
+            Text(
+                text = formatBeaconDistance(d),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+            Text("Close")
+        }
+    }
+}
+
+private fun formatBeaconInstant(epochMs: Long?): String {
+    if (epochMs == null || epochMs <= 0L) return "Unknown"
+    return runCatching {
+        val dt = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+        val hour24 = dt.hour
+        val h12 = ((hour24 + 11) % 12) + 1
+        val amPm = if (hour24 < 12) "AM" else "PM"
+        val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+        "$mon ${dt.dayOfMonth}, ${dt.year} · $h12:${dt.minute.toString().padStart(2, '0')} $amPm"
+    }.getOrElse { "Unknown" }
+}
+
+private fun formatBeaconPreviewClock(ms: Long): String {
+    val totalSec = (ms / 1000).toInt().coerceAtLeast(0)
+    val m = totalSec / 60
+    val s = totalSec % 60
+    return "$m:${s.toString().padStart(2, '0')}"
 }
 
 private fun formatBeaconDistance(meters: Double): String {

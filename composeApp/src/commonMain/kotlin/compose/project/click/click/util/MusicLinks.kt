@@ -28,5 +28,25 @@ fun isValidStreamingUrl(url: String): Boolean {
     val hostPart = authority.substringAfterLast("@").substringBefore(":")
     return hostPart == "spotify.com" || hostPart.endsWith(".spotify.com") ||
         hostPart == "music.apple.com" || hostPart.endsWith(".music.apple.com") ||
-        hostPart == "itunes.apple.com" || hostPart.endsWith(".itunes.apple.com")
+        hostPart == "itunes.apple.com" || hostPart.endsWith(".itunes.apple.com") ||
+        hostPart == "www.youtube.com" || hostPart == "youtube.com" ||
+        hostPart == "m.youtube.com" || hostPart == "youtu.be" ||
+        hostPart == "music.youtube.com" || hostPart.endsWith(".music.youtube.com")
+}
+
+/**
+ * URLs allowed when opening a full-track deep link from a soundtrack beacon
+ * (https streaming hosts plus `spotify:` deep links).
+ */
+fun isBeaconOriginalSongDeepLinkUrl(url: String): Boolean {
+    val t = url.trim()
+    if (t.isEmpty()) return false
+    if (t.startsWith("spotify:", ignoreCase = true)) {
+        val p = t.lowercase()
+        return p.startsWith("spotify:track:") ||
+            p.startsWith("spotify:album:") ||
+            p.startsWith("spotify:playlist:") ||
+            p.startsWith("spotify:episode:")
+    }
+    return isValidStreamingUrl(t)
 }
