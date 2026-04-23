@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -22,6 +25,8 @@ actual fun MapBeaconSheetRoot(
     contentColor: Color,
     scrimColor: Color,
     contentWindowInsets: @Composable () -> WindowInsets,
+    appColorScheme: ColorScheme,
+    appTypography: Typography,
     modifier: Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -39,17 +44,22 @@ actual fun MapBeaconSheetRoot(
         }
     }
 
-    AdaptiveBottomSheet(
-        onDismissRequest = onDismissRequest,
-        modifier = modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.5f),
-        adaptiveSheetState = sheetState,
-        containerColor = containerColor,
-        contentColor = contentColor,
-        scrimColor = scrimColor,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        contentWindowInsets = contentWindowInsets,
-        content = content,
-    )
+    MaterialTheme(
+        colorScheme = appColorScheme,
+        typography = appTypography,
+    ) {
+        AdaptiveBottomSheet(
+            onDismissRequest = onDismissRequest,
+            modifier = modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.5f),
+            adaptiveSheetState = sheetState,
+            containerColor = containerColor,
+            contentColor = contentColor,
+            scrimColor = scrimColor,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            contentWindowInsets = contentWindowInsets,
+            content = content,
+        )
+    }
 }

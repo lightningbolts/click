@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -242,7 +243,7 @@ fun MapScreen(
 
     if (showBeaconDropSheet) {
         val dropSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onDropSheet = MaterialTheme.colorScheme.onSurface
+        val onDropSheet = contentColorFor(dropSheetColor)
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { showBeaconDropSheet = false },
@@ -250,6 +251,8 @@ fun MapScreen(
             contentColor = onDropSheet,
             scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            appColorScheme = MaterialTheme.colorScheme,
+            appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
             MapDialogChrome(
@@ -258,6 +261,7 @@ fun MapScreen(
                     .fillMaxHeight(),
                 sheetColor = dropSheetColor,
                 onSurface = onDropSheet,
+                alignSemanticColorsToSheet = true,
             ) {
                 BeaconDropSheetContent(
                     modifier = Modifier
@@ -278,7 +282,7 @@ fun MapScreen(
     if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
         val beaconSel = selection as MapSelection.BeaconSelected
         val detailSurface = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onDetailSurface = MaterialTheme.colorScheme.onSurface
+        val onDetailSurface = contentColorFor(detailSurface)
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -286,6 +290,8 @@ fun MapScreen(
             contentColor = onDetailSurface,
             scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            appColorScheme = MaterialTheme.colorScheme,
+            appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
             MapDialogChrome(
@@ -294,6 +300,7 @@ fun MapScreen(
                     .fillMaxHeight(),
                 sheetColor = detailSurface,
                 onSurface = onDetailSurface,
+                alignSemanticColorsToSheet = true,
             ) {
                 BeaconDetailSheetContent(
                     beacon = beaconSel.beacon,
@@ -362,8 +369,47 @@ private fun MapDialogChrome(
     sheetColor: Color,
     onSurface: Color,
     useGrabber: Boolean = true,
+    /**
+     * When true, wraps [content] in a [MaterialTheme] whose surface / on-surface tokens are
+     * derived from [sheetColor] via [contentColorFor], so body text, chips, and text fields
+     * stay legible on `surfaceContainerHigh`-style sheet backgrounds. Profile sheets pass
+     * false and keep the previous behavior.
+     */
+    alignSemanticColorsToSheet: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val grabberTint = if (alignSemanticColorsToSheet) {
+        contentColorFor(sheetColor).copy(alpha = 0.38f)
+    } else {
+        onSurface.copy(alpha = 0.3f)
+    }
+
+    @Composable
+    fun themedContent() {
+        if (alignSemanticColorsToSheet) {
+            val primaryOn = contentColorFor(sheetColor)
+            val mutedOn = lerp(sheetColor, primaryOn, 0.88f)
+            val elevatedSurface = lerp(sheetColor, primaryOn, 0.12f)
+            MaterialTheme(
+                colorScheme = MaterialTheme.colorScheme.copy(
+                    surface = sheetColor,
+                    surfaceContainerLow = sheetColor,
+                    surfaceContainer = sheetColor,
+                    surfaceContainerHigh = sheetColor,
+                    surfaceContainerHighest = elevatedSurface,
+                    onSurface = primaryOn,
+                    onSurfaceVariant = mutedOn,
+                    outline = primaryOn.copy(alpha = 0.34f),
+                    outlineVariant = primaryOn.copy(alpha = 0.26f),
+                ),
+            ) {
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+
     Column(
         modifier
             .fillMaxWidth()
@@ -382,7 +428,7 @@ private fun MapDialogChrome(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(onSurface.copy(alpha = 0.3f)),
+                        .background(grabberTint),
                 )
             }
         }
@@ -391,7 +437,7 @@ private fun MapDialogChrome(
                 .fillMaxWidth()
                 .weight(1f, fill = true),
         ) {
-            content()
+            themedContent()
         }
     }
 }
@@ -649,6 +695,7 @@ private fun MusicPreviewCard(
             text = beacon.displayTypeTitle(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
@@ -697,6 +744,7 @@ private fun MusicPreviewCard(
                     text = trackTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
