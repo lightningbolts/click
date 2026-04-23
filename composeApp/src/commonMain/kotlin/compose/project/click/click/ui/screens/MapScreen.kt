@@ -4,8 +4,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,7 +14,10 @@ import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.draw.alpha
@@ -51,6 +52,10 @@ import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlis
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.util.openMusicStreamingUrl // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.zIndex
+import compose.project.click.click.getPlatform
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -104,7 +109,8 @@ fun MapScreen(
 
 
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
-    val beaconSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
+    // Partial expansion (≈ half screen) is allowed; avoid skipPartiallyExpanded=true (full jump).
+    val beaconSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
     // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
     // Pin taps update this directly (in addition to the view-model selection state) so
     // sheet visibility is decoupled from any race in the selection StateFlow.
@@ -119,6 +125,15 @@ fun MapScreen(
             sel.point.connection.id
         } else {
             null
+        }
+    }
+
+    LaunchedEffect(showBeaconDropSheet) {
+        if (showBeaconDropSheet) {
+            try {
+                beaconSheetState.show()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -191,56 +206,67 @@ fun MapScreen(
                         )
                     }
 
-                    MapLayerFilterRow(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.safeDrawing)
-                            .padding(top = 12.dp),
-                        selected = layerFilters,
-                        onToggle = { viewModel.toggleLayerFilter(it) },
-                    )
-
-                    FloatingActionButton(
-                        onClick = { showBeaconDropSheet = true },
+                    // Bottom bar: narrow layer control (no weight(1) so it does not span under the FAB or zoom),
+                    // add-location FAB, and zoom — single row to avoid map hit-stealing and overlap.
+                    Row(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(start = 16.dp, bottom = 24.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            .zIndex(4f)
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                            .padding(horizontal = 16.dp, vertical = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
+                        MapLayerFilterDropdown(
+                            selected = layerFilters,
+                            onToggle = { viewModel.toggleLayerFilter(it) },
+                        )
+                        FloatingActionButton(
+                            onClick = { showBeaconDropSheet = true },
+                            modifier = Modifier.size(56.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ) {
+                            Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        ZoomControls(
+                            onZoomIn = { viewModel.zoomIn() },
+                            onZoomOut = { viewModel.zoomOut() },
+                        )
                     }
-
-                    ZoomControls(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 16.dp, bottom = 24.dp),
-                        onZoomIn = { viewModel.zoomIn() },
-                        onZoomOut = { viewModel.zoomOut() },
-                    )
                 }
             }
         }
     }
 
     if (showBeaconDropSheet) {
+        val dropSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
         AdaptiveBottomSheet(
             onDismissRequest = { showBeaconDropSheet = false },
             adaptiveSheetState = beaconSheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = dropSheetColor,
             contentColor = MaterialTheme.colorScheme.onSurface,
             dragHandle = { BottomSheetDefaults.DragHandle() },
         ) {
-            BeaconDropSheetContent(
-                errorMessage = beaconInsertError,
-                onDismissError = { viewModel.clearBeaconInsertError() },
-                onSubmit = { kind, text ->
-                    viewModel.submitBeaconDrop(kind, text) { ok ->
-                        if (ok) showBeaconDropSheet = false
-                    }
-                },
-            )
+            // Full-bleed background for the detent: avoids native sheet showing a light band in dark mode.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .background(dropSheetColor),
+            ) {
+                BeaconDropSheetContent(
+                    errorMessage = beaconInsertError,
+                    onDismissError = { viewModel.clearBeaconInsertError() },
+                    onSubmit = { kind, text ->
+                        viewModel.submitBeaconDrop(kind, text) { ok ->
+                            if (ok) showBeaconDropSheet = false
+                        }
+                    },
+                )
+            }
         }
     }
 
@@ -346,38 +372,126 @@ private fun buildProfileSheetState(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** One-line label for the compact map layer control. */
+private fun mapLayerFilterShortLabel(selected: Set<MapLayerFilter>): String {
+    if (MapLayerFilter.ALL in selected) return "All"
+    val withoutAll = selected - MapLayerFilter.ALL
+    if (withoutAll.isEmpty()) return "—"
+    if (withoutAll.size == 1) {
+        return when (val f = withoutAll.first()) {
+            MapLayerFilter.MY_CONNECTIONS -> "Conn"
+            MapLayerFilter.SOUNDTRACKS -> "Audio"
+            MapLayerFilter.ALERTS_UTILITIES -> "Alerts"
+            MapLayerFilter.SOCIAL_VIBES -> "Social"
+            else -> f.label.take(6)
+        }
+    }
+    return "${withoutAll.size} on"
+}
+
+/**
+ * Native [DropdownMenu] from a liquid-glass style pill (iOS) / solid surface (Android).
+ * Menu opens **upward** (negative offset) so it stays on-screen over the bottom bar, with a
+ * fully opaque container for readable text.
+ */
 @Composable
-private fun MapLayerFilterRow(
-    modifier: Modifier = Modifier,
+private fun MapLayerFilterDropdown(
     selected: Set<MapLayerFilter>,
     onToggle: (MapLayerFilter) -> Unit,
 ) {
-    LazyRow(
-        modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    var expanded by remember { mutableStateOf(false) }
+    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    val menuSurface = MaterialTheme.colorScheme.surface
+    val onMenuSurface = MaterialTheme.colorScheme.onSurface
+    val menuOutline = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+    val itemCount = MapLayerFilter.entries.size
+    // ~48dp per row + padding — negative Y pulls the popup above the anchor.
+    val menuUpOffset = (itemCount * 48 + 24).dp
+    val menuWidth = 240.dp
+    val triggerWidth = 120.dp
+
+    Box(
+        modifier = Modifier
+            .widthIn(max = triggerWidth)
+            .wrapContentWidth(Alignment.Start),
     ) {
-        items(MapLayerFilter.entries.toList()) { filter ->
-            val isSelected = when (filter) {
-                MapLayerFilter.ALL -> MapLayerFilter.ALL in selected
-                else -> filter in selected
-            }
-            LiquidGlassPill(
-                cornerRadiusDp = 20,
-                modifier = Modifier.height(40.dp),
+        LiquidGlassPill(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 40.dp, max = 48.dp)
+                .clickable { expanded = true },
+            cornerRadiusDp = 20,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onToggle(filter) },
-                    label = { Text(filter.label, style = MaterialTheme.typography.labelMedium) },
-                    border = null,
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color.Transparent,
-                        selectedContainerColor = PrimaryBlue.copy(alpha = 0.22f),
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                    ),
+                Text(
+                    text = mapLayerFilterShortLabel(selected),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        // Same horizontal origin as the pill; full-opacity surface for legibility.
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(menuWidth)
+                .wrapContentWidth(Alignment.Start),
+            offset = DpOffset(0.dp, -menuUpOffset),
+            shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
+            containerColor = menuSurface,
+            tonalElevation = if (isIOS) 0.dp else 2.dp,
+            shadowElevation = if (isIOS) 0.dp else 8.dp,
+            border = if (isIOS) {
+                BorderStroke(0.5.dp, menuOutline)
+            } else {
+                null
+            },
+        ) {
+            MapLayerFilter.entries.forEach { filter ->
+                val isSelected = when (filter) {
+                    MapLayerFilter.ALL -> MapLayerFilter.ALL in selected
+                    else -> filter in selected
+                }
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            filter.label,
+                            color = onMenuSurface,
+                            style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        onToggle(filter)
+                        expanded = false
+                    },
+                    leadingIcon = {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = onMenuSurface,
+                            )
+                        } else {
+                            Spacer(Modifier.size(24.dp))
+                        }
+                    },
                 )
             }
         }
