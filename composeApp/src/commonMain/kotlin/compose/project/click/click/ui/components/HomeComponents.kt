@@ -151,7 +151,9 @@ fun PollPairCard(
     suggestion: PollPairSuggestion,
     onOpenChat: () -> Unit,
     onSendIcebreaker: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icebreakerSendEnabled: Boolean = true,
+    icebreakerCooldownSec: Int = 0,
 ) {
     val outerShape = RoundedCornerShape(24.dp)
     val innerShape = RoundedCornerShape(23.dp)
@@ -260,6 +262,7 @@ fun PollPairCard(
                 }
                 OutlinedButton(
                     onClick = onSendIcebreaker,
+                    enabled = icebreakerSendEnabled,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, GlassBorder),
@@ -272,11 +275,11 @@ fun PollPairCard(
                         Icons.Filled.Lightbulb,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = WebAccentBlue
+                        tint = WebAccentBlue.copy(alpha = if (icebreakerSendEnabled) 1f else 0.4f)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        "Icebreaker",
+                        if (icebreakerCooldownSec > 0) "Icebreaker (${icebreakerCooldownSec}s)" else "Icebreaker",
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
                     )

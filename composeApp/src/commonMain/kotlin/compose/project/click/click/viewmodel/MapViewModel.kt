@@ -6,14 +6,24 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
+import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
+import kotlinx.serialization.json.put // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -53,6 +63,7 @@ sealed class MapSelection {
     object None : MapSelection()
     data class ClusterSelected(val cluster: MapCluster) : MapSelection()
     data class ConnectionSelected(val point: ConnectionMapPoint, val otherUser: User?) : MapSelection()
+    data class BeaconSelected(val beacon: MapBeacon, val distanceMeters: Double?) : MapSelection()
 }
 
 /**
@@ -102,10 +113,23 @@ class MapViewModel : ViewModel() {
     private val _visibleBounds = MutableStateFlow<BoundingBox?>(null)
     val visibleBounds: StateFlow<BoundingBox?> = _visibleBounds.asStateFlow()
 
-    // Tribe filter for categorizing connections
-    private val _selectedFilter = MutableStateFlow("All")
-    val selectedFilter: StateFlow<String> = _selectedFilter.asStateFlow()
-    val availableFilters = listOf("All", "Study", "Party", "Coffee", "Outdoors")
+    private val _selectedLayerFilters = MutableStateFlow(defaultMapLayerFilters())
+    val selectedLayerFilters: StateFlow<Set<MapLayerFilter>> = _selectedLayerFilters.asStateFlow()
+
+    val availableLayerFilters: List<MapLayerFilter> = MapLayerFilter.entries
+
+    private val _mapBeacons = MutableStateFlow<List<MapBeacon>>(emptyList())
+    val mapBeacons: StateFlow<List<MapBeacon>> = _mapBeacons.asStateFlow()
+
+    private val mapBeaconRepository = MapBeaconRepository()
+
+    private val _beaconInsertError = MutableStateFlow<String?>(null)
+    val beaconInsertError: StateFlow<String?> = _beaconInsertError.asStateFlow()
+
+    private var beaconPollJob: Job? = null
+    private var beaconFetchSeq: Long = 0L
+
+    private val locationService = LocationService()
 
     // Cluster threshold - zoom level above which individual pins are shown
     private val clusterThreshold = 12.0
@@ -168,7 +192,6 @@ class MapViewModel : ViewModel() {
                 AppDataManager.isLoading,
                 AppDataManager.locationPreferences,
                 _zoomLevel,
-                _selectedFilter
             ) { values ->
                 @Suppress("UNCHECKED_CAST")
                 val connections = values[0] as List<Connection>
@@ -179,9 +202,17 @@ class MapViewModel : ViewModel() {
                 val isLoading = values[5] as Boolean
                 val locationPrefs = values[6] as LocationPreferences
                 val zoom = values[7] as Double
-                val filter = values[8] as String
-                Nonuple(connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter)
-            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom, filter) ->
+                Octuple(
+                    connections,
+                    connectedUsers,
+                    archivedIds,
+                    hiddenIds,
+                    isDataLoaded,
+                    isLoading,
+                    locationPrefs,
+                    zoom,
+                )
+            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom) ->
                 when {
                     // `archivedIds` is read so archive/unarchive recomputes the map when the connections list is unchanged.
                     isDataLoaded && (archivedIds.isNotEmpty() || archivedIds.isEmpty()) -> {
@@ -191,7 +222,7 @@ class MapViewModel : ViewModel() {
                         val mapVisibleConnections =
                             if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
                         ensureDefaultCameraTarget(mapVisibleConnections)
-                        updateRenderData(mapVisibleConnections, zoomForClusteringRender(zoom), filter)
+                        updateRenderData(mapVisibleConnections, zoomForClusteringRender(zoom))
                         refreshSelectedConnectionUser(connectedUsers)
                     }
                     isLoading -> {
@@ -202,6 +233,27 @@ class MapViewModel : ViewModel() {
                         _renderData.value = MapRenderData.Clusters(emptyList())
                     }
                 }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                combine(
+                    _mapState,
+                    AppDataManager.locationPreferences,
+                    AppDataManager.hiddenConnectionIds,
+                    _zoomLevel,
+                ) { state, prefs, hidden, zoom ->
+                    Quadruple(state, prefs, hidden, zoom)
+                },
+                _mapBeacons,
+                _selectedLayerFilters,
+            ) { base, _, _ ->
+                base
+            }.collectLatest { (state, prefs, hidden, zoom) ->
+                if (state !is MapState.Success) return@collectLatest
+                val mapVisible = state.connections.filter { it.id !in hidden }
+                val visible = if (prefs.showOnMapEnabled) mapVisible else emptyList()
+                updateRenderData(visible, zoomForClusteringRender(zoom))
             }
         }
     }
@@ -215,24 +267,62 @@ class MapViewModel : ViewModel() {
      * thread. The resulting [MapRenderData] is immutable and safe to publish to a
      * [MutableStateFlow] from any dispatcher.
      */
-    private fun updateRenderData(connections: List<Connection>, zoom: Double, filter: String = "All") {
+    private fun updateRenderData(connections: List<Connection>, zoom: Double) {
         renderDataJob?.cancel()
+        val layers = _selectedLayerFilters.value
+        val beaconsRaw = _mapBeacons.value
         renderDataJob = viewModelScope.launch {
             val rendered = withContext(Dispatchers.Default) {
-                val filtered = if (filter == "All") {
-                    connections
-                } else {
-                    val searchTerm = filter.lowercase()
-                    connections.filter { conn ->
-                        val location = conn.semanticLocation?.lowercase() ?: ""
-                        val tag = conn.displayLocationLabel?.lowercase() ?: ""
-                        location.contains(searchTerm) || tag.contains(searchTerm)
-                    }
-                }
-                determineMapRenderData(filtered, zoom, clusterThreshold)
+                val showConnections = layers.contains(MapLayerFilter.ALL) ||
+                    layers.contains(MapLayerFilter.MY_CONNECTIONS)
+                val filteredConnections = if (showConnections) connections else emptyList()
+                val filteredBeacons = filterBeaconsForLayers(beaconsRaw, layers)
+                determineMapRenderData(filteredConnections, filteredBeacons, zoom, clusterThreshold)
             }
             _renderData.value = rendered
         }
+    }
+
+    /**
+     * Optional `filters` query for `/api/beacons` derived from the active layer chips.
+     */
+    private fun beaconTypesQueryForLayers(layers: Set<MapLayerFilter>): String? {
+        if (layers.contains(MapLayerFilter.ALL)) return null
+        val types = LinkedHashSet<String>()
+        if (layers.contains(MapLayerFilter.SOUNDTRACKS)) types.add("soundtrack")
+        if (layers.contains(MapLayerFilter.ALERTS_UTILITIES)) {
+            types.add("sos")
+            types.add("study")
+            types.add("hazard_utility")
+        }
+        if (layers.contains(MapLayerFilter.SOCIAL_VIBES)) {
+            types.add("recreation")
+            types.add("hobby")
+            types.add("swag")
+            types.add("capacity")
+            types.add("transit")
+            types.add("scavenger")
+        }
+        return if (types.isEmpty()) null else types.joinToString(",")
+    }
+
+    private fun filterBeaconsForLayers(
+        beacons: List<MapBeacon>,
+        layers: Set<MapLayerFilter>,
+    ): List<MapBeacon> {
+        if (layers.contains(MapLayerFilter.ALL)) return beacons
+        val out = mutableListOf<MapBeacon>()
+        for (b in beacons) {
+            val include = when (b.kind) {
+                MapBeaconKind.SOUNDTRACK -> layers.contains(MapLayerFilter.SOUNDTRACKS)
+                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
+                    layers.contains(MapLayerFilter.ALERTS_UTILITIES)
+                MapBeaconKind.SOCIAL_VIBE -> layers.contains(MapLayerFilter.SOCIAL_VIBES)
+                MapBeaconKind.OTHER -> layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            }
+            if (include) out.add(b)
+        }
+        return out
     }
 
     /**
@@ -272,13 +362,129 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Set the active tribe filter
-     */
-    fun setFilter(filter: String) {
+    fun toggleLayerFilter(filter: MapLayerFilter) {
         _pinRenderZoomFloor.value = null
-        _selectedFilter.value = filter
+        val cur = _selectedLayerFilters.value.toMutableSet()
+        if (filter == MapLayerFilter.ALL) {
+            if (MapLayerFilter.ALL in cur) {
+                cur.clear()
+                cur.addAll(defaultMapLayerFilters())
+            } else {
+                cur.clear()
+                cur.add(MapLayerFilter.ALL)
+            }
+        } else {
+            cur.remove(MapLayerFilter.ALL)
+            if (filter in cur) cur.remove(filter) else cur.add(filter)
+            if (cur.isEmpty()) {
+                cur.addAll(defaultMapLayerFilters())
+            }
+        }
+        _selectedLayerFilters.value = cur.toSet()
+        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it) }
     }
+
+    fun clearBeaconInsertError() {
+        _beaconInsertError.value = null
+    }
+
+    fun onBeaconPinTapped(beaconId: String) {
+        viewModelScope.launch {
+            val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
+                ?: return@launch
+            val distance = locationService.getHighAccuracyLocation(3500L)?.let { loc ->
+                haversineDistance(loc.latitude, loc.longitude, beacon.latitude, beacon.longitude)
+            }
+            _selection.value = MapSelection.BeaconSelected(beacon, distance)
+        }
+    }
+
+    fun submitBeaconDrop(
+        kind: MapBeaconKind,
+        text: String,
+        ttlMs: Long? = null,
+        onFinished: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            _beaconInsertError.value = null
+            val loc = locationService.getHighAccuracyLocation(6000L)
+                ?: run {
+                    _beaconInsertError.value = "Could not read GPS. Enable location and try again."
+                    onFinished(false)
+                    return@launch
+                }
+            val trimmed = text.trim()
+            val metadata: JsonObject? = when (kind) {
+                MapBeaconKind.SOUNDTRACK -> {
+                    if (!isValidStreamingUrl(trimmed)) {
+                        _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
+                        onFinished(false)
+                        return@launch
+                    }
+                    buildJsonObject {
+                        put("music_url", trimmed)
+                    }
+                }
+                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
+                    if (trimmed.isEmpty()) {
+                        _beaconInsertError.value = "Please add a description."
+                        onFinished(false)
+                        return@launch
+                    }
+                    if (trimmed.length > 140) {
+                        _beaconInsertError.value = "Description must be 140 characters or less."
+                        onFinished(false)
+                        return@launch
+                    }
+                    buildJsonObject {
+                        put("description", trimmed)
+                    }
+                }
+                else -> {
+                    if (trimmed.isEmpty()) {
+                        _beaconInsertError.value = "Please add a description."
+                        onFinished(false)
+                        return@launch
+                    }
+                    if (trimmed.length > 140) {
+                        _beaconInsertError.value = "Description must be 140 characters or less."
+                        onFinished(false)
+                        return@launch
+                    }
+                    buildJsonObject {
+                        put("description", trimmed)
+                    }
+                }
+            }
+            val insert = MapBeaconInsert(
+                kind = kind.apiValue,
+                lat = loc.latitude,
+                lon = loc.longitude,
+                metadata = metadata,
+                ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
+            )
+            mapBeaconRepository.insertBeacon(insert).fold(
+                onSuccess = {
+                    _visibleBounds.value?.let { b ->
+                        mapBeaconRepository.fetchLocalBeacons(
+                            minLat = b.minLat,
+                            maxLat = b.maxLat,
+                            minLon = b.minLon,
+                            maxLon = b.maxLon,
+                            beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
+                        ).onSuccess { list -> _mapBeacons.value = list }
+                    }
+                    onFinished(true)
+                },
+                onFailure = { e ->
+                    _beaconInsertError.value = e.message ?: "Could not drop beacon"
+                    onFinished(false)
+                },
+            )
+        }
+    }
+
+    // URL validation is now in compose.project.click.click.util.isValidStreamingUrl
 
     /**
      * Update the current zoom level
@@ -343,6 +549,32 @@ class MapViewModel : ViewModel() {
             longitude = bounds.centerLon,
             zoom = _zoomLevel.value
         )
+        scheduleBeaconFetchForBounds(bounds)
+    }
+
+    private fun scheduleBeaconFetchForBounds(bounds: BoundingBox) {
+        val layers = _selectedLayerFilters.value
+        val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
+            layers.contains(MapLayerFilter.SOUNDTRACKS) ||
+            layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
+            layers.contains(MapLayerFilter.SOCIAL_VIBES)
+        if (!wantBeacons) return
+        if (AppDataManager.currentUser.value == null) return
+
+        beaconPollJob?.cancel()
+        val seq = ++beaconFetchSeq
+        beaconPollJob = viewModelScope.launch {
+            delay(400)
+            if (seq != beaconFetchSeq) return@launch
+            val result = mapBeaconRepository.fetchLocalBeacons(
+                minLat = bounds.minLat,
+                maxLat = bounds.maxLat,
+                minLon = bounds.minLon,
+                maxLon = bounds.maxLon,
+                beaconTypeFilters = beaconTypesQueryForLayers(layers),
+            )
+            result.onSuccess { list -> _mapBeacons.value = list }
+        }
     }
 
     private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
@@ -509,6 +741,22 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun onMapPinTapped(pin: MapPin) {
+        if (pin.id.startsWith("beacon:")) {
+            val raw = pin.id.removePrefix("beacon:")
+            onBeaconPinTapped(raw)
+        } else {
+            val state = _renderData.value
+            val point = when (state) {
+                is MapRenderData.IndividualPins ->
+                    state.points.firstOrNull { it.connection.id == pin.id }
+                is MapRenderData.Clusters ->
+                    state.clusters.flatMap { it.points }.firstOrNull { it.connection.id == pin.id }
+            }
+            if (point != null) onConnectionTapped(point)
+        }
+    }
+
     private fun refreshSelectedConnectionUser(connectedUsers: Map<String, User>) {
         val selected = _selection.value as? MapSelection.ConnectionSelected ?: return
         val currentUserId = AppDataManager.currentUser.value?.id
@@ -644,6 +892,7 @@ class MapViewModel : ViewModel() {
         if (channel != null) {
             teardownBlocking { channel.unsubscribe() }
         }
+        mapBeaconRepository.close()
     }
 
     /**
@@ -733,6 +982,17 @@ private data class Septuple<A, B, C, D, E, F, G>(
     val fifth: E,
     val sixth: F,
     val seventh: G
+)
+
+private data class Octuple<A, B, C, D, E, F, G, H>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+    val sixth: F,
+    val seventh: G,
+    val eighth: H,
 )
 
 private data class Nonuple<A, B, C, D, E, F, G, H, I>(

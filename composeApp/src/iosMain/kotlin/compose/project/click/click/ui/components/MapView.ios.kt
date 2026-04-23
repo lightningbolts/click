@@ -1,9 +1,10 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
-import compose.project.click.click.ui.utils.TimeState
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
@@ -114,10 +115,16 @@ actual fun PlatformMap(
                 // Add individual pins with color based on time state
                 pins.forEach { pin ->
                     val ann = MKPointAnnotation()
-                    val displayTitle = when (pin.timeState) {
-                        TimeState.LIVE -> "🔵 ${pin.title}"
-                        TimeState.RECENT -> "💠 ${pin.title}"
-                        TimeState.ARCHIVE -> "⚪ ${pin.title}"
+                    val displayTitle = when (pin.kind) {
+                        MapPinKind.CONNECTION -> when (pin.timeState) {
+                            TimeState.LIVE -> "🔵 ${pin.title}"
+                            TimeState.RECENT -> "💠 ${pin.title}"
+                            TimeState.ARCHIVE -> "⚪ ${pin.title}"
+                        }
+                        MapPinKind.BEACON_SOUNDTRACK -> "🎵 ${pin.title}"
+                        MapPinKind.BEACON_ALERT -> "⚠️ ${pin.title}"
+                        MapPinKind.BEACON_SOCIAL -> "✨ ${pin.title}"
+                        MapPinKind.BEACON_OTHER -> "📍 ${pin.title}"
                     }
                     ann.setTitle(displayTitle)
                     ann.setSubtitle(pin.id)
@@ -129,8 +136,7 @@ actual fun PlatformMap(
                 // Add cluster pins
                 clusters.forEach { cluster ->
                     val ann = MKPointAnnotation()
-                    val icon = if (cluster.hasLiveConnections) "🔵" else "⭕"
-                    ann.setTitle("$icon ${cluster.count} memories")
+                    ann.setTitle("${cluster.count}")
                     ann.setSubtitle("cluster:${cluster.id}")
                     ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
                     map.addAnnotation(ann)
@@ -193,6 +199,43 @@ actual fun PlatformMap(
             // continent-scale jumps. Programmatic zoom (buttons, cluster) always supplies a target center.
         }
     )
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun MapPin.markerTintUIColor(): UIColor {
+    val key = beaconTypeKey?.lowercase()
+    return when {
+        key != null -> when (key) {
+            "soundtrack" -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
+            "sos" -> UIColor.redColor
+            "study" -> UIColor(red = 0.20, green = 0.45, blue = 0.95, alpha = 1.0)
+            "hazard_utility" -> UIColor(red = 0.98, green = 0.45, blue = 0.12, alpha = 1.0)
+            "transit" -> UIColor(red = 0.0, green = 0.72, blue = 0.83, alpha = 1.0)
+            "recreation" -> UIColor(red = 0.18, green = 0.75, blue = 0.38, alpha = 1.0)
+            "hobby" -> UIColor(red = 0.35, green = 0.68, blue = 0.40, alpha = 1.0)
+            "swag" -> UIColor(red = 0.72, green = 0.33, blue = 0.82, alpha = 1.0)
+            "capacity" -> UIColor(red = 0.94, green = 0.32, blue = 0.62, alpha = 1.0)
+            "scavenger" -> UIColor(red = 0.96, green = 0.76, blue = 0.22, alpha = 1.0)
+            else -> UIColor(red = 0.85, green = 0.75, blue = 0.18, alpha = 1.0)
+        }
+        kind == MapPinKind.CONNECTION -> UIColor.magentaColor
+        beaconKind != null -> when (beaconKind!!) {
+            MapBeaconKind.SOUNDTRACK -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
+            MapBeaconKind.SOS -> UIColor.redColor
+            MapBeaconKind.HAZARD -> UIColor.orangeColor
+            MapBeaconKind.UTILITY -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
+            MapBeaconKind.STUDY -> UIColor.blueColor
+            MapBeaconKind.SOCIAL_VIBE -> UIColor.magentaColor
+            MapBeaconKind.OTHER -> UIColor.yellowColor
+        }
+        else -> when (kind) {
+            MapPinKind.BEACON_SOUNDTRACK -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
+            MapPinKind.BEACON_ALERT -> UIColor.redColor
+            MapPinKind.BEACON_SOCIAL -> UIColor.magentaColor
+            MapPinKind.BEACON_OTHER -> UIColor.yellowColor
+            MapPinKind.CONNECTION -> UIColor.magentaColor
+        }
+    }
 }
 
 private fun computeDataCenter(pins: List<MapPin>, clusters: List<MapClusterPin>): Pair<Double, Double>? {
@@ -368,6 +411,43 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         }
     }
 
+    private fun findMapCluster(ann: MKPointAnnotation): MapClusterPin? {
+        val byRef = clusterEntries.firstOrNull { (a, _) -> a === ann }?.second
+        if (byRef != null) return byRef
+        val sub = (ann.subtitle as? String)?.trim().orEmpty()
+        if (sub.isNotEmpty() && sub.startsWith("cluster:")) {
+            val id = sub.removePrefix("cluster:").trim()
+            clusterEntries.firstOrNull { it.second.id == id }?.second?.let { return it }
+        }
+        if (sub.isNotEmpty() && !sub.startsWith("cluster:")) {
+            return null
+        }
+        return ann.coordinate.useContents {
+            val aLat = latitude
+            val aLon = longitude
+            clusterEntries.firstOrNull { (_, c) ->
+                abs(c.latitude - aLat) < 1.2e-4 && abs(c.longitude - aLon) < 1.2e-4
+            }?.second
+        }
+    }
+
+    private fun findMapPin(ann: MKPointAnnotation): MapPin? {
+        val byRef = pinEntries.firstOrNull { (a, _) -> a === ann }?.second
+        if (byRef != null) return byRef
+        val sub = (ann.subtitle as? String)?.trim().orEmpty()
+        if (sub.isNotEmpty()) {
+            if (sub.startsWith("cluster:")) return null
+            pinEntries.firstOrNull { it.second.id == sub }?.second?.let { return it }
+        }
+        return ann.coordinate.useContents {
+            val aLat = latitude
+            val aLon = longitude
+            pinEntries.firstOrNull { (_, p) ->
+                abs(p.latitude - aLat) < 1.2e-4 && abs(p.longitude - aLon) < 1.2e-4
+            }?.second
+        }
+    }
+
     private fun dispatchByIdentifier(rawIdentifier: String?, mapView: MKMapView?): Boolean {
         val identifier = rawIdentifier?.trim().orEmpty()
         if (identifier.isEmpty()) return false
@@ -405,15 +485,15 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     private fun dispatch(annotation: Any?, mapView: MKMapView?) {
         if (annotation is MKUserLocation) return
         val pointAnnotation = annotation as? MKPointAnnotation ?: return
-        val pin = pinEntries.firstOrNull { it.first === pointAnnotation }?.second
-        if (pin != null) {
-            onPin(pin)
+        val cluster = findMapCluster(pointAnnotation)
+        if (cluster != null) {
+            onCluster(cluster)
             mapView?.deselectAnnotation(pointAnnotation, animated = true)
             return
         }
-        val cluster = clusterEntries.firstOrNull { it.first === pointAnnotation }?.second
-        if (cluster != null) {
-            onCluster(cluster)
+        val pin = findMapPin(pointAnnotation)
+        if (pin != null) {
+            onPin(pin)
             mapView?.deselectAnnotation(pointAnnotation, animated = true)
         }
     }
@@ -455,7 +535,16 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     @kotlinx.cinterop.ObjCSignatureOverride
     override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
         if (viewForAnnotation is MKUserLocation) return null
-        val identifier = "ClickPinMarker"
+        val pointAnn = viewForAnnotation as? MKPointAnnotation ?: return null
+        // MapKit often hands a *different* MKPointAnnotation instance than the one we added, so
+        // pointer identity fails. Resolve by subtitle (pin id) and then by coordinate.
+        val cluster = findMapCluster(pointAnn)
+        val pin = if (cluster == null) findMapPin(pointAnn) else null
+        val identifier = when {
+            cluster != null -> "C|${cluster.id}"
+            pin != null -> "P|${pin.id}"
+            else -> "X|orphan"
+        }
         val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
         val view = (reused as? MKMarkerAnnotationView)
             ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
@@ -463,6 +552,28 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         view.canShowCallout = false
         view.setEnabled(true)
         view.setSelected(false, animated = false)
+        when {
+            cluster != null -> {
+                val label = if (cluster.count > 99) "99+" else cluster.count.toString()
+                view.glyphText = label
+                view.markerTintColor = when {
+                    cluster.isConnectionOnly -> UIColor.magentaColor
+                    cluster.hasLiveConnections -> UIColor.blueColor
+                    else -> UIColor.orangeColor
+                }
+                view.zPriority = cluster.zIndex
+            }
+            pin != null -> {
+                view.glyphText = ""
+                view.markerTintColor = pin.markerTintUIColor()
+                view.zPriority = pin.zIndex
+            }
+            else -> {
+                view.glyphText = ""
+                view.markerTintColor = UIColor.yellowColor
+                view.zPriority = 0f
+            }
+        }
         return view
     }
 

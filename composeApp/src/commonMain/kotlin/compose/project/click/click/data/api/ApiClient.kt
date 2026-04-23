@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.ErrorResponse
 import compose.project.click.click.data.models.LoginRequest
 import compose.project.click.click.data.models.SignUpRequest
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.MapBeaconInsert
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.util.redactedRestMessage
@@ -23,6 +24,7 @@ import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -674,6 +676,55 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             val response = clickWebClient.post("$clickWebAuthOrigin/api/safety/report") {
                 contentType(ContentType.Application.Json)
                 setBody(SafetyReportPostBody(connectionId = id, reason = trimmedReason))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * `GET /api/beacons` — proximity map beacons (PostGIS); bearer is the Supabase session JWT.
+     */
+    suspend fun getMapBeacons(
+        lat: Double,
+        lon: Double,
+        radiusMeters: Double,
+        filters: String? = null,
+    ): Result<String> {
+        if (!lat.isFinite() || !lon.isFinite() || !radiusMeters.isFinite()) {
+            return Result.failure(IllegalArgumentException("lat, lon, and radiusMeters must be finite"))
+        }
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons") {
+                parameter("lat", lat)
+                parameter("lon", lon)
+                parameter("radius_meters", radiusMeters)
+                val f = filters?.trim().orEmpty()
+                if (f.isNotEmpty()) {
+                    parameter("filters", f)
+                }
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** `POST /api/beacons` — insert a map beacon (soundtrack rows enriched server-side). */
+    suspend fun postMapBeacon(insert: MapBeaconInsert): Result<Unit> {
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/beacons") {
+                contentType(ContentType.Application.Json)
+                setBody(insert)
             }
             if (response.status.value in 200..299) {
                 Result.success(Unit)

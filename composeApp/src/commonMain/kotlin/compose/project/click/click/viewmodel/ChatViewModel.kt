@@ -221,6 +221,13 @@ class ChatViewModel(
     private val _showIcebreakerPanel = MutableStateFlow(true)
     val showIcebreakerPanel: StateFlow<Boolean> = _showIcebreakerPanel.asStateFlow()
 
+    /** Seconds remaining for in-chat icebreaker refresh / outbound icebreaker send cooldown (see [armIcebreakerCooldown]). */
+    private val _icebreakerCooldownRemainingSec = MutableStateFlow(0)
+    val icebreakerCooldownRemainingSec: StateFlow<Int> = _icebreakerCooldownRemainingSec.asStateFlow()
+
+    private var icebreakerCooldownTickerJob: Job? = null
+    private var lastIcebreakerRefreshInvokedMs: Long = 0L
+
     // ── Nudge result feedback ──────────────────────────────────────────────────
     private val _nudgeResult = MutableStateFlow<String?>(null)
     val nudgeResult: StateFlow<String?> = _nudgeResult.asStateFlow()
@@ -271,6 +278,9 @@ class ChatViewModel(
 
     /** Serializes outbound chat POSTs so optimistic rows stay ordered; text sends can queue without blocking the composer UI. */
     private val outboundChatMessageMutex = Mutex()
+
+    /** Prevents concurrent archive-banner icebreaker sends from racing the cooldown gate. */
+    private val archiveBannerIcebreakerMutex = Mutex()
 
     /**
      * Connection ids for which the inbox row should show zero unread immediately after
@@ -2586,12 +2596,35 @@ class ChatViewModel(
     private fun loadIcebreakerPrompts(contextTag: String?) {
         _icebreakerPrompts.value = IcebreakerRepository.getPromptsForContext(contextTag, count = 3)
     }
+
+    private fun icebreakerCooldownRemainingSecCeil(endEpochMs: Long): Int =
+        ((endEpochMs - Clock.System.now().toEpochMilliseconds() + 999L) / 1000L).toInt().coerceAtLeast(0)
+
+    /** 15s cooldown after a successful in-chat prompt refresh or list icebreaker send. */
+    private fun armIcebreakerCooldown() {
+        icebreakerCooldownTickerJob?.cancel()
+        val end = Clock.System.now().toEpochMilliseconds() + 15_000L
+        _icebreakerCooldownRemainingSec.value = icebreakerCooldownRemainingSecCeil(end)
+        icebreakerCooldownTickerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1_000L)
+                val rem = icebreakerCooldownRemainingSecCeil(end)
+                _icebreakerCooldownRemainingSec.value = rem
+                if (rem <= 0) break
+            }
+            _icebreakerCooldownRemainingSec.value = 0
+        }
+    }
     
     fun refreshIcebreakerPrompts() {
         val currentState = _chatMessagesState.value
-        if (currentState is ChatMessagesState.Success) {
-            loadIcebreakerPrompts(currentState.chatDetails.connection.context_tag)
-        }
+        if (currentState !is ChatMessagesState.Success) return
+        if (_icebreakerCooldownRemainingSec.value > 0) return
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (now - lastIcebreakerRefreshInvokedMs < 350L) return
+        lastIcebreakerRefreshInvokedMs = now
+        loadIcebreakerPrompts(currentState.chatDetails.connection.context_tag)
+        armIcebreakerCooldown()
     }
     
     fun useIcebreakerPrompt(prompt: IcebreakerPrompt) {
@@ -2651,20 +2684,31 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         val name = otherDisplayName.trim().ifBlank { "them" }
         viewModelScope.launch {
-            try {
-                val details = chatRepository.fetchChatWithDetails(connectionId, userId)
-                val chatId = details?.chat?.id ?: resolveOrCreateApiChatId(connectionId) ?: run {
-                    _nudgeResult.value = "Couldn't open chat"
-                    return@launch
+            archiveBannerIcebreakerMutex.withLock {
+                if (_icebreakerCooldownRemainingSec.value > 0) {
+                    _nudgeResult.value = "Icebreaker on cooldown — ${_icebreakerCooldownRemainingSec.value}s"
+                } else {
+                    try {
+                        val details = chatRepository.fetchChatWithDetails(connectionId, userId)
+                        val chatId = details?.chat?.id ?: resolveOrCreateApiChatId(connectionId)
+                        if (chatId == null) {
+                            _nudgeResult.value = "Couldn't open chat"
+                        } else {
+                            val contextTag = details?.connection?.context_tag
+                            val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
+                                ?: IcebreakerRepository.getRandomPrompt()
+                            val msg = chatRepository.sendMessage(chatId, userId, prompt.text)
+                            if (msg != null) {
+                                _nudgeResult.value = "Icebreaker sent to $name!"
+                                armIcebreakerCooldown()
+                            } else {
+                                _nudgeResult.value = "Failed to send icebreaker"
+                            }
+                        }
+                    } catch (_: Exception) {
+                        _nudgeResult.value = "Failed to send icebreaker"
+                    }
                 }
-                val contextTag = details?.connection?.context_tag
-                val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
-                    ?: IcebreakerRepository.getRandomPrompt()
-                val msg = chatRepository.sendMessage(chatId, userId, prompt.text)
-                _nudgeResult.value =
-                    if (msg != null) "Icebreaker sent to $name!" else "Failed to send icebreaker"
-            } catch (_: Exception) {
-                _nudgeResult.value = "Failed to send icebreaker"
             }
         }
     }
@@ -3122,6 +3166,10 @@ class ChatViewModel(
     }
     
     private fun resetIcebreakerState() {
+        icebreakerCooldownTickerJob?.cancel()
+        icebreakerCooldownTickerJob = null
+        _icebreakerCooldownRemainingSec.value = 0
+        lastIcebreakerRefreshInvokedMs = 0L
         _icebreakerPrompts.value = emptyList()
         _showIcebreakerPanel.value = true
     }
@@ -3145,6 +3193,8 @@ class ChatViewModel(
         peerOnlineJob?.cancel()
         localTypingIdleJob?.cancel()
         vibeCheckTimerJob?.cancel()
+        icebreakerCooldownTickerJob?.cancel()
+        icebreakerCooldownTickerJob = null
 
         val connectionsChannel = connectionsRealtimeChannel
         connectionsRealtimeChannel = null

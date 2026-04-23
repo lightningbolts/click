@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -322,6 +324,8 @@ fun IcebreakerPanel(
     onPromptClick: (IcebreakerPrompt) -> Unit,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
+    /** Seconds left before "new prompts" refresh is allowed again (mirrors [ChatViewModel.icebreakerCooldownRemainingSec]). */
+    cooldownRemainingSec: Int = 0,
 ) {
     Surface(
         modifier = Modifier
@@ -355,17 +359,37 @@ fun IcebreakerPanel(
                     )
                 }
 
-                Row {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    val refreshLocked = cooldownRemainingSec > 0
                     IconButton(
                         onClick = onRefresh,
+                        enabled = !refreshLocked,
                         modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
                             Icons.Filled.Refresh,
                             contentDescription = "Get new prompts",
-                            modifier = Modifier.size(18.dp),
-                            tint = PrimaryBlue.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .size(18.dp)
+                                .alpha(if (refreshLocked) 0.35f else 1f),
+                            tint = PrimaryBlue.copy(alpha = if (refreshLocked) 0.35f else 0.7f),
                         )
+                    }
+                    Box(
+                        modifier = Modifier.widthIn(min = 34.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (refreshLocked) {
+                            Text(
+                                text = "${cooldownRemainingSec}s",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     IconButton(
                         onClick = onDismiss,

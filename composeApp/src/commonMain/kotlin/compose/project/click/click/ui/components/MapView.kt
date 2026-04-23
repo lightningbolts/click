@@ -1,15 +1,26 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import compose.project.click.click.ui.utils.ConnectionMapPoint
-import compose.project.click.click.ui.utils.MapCluster
-import compose.project.click.click.ui.utils.TimeState
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
+import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
+import compose.project.click.click.ui.utils.beaconZIndex // pragma: allowlist secret
 
 /**
  * Represents a point to plot on the map
  * Enhanced with visual decay metadata
  */
+enum class MapPinKind {
+    CONNECTION,
+    BEACON_SOUNDTRACK,
+    BEACON_ALERT,
+    BEACON_SOCIAL,
+    BEACON_OTHER,
+}
+
 data class MapPin(
     val id: String,
     val title: String,
@@ -19,7 +30,14 @@ data class MapPin(
     val timeState: TimeState = TimeState.RECENT,
     val opacity: Float = 1.0f,
     val shouldPulse: Boolean = false,
-    val imageUrl: String? = null  // For avatar pins
+    val imageUrl: String? = null,
+    val kind: MapPinKind = MapPinKind.CONNECTION,
+    /** Set for beacon pins — drives per-type marker color when [beaconTypeKey] is null. */
+    val beaconKind: MapBeaconKind? = null,
+    /** Raw API `beacon_type` string for palette + labels (preferred when set). */
+    val beaconTypeKey: String? = null,
+    /** Native marker draw order (Google Maps / MapKit). */
+    val zIndex: Float = 0f,
 ) {
     companion object {
         /**
@@ -35,7 +53,48 @@ data class MapPin(
                 timeState = point.timeState,
                 opacity = point.opacity,
                 shouldPulse = point.shouldPulse,
-                imageUrl = imageUrl
+                imageUrl = imageUrl,
+                kind = MapPinKind.CONNECTION,
+                beaconKind = null,
+                beaconTypeKey = null,
+                zIndex = 0f,
+            )
+        }
+
+        fun fromBeacon(beacon: MapBeacon): MapPin {
+            val kind = when (beacon.kind) {
+                MapBeaconKind.SOUNDTRACK -> MapPinKind.BEACON_SOUNDTRACK
+                MapBeaconKind.HAZARD, MapBeaconKind.SOS, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
+                    MapPinKind.BEACON_ALERT
+                MapBeaconKind.SOCIAL_VIBE -> MapPinKind.BEACON_SOCIAL
+                MapBeaconKind.OTHER -> MapPinKind.BEACON_OTHER
+            }
+            val label = beacon.metadata.title
+                ?: beacon.metadata.trackName
+                ?: beacon.metadata.description?.take(24)
+                ?: when (beacon.kind) {
+                    MapBeaconKind.SOUNDTRACK -> "Soundtrack"
+                    MapBeaconKind.SOS -> "SOS"
+                    MapBeaconKind.HAZARD -> "Alert"
+                    MapBeaconKind.UTILITY -> "Utility"
+                    MapBeaconKind.STUDY -> "Study"
+                    MapBeaconKind.SOCIAL_VIBE -> "Social"
+                    MapBeaconKind.OTHER -> "Beacon"
+                }
+            return MapPin(
+                id = "beacon:${beacon.id}",
+                title = label,
+                latitude = beacon.latitude,
+                longitude = beacon.longitude,
+                isNearby = false,
+                timeState = TimeState.RECENT,
+                opacity = 1f,
+                shouldPulse = beacon.kind == MapBeaconKind.SOS || beacon.kind == MapBeaconKind.HAZARD,
+                imageUrl = null,
+                kind = kind,
+                beaconKind = beacon.kind,
+                beaconTypeKey = beacon.sourceBeaconType,
+                zIndex = beaconZIndex(beacon),
             )
         }
     }
@@ -49,7 +108,13 @@ data class MapClusterPin(
     val latitude: Double,
     val longitude: Double,
     val count: Int,
-    val hasLiveConnections: Boolean = false
+    val hasLiveConnections: Boolean = false,
+    /**
+     * True when this cluster contains only [ConnectionMapPoint]s (no beacons). These hubs use the
+     * same accent as individual connection markers (magenta) instead of the generic "no live" orange.
+     */
+    val isConnectionOnly: Boolean = false,
+    val zIndex: Float = 0f,
 )
 
 /**
@@ -88,11 +153,58 @@ expect fun PlatformMap(
  */
 fun MapCluster.toClusterPin(): MapClusterPin {
     val hasLive = points.any { it.timeState == TimeState.LIVE }
+    val hazardTop = beaconPoints.any { it.kind == MapBeaconKind.HAZARD || it.kind == MapBeaconKind.SOS }
+    val connectionOnly = beaconPoints.isEmpty() && points.isNotEmpty()
     return MapClusterPin(
         id = id,
         latitude = centerLat,
         longitude = centerLon,
         count = count,
-        hasLiveConnections = hasLive
+        hasLiveConnections = hasLive,
+        isConnectionOnly = connectionOnly,
+        zIndex = if (hazardTop) 9_000f else 0f,
     )
 }
+
+/**
+ * Google Maps default-marker hue (0–360°) — keep in sync with iOS tint in MapView.ios.kt.
+ */
+fun MapPin.markerHueDegrees(): Float = when {
+    beaconTypeKey != null -> hueForRawBeaconType(beaconTypeKey!!)
+    // Unified connection accent (magenta) — matches cluster hubs for connection-only groups.
+    kind == MapPinKind.CONNECTION -> 300f
+    beaconKind != null -> hueForMapBeaconKind(beaconKind!!)
+    else -> when (kind) {
+        MapPinKind.BEACON_SOUNDTRACK -> 275f
+        MapPinKind.BEACON_ALERT -> 0f
+        MapPinKind.BEACON_SOCIAL -> 310f
+        MapPinKind.BEACON_OTHER -> 55f
+        MapPinKind.CONNECTION -> 300f
+    }
+}
+
+private fun hueForRawBeaconType(raw: String): Float =
+    when (raw.lowercase()) {
+        "soundtrack" -> 275f
+        "sos" -> 0f
+        "study" -> 240f
+        "hazard_utility" -> 28f
+        "transit" -> 195f
+        "recreation" -> 118f
+        "hobby" -> 145f
+        "swag" -> 300f
+        "capacity" -> 328f
+        "scavenger" -> 62f
+        else -> 55f
+    }
+
+private fun hueForMapBeaconKind(kind: MapBeaconKind): Float =
+    when (kind) {
+        MapBeaconKind.SOUNDTRACK -> 275f
+        MapBeaconKind.SOS -> 0f
+        MapBeaconKind.HAZARD -> 35f
+        MapBeaconKind.UTILITY -> 210f
+        MapBeaconKind.STUDY -> 240f
+        MapBeaconKind.SOCIAL_VIBE -> 310f
+        MapBeaconKind.OTHER -> 55f
+    }

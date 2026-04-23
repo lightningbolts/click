@@ -148,7 +148,6 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
@@ -160,7 +159,6 @@ import compose.project.click.click.ui.chat.ChatChannelLoadingView
 import compose.project.click.click.ui.chat.ChatWarmLoadingView
 import compose.project.click.click.ui.chat.ConnectionItem
 import compose.project.click.click.ui.chat.ForwardDialog
-import compose.project.click.click.ui.chat.IcebreakerPanel
 import compose.project.click.click.ui.chat.VibeCheckBanner
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet
 import compose.project.click.click.ui.chat.LocationGapNudge
@@ -192,11 +190,9 @@ import compose.project.click.click.data.models.previewLabel // pragma: allowlist
 import compose.project.click.click.data.models.parsedMediaMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
 import coil3.compose.AsyncImage // pragma: allowlist secret
 import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
@@ -219,9 +215,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -262,14 +255,6 @@ fun ConnectionsListView(
     val tabContentAlpha = remember { Animatable(1f) }
     var previousTabIndexForAnim by remember { mutableStateOf(selectedTabIndex) }
     var hasInitializedTabAnimation by remember { mutableStateOf(false) }
-    var listBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            delay(60_000)
-            listBannerNow = Clock.System.now().toEpochMilliseconds()
-        }
-    }
-
     LaunchedEffect(selectedTabIndex) {
         if (!hasInitializedTabAnimation) {
             hasInitializedTabAnimation = true
@@ -684,24 +669,6 @@ fun ConnectionsListView(
                     }
                 }
 
-                val chatLabelByConnectionId = effectiveChats.associate { chat ->
-                    val who = chat.otherUser.name?.trim()?.takeIf { it.isNotBlank() }
-                        ?: chat.connection.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }
-                        ?: "this connection"
-                    chat.connection.id to who
-                }
-                val archiveBannerNotice =
-                    if (effectiveChats.isNotEmpty() && selectedTabIndex == 0) {
-                        activeChats
-                            .filter { !it.connection.isServerLifecycleArchived() }
-                            .map { it.connection }
-                            .mostUrgentArchiveNotice(listBannerNow) { conn ->
-                                chatLabelByConnectionId[conn.id] ?: "this connection"
-                            }
-                    } else {
-                        null
-                    }
-
                 val clicksListOrderSignature = filteredChats.joinToString("\u0000") {
                     "${it.connection.id}\t${connectionListActivityTs(it)}"
                 }
@@ -729,21 +696,6 @@ fun ConnectionsListView(
                                 .fillMaxSize()
                                 .verticalScroll(emptyScroll)
                         ) {
-                            archiveBannerNotice?.let { notice ->
-                                ConnectionArchiveWarningBanner(
-                                    notice = notice,
-                                    onOpenChat = { onChatSelected(notice.connectionId) },
-                                    onSendIcebreaker = {
-                                        viewModel.sendArchiveBannerIcebreaker(
-                                            notice.connectionId,
-                                            notice.chatLabel,
-                                        )
-                                    },
-                                    modifier = Modifier
-                                        .padding(horizontal = 20.dp)
-                                        .padding(bottom = 10.dp),
-                                )
-                            }
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -785,24 +737,6 @@ fun ConnectionsListView(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 16.dp)
                         ) {
-                            archiveBannerNotice?.let { notice ->
-                                item(key = "archive_banner") {
-                                    ConnectionArchiveWarningBanner(
-                                        notice = notice,
-                                        onOpenChat = { onChatSelected(notice.connectionId) },
-                                        onSendIcebreaker = {
-                                            viewModel.sendArchiveBannerIcebreaker(
-                                                notice.connectionId,
-                                                notice.chatLabel,
-                                            )
-                                        },
-                                        modifier = Modifier
-                                            .padding(horizontal = 20.dp)
-                                            .padding(bottom = 10.dp),
-                                    )
-                                }
-                            }
-
                             items(
                                 filteredChats,
                                 // R1.3: key must be stable across content mutations (last message changing,

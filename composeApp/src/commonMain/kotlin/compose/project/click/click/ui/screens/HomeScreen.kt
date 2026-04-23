@@ -102,6 +102,7 @@ fun HomeScreen(
     val connectedUsers by viewModel.connectedUsers.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by viewModel.pollPairSuggestion.collectAsState()
+    val icebreakerSendCooldownSec by viewModel.icebreakerSendCooldownRemainingSec.collectAsState()
     val homeAvailabilityIntents by viewModel.homeAvailabilityIntents.collectAsState()
     val homeAvailabilityOverlapMessages by viewModel.homeAvailabilityOverlapMessages.collectAsState()
     val archivedForHome by AppDataManager.archivedConnectionIds.collectAsState()
@@ -243,6 +244,8 @@ fun HomeScreen(
                                     onOpenChat = { onNavigateToChat(notice.connectionId) },
                                     onSendIcebreaker = { viewModel.sendArchiveBannerIcebreaker(notice) },
                                     modifier = Modifier.fillMaxWidth(),
+                                    icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
+                                    icebreakerCooldownSec = icebreakerSendCooldownSec,
                                 )
                             }
                         }
@@ -251,7 +254,9 @@ fun HomeScreen(
                                 PollPairCard(
                                     suggestion = suggestion,
                                     onOpenChat = { onNavigateToChat(suggestion.connectionId) },
-                                    onSendIcebreaker = { viewModel.sendPollPairIcebreaker(suggestion) }
+                                    onSendIcebreaker = { viewModel.sendPollPairIcebreaker(suggestion) },
+                                    icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
+                                    icebreakerCooldownSec = icebreakerSendCooldownSec,
                                 )
                             }
                         }

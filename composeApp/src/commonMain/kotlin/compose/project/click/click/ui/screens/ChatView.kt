@@ -296,6 +296,7 @@ fun ChatView(
     // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
     val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
+    val icebreakerCooldownRemainingSec by viewModel.icebreakerCooldownRemainingSec.collectAsState()
 
     // Fresh scroll state per chat so opening a thread doesn't keep the previous scroll offset
     val listState = remember(chatId) { LazyListState() }
@@ -881,7 +882,8 @@ fun ChatView(
                             prompts = icebreakerPrompts,
                             onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
                             onRefresh = { viewModel.refreshIcebreakerPrompts() },
-                            onDismiss = { viewModel.dismissIcebreakerPanel() }
+                            onDismiss = { viewModel.dismissIcebreakerPanel() },
+                            cooldownRemainingSec = icebreakerCooldownRemainingSec,
                         )
                     }
 
