@@ -293,6 +293,8 @@ class MapViewModel : ViewModel() {
         if (layers.contains(MapLayerFilter.ALERTS_UTILITIES)) {
             types.add("sos")
             types.add("study")
+            types.add("hazard")
+            types.add("utility")
             types.add("hazard_utility")
         }
         if (layers.contains(MapLayerFilter.SOCIAL_VIBES)) {

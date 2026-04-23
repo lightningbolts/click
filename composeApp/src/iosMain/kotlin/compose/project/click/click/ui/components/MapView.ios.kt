@@ -209,6 +209,8 @@ private fun MapPin.markerTintUIColor(): UIColor {
             "soundtrack" -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
             "sos" -> UIColor.redColor
             "study" -> UIColor(red = 0.20, green = 0.45, blue = 0.95, alpha = 1.0)
+            "hazard" -> UIColor.orangeColor
+            "utility" -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
             "hazard_utility" -> UIColor(red = 0.98, green = 0.45, blue = 0.12, alpha = 1.0)
             "transit" -> UIColor(red = 0.0, green = 0.72, blue = 0.83, alpha = 1.0)
             "recreation" -> UIColor(red = 0.18, green = 0.75, blue = 0.38, alpha = 1.0)
