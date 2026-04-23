@@ -694,16 +694,19 @@ enum class MapBeaconKind(val apiValue: String) {
     companion object {
         fun fromRaw(value: String?): MapBeaconKind {
             val v = value?.trim()?.lowercase().orEmpty()
-            return entries.firstOrNull { it.apiValue == v }
-                ?: when {
-                    v.contains("sound") || v == "music" -> SOUNDTRACK
-                    v.contains("sos") || v.contains("emergency") -> SOS
-                    v.contains("hazard") || v.contains("danger") -> HAZARD
-                    v.contains("util") || v.contains("amenity") -> UTILITY
-                    v.contains("study") -> STUDY
-                    v.contains("social") || v.contains("vibe") -> SOCIAL_VIBE
-                    else -> OTHER
-                }
+            if (v.isEmpty()) return OTHER
+            // Legacy combined DB enum / API string (migration maps rows to `hazard`; keep parse path).
+            if (v == "hazard_utility") return HAZARD
+            entries.firstOrNull { it.apiValue == v }?.let { return it }
+            return when {
+                v.contains("sound") || v == "music" -> SOUNDTRACK
+                v.contains("sos") || v.contains("emergency") -> SOS
+                v == "hazard" || v.contains("danger") -> HAZARD
+                v == "utility" || v.contains("util") || v.contains("amenity") -> UTILITY
+                v.contains("study") -> STUDY
+                v.contains("social") || v.contains("vibe") -> SOCIAL_VIBE
+                else -> OTHER
+            }
         }
     }
 }
@@ -780,7 +783,7 @@ data class MapBeacon(
     val createdByUserId: String? = null,
     val createdAtEpochMs: Long? = null,
     val expiresAtEpochMs: Long? = null,
-    /** Raw `beacon_type` from PostgREST / API (e.g. `hazard_utility`) for tint + labels. */
+    /** Raw `beacon_type` from PostgREST / API (e.g. `hazard`, `utility`) for tint + labels. */
     val sourceBeaconType: String? = null,
 )
 

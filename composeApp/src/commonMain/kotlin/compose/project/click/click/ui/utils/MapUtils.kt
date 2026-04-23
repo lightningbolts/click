@@ -122,7 +122,15 @@ data class BoundingBox(
  * Sealed class representing what to render on the map based on zoom level
  */
 sealed class MapRenderData {
-    data class Clusters(val clusters: List<MapCluster>) : MapRenderData()
+    /**
+     * @param standaloneBeacons High-priority beacons (soundtrack, hazard, utility) that stay
+     * as individual pins while zoomed out so they are not absorbed into connection clusters.
+     */
+    data class Clusters(
+        val clusters: List<MapCluster>,
+        val standaloneBeacons: List<MapBeacon> = emptyList(),
+    ) : MapRenderData()
+
     data class IndividualPins(
         val points: List<ConnectionMapPoint>,
         val beacons: List<MapBeacon> = emptyList(),
@@ -283,7 +291,7 @@ private fun clusterUnifiedMembers(
 
 /**
  * Determines what to render based on current zoom level
- * 
+ *
  * @param connections All connections
  * @param zoomLevel Current map zoom level
  * @param clusterThreshold Zoom level above which to show individual pins
@@ -295,6 +303,11 @@ fun determineMapRenderData(
     zoomLevel: Double,
     clusterThreshold: Double = 12.0
 ): MapRenderData {
+    val standaloneKinds = setOf(
+        MapBeaconKind.SOUNDTRACK,
+        MapBeaconKind.HAZARD,
+        MapBeaconKind.UTILITY,
+    )
     val points = connections.mapNotNull { conn ->
         try {
             conn.toMapPoint()
@@ -312,20 +325,31 @@ fun determineMapRenderData(
             zoomLevel < 10 -> 1000.0
             else -> 500.0
         }
+        val standalone = beacons.filter { it.kind in standaloneKinds }
+        val clusterable = beacons.filter { it.kind !in standaloneKinds }
         val members = buildList {
             points.forEach { add(MapClusterMember.Conn(it)) }
-            beacons.forEach { add(MapClusterMember.Bcn(it)) }
+            clusterable.forEach { add(MapClusterMember.Bcn(it)) }
         }
-        MapRenderData.Clusters(clusterUnifiedMembers(members, clusterRadius))
+        MapRenderData.Clusters(
+            clusters = clusterUnifiedMembers(members, clusterRadius),
+            standaloneBeacons = standalone,
+        )
     }
 }
 
-/** Hazard / SOS pins must draw above generic markers (native map z-index). */
+/**
+ * All beacon pins draw above connection pins and cluster hubs ([MapPin.fromConnectionPoint]
+ * and [MapClusterPin] use lower z-index values).
+ */
 fun beaconZIndex(beacon: MapBeacon): Float =
     when (beacon.kind) {
-        MapBeaconKind.HAZARD, MapBeaconKind.SOS -> 10_000f
-        MapBeaconKind.SOUNDTRACK -> 100f
-        else -> 50f
+        MapBeaconKind.HAZARD, MapBeaconKind.SOS -> 12_000f
+        MapBeaconKind.SOUNDTRACK -> 11_500f
+        MapBeaconKind.UTILITY -> 11_400f
+        MapBeaconKind.STUDY -> 11_200f
+        MapBeaconKind.SOCIAL_VIBE -> 11_100f
+        MapBeaconKind.OTHER -> 11_050f
     }
 
 /**

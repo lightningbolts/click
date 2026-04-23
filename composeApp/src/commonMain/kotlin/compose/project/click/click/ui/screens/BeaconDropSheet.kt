@@ -9,11 +9,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -22,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
@@ -32,6 +39,7 @@ import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragm
  */
 enum class BeaconDropCategory {
     SOUNDTRACK,
+    HAZARD,
     UTILITY,
     SOS,
     STUDY,
@@ -45,17 +53,20 @@ fun BeaconDropSheetContent(
     onSubmit: (MapBeaconKind, String, ttlMs: Long?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val clipboardManager = LocalClipboardManager.current
     val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
     val text = remember { mutableStateOf("") }
     val expiration = remember { mutableStateOf(AvailabilityIntentDuration.THREE_HOURS) }
     val kind = when (category.value) {
         BeaconDropCategory.SOUNDTRACK -> MapBeaconKind.SOUNDTRACK
+        BeaconDropCategory.HAZARD -> MapBeaconKind.HAZARD
         BeaconDropCategory.UTILITY -> MapBeaconKind.UTILITY
         BeaconDropCategory.SOS -> MapBeaconKind.SOS
         BeaconDropCategory.STUDY -> MapBeaconKind.STUDY
     }
     val label = when (category.value) {
         BeaconDropCategory.SOUNDTRACK -> "Spotify, Apple Music, or YouTube link"
+        BeaconDropCategory.HAZARD -> "Hazard note (max 140)"
         BeaconDropCategory.UTILITY -> "What’s here? (max 140)"
         BeaconDropCategory.SOS -> "SOS message (max 140)"
         BeaconDropCategory.STUDY -> "Study spot note (max 140)"
@@ -97,6 +108,7 @@ fun BeaconDropSheetContent(
                         Text(
                             when (cat) {
                                 BeaconDropCategory.SOUNDTRACK -> "Soundtrack"
+                                BeaconDropCategory.HAZARD -> "Hazard"
                                 BeaconDropCategory.UTILITY -> "Utility"
                                 BeaconDropCategory.SOS -> "SOS"
                                 BeaconDropCategory.STUDY -> "Study"
@@ -146,6 +158,7 @@ fun BeaconDropSheetContent(
             }
         }
 
+        val isUrlField = category.value == BeaconDropCategory.SOUNDTRACK
         OutlinedTextField(
             value = text.value,
             onValueChange = {
@@ -156,9 +169,33 @@ fun BeaconDropSheetContent(
             },
             modifier = Modifier.fillMaxWidth(),
             label = { Text(label) },
-            singleLine = category.value == BeaconDropCategory.SOUNDTRACK,
-            minLines = if (category.value == BeaconDropCategory.SOUNDTRACK) 1 else 3,
-            maxLines = if (category.value == BeaconDropCategory.SOUNDTRACK) 3 else 6,
+            singleLine = isUrlField,
+            keyboardOptions = if (isUrlField) {
+                KeyboardOptions(keyboardType = KeyboardType.Uri)
+            } else {
+                KeyboardOptions.Default
+            },
+            minLines = if (isUrlField) 1 else 3,
+            maxLines = if (isUrlField) 3 else 6,
+            trailingIcon = if (isUrlField) {
+                {
+                    IconButton(
+                        onClick = {
+                            clipboardManager.getText()?.text?.let { pasted ->
+                                text.value = pasted.trim()
+                                onDismissError()
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentPaste,
+                            contentDescription = "Paste link",
+                        )
+                    }
+                }
+            } else {
+                null
+            },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = MaterialTheme.colorScheme.onSurface,
                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,

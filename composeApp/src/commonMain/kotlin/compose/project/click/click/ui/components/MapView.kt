@@ -57,7 +57,7 @@ data class MapPin(
                 kind = MapPinKind.CONNECTION,
                 beaconKind = null,
                 beaconTypeKey = null,
-                zIndex = 0f,
+                zIndex = 10f,
             )
         }
 
@@ -75,7 +75,7 @@ data class MapPin(
                 ?: when (beacon.kind) {
                     MapBeaconKind.SOUNDTRACK -> "Soundtrack"
                     MapBeaconKind.SOS -> "SOS"
-                    MapBeaconKind.HAZARD -> "Alert"
+                    MapBeaconKind.HAZARD -> "Hazard"
                     MapBeaconKind.UTILITY -> "Utility"
                     MapBeaconKind.STUDY -> "Study"
                     MapBeaconKind.SOCIAL_VIBE -> "Social"
@@ -162,7 +162,7 @@ fun MapCluster.toClusterPin(): MapClusterPin {
         count = count,
         hasLiveConnections = hasLive,
         isConnectionOnly = connectionOnly,
-        zIndex = if (hazardTop) 9_000f else 0f,
+        zIndex = if (hazardTop) 80f else 20f,
     )
 }
 
@@ -188,6 +188,8 @@ private fun hueForRawBeaconType(raw: String): Float =
         "soundtrack" -> 275f
         "sos" -> 0f
         "study" -> 240f
+        "hazard" -> 35f
+        "utility" -> 210f
         "hazard_utility" -> 28f
         "transit" -> 195f
         "recreation" -> 118f
