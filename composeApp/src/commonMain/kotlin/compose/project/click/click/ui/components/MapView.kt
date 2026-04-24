@@ -9,6 +9,14 @@ import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secr
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import compose.project.click.click.ui.utils.beaconZIndex // pragma: allowlist secret
 
+/** Short on-map caption (beacon context or truncated connection name). */
+internal fun truncateMapPinCaption(text: String, maxChars: Int): String {
+    val t = text.trim()
+    if (t.isEmpty()) return ""
+    if (t.length <= maxChars) return t
+    return t.take(maxChars - 1) + "…"
+}
+
 /**
  * Represents a point to plot on the map
  * Enhanced with visual decay metadata
@@ -38,12 +46,17 @@ data class MapPin(
     val beaconTypeKey: String? = null,
     /** Native marker draw order (Google Maps / MapKit). */
     val zIndex: Float = 0f,
+    /**
+     * Optional caption drawn below the marker (truncated soundtrack / description / peer name).
+     */
+    val caption: String? = null,
 ) {
     companion object {
         /**
          * Create from ConnectionMapPoint
          */
         fun fromConnectionPoint(point: ConnectionMapPoint, imageUrl: String? = null): MapPin {
+            val cap = truncateMapPinCaption(point.displayName, 12).takeIf { it.isNotEmpty() }
             return MapPin(
                 id = point.connection.id,
                 title = point.displayName,
@@ -57,7 +70,8 @@ data class MapPin(
                 kind = MapPinKind.CONNECTION,
                 beaconKind = null,
                 beaconTypeKey = null,
-                zIndex = 10f,
+                zIndex = 0f,
+                caption = cap,
             )
         }
 
@@ -81,6 +95,23 @@ data class MapPin(
                     MapBeaconKind.SOCIAL_VIBE -> "Social"
                     MapBeaconKind.OTHER -> "Beacon"
                 }
+            val caption = when (beacon.kind) {
+                MapBeaconKind.SOUNDTRACK -> {
+                    val raw = beacon.metadata.trackName
+                        ?: beacon.metadata.title
+                        ?: beacon.metadata.musicUrl
+                        ?: label
+                    truncateMapPinCaption(raw, 12).takeIf { it.isNotEmpty() }
+                }
+                MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.SOS, MapBeaconKind.STUDY -> {
+                    beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
+                        ?.takeIf { it.isNotEmpty() }
+                }
+                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER -> {
+                    beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
+                        ?.takeIf { it.isNotEmpty() }
+                }
+            }
             return MapPin(
                 id = "beacon:${beacon.id}",
                 title = label,
@@ -95,6 +126,7 @@ data class MapPin(
                 beaconKind = beacon.kind,
                 beaconTypeKey = beacon.sourceBeaconType,
                 zIndex = beaconZIndex(beacon),
+                caption = caption,
             )
         }
     }

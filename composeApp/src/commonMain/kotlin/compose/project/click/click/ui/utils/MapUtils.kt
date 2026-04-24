@@ -4,6 +4,9 @@ import compose.project.click.click.data.models.Connection // pragma: allowlist s
 import compose.project.click.click.data.models.GeoLocation // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlin.math.*
 
@@ -36,7 +39,12 @@ data class ConnectionMapPoint(
     val timeState: TimeState,
     val opacity: Float,
     val shouldPulse: Boolean,
+    /**
+     * Primary map label: peer display name when known, otherwise the semantic place label.
+     */
     val displayName: String,
+    /** Semantic / place string for "Met at …" copy and timeline rows. */
+    val locationLabel: String,
     val formattedDate: String
 )
 
@@ -163,22 +171,49 @@ fun getOpacityForTimeState(timeState: TimeState): Float {
 }
 
 /**
- * Converts a Connection to a ConnectionMapPoint with visual metadata
+ * Resolves the other party's display name for map pins using the same [connectedUsers]
+ * snapshot as clustering (avoids races with [AppDataManager] reads on a background dispatcher).
  */
-fun Connection.toMapPoint(): ConnectionMapPoint {
+fun mapPeerDisplayNameForPin(
+    connection: Connection,
+    currentUserId: String?,
+    connectedUsers: Map<String, User>,
+): String? {
+    val myId = currentUserId ?: return null
+    val otherId = connection.user_ids.firstOrNull { it != myId } ?: return null
+    val user = connectedUsers[otherId] ?: return null
+    val label = resolveDisplayName(
+        firstName = user.firstName,
+        lastName = user.lastName,
+        fullName = null,
+        name = user.name,
+        email = user.email,
+    ).trim()
+    return label.takeIf { isResolvedDisplayName(it) }
+}
+
+/**
+ * Converts a Connection to a ConnectionMapPoint with visual metadata.
+ *
+ * @param peerDisplayName When non-blank, used as the map-facing [ConnectionMapPoint.displayName]
+ * (peer name). [locationLabel] always retains the semantic place string.
+ */
+fun Connection.toMapPoint(peerDisplayName: String? = null): ConnectionMapPoint {
     val geo = this.connectionMapGeo()
         ?: throw IllegalArgumentException("Invalid geo for connection $id")
     val lat = geo.lat
     val lon = geo.lon
 
     val timeState = calculateTimeState(created)
-    
-    val displayName = semanticLocation
+
+    val locationLabel = semanticLocation
         ?: displayLocationLabel
         ?: "Connection"
-    
+    val displayName = peerDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: locationLabel
+
     val formattedDate = formatTimestamp(created)
-    
+
     return ConnectionMapPoint(
         connection = this,
         latitude = lat,
@@ -187,6 +222,7 @@ fun Connection.toMapPoint(): ConnectionMapPoint {
         opacity = getOpacityForTimeState(timeState),
         shouldPulse = timeState == TimeState.LIVE,
         displayName = displayName,
+        locationLabel = locationLabel,
         formattedDate = formattedDate
     )
 }
@@ -301,7 +337,8 @@ fun determineMapRenderData(
     connections: List<Connection>,
     beacons: List<MapBeacon>,
     zoomLevel: Double,
-    clusterThreshold: Double = 12.0
+    clusterThreshold: Double = 12.0,
+    connectionPeerDisplayName: (Connection) -> String? = { null },
 ): MapRenderData {
     val standaloneKinds = setOf(
         MapBeaconKind.SOUNDTRACK,
@@ -310,7 +347,7 @@ fun determineMapRenderData(
     )
     val points = connections.mapNotNull { conn ->
         try {
-            conn.toMapPoint()
+            conn.toMapPoint(connectionPeerDisplayName(conn))
         } catch (e: Exception) {
             null
         }

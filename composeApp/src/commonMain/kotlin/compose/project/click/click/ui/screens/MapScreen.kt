@@ -94,6 +94,7 @@ fun MapScreen(
     val cameraTarget by viewModel.cameraTarget.collectAsState()
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
+    val beaconDropFailureToast by viewModel.beaconDropFailureToast.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
@@ -118,6 +119,20 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(beaconDropFailureToast) {
+        beaconDropFailureToast?.let { msg ->
+            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
+            viewModel.clearBeaconDropFailureToast()
+        }
+    }
+
+    LaunchedEffect(beaconInsertError) {
+        val err = beaconInsertError?.trim().orEmpty()
+        if (err.isNotEmpty()) {
+            snackbarHostState.showSnackbar(message = err, duration = SnackbarDuration.Long)
+            viewModel.clearBeaconInsertError()
+        }
+    }
 
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
@@ -125,6 +140,12 @@ fun MapScreen(
     // sheet visibility is decoupled from any race in the selection StateFlow.
     var selectedProfileId by remember { mutableStateOf<String?>(null) }
     var showBeaconDropSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showBeaconDropSheet) {
+        if (showBeaconDropSheet) {
+            viewModel.clearBeaconInsertError()
+        }
+    }
     val showBottomSheet = selectedProfileId != null && selection is MapSelection.ConnectionSelected
     val showBeaconDetailSheet = selection is MapSelection.BeaconSelected
 
@@ -269,10 +290,16 @@ fun MapScreen(
                         .padding(bottom = 12.dp),
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
-                    onSubmit = { kind, text, ttlMs ->
-                        viewModel.submitBeaconDrop(kind, text, ttlMs) { ok ->
-                            if (ok) showBeaconDropSheet = false
-                        }
+                    onSubmit = { kind, text, ttlMs, onRejectedEarly ->
+                        showBeaconDropSheet = false
+                        viewModel.submitBeaconDrop(
+                            kind = kind,
+                            text = text,
+                            ttlMs = ttlMs,
+                            onAcceptedLocally = { },
+                            onRejectedEarly = onRejectedEarly,
+                            onRemoteFinished = { },
+                        )
                     },
                 )
             }
@@ -464,14 +491,14 @@ private fun buildProfileSheetState(
     val timelineSeed = listOf(
         ProfileSheetTimelineItem(
             id = "conn-${point.connection.id}",
-            title = "Met at ${point.displayName}",
+            title = "Met at ${point.locationLabel}",
             subtitle = point.connection.contextTagId,
             timestamp = point.formattedDate,
         ),
     )
     return ProfileSheetState(
         displayName = displayName,
-        subtitle = point.displayName,
+        subtitle = otherUser?.email?.takeIf { it.isNotBlank() },
         avatarUrl = otherUser?.image,
         statusBadge = status,
         canNudge = point.timeState == TimeState.LIVE || point.timeState == TimeState.RECENT,
@@ -1112,7 +1139,7 @@ fun ConnectionMarkerSheet(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            "Met at ${point.displayName}",
+            "Met at ${point.locationLabel}",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

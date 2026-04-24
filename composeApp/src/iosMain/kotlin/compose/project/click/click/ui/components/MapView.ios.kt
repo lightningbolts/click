@@ -566,7 +566,13 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
                 view.zPriority = cluster.zIndex
             }
             pin != null -> {
-                view.glyphText = ""
+                val cap = pin.caption?.trim().orEmpty()
+                // MKMarker glyph is tiny; show a short snippet so nearby pins of the same tint differ.
+                view.glyphText = when {
+                    cap.isEmpty() -> ""
+                    cap.length <= 3 -> cap
+                    else -> cap.take(3)
+                }
                 view.markerTintColor = pin.markerTintUIColor()
                 view.zPriority = pin.zIndex
             }

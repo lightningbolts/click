@@ -13,7 +13,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -24,8 +27,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,10 +56,11 @@ enum class BeaconDropCategory {
 fun BeaconDropSheetContent(
     errorMessage: String?,
     onDismissError: () -> Unit,
-    onSubmit: (MapBeaconKind, String, ttlMs: Long?) -> Unit,
+    onSubmit: (MapBeaconKind, String, ttlMs: Long?, onRejectedEarly: () -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val clipboardManager = LocalClipboardManager.current
+    var isSubmitting by remember { mutableStateOf(false) }
     val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
     val text = remember { mutableStateOf("") }
     val expiration = remember { mutableStateOf(AvailabilityIntentDuration.THREE_HOURS) }
@@ -214,16 +221,32 @@ fun BeaconDropSheetContent(
         }
         Button(
             onClick = {
+                if (isSubmitting) return@Button
+                isSubmitting = true
                 val ttl = if (category.value == BeaconDropCategory.SOUNDTRACK) {
                     null
                 } else {
                     expiration.value.durationMs
                 }
-                onSubmit(kind, text.value, ttl)
+                onSubmit(kind, text.value, ttl) {
+                    isSubmitting = false
+                }
             },
+            enabled = !isSubmitting,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Drop pin")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Text("Drop pin")
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
     }

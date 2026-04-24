@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.LocationPreferences // pragma: al
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
@@ -44,8 +45,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.random.Random
 
 /**
  * State representing the map loading/error status
@@ -126,6 +129,10 @@ class MapViewModel : ViewModel() {
     private val _beaconInsertError = MutableStateFlow<String?>(null)
     val beaconInsertError: StateFlow<String?> = _beaconInsertError.asStateFlow()
 
+    /** One-shot remote failure after an optimistic beacon was shown (sheet already dismissed). */
+    private val _beaconDropFailureToast = MutableStateFlow<String?>(null)
+    val beaconDropFailureToast: StateFlow<String?> = _beaconDropFailureToast.asStateFlow()
+
     private var beaconPollJob: Job? = null
     private var beaconFetchSeq: Long = 0L
 
@@ -175,6 +182,8 @@ class MapViewModel : ViewModel() {
     private var pendingProgrammaticZoomSetAtMs: Long = 0L
 
     private var renderDataJob: Job? = null
+
+    private val beaconSubmitMutex = Mutex()
 
     init {
         observeAppData()
@@ -273,11 +282,21 @@ class MapViewModel : ViewModel() {
         val beaconsRaw = _mapBeacons.value
         renderDataJob = viewModelScope.launch {
             val rendered = withContext(Dispatchers.Default) {
+                val connectedUsersSnapshot = AppDataManager.connectedUsers.value
+                val currentUserId = AppDataManager.currentUser.value?.id
                 val showConnections = layers.contains(MapLayerFilter.ALL) ||
                     layers.contains(MapLayerFilter.MY_CONNECTIONS)
                 val filteredConnections = if (showConnections) connections else emptyList()
                 val filteredBeacons = filterBeaconsForLayers(beaconsRaw, layers)
-                determineMapRenderData(filteredConnections, filteredBeacons, zoom, clusterThreshold)
+                determineMapRenderData(
+                    connections = filteredConnections,
+                    beacons = filteredBeacons,
+                    zoomLevel = zoom,
+                    clusterThreshold = clusterThreshold,
+                    connectionPeerDisplayName = { conn ->
+                        mapPeerDisplayNameForPin(conn, currentUserId, connectedUsersSnapshot)
+                    },
+                )
             }
             _renderData.value = rendered
         }
@@ -390,6 +409,10 @@ class MapViewModel : ViewModel() {
         _beaconInsertError.value = null
     }
 
+    fun clearBeaconDropFailureToast() {
+        _beaconDropFailureToast.value = null
+    }
+
     fun onBeaconPinTapped(beaconId: String) {
         viewModelScope.launch {
             val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
@@ -405,14 +428,20 @@ class MapViewModel : ViewModel() {
         kind: MapBeaconKind,
         text: String,
         ttlMs: Long? = null,
-        onFinished: (Boolean) -> Unit = {},
+        onAcceptedLocally: () -> Unit = {},
+        onRejectedEarly: () -> Unit = {},
+        onRemoteFinished: (Boolean) -> Unit = {},
     ) {
         viewModelScope.launch {
+            beaconSubmitMutex.lock()
+            try {
             _beaconInsertError.value = null
+            _beaconDropFailureToast.value = null
             val loc = locationService.getHighAccuracyLocation(6000L)
                 ?: run {
                     _beaconInsertError.value = "Could not read GPS. Enable location and try again."
-                    onFinished(false)
+                    onRejectedEarly()
+                    onRemoteFinished(false)
                     return@launch
                 }
             val trimmed = text.trim()
@@ -420,7 +449,8 @@ class MapViewModel : ViewModel() {
                 MapBeaconKind.SOUNDTRACK -> {
                     if (!isValidStreamingUrl(trimmed)) {
                         _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
-                        onFinished(false)
+                        onRejectedEarly()
+                        onRemoteFinished(false)
                         return@launch
                     }
                     buildJsonObject {
@@ -430,12 +460,14 @@ class MapViewModel : ViewModel() {
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
                     if (trimmed.isEmpty()) {
                         _beaconInsertError.value = "Please add a description."
-                        onFinished(false)
+                        onRejectedEarly()
+                        onRemoteFinished(false)
                         return@launch
                     }
                     if (trimmed.length > 140) {
                         _beaconInsertError.value = "Description must be 140 characters or less."
-                        onFinished(false)
+                        onRejectedEarly()
+                        onRemoteFinished(false)
                         return@launch
                     }
                     buildJsonObject {
@@ -445,12 +477,14 @@ class MapViewModel : ViewModel() {
                 else -> {
                     if (trimmed.isEmpty()) {
                         _beaconInsertError.value = "Please add a description."
-                        onFinished(false)
+                        onRejectedEarly()
+                        onRemoteFinished(false)
                         return@launch
                     }
                     if (trimmed.length > 140) {
                         _beaconInsertError.value = "Description must be 140 characters or less."
-                        onFinished(false)
+                        onRejectedEarly()
+                        onRemoteFinished(false)
                         return@launch
                     }
                     buildJsonObject {
@@ -465,8 +499,24 @@ class MapViewModel : ViewModel() {
                 metadata = metadata,
                 ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
             )
+            val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
+            val optimisticBeacon = MapBeacon(
+                id = optimisticId,
+                kind = kind,
+                latitude = loc.latitude,
+                longitude = loc.longitude,
+                metadata = parseMapBeaconMetadata(metadata),
+                createdByUserId = AppDataManager.currentUser.value?.id,
+                createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+                expiresAtEpochMs = null,
+                sourceBeaconType = insert.kind,
+            )
+            _mapBeacons.value = _mapBeacons.value + optimisticBeacon
+            onAcceptedLocally()
+
             mapBeaconRepository.insertBeacon(insert).fold(
                 onSuccess = {
+                    _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
                     _visibleBounds.value?.let { b ->
                         mapBeaconRepository.fetchLocalBeacons(
                             minLat = b.minLat,
@@ -476,13 +526,17 @@ class MapViewModel : ViewModel() {
                             beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
                         ).onSuccess { list -> _mapBeacons.value = list }
                     }
-                    onFinished(true)
+                    onRemoteFinished(true)
                 },
                 onFailure = { e ->
-                    _beaconInsertError.value = e.message ?: "Could not drop beacon"
-                    onFinished(false)
+                    _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
+                    _beaconDropFailureToast.value = e.message ?: "Could not drop beacon"
+                    onRemoteFinished(false)
                 },
             )
+            } finally {
+                beaconSubmitMutex.unlock()
+            }
         }
     }
 
