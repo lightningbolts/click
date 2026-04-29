@@ -5,6 +5,8 @@ package compose.project.click.click.proximity
  * Prefix bytes are ASCII "CK" so scans can ignore unrelated advertisements.
  */
 internal const val CLICK_BLE_MANUFACTURER_ID: Int = 0xCAFE
+private const val CLICK_SERVICE_UUID_PREFIX = "6f1c8c2a"
+private const val CLICK_SERVICE_UUID_SUFFIX = "4000-8000-00cafe000001"
 
 internal fun normalizeHandshakeToken(raw: String): String? {
     val digits = raw.filter { it.isDigit() }.takeLast(4).padStart(4, '0')
@@ -25,4 +27,19 @@ internal fun parseBleManufacturerPayload(data: ByteArray?): String? {
         }
     }
     return normalizeHandshakeToken(s)
+}
+
+internal fun buildProximityServiceUuidString(token: String): String {
+    val n = normalizeHandshakeToken(token) ?: error("Invalid handshake token")
+    return "$CLICK_SERVICE_UUID_PREFIX-$n-$CLICK_SERVICE_UUID_SUFFIX"
+}
+
+internal fun parseProximityServiceUuidString(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    val parts = raw.lowercase().split('-')
+    if (parts.size != 5) return null
+    if (parts[0] != CLICK_SERVICE_UUID_PREFIX || parts.drop(2).joinToString("-") != CLICK_SERVICE_UUID_SUFFIX) {
+        return null
+    }
+    return normalizeHandshakeToken(parts[1])
 }

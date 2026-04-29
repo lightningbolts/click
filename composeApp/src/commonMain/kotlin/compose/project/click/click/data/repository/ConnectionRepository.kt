@@ -136,6 +136,8 @@ data class BindProximityHandshakeOutcome(
      * verified group flow with these ids (includes the caller).
      */
     val groupCliqueCandidateMemberIds: List<String>? = null,
+    val connectionId: String? = null,
+    val isGroup: Boolean = false,
 )
 
 private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
@@ -169,6 +171,7 @@ private data class BindProximityResponse(
     @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
     @SerialName("connection_id") val connectionId: String? = null,
     @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
+    @SerialName("is_group") val isGroup: Boolean? = null,
     val matches: List<User>? = null,
     val error: String? = null,
     @SerialName("group_clique_candidate") val groupCliqueCandidate: GroupCliqueCandidatePayload? = null,
@@ -177,6 +180,7 @@ private data class BindProximityResponse(
 @Serializable
 private data class BindProximityRequest(
     @SerialName("my_token") val myToken: String,
+    val tokens: List<String>,
     @SerialName("heard_tokens") val heardTokens: List<String>,
     @SerialName("latitude") val latitude: Double? = null,
     @SerialName("longitude") val longitude: Double? = null,
@@ -397,6 +401,7 @@ class ConnectionRepository(
                 ?.takeIf { it.isNotEmpty() }
             val request = BindProximityRequest(
                 myToken = myToken,
+                tokens = heardTokens,
                 heardTokens = heardTokens,
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
@@ -442,6 +447,8 @@ class ConnectionRepository(
                     matches = rows,
                     encounterLogged = aggregateEncounterLogged,
                     groupCliqueCandidateMemberIds = groupCliqueCandidateMemberIds,
+                    connectionId = parsed.connectionId,
+                    isGroup = parsed.isGroup == true,
                 ),
             )
         } catch (e: Exception) {

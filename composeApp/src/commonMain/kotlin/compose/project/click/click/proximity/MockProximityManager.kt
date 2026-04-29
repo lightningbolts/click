@@ -6,8 +6,8 @@ import kotlinx.coroutines.delay
  * Deterministic tri-factor stand-in for iOS Simulator / Android emulator when
  * [compose.project.click.click.ui.utils.AppSystemSettings.isDebugMode] is enabled.
  *
- * [startHandshakeListening] waits three seconds then returns two synthetic BLE token strings
- * (UUID form) so [bind-proximity-connection] can be exercised without radios.
+ * [startHandshakeListening] waits through the debounce window then returns two synthetic
+ * token strings so [bind-proximity-connection] can be exercised without radios.
  */
 class MockProximityManager : ProximityManager {
 
@@ -16,10 +16,10 @@ class MockProximityManager : ProximityManager {
     }
 
     override suspend fun startHandshakeListening(): List<String> {
-        delay(3_000L)
+        delay(4_000L)
         return listOf(
-            "00000000-0000-4000-8000-000000001234",
-            "00000000-0000-4000-8000-000000005678",
+            "1234",
+            "5678",
         )
     }
 

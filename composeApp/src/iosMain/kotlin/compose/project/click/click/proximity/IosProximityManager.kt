@@ -17,6 +17,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.AVFAudio.AVAudioPlayer
 import platform.AVFAudio.AVAudioRecorder
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
+import platform.AVFAudio.AVAudioSessionCategoryOptionMixWithOthers
+import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
 import platform.AVFAudio.AVEncoderAudioQualityKey
 import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVLinearPCMBitDepthKey
@@ -24,9 +28,13 @@ import platform.AVFAudio.AVLinearPCMIsBigEndianKey
 import platform.AVFAudio.AVLinearPCMIsFloatKey
 import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
+import platform.AVFAudio.setActive
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
+import platform.CoreBluetooth.CBAdvertisementDataManufacturerDataKey
+import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.CoreBluetooth.CBCentralManagerScanOptionAllowDuplicatesKey
+import platform.CoreBluetooth.CBUUID
 import platform.CoreBluetooth.CBManagerStatePoweredOn
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralManager
@@ -54,6 +62,7 @@ import kotlin.coroutines.resume
 
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun NSData.toByteArray(): ByteArray {
@@ -89,6 +98,30 @@ private fun parseManufacturerFromIosAdvertisement(data: NSData): String? {
     if (id != CLICK_BLE_MANUFACTURER_ID) return null
     val rest = bytes.copyOfRange(2, bytes.size)
     return parseBleManufacturerPayload(rest)
+}
+
+private fun parseServiceUuidFromIosAdvertisement(raw: Any?): String? {
+    val uuids = raw as? List<*> ?: return null
+    for (uuid in uuids) {
+        val token = parseProximityServiceUuidString((uuid as? CBUUID)?.UUIDString)
+        if (token != null) return token
+    }
+    return null
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun prepareProximityAudioSession() {
+    runCatching<Unit> {
+        val session = AVAudioSession.sharedInstance()
+        val options: ULong = AVAudioSessionCategoryOptionMixWithOthers or
+            AVAudioSessionCategoryOptionDefaultToSpeaker
+        session.setCategory(
+            AVAudioSessionCategoryPlayAndRecord,
+            withOptions = options,
+            error = null,
+        )
+        session.setActive(true, error = null)
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
@@ -148,6 +181,10 @@ class IosProximityManager : ProximityManager {
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
         stopAll()
         val payload = runCatching { buildIosManufacturerBlock(ephemeralToken) }.getOrElse { return }
+        val serviceUuid = runCatching {
+            CBUUID.UUIDWithString(buildProximityServiceUuidString(ephemeralToken))
+        }.getOrElse { return }
+        prepareProximityAudioSession()
 
         withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { cont ->
@@ -162,8 +199,14 @@ class IosProximityManager : ProximityManager {
                     override fun peripheralManagerDidUpdateState(peripheral: CBPeripheralManager) {
                         if (peripheral.state == CBManagerStatePoweredOn) {
                             val adv = NSMutableDictionary()
-                            val advKey = NSString.create(string = "kCBAdvDataManufacturerData")
-                            adv.setObject(payload, forKey = advKey)
+                            adv.setObject(
+                                listOf(serviceUuid),
+                                forKey = NSString.create(string = CBAdvertisementDataServiceUUIDsKey),
+                            )
+                            adv.setObject(
+                                payload,
+                                forKey = NSString.create(string = CBAdvertisementDataManufacturerDataKey),
+                            )
                             peripheral.startAdvertising(adv as Map<Any?, *>)
                         } else {
                             finish()
@@ -204,6 +247,7 @@ class IosProximityManager : ProximityManager {
 
     override suspend fun startHandshakeListening(): List<String> {
         heardTokens.clear()
+        prepareProximityAudioSession()
         withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { cont ->
                 var started = false
@@ -225,9 +269,10 @@ class IosProximityManager : ProximityManager {
                         advertisementData: Map<Any?, *>,
                         RSSI: NSNumber,
                     ) {
-                        val raw = advertisementData["kCBAdvDataManufacturerData"] as? NSData
-                            ?: return
-                        parseManufacturerFromIosAdvertisement(raw)?.let { heardTokens.add(it) }
+                        parseServiceUuidFromIosAdvertisement(advertisementData[CBAdvertisementDataServiceUUIDsKey])
+                            ?.let { heardTokens.add(it) }
+                        val raw = advertisementData[CBAdvertisementDataManufacturerDataKey] as? NSData
+                        parseManufacturerFromIosAdvertisement(raw ?: return)?.let { heardTokens.add(it) }
                     }
                 }
                 centralManager = CBCentralManager(delegate = del, queue = null)
@@ -238,7 +283,7 @@ class IosProximityManager : ProximityManager {
         }
         coroutineScope {
             val audio = async(Dispatchers.Default) { recordAudioSampleToSink() }
-            delay(3000L)
+            delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
             centralManager?.stopScan()
             audio.await()
         }
@@ -262,7 +307,7 @@ class IosProximityManager : ProximityManager {
         audioRecorder = recorder
         if (!recorder.prepareToRecord()) return
         recorder.record()
-        delay(3000L)
+        delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
         recorder.stop()
         audioRecorder = null
         val bytes = readBytesFromPath(path) ?: return

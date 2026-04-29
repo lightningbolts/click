@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
  * Tri-factor proximity handshake: BLE manufacturer frames + ultrasonic audio token encoding.
  *
  * [startHandshakeBroadcast] begins BLE advertising and plays the audio envelope (18.5 kHz chirp + digit tones).
- * [startHandshakeListening] listens for up to three seconds and returns **distinct** tokens observed on BLE and/or audio.
+ * [startHandshakeListening] listens through the proximity debounce window and returns **distinct** tokens observed on BLE and/or audio.
  */
 interface ProximityManager {
     suspend fun startHandshakeBroadcast(ephemeralToken: String)

@@ -1,6 +1,8 @@
 package compose.project.click.click.proximity
 
 import android.annotation.SuppressLint
+import android.Manifest
+import android.content.pm.PackageManager
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
@@ -24,6 +26,7 @@ import android.os.ParcelUuid
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -33,7 +36,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
-private val CLICK_SERVICE_UUID: ParcelUuid = ParcelUuid.fromString("6f1c8c2a-0000-4000-8000-00cafe000001")
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
 
 @SuppressLint("MissingPermission")
 class AndroidProximityManager(
@@ -50,6 +53,7 @@ class AndroidProximityManager(
 
     override fun supportsTapExchange(): Boolean {
         val a = adapter ?: return false
+        if (missingBluetoothRuntimePermissions().isNotEmpty()) return true
         return a.isEnabled && advertiser != null && scanner != null &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || a.isLeExtendedAdvertisingSupported || a.isMultipleAdvertisementSupported)
     }
@@ -58,6 +62,24 @@ class AndroidProximityManager(
         if (adapter == null) return "Bluetooth is not available on this device."
         if (advertiser == null) return "This device cannot send BLE advertisements needed for Tap to Connect."
         return "Uses Bluetooth Low Energy and short-range audio tones (including 18.5 kHz) to find nearby taps."
+    }
+
+    private fun enforceBluetoothRuntimePermissions() {
+        val missing = missingBluetoothRuntimePermissions()
+        if (missing.isNotEmpty()) {
+            throw SecurityException("Missing Bluetooth permission: ${missing.joinToString()}")
+        }
+    }
+
+    private fun missingBluetoothRuntimePermissions(): List<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return emptyList()
+        return listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        ).filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+        }
     }
 
     override fun openRadiosSettings() {
@@ -80,9 +102,11 @@ class AndroidProximityManager(
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
+        enforceBluetoothRuntimePermissions()
         stopAll()
         val adv = advertiser ?: return
         val payload = runCatching { buildBleManufacturerPayload(ephemeralToken) }.getOrElse { return }
+        val dynamicServiceUuid = ParcelUuid.fromString(buildProximityServiceUuidString(ephemeralToken))
 
         withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
@@ -104,7 +128,7 @@ class AndroidProximityManager(
                 val data = AdvertiseData.Builder()
                     .setIncludeDeviceName(false)
                     .addManufacturerData(CLICK_BLE_MANUFACTURER_ID, payload)
-                    .addServiceUuid(CLICK_SERVICE_UUID)
+                    .addServiceUuid(dynamicServiceUuid)
                     .build()
                 adv.startAdvertising(settings, data, cb)
                 cont.invokeOnCancellation { runCatching { adv.stopAdvertising(cb) } }
@@ -118,16 +142,18 @@ class AndroidProximityManager(
     }
 
     override suspend fun startHandshakeListening(): List<String> {
+        enforceBluetoothRuntimePermissions()
         val tokens = ConcurrentHashMap.newKeySet<String>()
         stopScanOnly()
         val sc = scanner
         val cb = if (sc != null) {
             object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult?) {
+                    result?.scanRecord?.serviceUuids?.forEach { uuid ->
+                        parseProximityServiceUuidString(uuid?.uuid?.toString())?.let { tokens.add(it) }
+                    }
                     val raw = result?.scanRecord?.getManufacturerSpecificData(CLICK_BLE_MANUFACTURER_ID)
-                        ?: return
-                    val token = parseBleManufacturerPayload(raw) ?: return
-                    tokens.add(token)
+                    parseBleManufacturerPayload(raw)?.let { tokens.add(it) }
                 }
 
                 override fun onBatchScanResults(results: MutableList<ScanResult>?) {
@@ -148,8 +174,8 @@ class AndroidProximityManager(
             }
         }
         coroutineScope {
-            val audio = async(Dispatchers.IO) { collectAudioToken(3000L, tokens) }
-            delay(3000L)
+            val audio = async(Dispatchers.IO) { collectAudioToken(PROXIMITY_DEBOUNCE_WINDOW_MS, tokens) }
+            delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
             audio.await()
         }
         withContext(Dispatchers.Main) {

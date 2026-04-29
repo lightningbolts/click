@@ -71,11 +71,60 @@ private fun ConnectionContextHeaderAvatars(connectedUsers: List<UserProfile>) {
             )
         }
         else -> {
-            val overflow = (connectedUsers.size - 3).coerceAtLeast(0)
-            StackedProfileAvatarRow(
-                profiles = connectedUsers.take(3),
-                overflowCount = overflow,
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(116.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 4,
+            ) {
+                connectedUsers.forEach { profile ->
+                    ProfileAvatarBubble(
+                        profile = profile,
+                        size = 52.dp,
+                        borderColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileAvatarBubble(
+    profile: UserProfile,
+    size: androidx.compose.ui.unit.Dp,
+    borderColor: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.size(size),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(2.dp, borderColor),
+    ) {
+        if (!profile.avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = profile.avatarUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(size)
+                    .clip(CircleShape),
             )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size((size.value * 0.55f).dp),
+                )
+            }
         }
     }
 }
@@ -104,39 +153,16 @@ private fun StackedProfileAvatarRow(
         ) {
             profiles.forEachIndexed { index, profile ->
                 val borderColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                Surface(
+                ProfileAvatarBubble(
+                    profile = profile,
+                    size = avatarSize,
+                    borderColor = borderColor,
                     modifier = Modifier
                         .offset(x = overlap * index)
                         .size(avatarSize)
                         .zIndex(index.toFloat())
                         .align(Alignment.CenterStart),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(2.dp, borderColor),
-                ) {
-                    if (!profile.avatarUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = profile.avatarUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(avatarSize)
-                                .clip(CircleShape),
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size((avatarSize.value * 0.55f).dp),
-                            )
-                        }
-                    }
-                }
+                )
             }
             if (overflowCount > 0) {
                 Surface(

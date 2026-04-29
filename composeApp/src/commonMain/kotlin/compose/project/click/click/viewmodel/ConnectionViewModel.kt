@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.datetime.Clock
 
 /** Emitted when a proximity bind returns a multi-user verified-clique cluster from the edge function. */
 data class VerifiedCliqueProximityIntent(
@@ -79,6 +80,8 @@ sealed class ConnectionState {
     data class TaggingContext(
         val newConnections: List<Connection>,
         val targetUsers: List<UserProfile>,
+        val isGroup: Boolean = false,
+        val memberUserIds: List<String> = emptyList(),
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -91,6 +94,7 @@ sealed class ConnectionState {
 
     /** Bind in flight after handshake; avoids [Loading] so the NFC sheet stays responsive. */
     object ProximityResolving : ConnectionState()
+    object SecuringConnection : ConnectionState()
 }
 
 class ConnectionViewModel : ViewModel() {
@@ -294,17 +298,33 @@ class ConnectionViewModel : ViewModel() {
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                     } else {
                         PlatformHapticsPolicy.successNotification()
-                        val groupIds = outcome.groupCliqueCandidateMemberIds
-                        val others =
-                            groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
-                        if (groupIds != null && others.size >= 2) {
-                            _verifiedCliqueFromProximity.emit(
-                                VerifiedCliqueProximityIntent(
-                                    preselectFriendIds = others,
-                                    matchedUsers = users,
-                                ),
+                        val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
+                        val others = groupIds?.filter { it != currentUserId }.orEmpty()
+                        if (outcome.isGroup && outcome.connectionId != null && groupIds != null && others.size >= 2) {
+                            val groupConnection = syntheticProximityConnection(
+                                connectionId = outcome.connectionId,
+                                memberUserIds = groupIds,
+                                isGroup = true,
                             )
-                            _connectionState.value = ConnectionState.Idle
+                            AppDataManager.addConnection(groupConnection, syntheticUserForProximitySuccess(users.map { it.toUserProfile() }))
+                            _connectionState.value = ConnectionState.TaggingContext(
+                                newConnections = listOf(groupConnection),
+                                targetUsers = users.map { it.toUserProfile() },
+                                isGroup = true,
+                                memberUserIds = groupIds,
+                            )
+                        } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
+                            val peer = users.first()
+                            val connection = syntheticProximityConnection(
+                                connectionId = outcome.connectionId,
+                                memberUserIds = listOf(currentUserId, peer.id).distinct().sorted(),
+                                isGroup = false,
+                            )
+                            AppDataManager.addConnection(connection, peer)
+                            _connectionState.value = ConnectionState.TaggingContext(
+                                newConnections = listOf(connection),
+                                targetUsers = listOf(peer.toUserProfile()),
+                            )
                         } else {
                             _connectionState.value = ConnectionState.PendingConfirmation(users)
                         }
@@ -711,8 +731,10 @@ class ConnectionViewModel : ViewModel() {
                 }
                 val selfId = AppDataManager.currentUser.value?.id
                 if (selfId != null && targetProfiles.size >= 1) {
-                    val memberUserIds = (listOf(selfId) + targetProfiles.map { it.id }).distinct().sorted()
+                    val memberUserIds = (tagging.memberUserIds.takeIf { it.isNotEmpty() }
+                        ?: (listOf(selfId) + targetProfiles.map { it.id })).distinct().sorted()
                     if (memberUserIds.size >= 2) {
+                        _connectionState.value = ConnectionState.SecuringConnection
                         val selfProfile = AppDataManager.currentUser.value?.toUserProfile()
                         val nameParts = if (selfProfile != null) {
                             (listOf(selfProfile) + targetProfiles).distinctBy { it.id }.sortedBy { it.id }
@@ -746,7 +768,7 @@ class ConnectionViewModel : ViewModel() {
                 val stillTagging = _connectionState.value as? ConnectionState.TaggingContext
                 val sameBatch = stillTagging?.newConnections?.map { it.id }?.toSet() ==
                     connections.map { it.id }.toSet()
-                if (stillTagging != null && sameBatch) {
+                if (stillTagging == null || sameBatch) {
                     _connectionState.value = ConnectionState.Success(primary, summaryUser)
                 }
             } catch (e: Exception) {
@@ -769,6 +791,27 @@ class ConnectionViewModel : ViewModel() {
             name = label,
             image = primaryImage,
             createdAt = 0L,
+        )
+    }
+
+    private fun syntheticProximityConnection(
+        connectionId: String,
+        memberUserIds: List<String>,
+        isGroup: Boolean,
+    ): Connection {
+        val now = Clock.System.now().toEpochMilliseconds()
+        return Connection(
+            id = connectionId,
+            created = now,
+            createdUtc = kotlinx.datetime.Instant.fromEpochMilliseconds(now).toString(),
+            timeOfDayUtc = null,
+            expiry = now + 30L * 24L * 60L * 60L * 1000L,
+            user_ids = memberUserIds.distinct().sorted(),
+            status = "active",
+            expiry_state = "active",
+            connection_method = "proximity",
+            proximity_confidence = if (lastProximityLat != null && lastProximityLng != null) 65 else 50,
+            isGroup = isGroup,
         )
     }
 }

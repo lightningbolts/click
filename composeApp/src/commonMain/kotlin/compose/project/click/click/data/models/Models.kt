@@ -427,7 +427,9 @@ data class Connection(
     val proximity_signals: Map<String, kotlinx.serialization.json.JsonElement>? = null,
     val connection_method: String = "qr",
     val flagged: Boolean = false,
-    val include_in_business_insights: Boolean = true
+    val include_in_business_insights: Boolean = true,
+    @SerialName("is_group")
+    val isGroup: Boolean = false,
 ) {
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer

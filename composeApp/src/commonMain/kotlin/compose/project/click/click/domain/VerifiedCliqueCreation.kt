@@ -24,6 +24,16 @@ object VerifiedCliqueCreation {
                 c.normalizedConnectionStatus() in setOf("active", "kept")
         }
 
+    private fun findActiveGroup(memberUserIds: List<String>, connections: List<Connection>): Connection? {
+        val members = memberUserIds.distinct().sorted()
+        if (members.size < 3) return null
+        return connections.firstOrNull { c ->
+            c.user_ids.distinct().sorted() == members &&
+                c.normalizedConnectionStatus() in setOf("active", "kept") &&
+                (c.isGroup || c.user_ids.size >= 3)
+        }
+    }
+
     suspend fun createVerifiedCliqueWithWrappedKeys(
         chatRepository: ChatRepository,
         connections: List<Connection>,
@@ -43,16 +53,27 @@ object VerifiedCliqueCreation {
         val master = MessageCrypto.generateGroupMasterKey()
         val b64 = MessageCrypto.encodeGroupMasterKeyBase64(master)
         val encrypted = mutableMapOf<String, String>()
-        for (m in members) {
-            val wrapPeer = if (m == creator) anchor else creator
-            val conn = findActiveEdge(m, wrapPeer, connections) ?: run {
-                return Result.failure(IllegalStateException("Missing verified connection for a member"))
-            }
+        val groupConnection = findActiveGroup(members, connections)
+        if (groupConnection != null) {
             val keys = MessageCrypto.deriveKeysForConnection(
-                conn.id,
-                listOf(m, wrapPeer).sorted(),
+                groupConnection.id,
+                members,
             )
-            encrypted[m] = MessageCrypto.encryptContent(b64, keys)
+            for (m in members) {
+                encrypted[m] = MessageCrypto.encryptContent(b64, keys)
+            }
+        } else {
+            for (m in members) {
+                val wrapPeer = if (m == creator) anchor else creator
+                val conn = findActiveEdge(m, wrapPeer, connections) ?: run {
+                    return Result.failure(IllegalStateException("Missing verified connection for a member"))
+                }
+                val keys = MessageCrypto.deriveKeysForConnection(
+                    conn.id,
+                    listOf(m, wrapPeer).sorted(),
+                )
+                encrypted[m] = MessageCrypto.encryptContent(b64, keys)
+            }
         }
         val label = initialGroupName.trim().ifBlank { "Clique" }
         return chatRepository.createVerifiedClique(members, encrypted, label).map { groupId ->

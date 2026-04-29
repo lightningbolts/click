@@ -239,6 +239,9 @@ fun NfcScreen(
                         is ConnectionState.Loading -> {
                             NfcCreatingConnectionContent()
                         }
+                        is ConnectionState.SecuringConnection -> {
+                            NfcCreatingConnectionContent(title = "Securing Connection...")
+                        }
                         is ConnectionState.ProximityCapturedOfflineSyncing -> {
                             ProximityOfflineCapturedContent(
                                 message = state.message,
@@ -940,7 +943,7 @@ private fun NfcUserDetectedContent(
 }
 
 @Composable
-private fun NfcCreatingConnectionContent() {
+private fun NfcCreatingConnectionContent(title: String = "Creating Connection...") {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -954,7 +957,7 @@ private fun NfcCreatingConnectionContent() {
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "Creating Connection...",
+            text = title,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
@@ -1325,4 +1328,3 @@ private fun NfcErrorContent(
         }
     }
 }
-
