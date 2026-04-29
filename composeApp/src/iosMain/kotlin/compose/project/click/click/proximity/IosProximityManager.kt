@@ -1,13 +1,19 @@
+@file:OptIn(ExperimentalForeignApi::class)
+
 package compose.project.click.click.proximity
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.ObjCObjectVar
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.convert
+import kotlinx.cinterop.ptr
 import kotlinx.cinterop.refTo
 import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -17,6 +23,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.AVFAudio.AVAudioPlayer
 import platform.AVFAudio.AVAudioRecorder
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
+import platform.AVFAudio.AVAudioSessionCategoryOptionMixWithOthers
+import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
 import platform.AVFAudio.AVEncoderAudioQualityKey
 import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVLinearPCMBitDepthKey
@@ -24,13 +34,18 @@ import platform.AVFAudio.AVLinearPCMIsBigEndianKey
 import platform.AVFAudio.AVLinearPCMIsFloatKey
 import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
+import platform.AVFAudio.setActive
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
 import platform.CoreBluetooth.CBCentralManagerScanOptionAllowDuplicatesKey
+import platform.CoreBluetooth.CBCharacteristicPropertyRead
 import platform.CoreBluetooth.CBManagerStatePoweredOn
+import platform.CoreBluetooth.CBMutableCharacteristic
+import platform.CoreBluetooth.CBMutableService
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralManager
 import platform.CoreBluetooth.CBPeripheralManagerDelegateProtocol
+import platform.CoreBluetooth.CBUUID
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSMutableData
@@ -55,7 +70,32 @@ import kotlin.coroutines.resume
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
 
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+private fun logNsError(where: String, error: NSError?) {
+    if (error == null) return
+    println("IosProximityManager: $where — code=${error.code} domain=${error.domain} desc=${error.localizedDescription}")
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun configureProximityAudioSession() {
+    val session: AVAudioSession = AVAudioSession.sharedInstance()
+    try {
+        val options = AVAudioSessionCategoryOptionMixWithOthers or AVAudioSessionCategoryOptionDefaultToSpeaker
+        memScoped {
+            val catErr = alloc<ObjCObjectVar<NSError?>>()
+            catErr.value = null
+            session.setCategory(AVAudioSessionCategoryPlayAndRecord, options, catErr.ptr)
+            catErr.value?.let { logNsError("setCategory", it) }
+            val actErr = alloc<ObjCObjectVar<NSError?>>()
+            actErr.value = null
+            session.setActive(true, actErr.ptr)
+            actErr.value?.let { logNsError("setActive", it) }
+        }
+    } catch (e: Throwable) {
+        println("IosProximityManager: configureProximityAudioSession — ${e.message}")
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
 private fun NSData.toByteArray(): ByteArray {
     val len = length.toInt()
     if (len == 0) return ByteArray(0)
@@ -65,7 +105,7 @@ private fun NSData.toByteArray(): ByteArray {
     return out
 }
 
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@OptIn(ExperimentalForeignApi::class)
 private fun buildIosManufacturerBlock(token: String): NSData {
     val payload = buildBleManufacturerPayload(token)
     val id = CLICK_BLE_MANUFACTURER_ID
@@ -91,7 +131,7 @@ private fun parseManufacturerFromIosAdvertisement(data: NSData): String? {
     return parseBleManufacturerPayload(rest)
 }
 
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@OptIn(ExperimentalForeignApi::class)
 private fun writeBytesToPath(path: String, bytes: ByteArray) {
     if (bytes.isEmpty()) return
     bytes.usePinned { pinned ->
@@ -104,7 +144,7 @@ private fun writeBytesToPath(path: String, bytes: ByteArray) {
     }
 }
 
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@OptIn(ExperimentalForeignApi::class)
 private fun readBytesFromPath(path: String): ByteArray? {
     val f = fopen(path, "rb") ?: return null
     try {
@@ -122,7 +162,21 @@ private fun readBytesFromPath(path: String): ByteArray? {
     }
 }
 
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@OptIn(ExperimentalForeignApi::class)
+private fun byteArrayToNsData(bytes: ByteArray): NSData {
+    if (bytes.isEmpty()) {
+        return NSMutableData()
+    }
+    return bytes.usePinned { pinned ->
+        val m = NSMutableData()
+        m.setLength(bytes.size.convert())
+        val dest = m.mutableBytes ?: error("mutableBytes")
+        memcpy(dest, pinned.addressOf(0), bytes.size.convert())
+        m
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
 class IosProximityManager : ProximityManager {
 
     private var peripheralManager: CBPeripheralManager? = null
@@ -139,15 +193,28 @@ class IosProximityManager : ProximityManager {
         "Uses Bluetooth Low Energy and short-range audio tones (including 18.5 kHz) to find nearby taps."
 
     override fun openRadiosSettings() {
-        // iOS does not expose a public deep-link to the Bluetooth radio toggle —
-        // per directive Q4, fall back to the app's own Settings page via the shared
-        // helper (which bypasses the `canOpenURL` probe).
         compose.project.click.click.ui.utils.openApplicationSystemSettings()
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
         stopAll()
         val payload = runCatching { buildIosManufacturerBlock(ephemeralToken) }.getOrElse { return }
+        val tokenBytes = buildBleManufacturerPayload(ephemeralToken)
+        val tokenUuidStr = encodeBleTokenIntoAdvertisedUuidString(ephemeralToken)
+        val primaryUuid = CBUUID.UUIDWithString(CLICK_PRIMARY_SERVICE_UUID_STRING)
+        val tokenUuid = CBUUID.UUIDWithString(tokenUuidStr)
+        val charUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID_STRING)
+        val charData = byteArrayToNsData(tokenBytes)
+        val characteristic = CBMutableCharacteristic(
+            type = charUuid,
+            properties = CBCharacteristicPropertyRead,
+            value = charData,
+            permissions = platform.CoreBluetooth.CBAttributePermissionsReadable,
+        )
+        val service = CBMutableService(type = primaryUuid, primary = true)
+        val chars = mutableListOf<Any?>()
+        chars.add(characteristic)
+        service.setCharacteristics(chars)
 
         withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { cont ->
@@ -158,32 +225,54 @@ class IosProximityManager : ProximityManager {
                         cont.resume(Unit)
                     }
                 }
+                var advertisingStarted = false
                 val del = object : NSObject(), CBPeripheralManagerDelegateProtocol {
                     override fun peripheralManagerDidUpdateState(peripheral: CBPeripheralManager) {
                         if (peripheral.state == CBManagerStatePoweredOn) {
-                            val adv = NSMutableDictionary()
-                            val advKey = NSString.create(string = "kCBAdvDataManufacturerData")
-                            adv.setObject(payload, forKey = advKey)
-                            peripheral.startAdvertising(adv as Map<Any?, *>)
+                            peripheral.removeAllServices()
+                            peripheral.addService(service)
                         } else {
                             finish()
                         }
+                    }
+
+                    override fun peripheralManager(
+                        peripheral: CBPeripheralManager,
+                        didAddService: platform.CoreBluetooth.CBService,
+                        error: NSError?,
+                    ) {
+                        if (error != null) {
+                            logNsError("didAddService", error)
+                            finish()
+                            return
+                        }
+                        if (advertisingStarted) return
+                        advertisingStarted = true
+                        val adv = NSMutableDictionary()
+                        val mfgKey = NSString.create(string = "kCBAdvDataManufacturerData")
+                        adv.setObject(payload, forKey = mfgKey)
+                        val uuidKey = NSString.create(string = "kCBAdvDataServiceUUIDsKey")
+                        adv.setObject(listOf(tokenUuid, primaryUuid), forKey = uuidKey)
+                        peripheral.startAdvertising(adv as Map<Any?, *>)
                     }
 
                     override fun peripheralManagerDidStartAdvertising(
                         peripheral: CBPeripheralManager,
                         error: NSError?,
                     ) {
+                        if (error != null) logNsError("didStartAdvertising", error)
                         finish()
                     }
                 }
                 peripheralManager = CBPeripheralManager(delegate = del, queue = null)
                 cont.invokeOnCancellation {
                     peripheralManager?.stopAdvertising()
+                    peripheralManager?.removeAllServices()
                 }
             }
         }
 
+        configureProximityAudioSession()
         val pcm = buildHandshakeAudioPcm(ephemeralToken)
         if (pcm.isEmpty()) return
         val wav = wrapPcmAsWav(pcm)
@@ -204,6 +293,8 @@ class IosProximityManager : ProximityManager {
 
     override suspend fun startHandshakeListening(): List<String> {
         heardTokens.clear()
+        configureProximityAudioSession()
+        val primaryFilterUuid = CBUUID.UUIDWithString(CLICK_PRIMARY_SERVICE_UUID_STRING)
         withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { cont ->
                 var started = false
@@ -214,7 +305,10 @@ class IosProximityManager : ProximityManager {
                             val opts = mutableMapOf<Any?, Any?>(
                                 CBCentralManagerScanOptionAllowDuplicatesKey to NSNumber(bool = true),
                             )
-                            central.scanForPeripheralsWithServices(null, options = opts)
+                            central.scanForPeripheralsWithServices(
+                                serviceUUIDs = listOf(primaryFilterUuid),
+                                options = opts,
+                            )
                             cont.resume(Unit)
                         }
                     }
@@ -225,9 +319,15 @@ class IosProximityManager : ProximityManager {
                         advertisementData: Map<Any?, *>,
                         RSSI: NSNumber,
                     ) {
-                        val raw = advertisementData["kCBAdvDataManufacturerData"] as? NSData
-                            ?: return
-                        parseManufacturerFromIosAdvertisement(raw)?.let { heardTokens.add(it) }
+                        val mfgRaw = advertisementData["kCBAdvDataManufacturerData"] as? NSData
+                        if (mfgRaw != null) {
+                            parseManufacturerFromIosAdvertisement(mfgRaw)?.let { heardTokens.add(it) }
+                        }
+                        val uuidList = advertisementData["kCBAdvDataServiceUUIDsKey"] as? List<*>
+                        uuidList?.forEach { u ->
+                            val uuidStr = (u as? CBUUID)?.UUIDString ?: return@forEach
+                            decodeBleTokenFromAdvertisedUuidString(uuidStr)?.let { heardTokens.add(it) }
+                        }
                     }
                 }
                 centralManager = CBCentralManager(delegate = del, queue = null)
@@ -247,6 +347,7 @@ class IosProximityManager : ProximityManager {
     }
 
     private suspend fun recordAudioSampleToSink() {
+        configureProximityAudioSession()
         val path = NSTemporaryDirectory().trimEnd('/') + "/click_prox_listen_${kotlin.random.Random.nextLong()}.wav"
         val url = NSURL.fileURLWithPath(path)
         val settings = mutableMapOf<Any?, Any?>(
@@ -278,6 +379,7 @@ class IosProximityManager : ProximityManager {
 
     override fun stopAll() {
         peripheralManager?.stopAdvertising()
+        peripheralManager?.removeAllServices()
         peripheralManager = null
         centralManager?.stopScan()
         centralManager = null
@@ -288,7 +390,7 @@ class IosProximityManager : ProximityManager {
     }
 }
 
-@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@OptIn(ExperimentalForeignApi::class)
 private fun wrapPcmAsWav(pcm: ShortArray): ByteArray {
     val sampleRate = 44_100
     val bitsPerSample = 16

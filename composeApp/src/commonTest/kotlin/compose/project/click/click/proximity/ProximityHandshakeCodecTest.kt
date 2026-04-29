@@ -152,6 +152,25 @@ class ProximityHandshakeCodecTest {
         assertEquals("0000", parseBleManufacturerPayload(payload))
     }
 
+    @Test
+    fun advertisedUuid_decodeRestoresToken() {
+        val token = "7391"
+        val uuid = encodeBleTokenIntoAdvertisedUuidString(token)
+        assertEquals(36, uuid.length)
+        assertEquals(token, decodeBleTokenFromAdvertisedUuidString(uuid))
+        val prefix = buildBleManufacturerPayload(token)
+        val bytes = bleUuidStringToBytes(uuid)!!
+        for (i in 0 until 6) {
+            assertEquals(prefix[i], bytes[i], "UUID payload prefix mismatch at $i")
+        }
+    }
+
+    @Test
+    fun advertisedUuid_decodeRejectsNonCkPrefixInUuid() {
+        val hex = "00000000-0000-4000-8000-000000000000"
+        assertNull(decodeBleTokenFromAdvertisedUuidString(hex))
+    }
+
     // endregion
 
     // region ultrasonic codec
