@@ -9,5 +9,16 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).NotificationService</string>
 	</dict>
+	<key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.530817233802-crnehf5a9duauov4vos4lgsijkgingdj</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
