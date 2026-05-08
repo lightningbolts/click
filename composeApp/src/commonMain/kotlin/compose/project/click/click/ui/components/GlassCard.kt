@@ -37,8 +37,8 @@ private fun platformGlassBorder(usePrimary: Boolean): Color {
 @Composable
 private fun platformBorderWidth(): Dp = LocalPlatformStyle.current.cardBorderWidth
 
-val GlassCardShape = RoundedCornerShape(24.dp)
-val GlassCornerRadius: Dp = 24.dp
+val GlassCardShape = RoundedCornerShape(28.dp)
+val GlassCornerRadius: Dp = 28.dp
 
 @Composable
 fun GlassCard(

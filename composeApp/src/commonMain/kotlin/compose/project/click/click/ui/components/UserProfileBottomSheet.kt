@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -65,8 +66,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
@@ -751,28 +755,22 @@ fun UserProfileBottomSheet(
         }
     }
 
-    val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
-
-    AdaptiveBottomSheet(
+    GlassAdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = sheetBg,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
-        // Fill sheet height so the home-indicator / safe-area gap is not UIKit white in dark mode.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(sheetBg)
+                .background(GlassSheetTokens.OledBlack)
         ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .padding(bottom = 28.dp)
         ) {
             Row(
@@ -783,11 +781,11 @@ fun UserProfileBottomSheet(
                     text = "Profile",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = GlassSheetTokens.OnOled,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = { dismiss() }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close")
+                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GlassSheetTokens.OnOled)
                 }
             }
 
@@ -810,7 +808,7 @@ fun UserProfileBottomSheet(
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(vertical = 16.dp)
                     )
-                    TextButton(onClick = { dismiss() }) { Text("Close") }
+                    TextButton(onClick = { dismiss() }) { Text("Close", color = GlassSheetTokens.OnOled) }
                 }
                 profile != null -> {
                     val p = profile!!
@@ -820,52 +818,138 @@ fun UserProfileBottomSheet(
                         append(u.name ?: "Member")
                         if (age != null) append(", $age")
                     }
-
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = u.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                            color = LightBlue.copy(alpha = 0.96f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 36.sp
-                        )
+                    val mutual = sharedInterestTags(p.viewerInterestTags, p.interestTags)
+                    val conn = p.sharedConnection
+                    val capsuleLines = if (conn != null) {
+                        listOfNotNull(
+                            conn.profileContextLine(),
+                            conn.profilePlaceLine(),
+                            conn.profileWhenLine(),
+                            conn.profileWeatherLine(),
+                            conn.profileNoiseLine(),
+                        ).map { it.trim() }.filter { it.isNotEmpty() }
+                    } else {
+                        emptyList()
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        GlassCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            usePrimaryBorder = true,
+                            contentPadding = 16.dp,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(88.dp)
+                                        .clip(CircleShape)
+                                        .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue))),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = u.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
+                                        color = LightBlue.copy(alpha = 0.96f),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 32.sp,
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    if (!u.email.isNullOrBlank()) {
+                                        Text(
+                                            text = u.email ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(top = 4.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                        if (mutual.isNotEmpty()) {
+                            GlassCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = 14.dp,
+                            ) {
+                                Text(
+                                    text = "Mutual interests",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    mutual.forEach { tag ->
+                                        Text(
+                                            text = tag,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(GlassSheetTokens.BentoInteriorCorner))
+                                                .background(
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                                )
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-                    if (!u.email.isNullOrBlank()) {
-                        Text(
-                            text = u.email ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
+                        if (capsuleLines.isNotEmpty() && conn != null) {
+                            GlassCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = 0.dp,
+                            ) {
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    ChatAmbientMeshBackground(
+                                        connection = conn,
+                                        isHubNeutral = false,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            text = "Memory capsule",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        capsuleLines.take(6).forEach { line ->
+                                            Text(
+                                                text = line,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ProfileLegacyTimelineContent(
+                            profile = p,
+                            loading = false,
+                            error = null,
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    ProfileLegacyTimelineContent(
-                        profile = p,
-                        loading = false,
-                        error = null,
-                    )
                 }
                 else -> {
-                    Text("Profile unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Profile unavailable", color = GlassSheetTokens.OnOledMuted)
                 }
             }
         }

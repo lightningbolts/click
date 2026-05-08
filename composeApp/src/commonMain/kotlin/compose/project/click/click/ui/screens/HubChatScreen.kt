@@ -298,6 +298,8 @@ fun HubChatScreen(
                                 timeCreated = mwu.message.timeCreated,
                                 stripVisualPx = displayTimestampPeekVisualPx,
                                 maxRevealPx = peekRevealPx,
+                                meshConnection = null,
+                                useHubNeutralMesh = true,
                             ) {
                                 ChatMessageBubble(
                                     messageWithUser = mwu,

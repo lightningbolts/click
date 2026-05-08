@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.text.BasicTextField
@@ -133,8 +133,9 @@ import androidx.compose.material3.ripple
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
@@ -153,37 +154,37 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
-import compose.project.click.click.ui.chat.CallLogSystemRow
-import compose.project.click.click.ui.chat.ChatBubblePhotoContent
-import compose.project.click.click.ui.chat.ChatChannelLoadingView
-import compose.project.click.click.ui.chat.ChatWarmLoadingView
-import compose.project.click.click.ui.chat.ConnectionItem
-import compose.project.click.click.ui.chat.ForwardDialog
-import compose.project.click.click.ui.chat.VibeCheckBanner
-import compose.project.click.click.ui.chat.GroupMembersPickerSheet
-import compose.project.click.click.ui.chat.LocationGapNudge
-import compose.project.click.click.ui.chat.MessageActionSheet
-import compose.project.click.click.ui.chat.orderedGroupMembersForPicker
-import compose.project.click.click.ui.chat.connectionHasNoGeo
-import compose.project.click.click.ui.chat.connectionListActivityTs
-import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface
-import compose.project.click.click.ui.chat.ConnectionActionSheet
-import compose.project.click.click.ui.chat.ConnectionChatMessageComposer
-import compose.project.click.click.ui.chat.ChatTimelineEntry
-import compose.project.click.click.ui.chat.ChatTypingDots
-import compose.project.click.click.ui.chat.ConversationDaySeparator
-import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder
-import compose.project.click.click.ui.chat.ReplySwipeSideIcon
-import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst
-import compose.project.click.click.ui.chat.callLogLabel
-import compose.project.click.click.ui.chat.formatCallDurationForLog
-import compose.project.click.click.ui.chat.formatConnectionListTimestamp
-import compose.project.click.click.ui.chat.formatConversationDayLabel
-import compose.project.click.click.ui.chat.formatVibeCheckTime
-import compose.project.click.click.ui.chat.messageDayKey
-import compose.project.click.click.ui.chat.replyDragHintProgress
-import compose.project.click.click.ui.chat.swipeRawTravelFromVisual
-import compose.project.click.click.ui.chat.swipeVisualFromRawTravel
+import compose.project.click.click.ui.chat.CallLogSystemRow // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatBubblePhotoContent // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
+import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
+import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.LocationGapNudge // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
+import compose.project.click.click.ui.chat.connectionHasNoGeo // pragma: allowlist secret
+import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatTimelineEntry // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConversationDaySeparator // pragma: allowlist secret
+import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowlist secret
+import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.callLogLabel // pragma: allowlist secret
+import compose.project.click.click.ui.chat.formatCallDurationForLog // pragma: allowlist secret
+import compose.project.click.click.ui.chat.formatConnectionListTimestamp // pragma: allowlist secret
+import compose.project.click.click.ui.chat.formatConversationDayLabel // pragma: allowlist secret
+import compose.project.click.click.ui.chat.formatVibeCheckTime // pragma: allowlist secret
+import compose.project.click.click.ui.chat.messageDayKey // pragma: allowlist secret
+import compose.project.click.click.ui.chat.replyDragHintProgress // pragma: allowlist secret
+import compose.project.click.click.ui.chat.swipeRawTravelFromVisual // pragma: allowlist secret
+import compose.project.click.click.ui.chat.swipeVisualFromRawTravel // pragma: allowlist secret
 import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
@@ -224,7 +225,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageBubble
+import compose.project.click.click.ui.chat.ChatMessageBubble // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
@@ -735,7 +736,8 @@ fun ConnectionsListView(
                         LazyColumn(
                             state = connectionsLazyListState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 16.dp)
+                            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             items(
                                 filteredChats,
@@ -780,11 +782,6 @@ fun ConnectionsListView(
                                         )
                                     }
                                 }
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 68.dp, end = 16.dp),
-                                    thickness = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                )
                             }
                         }
                     }
@@ -818,19 +815,15 @@ fun ConnectionsListView(
 
     val uidForClique = currentUserId
     if (cliqueSheetVisible && uidForClique != null) {
-        val verifiedCliqueSheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
-        AdaptiveBottomSheet(
+        GlassAdaptiveBottomSheet(
             onDismissRequest = { dismissVerifiedCliqueSheet() },
             adaptiveSheetState = cliqueSheetState,
-            containerColor = verifiedCliqueSheetBg,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            dragHandle = { BottomSheetDefaults.DragHandle() },
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .background(verifiedCliqueSheetBg),
+                    .background(GlassSheetTokens.OledBlack),
             ) {
             Column(
                 modifier = Modifier

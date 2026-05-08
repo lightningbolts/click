@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -31,14 +31,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.utils.BoundingBox
-import compose.project.click.click.ui.utils.ConnectionMapPoint
-import compose.project.click.click.ui.utils.TimeState
-import compose.project.click.click.ui.utils.toMapPoint
-import compose.project.click.click.viewmodel.MapState
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.utils.BoundingBox // pragma: allowlist secret
+import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
+import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
+import compose.project.click.click.ui.utils.toMapPoint // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
 
 /**
  * Vertical list of connection memories, extracted from [MapScreen] so the map itself can be
@@ -132,6 +133,14 @@ private fun EmptyMemoriesState(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().padding(24.dp),
         contentAlignment = Alignment.Center,
     ) {
+        ChatAmbientMeshBackground(
+            connection = null,
+            isHubNeutral = true,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(28.dp))
+                .alpha(0.35f),
+        )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 Icons.Filled.LocationOff,
@@ -168,7 +177,7 @@ private fun MemoryLocationCard(
         TimeState.ARCHIVE -> Color.Gray
     }
 
-    AdaptiveCard(
+    GlassCard(
         modifier = Modifier.fillMaxWidth().alpha(point.opacity),
         onClick = onClick,
     ) {

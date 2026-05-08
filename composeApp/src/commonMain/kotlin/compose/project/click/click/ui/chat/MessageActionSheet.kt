@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -29,7 +28,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -47,16 +45,19 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.ChatMessageType
-import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.copyableText
-import compose.project.click.click.data.models.isEncryptedMedia
-import compose.project.click.click.data.models.mediaUrlOrNull
-import compose.project.click.click.data.models.originalMimeTypeOrNull
-import compose.project.click.click.ui.components.EmojiCatalog
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -87,21 +88,17 @@ internal fun MessageActionSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
-    ModalBottomSheet(
+    GlassModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         LaunchedEffect(Unit) {
             PlatformHapticsPolicy.lightImpact()
         }
-        val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onSurface = MaterialTheme.colorScheme.onSurface
-        val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
+        val sheetBg = GlassSheetTokens.OledBlack
+        val onSurface = GlassSheetTokens.OnOled
+        val onVariant = GlassSheetTokens.OnOledMuted
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -334,7 +331,7 @@ internal fun MessageActionSheet(
     }
 
     if (showDeleteMessageConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeleteMessageConfirm = false },
             title = { Text("Delete Message?") },
             text = { Text("This message will be permanently deleted. This cannot be undone.") },
@@ -357,7 +354,7 @@ internal fun MessageActionSheet(
     }
 
     if (showDeleteMessageFinalConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeleteMessageFinalConfirm = false },
             title = { Text("Delete Message Permanently?") },
             text = { Text("This action is permanent and cannot be undone.") },

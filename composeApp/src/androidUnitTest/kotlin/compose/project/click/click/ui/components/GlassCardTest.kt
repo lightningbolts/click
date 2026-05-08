@@ -10,6 +10,6 @@ class GlassCardTest {
 
     @Test
     fun glassCornerRadius_matchesDesignToken() {
-        assertEquals(24f, GlassCornerRadius.value)
+        assertEquals(28f, GlassCornerRadius.value)
     }
 }

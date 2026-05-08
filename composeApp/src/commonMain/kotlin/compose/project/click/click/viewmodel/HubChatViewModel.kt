@@ -34,6 +34,7 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
@@ -84,6 +86,8 @@ private fun randomHubMediaLeaf(): String =
         val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
         repeat(20) { append(alphabet[Random.nextInt(alphabet.length)]) }
     }
+
+private const val HUB_INITIAL_MESSAGE_LIMIT = 120L
 
 class HubChatViewModel(
     private val hubId: String,
@@ -128,7 +132,17 @@ class HubChatViewModel(
     private var sessionJob: Job? = null
 
     init {
-        startSession()
+        sessionJob?.cancel()
+        sessionJob = viewModelScope.launch {
+            try {
+                loadInitialMessages()
+                runRealtimeSession()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
+            }
+        }
     }
 
     fun updateDraft(text: String) {
@@ -194,128 +208,119 @@ class HubChatViewModel(
         }
     }
 
-    private fun startSession() {
-        sessionJob?.cancel()
-        sessionJob = viewModelScope.launch {
+    private suspend fun CoroutineScope.runRealtimeSession() {
+        val channel = supabase.channel(realtimeChannelName) {
+            presence {
+                key = currentUserId
+            }
+        }
+        hubChannel = channel
+
+        val hubMessageChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "hub_messages"
+        }
+
+        val occupantKeys = mutableSetOf<String>()
+        fun recomputeOccupants() {
+            val n = occupantKeys.size.coerceAtLeast(1)
+            _occupantCount.value = n
+        }
+
+        val presenceJob = launch(context = Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
             try {
-                loadInitialMessages()
-                val channel = supabase.channel(realtimeChannelName) {
-                    presence {
-                        key = currentUserId
+                channel.presenceChangeFlow().collect { action ->
+                    action.leaves.keys.forEach { occupantKeys.remove(it) }
+                    action.joins.keys.forEach { occupantKeys.add(it) }
+                    action.joins.values.forEach { p ->
+                        userIdFromPresence(p)?.let { occupantKeys.add(it) }
                     }
-                }
-                hubChannel = channel
-
-                val hubMessageChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                    table = "hub_messages"
-                }
-
-                val occupantKeys = mutableSetOf<String>()
-                fun recomputeOccupants() {
-                    val n = occupantKeys.size.coerceAtLeast(1)
-                    _occupantCount.value = n
-                }
-
-                val presenceJob = launch(start = CoroutineStart.UNDISPATCHED) {
-                    try {
-                        channel.presenceChangeFlow().collect { action ->
-                            action.leaves.keys.forEach { occupantKeys.remove(it) }
-                            action.joins.keys.forEach { occupantKeys.add(it) }
-                            action.joins.values.forEach { p ->
-                                userIdFromPresence(p)?.let { occupantKeys.add(it) }
-                            }
-                            action.leaves.values.forEach { p ->
-                                userIdFromPresence(p)?.let { occupantKeys.remove(it) }
-                            }
-                            recomputeOccupants()
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
+                    action.leaves.values.forEach { p ->
+                        userIdFromPresence(p)?.let { occupantKeys.remove(it) }
                     }
-                }
-
-                channel.subscribe(blockUntilSubscribed = true)
-                channel.track(buildJsonObject { put("userId", currentUserId) })
-                occupantKeys.add(currentUserId)
-                recomputeOccupants()
-
-                val refreshJob = launch {
-                    while (isActive) {
-                        delay(25_000L)
-                        runCatching {
-                            channel.track(buildJsonObject { put("userId", currentUserId) })
-                        }
-                    }
-                }
-
-                try {
-                    hubMessageChanges.collect { action ->
-                        when (action) {
-                            is PostgresAction.Insert -> {
-                                val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
-                                if (row.hubId != hubId) return@collect
-                                val ui = rowToMessageWithUser(row)
-                                if (_messages.value.none { it.message.id == ui.message.id }) {
-                                    _messages.value = _messages.value + ui
-                                }
-                            }
-                            is PostgresAction.Update -> {
-                                // Edits/soft-mutations propagate via UPDATE. Decode the full row
-                                // and replace in place; ignore rows that belong to a different hub
-                                // or that predate our initial snapshot (not yet in the list).
-                                val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
-                                if (row.hubId != hubId) return@collect
-                                val current = _messages.value
-                                val idx = current.indexOfFirst { it.message.id == row.id }
-                                if (idx >= 0) {
-                                    val refreshed = rowToMessageWithUser(row)
-                                    _messages.value = current.toMutableList().also { it[idx] = refreshed }
-                                }
-                            }
-                            is PostgresAction.Delete -> {
-                                // `record` is empty on DELETE; pull the PK from `oldRecord`.
-                                val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
-                                val current = _messages.value
-                                if (current.any { it.message.id == deletedId }) {
-                                    _messages.value = current.filterNot { it.message.id == deletedId }
-                                }
-                            }
-                            else -> Unit
-                        }
-                    }
-                } finally {
-                    refreshJob.cancel()
-                    presenceJob.cancel()
+                    recomputeOccupants()
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
-                println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
-            } finally {
-                val ch = hubChannel
-                hubChannel = null
-                if (ch != null) {
-                    runCatching { ch.untrack() }
-                    runCatching { ch.unsubscribe() }
+            } catch (_: Exception) {
+            }
+        }
+
+        withContext(Dispatchers.IO) {
+            channel.subscribe(blockUntilSubscribed = true)
+        }
+        channel.track(buildJsonObject { put("userId", currentUserId) })
+        occupantKeys.add(currentUserId)
+        recomputeOccupants()
+
+        val refreshJob = launch {
+            while (isActive) {
+                delay(25_000L)
+                runCatching {
+                    channel.track(buildJsonObject { put("userId", currentUserId) })
                 }
+            }
+        }
+
+        try {
+            hubMessageChanges.collect { action ->
+                when (action) {
+                    is PostgresAction.Insert -> {
+                        val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
+                        if (row.hubId != hubId) return@collect
+                        val ui = withContext(Dispatchers.IO) { rowToMessageWithUser(row) }
+                        if (_messages.value.none { it.message.id == ui.message.id }) {
+                            _messages.value = _messages.value + ui
+                        }
+                    }
+                    is PostgresAction.Update -> {
+                        val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
+                        if (row.hubId != hubId) return@collect
+                        val current = _messages.value
+                        val idx = current.indexOfFirst { it.message.id == row.id }
+                        if (idx >= 0) {
+                            val refreshed = withContext(Dispatchers.IO) { rowToMessageWithUser(row) }
+                            _messages.value = current.toMutableList().also { it[idx] = refreshed }
+                        }
+                    }
+                    is PostgresAction.Delete -> {
+                        val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
+                        val current = _messages.value
+                        if (current.any { it.message.id == deletedId }) {
+                            _messages.value = current.filterNot { it.message.id == deletedId }
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        } finally {
+            refreshJob.cancel()
+            presenceJob.cancel()
+            val ch = hubChannel
+            hubChannel = null
+            if (ch != null) {
+                runCatching { ch.untrack() }
+                runCatching { ch.unsubscribe() }
             }
         }
     }
 
     private suspend fun loadInitialMessages() {
-        try {
-            val rows = supabase.from("hub_messages")
-                .select {
-                    filter {
-                        eq("hub_id", hubId)
+        withContext(Dispatchers.IO) {
+            try {
+                val rows = supabase.from("hub_messages")
+                    .select {
+                        filter {
+                            eq("hub_id", hubId)
+                        }
+                        order("created_at", Order.DESCENDING)
+                        limit(HUB_INITIAL_MESSAGE_LIMIT)
                     }
-                    order("created_at", Order.ASCENDING)
-                }
-                .decodeList<HubMessageRow>()
-            mergeMessages(rows)
-        } catch (e: Exception) {
-            println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
+                    .decodeList<HubMessageRow>()
+                    .asReversed()
+                mergeMessages(rows)
+            } catch (e: Exception) {
+                println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
+            }
         }
     }
 
