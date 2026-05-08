@@ -42,6 +42,9 @@ fun BentoGlassOptionRow(
     cornerRadius: Dp = GlassSheetTokens.BentoInteriorCorner,
     /** Message action sheet uses borderless rows for visual consistency with the sheet chrome. */
     showBorder: Boolean = true,
+    /** Outer gutter around each row (message sheet uses 0.dp for full-width list rows). */
+    horizontalInset: Dp = 12.dp,
+    verticalInset: Dp = 4.dp,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -67,7 +70,7 @@ fun BentoGlassOptionRow(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .padding(horizontal = horizontalInset, vertical = verticalInset)
             .clip(shape)
             .then(
                 if (showBorder) {

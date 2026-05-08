@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -22,7 +24,6 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -150,7 +151,7 @@ internal fun MessageActionSheet(
                     }
                 }
             } else {
-                val optionRadius = GlassSheetTokens.BentoExteriorCorner
+                val optionRadius = 0.dp
                 BentoGlassOptionRow(
                     title = "Reply",
                     onClick = {
@@ -161,6 +162,8 @@ internal fun MessageActionSheet(
                     },
                     cornerRadius = optionRadius,
                     showBorder = false,
+                    horizontalInset = 0.dp,
+                    verticalInset = 0.dp,
                     leading = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Reply,
@@ -199,7 +202,7 @@ internal fun MessageActionSheet(
                     Text("More emojis…", color = PrimaryBlue)
                 }
 
-                HorizontalDivider(color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 val imageUrl = message.mediaUrlOrNull()
                 if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
@@ -223,6 +226,8 @@ internal fun MessageActionSheet(
                         },
                         cornerRadius = optionRadius,
                         showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
                         leading = {
                             Icon(
                                 imageVector = Icons.Outlined.Save,
@@ -250,6 +255,8 @@ internal fun MessageActionSheet(
                             },
                             cornerRadius = optionRadius,
                             showBorder = false,
+                            horizontalInset = 0.dp,
+                            verticalInset = 0.dp,
                             leading = {
                                 Icon(
                                     imageVector = Icons.Outlined.Share,
@@ -273,6 +280,8 @@ internal fun MessageActionSheet(
                     },
                     cornerRadius = optionRadius,
                     showBorder = false,
+                    horizontalInset = 0.dp,
+                    verticalInset = 0.dp,
                     leading = {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
@@ -291,6 +300,8 @@ internal fun MessageActionSheet(
                         },
                         cornerRadius = optionRadius,
                         showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
                         leading = {
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -306,6 +317,8 @@ internal fun MessageActionSheet(
                         destructive = true,
                         cornerRadius = optionRadius,
                         showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
                         leading = {
                             Icon(
                                 imageVector = Icons.Default.Delete,

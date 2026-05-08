@@ -141,6 +141,7 @@ internal fun ConnectionActionSheet(
 
             if (!isGroup) {
                 BentoGlassOptionRow(
+                    showBorder = false,
                     title = "Nudge 👋",
                     subtitle = "Send a quick ping",
                     onClick = {
@@ -187,6 +188,7 @@ internal fun ConnectionActionSheet(
                 )
 
                 BentoGlassOptionRow(
+                    showBorder = false,
                     title = "Remove Connection",
                     subtitle = "Permanently remove this chat",
                     onClick = { showDeleteConfirm = true },
@@ -201,6 +203,7 @@ internal fun ConnectionActionSheet(
                 )
 
                 BentoGlassOptionRow(
+                    showBorder = false,
                     title = "Report",
                     subtitle = "Flag for review",
                     onClick = {
@@ -218,6 +221,7 @@ internal fun ConnectionActionSheet(
                 )
 
                 BentoGlassOptionRow(
+                    showBorder = false,
                     title = "Block",
                     subtitle = "They can no longer reach you",
                     onClick = { showBlockConfirm = true },
@@ -236,6 +240,7 @@ internal fun ConnectionActionSheet(
                     color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f),
                 )
                 BentoGlassOptionRow(
+                    showBorder = false,
                     title = "Leave Group",
                     subtitle = "Lose access to this verified click",
                     onClick = {
@@ -259,6 +264,7 @@ internal fun ConnectionActionSheet(
                 )
                 if (isGroupCreator) {
                     BentoGlassOptionRow(
+                        showBorder = false,
                         title = "Delete Group",
                         subtitle = "Remove for everyone",
                         onClick = {

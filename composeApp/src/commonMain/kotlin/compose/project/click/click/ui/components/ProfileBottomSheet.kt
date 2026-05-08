@@ -545,6 +545,7 @@ fun ProfileBottomSheet(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.Top,
+            pageSpacing = 14.dp,
         ) { pageIndex ->
             when (visibleTabs[pageIndex]) {
                 ProfileSheetTab.Timeline -> TimelinePanel(
@@ -1025,11 +1026,13 @@ private fun TimelinePanel(
 
 @Composable
 private fun TimelineRow(item: ProfileSheetTimelineItem) {
+    val rowShape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clip(rowShape)
+            .border(1.dp, GlassSheetTokens.GlassBorder, rowShape)
+            .background(GlassSheetTokens.GlassSurface)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -1098,14 +1101,14 @@ private fun MediaPanel(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         repeat(3) {
+                            val skelShape = RoundedCornerShape(14.dp)
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(96.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
-                                    ),
+                                    .clip(skelShape)
+                                    .border(1.dp, GlassSheetTokens.GlassBorder, skelShape)
+                                    .background(GlassSheetTokens.GlassSurface),
                             )
                         }
                     }
@@ -1148,8 +1151,8 @@ private fun MediaPanel(
                         label = "media_thumb_press",
                     )
                     val thumbShape = RoundedCornerShape(14.dp)
-                    val thumbBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
-                    val thumbBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    val thumbBorder = GlassSheetTokens.GlassBorder
+                    val thumbBg = GlassSheetTokens.GlassSurface
                     val thumbModifier = Modifier
                         .weight(1f)
                         .height(110.dp)
@@ -1242,11 +1245,13 @@ private fun MediaPanel(
                             )
                         }
                         unlockingAudio -> {
+                            val lockShape = RoundedCornerShape(14.dp)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                    .clip(lockShape)
+                                    .border(1.dp, GlassSheetTokens.GlassBorder, lockShape)
+                                    .background(GlassSheetTokens.GlassSurface)
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1306,8 +1311,8 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
     ) {
         items(items, key = { it.id }) { link ->
             val linkShape = RoundedCornerShape(14.dp)
-            val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
-            val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            val cardBorder = GlassSheetTokens.GlassBorder
+            val cardBg = GlassSheetTokens.GlassSurface
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1363,11 +1368,13 @@ private fun FilesPanel(items: List<ProfileSheetFile>, onDownload: (ProfileSheetF
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         items(items, key = { it.id }) { file ->
+            val fileShape = RoundedCornerShape(14.dp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clip(fileShape)
+                    .border(1.dp, GlassSheetTokens.GlassBorder, fileShape)
+                    .background(GlassSheetTokens.GlassSurface)
                     .clickable { onDownload(file) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
