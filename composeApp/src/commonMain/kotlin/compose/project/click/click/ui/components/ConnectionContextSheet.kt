@@ -30,9 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -245,12 +243,9 @@ fun ConnectionContextSheet(
         }
     }
 
-    AdaptiveBottomSheet(
+    GlassAdaptiveBottomSheet(
         onDismissRequest = dismissSheet,
         adaptiveSheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         Column(
             modifier = Modifier
@@ -267,13 +262,14 @@ fun ConnectionContextSheet(
             Text(
                 text = titleText,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = GlassSheetTokens.OnOled,
             )
 
             Text(
                 text = subtitleText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = GlassSheetTokens.OnOledMuted,
             )
 
             if (!locationName.isNullOrBlank()) {

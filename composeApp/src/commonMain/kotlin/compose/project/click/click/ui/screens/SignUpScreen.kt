@@ -38,6 +38,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.utils.toImageBitmap
@@ -352,6 +353,23 @@ fun SignUpScreen(
                 val birthdayPickerState = rememberDatePickerState()
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
+                    colors = DatePickerDefaults.colors(
+                        containerColor = GlassSheetTokens.OledBlack,
+                        titleContentColor = GlassSheetTokens.OnOled,
+                        headlineContentColor = GlassSheetTokens.OnOled,
+                        weekdayContentColor = GlassSheetTokens.OnOledMuted,
+                        subheadContentColor = GlassSheetTokens.OnOledMuted,
+                        navigationContentColor = GlassSheetTokens.OnOled,
+                        yearContentColor = GlassSheetTokens.OnOled,
+                        currentYearContentColor = GlassSheetTokens.OnOled,
+                        selectedYearContentColor = GlassSheetTokens.OnOled,
+                        selectedYearContainerColor = PrimaryBlue,
+                        dayContentColor = GlassSheetTokens.OnOled,
+                        selectedDayContainerColor = PrimaryBlue,
+                        todayDateBorderColor = PrimaryBlue,
+                        todayContentColor = PrimaryBlue,
+                        dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface,
+                    ),
                     confirmButton = {
                         TextButton(
                             onClick = {

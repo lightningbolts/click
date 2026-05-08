@@ -3,6 +3,7 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,8 +29,10 @@ fun GlassAlertDialog(
     onDismissRequest: () -> Unit,
     title: @Composable () -> Unit,
     text: @Composable (() -> Unit)? = null,
-    confirmButton: @Composable () -> Unit,
+    confirmButton: @Composable (() -> Unit)? = null,
     dismissButton: @Composable (() -> Unit)? = null,
+    icon: @Composable (() -> Unit)? = null,
+    showActionRow: Boolean = true,
     properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false),
 ) {
     Dialog(
@@ -47,6 +50,14 @@ fun GlassAlertDialog(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (icon != null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    icon()
+                }
+            }
             androidx.compose.material3.ProvideTextStyle(
                 MaterialTheme.typography.titleMedium.copy(color = GlassSheetTokens.OnOled),
             ) {
@@ -59,15 +70,15 @@ fun GlassAlertDialog(
                     text()
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (dismissButton != null) {
-                    dismissButton()
+            if (showActionRow && (confirmButton != null || dismissButton != null)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    dismissButton?.invoke()
+                    confirmButton?.invoke()
                 }
-                confirmButton()
             }
         }
     }

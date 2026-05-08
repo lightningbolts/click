@@ -226,7 +226,7 @@ class HubChatViewModel(
             _occupantCount.value = n
         }
 
-        val presenceJob = launch(context = Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+        val presenceJob = launch(context = Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
             try {
                 channel.presenceChangeFlow().collect { action ->
                     action.leaves.keys.forEach { occupantKeys.remove(it) }
@@ -245,7 +245,7 @@ class HubChatViewModel(
             }
         }
 
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             channel.subscribe(blockUntilSubscribed = true)
         }
         channel.track(buildJsonObject { put("userId", currentUserId) })
@@ -267,7 +267,7 @@ class HubChatViewModel(
                     is PostgresAction.Insert -> {
                         val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
                         if (row.hubId != hubId) return@collect
-                        val ui = withContext(Dispatchers.IO) { rowToMessageWithUser(row) }
+                        val ui = withContext(Dispatchers.Default) { rowToMessageWithUser(row) }
                         if (_messages.value.none { it.message.id == ui.message.id }) {
                             _messages.value = _messages.value + ui
                         }
@@ -278,7 +278,7 @@ class HubChatViewModel(
                         val current = _messages.value
                         val idx = current.indexOfFirst { it.message.id == row.id }
                         if (idx >= 0) {
-                            val refreshed = withContext(Dispatchers.IO) { rowToMessageWithUser(row) }
+                            val refreshed = withContext(Dispatchers.Default) { rowToMessageWithUser(row) }
                             _messages.value = current.toMutableList().also { it[idx] = refreshed }
                         }
                     }
@@ -305,7 +305,7 @@ class HubChatViewModel(
     }
 
     private suspend fun loadInitialMessages() {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             try {
                 val rows = supabase.from("hub_messages")
                     .select {

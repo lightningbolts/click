@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -48,7 +49,6 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,7 +64,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import androidx.compose.runtime.Composable
@@ -617,6 +616,7 @@ fun ProfileBottomSheet(
                         ) { selectedMediaForPreview = null },
                     contentAlignment = Alignment.Center,
                 ) {
+                    val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -626,10 +626,12 @@ fun ProfileBottomSheet(
                                 scaleX = 0.88f + 0.12f * t
                                 scaleY = 0.88f + 0.12f * t
                                 alpha = t
-                            },
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        tonalElevation = 2.dp,
+                            }
+                            .clip(previewShape)
+                            .border(1.dp, GlassSheetTokens.GlassBorder, previewShape),
+                        shape = previewShape,
+                        color = GlassSheetTokens.OledBlack,
+                        tonalElevation = 0.dp,
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1837,12 +1839,9 @@ fun TabbedUserProfileSheet(
         )
     }
 
-    AdaptiveBottomSheet(
+    GlassAdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         ProfileBottomSheet(
             state = state,

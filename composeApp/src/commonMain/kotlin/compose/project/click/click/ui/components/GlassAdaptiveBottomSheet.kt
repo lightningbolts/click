@@ -4,12 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveSheetState
 
@@ -23,7 +26,10 @@ fun GlassAdaptiveBottomSheet(
     onDismissRequest: () -> Unit,
     adaptiveSheetState: AdaptiveSheetState,
     modifier: Modifier = Modifier,
-    sheetMaxWidth: androidx.compose.ui.unit.Dp = BottomSheetDefaults.SheetMaxWidth,
+    sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
+    scrimColor: Color = Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha),
+    contentWindowInsets: @Composable () -> WindowInsets = { BottomSheetDefaults.windowInsets },
+    dragHandle: @Composable () -> Unit = { GlassSheetGrabber() },
     content: @Composable ColumnScope.() -> Unit,
 ) {
     AdaptiveBottomSheet(
@@ -33,7 +39,9 @@ fun GlassAdaptiveBottomSheet(
         sheetMaxWidth = sheetMaxWidth,
         containerColor = GlassSheetTokens.OledBlack,
         contentColor = GlassSheetTokens.OnOled,
-        dragHandle = { GlassSheetGrabber() },
+        scrimColor = scrimColor,
+        contentWindowInsets = contentWindowInsets,
+        dragHandle = dragHandle,
     ) {
         Box(
             modifier = Modifier

@@ -11,10 +11,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -231,7 +228,7 @@ private fun VoiceRecordDialog(
         null
     }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = {
             runCatching {
                 recorder?.apply {
@@ -333,10 +330,9 @@ private fun VoiceRecordDialog(
             )
             }
         },
-        confirmButton = {},
-        dismissButton = {},
-        shape = MaterialTheme.shapes.extraLarge,
-        modifier = Modifier.padding(8.dp),
+        confirmButton = null,
+        dismissButton = null,
+        showActionRow = false,
     )
 }
 

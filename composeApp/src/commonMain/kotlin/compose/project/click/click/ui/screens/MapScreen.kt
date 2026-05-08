@@ -9,8 +9,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -348,19 +349,17 @@ fun MapScreen(
         val sheetData = remember(connectionSelection, viewerUserId) {
             buildProfileSheetState(connectionSelection, viewerUserId)
         }
-        val profileSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onProfileSheet = MaterialTheme.colorScheme.onSurface
-        AdaptiveBottomSheet(
+        val profileSheetColor = GlassSheetTokens.OledBlack
+        val onProfileSheet = GlassSheetTokens.OnOled
+        GlassAdaptiveBottomSheet(
             onDismissRequest = {
                 selectedProfileId = null
                 viewModel.clearSelection()
             },
             adaptiveSheetState = sheetState,
-            containerColor = profileSheetColor,
-            contentColor = onProfileSheet,
-            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            scrimColor = Color.Black.copy(alpha = 0.55f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            dragHandle = null,
+            dragHandle = { },
         ) {
             MapDialogChrome(
                 modifier = Modifier

@@ -34,7 +34,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -43,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -68,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -660,7 +662,7 @@ fun SettingsScreen(
 
         val pendingDelete = pendingDeleteAvailabilityIntent
         if (pendingDelete != null) {
-            AlertDialog(
+            GlassAlertDialog(
                 onDismissRequest = { pendingDeleteAvailabilityIntent = null },
                 title = { Text("Remove availability?") },
                 text = {
@@ -684,14 +686,14 @@ fun SettingsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingDeleteAvailabilityIntent = null }) {
-                        Text("Cancel")
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 },
             )
         }
 
         if (showNameDialog) {
-            AlertDialog(
+            GlassAlertDialog(
                 onDismissRequest = { showNameDialog = false },
                 title = { Text("Edit name") },
                 text = {
@@ -702,16 +704,34 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = newFirstName,
                             onValueChange = { newFirstName = it },
-                            label = { Text("First name") },
+                            label = { Text("First name", color = GlassSheetTokens.OnOledMuted) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = GlassSheetTokens.OnOled,
+                                unfocusedTextColor = GlassSheetTokens.OnOled,
+                                focusedBorderColor = PrimaryBlue,
+                                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                                cursorColor = PrimaryBlue,
+                                focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            ),
                         )
                         OutlinedTextField(
                             value = newLastName,
                             onValueChange = { newLastName = it },
-                            label = { Text("Last name") },
+                            label = { Text("Last name", color = GlassSheetTokens.OnOledMuted) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = GlassSheetTokens.OnOled,
+                                unfocusedTextColor = GlassSheetTokens.OnOled,
+                                focusedBorderColor = PrimaryBlue,
+                                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                                cursorColor = PrimaryBlue,
+                                focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            ),
                         )
                     }
                 },
@@ -724,12 +744,12 @@ fun SettingsScreen(
                             }
                         }
                     ) {
-                        Text("Save")
+                        Text("Save", color = GlassSheetTokens.OnOled)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showNameDialog = false }) {
-                        Text("Cancel")
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 }
             )

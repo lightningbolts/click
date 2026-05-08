@@ -4,9 +4,7 @@ package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -19,7 +17,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.uikit.LocalUIViewController
-import androidx.compose.ui.unit.dp
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.refTo
 import kotlinx.coroutines.delay
@@ -329,7 +326,7 @@ private fun IosVoiceRecordDialog(
         null
     }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = {
             runCatching {
                 recorder?.apply {
@@ -430,9 +427,8 @@ private fun IosVoiceRecordDialog(
                 )
             }
         },
-        confirmButton = {},
-        dismissButton = {},
-        shape = MaterialTheme.shapes.extraLarge,
-        modifier = Modifier.padding(8.dp),
+        confirmButton = null,
+        dismissButton = null,
+        showActionRow = false,
     )
 }
