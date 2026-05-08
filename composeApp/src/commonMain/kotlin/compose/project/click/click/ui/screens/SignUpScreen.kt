@@ -366,6 +366,7 @@ fun SignUpScreen(
                         selectedYearContainerColor = PrimaryBlue,
                         dayContentColor = GlassSheetTokens.OnOled,
                         selectedDayContainerColor = PrimaryBlue,
+                        selectedDayContentColor = GlassSheetTokens.OnOled,
                         todayDateBorderColor = PrimaryBlue,
                         todayContentColor = PrimaryBlue,
                         dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface,
