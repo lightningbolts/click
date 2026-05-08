@@ -203,7 +203,10 @@ internal fun ConnectionActionSheet(
                 BentoGlassOptionRow(
                     title = "Report",
                     subtitle = "Flag for review",
-                    onClick = { showReportDialog = true },
+                    onClick = {
+                        reportReason = ""
+                        showReportDialog = true
+                    },
                     titleColor = Color(0xFFFF8C00),
                     leading = {
                         Icon(
@@ -415,7 +418,10 @@ internal fun ConnectionActionSheet(
 
     if (showReportDialog) {
         GlassAlertDialog(
-            onDismissRequest = { showReportDialog = false },
+            onDismissRequest = {
+                reportReason = ""
+                showReportDialog = false
+            },
             title = { Text("Report User") },
             text = {
                 Column {
@@ -448,8 +454,9 @@ internal fun ConnectionActionSheet(
                 TextButton(
                     onClick = {
                         if (reportReason.isNotBlank()) {
-                            showReportDialog = false
                             val reasonToSubmit = reportReason.trim()
+                            reportReason = ""
+                            showReportDialog = false
                             openFinalConfirm(
                                 title = "Confirm Report",
                                 body = "Submit this report for review?",
@@ -465,7 +472,10 @@ internal fun ConnectionActionSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showReportDialog = false }) {
+                TextButton(onClick = {
+                    reportReason = ""
+                    showReportDialog = false
+                }) {
                     Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },

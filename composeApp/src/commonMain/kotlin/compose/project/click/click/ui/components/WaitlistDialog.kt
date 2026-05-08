@@ -75,6 +75,11 @@ fun WaitlistDialog(
                     .border(1.dp, GlassSheetTokens.GlassBorder, shape)
                     .background(GlassSheetTokens.OledBlack)
                     .verticalScroll(rememberScrollState())
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
                     .padding(horizontal = 22.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {

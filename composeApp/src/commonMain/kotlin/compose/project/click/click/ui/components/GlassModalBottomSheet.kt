@@ -3,7 +3,6 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
@@ -74,7 +73,6 @@ fun GlassModalBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
                 .background(GlassSheetTokens.OledBlack),
             content = content,
         )

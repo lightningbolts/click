@@ -693,6 +693,15 @@ fun SettingsScreen(
         }
 
         if (showNameDialog) {
+            val nameDialogFieldColors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = GlassSheetTokens.OnOled,
+                unfocusedTextColor = GlassSheetTokens.OnOled,
+                focusedBorderColor = PrimaryBlue,
+                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                cursorColor = PrimaryBlue,
+                focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+            )
             GlassAlertDialog(
                 onDismissRequest = { showNameDialog = false },
                 title = { Text("Edit name") },
@@ -707,15 +716,7 @@ fun SettingsScreen(
                             label = { Text("First name", color = GlassSheetTokens.OnOledMuted) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = GlassSheetTokens.OnOled,
-                                unfocusedTextColor = GlassSheetTokens.OnOled,
-                                focusedBorderColor = PrimaryBlue,
-                                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
-                                cursorColor = PrimaryBlue,
-                                focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            ),
+                            colors = nameDialogFieldColors,
                         )
                         OutlinedTextField(
                             value = newLastName,
@@ -723,15 +724,7 @@ fun SettingsScreen(
                             label = { Text("Last name", color = GlassSheetTokens.OnOledMuted) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = GlassSheetTokens.OnOled,
-                                unfocusedTextColor = GlassSheetTokens.OnOled,
-                                focusedBorderColor = PrimaryBlue,
-                                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
-                                cursorColor = PrimaryBlue,
-                                focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            ),
+                            colors = nameDialogFieldColors,
                         )
                     }
                 },

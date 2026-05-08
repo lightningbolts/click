@@ -41,18 +41,21 @@ class GlassCardUiTest {
 
     @Test
     fun glassAlertDialog_rendersTitleAndConfirm() = runComposeUiTest {
+        val confirmClicks = intArrayOf(0)
         setContent {
             GlassAlertDialog(
                 onDismissRequest = {},
                 title = { Text("Glass title") },
                 text = { Text("Glass body") },
                 confirmButton = {
-                    TextButton(onClick = {}) { Text("OK") }
+                    TextButton(onClick = { confirmClicks[0]++ }) { Text("OK") }
                 },
             )
         }
         onNodeWithText("Glass title").assertExists()
         onNodeWithText("Glass body").assertExists()
         onNodeWithText("OK").assertExists()
+        onNodeWithText("OK").performClick()
+        assertEquals(1, confirmClicks[0])
     }
 }

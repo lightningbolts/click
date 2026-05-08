@@ -318,6 +318,8 @@ class HubChatViewModel(
                     .decodeList<HubMessageRow>()
                     .asReversed()
                 mergeMessages(rows)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
             }
