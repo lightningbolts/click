@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -37,6 +38,8 @@ fun BentoGlassOptionRow(
     leading: (@Composable () -> Unit)? = null,
     titleColor: androidx.compose.ui.graphics.Color = GlassSheetTokens.OnOled,
     destructive: Boolean = false,
+    /** Default interior radius; message sheets use [GlassSheetTokens.BentoExteriorCorner] for larger pills. */
+    cornerRadius: Dp = GlassSheetTokens.BentoInteriorCorner,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -56,7 +59,7 @@ fun BentoGlassOptionRow(
         ),
         label = "bento_row_scale",
     )
-    val shape = RoundedCornerShape(GlassSheetTokens.BentoInteriorCorner)
+    val shape = RoundedCornerShape(cornerRadius)
     val bodyColor =
         if (destructive) androidx.compose.ui.graphics.Color(0xFFFF6B6B) else titleColor
     Column(

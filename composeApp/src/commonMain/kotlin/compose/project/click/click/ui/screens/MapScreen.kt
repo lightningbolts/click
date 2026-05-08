@@ -264,8 +264,8 @@ fun MapScreen(
     }
 
     if (showBeaconDropSheet) {
-        val dropSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onDropSheet = contentColorFor(dropSheetColor)
+        val dropSheetColor = GlassSheetTokens.OledBlack
+        val onDropSheet = GlassSheetTokens.OnOled
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { showBeaconDropSheet = false },
@@ -309,8 +309,8 @@ fun MapScreen(
 
     if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
         val beaconSel = selection as MapSelection.BeaconSelected
-        val detailSurface = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onDetailSurface = contentColorFor(detailSurface)
+        val detailSurface = GlassSheetTokens.OledBlack
+        val onDetailSurface = GlassSheetTokens.OnOled
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -367,6 +367,7 @@ fun MapScreen(
                     .weight(1f, fill = true),
                 sheetColor = profileSheetColor,
                 onSurface = onProfileSheet,
+                alignSemanticColorsToSheet = true,
             ) {
                 ProfileBottomSheet(
                     state = sheetData,

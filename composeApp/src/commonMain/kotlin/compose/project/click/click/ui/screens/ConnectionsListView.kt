@@ -604,7 +604,6 @@ fun ConnectionsListView(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
             }
 
             if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
@@ -736,7 +735,12 @@ fun ConnectionsListView(
                         LazyColumn(
                             state = connectionsLazyListState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 20.dp),
+                            contentPadding = PaddingValues(
+                                start = 20.dp,
+                                end = 20.dp,
+                                top = 6.dp,
+                                bottom = 20.dp,
+                            ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             items(

@@ -25,8 +25,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +56,7 @@ import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -151,24 +150,23 @@ internal fun MessageActionSheet(
                     }
                 }
             } else {
-                ListItem(
-                    headlineContent = {
-                        Text("Reply", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                val optionRadius = GlassSheetTokens.BentoExteriorCorner
+                BentoGlassOptionRow(
+                    title = "Reply",
+                    onClick = {
+                        if (message.messageType != "call_log") {
+                            viewModel.startReplyTo(messageWithUser)
+                            dismiss()
+                        }
                     },
-                    leadingContent = {
+                    cornerRadius = optionRadius,
+                    leading = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Reply,
                             contentDescription = "Reply",
                             tint = PrimaryBlue,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        if (message.messageType != "call_log") {
-                            viewModel.startReplyTo(messageWithUser)
-                            dismiss()
-                        }
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
 
                 Row(
@@ -200,22 +198,13 @@ internal fun MessageActionSheet(
                     Text("More emojis…", color = PrimaryBlue)
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
+                HorizontalDivider(color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f))
 
                 val imageUrl = message.mediaUrlOrNull()
                 if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Save to gallery", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                        },
-                        leadingContent = {
-                            Icon(
-                                imageVector = Icons.Outlined.Save,
-                                contentDescription = "Save to gallery",
-                                tint = PrimaryBlue,
-                            )
-                        },
-                        modifier = Modifier.clickable {
+                    BentoGlassOptionRow(
+                        title = "Save to gallery",
+                        onClick = {
                             scope.launch {
                                 if (message.isEncryptedMedia()) {
                                     val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
@@ -231,21 +220,19 @@ internal fun MessageActionSheet(
                                 }
                             }
                         },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        cornerRadius = optionRadius,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Outlined.Save,
+                                contentDescription = "Save to gallery",
+                                tint = PrimaryBlue,
+                            )
+                        },
                     )
                     if (message.isEncryptedMedia()) {
-                        ListItem(
-                            headlineContent = {
-                                Text("Share image", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                            },
-                            leadingContent = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Share,
-                                    contentDescription = "Share image",
-                                    tint = PrimaryBlue,
-                                )
-                            },
-                            modifier = Modifier.clickable {
+                        BentoGlassOptionRow(
+                            title = "Share image",
+                            onClick = {
                                 scope.launch {
                                     val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
                                     if (bytes != null) {
@@ -259,71 +246,67 @@ internal fun MessageActionSheet(
                                     }
                                 }
                             },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            cornerRadius = optionRadius,
+                            leading = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Share,
+                                    contentDescription = "Share image",
+                                    tint = PrimaryBlue,
+                                )
+                            },
                         )
                     }
                 }
 
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
-                                "Copy caption & link"
-                            } else {
-                                "Copy"
-                            },
-                            color = onSurface,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
+                BentoGlassOptionRow(
+                    title = if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
+                        "Copy caption & link"
+                    } else {
+                        "Copy"
                     },
-                    leadingContent = {
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(message.copyableText()))
+                        dismiss()
+                    },
+                    cornerRadius = optionRadius,
+                    leading = {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = "Copy",
                             tint = onVariant,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        clipboardManager.setText(AnnotatedString(message.copyableText()))
-                        dismiss()
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
 
                 if (isSent) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Edit", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                    BentoGlassOptionRow(
+                        title = "Edit",
+                        onClick = {
+                            viewModel.startEditMessage(message.id, message.content)
+                            dismiss()
                         },
-                        leadingContent = {
+                        cornerRadius = optionRadius,
+                        leading = {
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit message",
                                 tint = PrimaryBlue,
                             )
                         },
-                        modifier = Modifier.clickable {
-                            viewModel.startEditMessage(message.id, message.content)
-                            dismiss()
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
 
-                    ListItem(
-                        headlineContent = {
-                            Text("Delete", color = Color(0xFFFF4444), style = MaterialTheme.typography.bodyLarge)
-                        },
-                        leadingContent = {
+                    BentoGlassOptionRow(
+                        title = "Delete",
+                        onClick = { showDeleteMessageConfirm = true },
+                        destructive = true,
+                        cornerRadius = optionRadius,
+                        leading = {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Delete message",
                                 tint = Color(0xFFFF4444),
                             )
                         },
-                        modifier = Modifier.clickable {
-                            showDeleteMessageConfirm = true
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
                 }
             }

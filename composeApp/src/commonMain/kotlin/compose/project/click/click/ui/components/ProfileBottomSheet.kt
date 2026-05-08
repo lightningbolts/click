@@ -1843,15 +1843,17 @@ fun TabbedUserProfileSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
     ) {
-        ProfileBottomSheet(
-            state = state,
-            onMessage = {
-                onMessage?.invoke()
-                onDismiss()
-            },
-            onNudge = {
-                onDismiss()
-            },
-        )
+        OledSheetTheme {
+            ProfileBottomSheet(
+                state = state,
+                onMessage = {
+                    onMessage?.invoke()
+                    onDismiss()
+                },
+                onNudge = {
+                    onDismiss()
+                },
+            )
+        }
     }
 }
