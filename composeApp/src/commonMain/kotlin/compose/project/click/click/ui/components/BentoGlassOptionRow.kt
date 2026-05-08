@@ -40,6 +40,8 @@ fun BentoGlassOptionRow(
     destructive: Boolean = false,
     /** Default interior radius; message sheets use [GlassSheetTokens.BentoExteriorCorner] for larger pills. */
     cornerRadius: Dp = GlassSheetTokens.BentoInteriorCorner,
+    /** Message action sheet uses borderless rows for visual consistency with the sheet chrome. */
+    showBorder: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -67,7 +69,13 @@ fun BentoGlassOptionRow(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .clip(shape)
-            .border(1.dp, GlassSheetTokens.GlassBorder.copy(alpha = borderAlpha), shape)
+            .then(
+                if (showBorder) {
+                    Modifier.border(1.dp, GlassSheetTokens.GlassBorder.copy(alpha = borderAlpha), shape)
+                } else {
+                    Modifier
+                },
+            )
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale

@@ -160,6 +160,7 @@ internal fun MessageActionSheet(
                         }
                     },
                     cornerRadius = optionRadius,
+                    showBorder = false,
                     leading = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Reply,
@@ -221,6 +222,7 @@ internal fun MessageActionSheet(
                             }
                         },
                         cornerRadius = optionRadius,
+                        showBorder = false,
                         leading = {
                             Icon(
                                 imageVector = Icons.Outlined.Save,
@@ -247,6 +249,7 @@ internal fun MessageActionSheet(
                                 }
                             },
                             cornerRadius = optionRadius,
+                            showBorder = false,
                             leading = {
                                 Icon(
                                     imageVector = Icons.Outlined.Share,
@@ -269,6 +272,7 @@ internal fun MessageActionSheet(
                         dismiss()
                     },
                     cornerRadius = optionRadius,
+                    showBorder = false,
                     leading = {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
@@ -286,6 +290,7 @@ internal fun MessageActionSheet(
                             dismiss()
                         },
                         cornerRadius = optionRadius,
+                        showBorder = false,
                         leading = {
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -300,6 +305,7 @@ internal fun MessageActionSheet(
                         onClick = { showDeleteMessageConfirm = true },
                         destructive = true,
                         cornerRadius = optionRadius,
+                        showBorder = false,
                         leading = {
                             Icon(
                                 imageVector = Icons.Default.Delete,

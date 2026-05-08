@@ -525,6 +525,7 @@ fun ConnectionsListView(
                 val segInnerCorner = if (segStyle.isIOS) 7.dp else 8.dp
                 Row(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = 20.dp)
                         .border(
                             width = segBorderWidth,
@@ -738,7 +739,7 @@ fun ConnectionsListView(
                             contentPadding = PaddingValues(
                                 start = 20.dp,
                                 end = 20.dp,
-                                top = 6.dp,
+                                top = 18.dp,
                                 bottom = 20.dp,
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
