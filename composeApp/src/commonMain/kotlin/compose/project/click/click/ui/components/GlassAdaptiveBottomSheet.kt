@@ -46,13 +46,12 @@ fun GlassAdaptiveBottomSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
                 .background(GlassSheetTokens.OledBlack),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(),
+                    ,
                 content = content,
             )
         }
