@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -48,7 +49,6 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,7 +64,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import androidx.compose.runtime.Composable
@@ -546,6 +545,7 @@ fun ProfileBottomSheet(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.Top,
+            pageSpacing = 14.dp,
         ) { pageIndex ->
             when (visibleTabs[pageIndex]) {
                 ProfileSheetTab.Timeline -> TimelinePanel(
@@ -617,6 +617,7 @@ fun ProfileBottomSheet(
                         ) { selectedMediaForPreview = null },
                     contentAlignment = Alignment.Center,
                 ) {
+                    val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -626,10 +627,12 @@ fun ProfileBottomSheet(
                                 scaleX = 0.88f + 0.12f * t
                                 scaleY = 0.88f + 0.12f * t
                                 alpha = t
-                            },
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        tonalElevation = 2.dp,
+                            }
+                            .clip(previewShape)
+                            .border(1.dp, GlassSheetTokens.GlassBorder, previewShape),
+                        shape = previewShape,
+                        color = GlassSheetTokens.OledBlack,
+                        tonalElevation = 0.dp,
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1023,11 +1026,13 @@ private fun TimelinePanel(
 
 @Composable
 private fun TimelineRow(item: ProfileSheetTimelineItem) {
+    val rowShape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clip(rowShape)
+            .border(1.dp, GlassSheetTokens.GlassBorder, rowShape)
+            .background(GlassSheetTokens.GlassSurface)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -1096,14 +1101,14 @@ private fun MediaPanel(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         repeat(3) {
+                            val skelShape = RoundedCornerShape(14.dp)
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(96.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
-                                    ),
+                                    .clip(skelShape)
+                                    .border(1.dp, GlassSheetTokens.GlassBorder, skelShape)
+                                    .background(GlassSheetTokens.GlassSurface),
                             )
                         }
                     }
@@ -1145,6 +1150,9 @@ private fun MediaPanel(
                         animationSpec = tween(140, easing = FastOutSlowInEasing),
                         label = "media_thumb_press",
                     )
+                    val thumbShape = RoundedCornerShape(14.dp)
+                    val thumbBorder = GlassSheetTokens.GlassBorder
+                    val thumbBg = GlassSheetTokens.GlassSurface
                     val thumbModifier = Modifier
                         .weight(1f)
                         .height(110.dp)
@@ -1153,8 +1161,9 @@ private fun MediaPanel(
                             scaleY = thumbScale
                             alpha = thumbReveal
                         }
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clip(thumbShape)
+                        .border(1.dp, thumbBorder, thumbShape)
+                        .background(thumbBg)
                         .clickable(
                             interactionSource = thumbInteraction,
                             indication = ripple(bounded = true, radius = 52.dp),
@@ -1236,11 +1245,13 @@ private fun MediaPanel(
                             )
                         }
                         unlockingAudio -> {
+                            val lockShape = RoundedCornerShape(14.dp)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                    .clip(lockShape)
+                                    .border(1.dp, GlassSheetTokens.GlassBorder, lockShape)
+                                    .background(GlassSheetTokens.GlassSurface)
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1299,11 +1310,15 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         items(items, key = { it.id }) { link ->
+            val linkShape = RoundedCornerShape(14.dp)
+            val cardBorder = GlassSheetTokens.GlassBorder
+            val cardBg = GlassSheetTokens.GlassSurface
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clip(linkShape)
+                    .border(1.dp, cardBorder, linkShape)
+                    .background(cardBg)
                     .clickable { onOpen(link.url) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1353,11 +1368,13 @@ private fun FilesPanel(items: List<ProfileSheetFile>, onDownload: (ProfileSheetF
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         items(items, key = { it.id }) { file ->
+            val fileShape = RoundedCornerShape(14.dp)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clip(fileShape)
+                    .border(1.dp, GlassSheetTokens.GlassBorder, fileShape)
+                    .background(GlassSheetTokens.GlassSurface)
                     .clickable { onDownload(file) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1837,22 +1854,21 @@ fun TabbedUserProfileSheet(
         )
     }
 
-    AdaptiveBottomSheet(
+    GlassAdaptiveBottomSheet(
         onDismissRequest = onDismiss,
         adaptiveSheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
-        ProfileBottomSheet(
-            state = state,
-            onMessage = {
-                onMessage?.invoke()
-                onDismiss()
-            },
-            onNudge = {
-                onDismiss()
-            },
-        )
+        OledSheetTheme {
+            ProfileBottomSheet(
+                state = state,
+                onMessage = {
+                    onMessage?.invoke()
+                    onDismiss()
+                },
+                onNudge = {
+                    onDismiss()
+                },
+            )
+        }
     }
 }

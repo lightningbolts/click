@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -36,5 +37,25 @@ class GlassCardUiTest {
         }
         onNodeWithText("inside card").performClick()
         assertEquals(1, clicks)
+    }
+
+    @Test
+    fun glassAlertDialog_rendersTitleAndConfirm() = runComposeUiTest {
+        val confirmClicks = intArrayOf(0)
+        setContent {
+            GlassAlertDialog(
+                onDismissRequest = {},
+                title = { Text("Glass title") },
+                text = { Text("Glass body") },
+                confirmButton = {
+                    TextButton(onClick = { confirmClicks[0]++ }) { Text("OK") }
+                },
+            )
+        }
+        onNodeWithText("Glass title").assertExists()
+        onNodeWithText("Glass body").assertExists()
+        onNodeWithText("OK").assertExists()
+        onNodeWithText("OK").performClick()
+        assertEquals(1, confirmClicks[0])
     }
 }

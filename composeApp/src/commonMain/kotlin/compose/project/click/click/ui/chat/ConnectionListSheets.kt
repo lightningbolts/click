@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -37,10 +36,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.User
-import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -124,19 +125,18 @@ internal fun GroupMembersPickerSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
     val scroll = rememberScrollState()
-    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    ModalBottomSheet(
+    val surface = GlassSheetTokens.OledBlack
+    val onSurface = GlassSheetTokens.OnOled
+    val onVariant = GlassSheetTokens.OnOledMuted
+    GlassModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = surface,
-        contentColor = onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(surface)
                 .verticalScroll(scroll)
                 .padding(bottom = 28.dp),
         ) {

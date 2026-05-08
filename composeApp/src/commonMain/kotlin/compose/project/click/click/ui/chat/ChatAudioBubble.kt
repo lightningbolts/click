@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +54,7 @@ import compose.project.click.click.data.models.mediaUrlLooksLikePlaintextWebChat
 import compose.project.click.click.getPlatform
 import compose.project.click.click.media.rememberChatAudioPlayer
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
@@ -80,7 +82,7 @@ private data class VoiceChromePalette(
 private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePalette {
     val scheme = MaterialTheme.colorScheme
     val violet = Color(0xFF8338EC)
-    return remember(kind, scheme.surfaceContainerHigh, scheme.outline, scheme.onSurfaceVariant) {
+    return remember(kind, scheme.surface, scheme.surfaceContainerHigh, scheme.outline, scheme.onSurfaceVariant) {
         when (kind) {
             ChatAudioChromeKind.SentBubble -> VoiceChromePalette(
                 shellBg = Color.White.copy(alpha = 0.12f),
@@ -94,7 +96,7 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                 ),
                 timeColor = Color.White.copy(alpha = 0.75f),
             )
-            ChatAudioChromeKind.ReceivedBubble, ChatAudioChromeKind.ProfileSurface -> VoiceChromePalette(
+            ChatAudioChromeKind.ReceivedBubble -> VoiceChromePalette(
                 shellBg = scheme.surfaceContainerHigh.copy(alpha = 0.94f),
                 shellBorder = scheme.outline.copy(alpha = 0.28f),
                 playFill = PrimaryBlue.copy(alpha = 0.22f),
@@ -104,6 +106,32 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                 progressBrush = Brush.horizontalGradient(colors = listOf(violet, PrimaryBlue, LightBlue)),
                 timeColor = scheme.onSurfaceVariant.copy(alpha = 0.92f),
             )
+            ChatAudioChromeKind.ProfileSurface -> {
+                val onOledSheet = scheme.surface.luminance() < 0.08f
+                if (onOledSheet) {
+                    VoiceChromePalette(
+                        shellBg = GlassSheetTokens.GlassSurface,
+                        shellBorder = GlassSheetTokens.GlassBorder,
+                        playFill = PrimaryBlue.copy(alpha = 0.28f),
+                        playBorder = PrimaryBlue.copy(alpha = 0.45f),
+                        playIcon = Color.White,
+                        trackBg = Color.White.copy(alpha = 0.22f),
+                        progressBrush = Brush.horizontalGradient(colors = listOf(violet, PrimaryBlue, LightBlue)),
+                        timeColor = GlassSheetTokens.OnOledMuted,
+                    )
+                } else {
+                    VoiceChromePalette(
+                        shellBg = scheme.surfaceContainerHigh.copy(alpha = 0.94f),
+                        shellBorder = scheme.outline.copy(alpha = 0.28f),
+                        playFill = PrimaryBlue.copy(alpha = 0.22f),
+                        playBorder = PrimaryBlue.copy(alpha = 0.38f),
+                        playIcon = Color(0xFFC4A8FF),
+                        trackBg = Color.Black.copy(alpha = 0.45f),
+                        progressBrush = Brush.horizontalGradient(colors = listOf(violet, PrimaryBlue, LightBlue)),
+                        timeColor = scheme.onSurfaceVariant.copy(alpha = 0.92f),
+                    )
+                }
+            }
         }
     }
 }

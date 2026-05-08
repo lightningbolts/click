@@ -9,8 +9,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -40,7 +42,6 @@ import compose.project.click.click.ui.components.toClusterPin // pragma: allowli
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProfileSheetTimelineItem // pragma: allowlist secret
 import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -263,8 +264,8 @@ fun MapScreen(
     }
 
     if (showBeaconDropSheet) {
-        val dropSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onDropSheet = contentColorFor(dropSheetColor)
+        val dropSheetColor = GlassSheetTokens.OledBlack
+        val onDropSheet = GlassSheetTokens.OnOled
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { showBeaconDropSheet = false },
@@ -308,8 +309,8 @@ fun MapScreen(
 
     if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
         val beaconSel = selection as MapSelection.BeaconSelected
-        val detailSurface = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onDetailSurface = contentColorFor(detailSurface)
+        val detailSurface = GlassSheetTokens.OledBlack
+        val onDetailSurface = GlassSheetTokens.OnOled
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -348,19 +349,17 @@ fun MapScreen(
         val sheetData = remember(connectionSelection, viewerUserId) {
             buildProfileSheetState(connectionSelection, viewerUserId)
         }
-        val profileSheetColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onProfileSheet = MaterialTheme.colorScheme.onSurface
-        AdaptiveBottomSheet(
+        val profileSheetColor = GlassSheetTokens.OledBlack
+        val onProfileSheet = GlassSheetTokens.OnOled
+        GlassAdaptiveBottomSheet(
             onDismissRequest = {
                 selectedProfileId = null
                 viewModel.clearSelection()
             },
             adaptiveSheetState = sheetState,
-            containerColor = profileSheetColor,
-            contentColor = onProfileSheet,
-            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            scrimColor = Color.Black.copy(alpha = 0.55f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            dragHandle = null,
+            dragHandle = { },
         ) {
             MapDialogChrome(
                 modifier = Modifier
@@ -368,6 +367,7 @@ fun MapScreen(
                     .weight(1f, fill = true),
                 sheetColor = profileSheetColor,
                 onSurface = onProfileSheet,
+                alignSemanticColorsToSheet = true,
             ) {
                 ProfileBottomSheet(
                     state = sheetData,
@@ -406,7 +406,9 @@ private fun MapDialogChrome(
     content: @Composable () -> Unit,
 ) {
     val grabberTint = if (alignSemanticColorsToSheet) {
-        contentColorFor(sheetColor).copy(alpha = 0.38f)
+        val darkSheet = sheetColor.luminance() < 0.05f
+        if (darkSheet) GlassSheetTokens.OnOledMuted.copy(alpha = 0.42f)
+        else contentColorFor(sheetColor).copy(alpha = 0.38f)
     } else {
         onSurface.copy(alpha = 0.3f)
     }
@@ -414,11 +416,18 @@ private fun MapDialogChrome(
     @Composable
     fun themedContent() {
         if (alignSemanticColorsToSheet) {
-            val primaryOn = contentColorFor(sheetColor)
-            val mutedOn = lerp(sheetColor, primaryOn, 0.88f)
-            val elevatedSurface = lerp(sheetColor, primaryOn, 0.12f)
+            val darkSheet = sheetColor.luminance() < 0.05f
+            val primaryOn =
+                if (darkSheet) GlassSheetTokens.OnOled else contentColorFor(sheetColor)
+            val mutedOn =
+                if (darkSheet) GlassSheetTokens.OnOledMuted
+                else lerp(sheetColor, primaryOn, 0.88f)
+            val elevatedSurface =
+                if (darkSheet) GlassSheetTokens.GlassSurface
+                else lerp(sheetColor, primaryOn, 0.12f)
+            val scheme = MaterialTheme.colorScheme
             MaterialTheme(
-                colorScheme = MaterialTheme.colorScheme.copy(
+                colorScheme = scheme.copy(
                     surface = sheetColor,
                     surfaceContainerLow = sheetColor,
                     surfaceContainer = sheetColor,
@@ -428,6 +437,10 @@ private fun MapDialogChrome(
                     onSurfaceVariant = mutedOn,
                     outline = primaryOn.copy(alpha = 0.34f),
                     outlineVariant = primaryOn.copy(alpha = 0.26f),
+                    primary = scheme.primary,
+                    onPrimary = scheme.onPrimary,
+                    error = scheme.error,
+                    onError = scheme.onError,
                 ),
             ) {
                 content()
@@ -488,21 +501,13 @@ private fun buildProfileSheetState(
         TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
         TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
     }
-    val timelineSeed = listOf(
-        ProfileSheetTimelineItem(
-            id = "conn-${point.connection.id}",
-            title = "Met at ${point.locationLabel}",
-            subtitle = point.connection.contextTagId,
-            timestamp = point.formattedDate,
-        ),
-    )
     return ProfileSheetState(
         displayName = displayName,
         subtitle = otherUser?.email?.takeIf { it.isNotBlank() },
         avatarUrl = otherUser?.image,
         statusBadge = status,
         canNudge = point.timeState == TimeState.LIVE || point.timeState == TimeState.RECENT,
-        timeline = timelineSeed,
+        timeline = emptyList(),
         media = emptyList(),
         links = emptyList(),
         files = emptyList(),

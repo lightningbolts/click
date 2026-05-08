@@ -26,8 +26,8 @@ data class PlatformStyle(
 val LocalPlatformStyle = staticCompositionLocalOf {
     PlatformStyle(
         isIOS = false,
-        cardCornerRadius = 16.dp,
-        compactCardCornerRadius = 12.dp,
+        cardCornerRadius = 28.dp,
+        compactCardCornerRadius = 8.dp,
         buttonCornerRadius = 16.dp,
         cardBorderWidth = 1.dp,
         glassBackgroundAlpha = 0.05f,
@@ -40,8 +40,8 @@ val LocalPlatformStyle = staticCompositionLocalOf {
 
 private val iOSPlatformStyle = PlatformStyle(
     isIOS = true,
-    cardCornerRadius = 20.dp,
-    compactCardCornerRadius = 14.dp,
+    cardCornerRadius = 28.dp,
+    compactCardCornerRadius = 8.dp,
     buttonCornerRadius = 12.dp,
     cardBorderWidth = 0.5.dp,
     glassBackgroundAlpha = 0.08f,
@@ -53,8 +53,8 @@ private val iOSPlatformStyle = PlatformStyle(
 
 private val androidPlatformStyle = PlatformStyle(
     isIOS = false,
-    cardCornerRadius = 16.dp,
-    compactCardCornerRadius = 12.dp,
+    cardCornerRadius = 28.dp,
+    compactCardCornerRadius = 8.dp,
     buttonCornerRadius = 16.dp,
     cardBorderWidth = 1.dp,
     glassBackgroundAlpha = 0.05f,

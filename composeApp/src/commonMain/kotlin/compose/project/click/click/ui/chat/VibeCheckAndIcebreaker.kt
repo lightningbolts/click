@@ -25,7 +25,8 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.AlertDialog
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -87,7 +88,7 @@ fun VibeCheckBanner(
     }
 
     if (vibeCheckExpired && !connectionKept) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { },
             icon = {
                 Icon(
@@ -119,10 +120,11 @@ fun VibeCheckBanner(
                         },
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = GlassSheetTokens.OnOledMuted,
                     )
                 }
             },
+            dismissButton = null,
             confirmButton = {
                 Button(
                     onClick = onExpiredDismiss,

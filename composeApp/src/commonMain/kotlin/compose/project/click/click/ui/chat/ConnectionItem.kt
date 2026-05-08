@@ -1,10 +1,15 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,19 +49,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.previewLabel
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.getPlatform
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
-import compose.project.click.click.ui.components.GroupAvatar
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.util.AvailabilityOverlapCache
-import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.getPlatform // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
+import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -122,6 +128,20 @@ fun ConnectionItem(
         hasIntentOverlap = result
     }
 
+    val rowInteraction = remember { MutableInteractionSource() }
+    val pressed by rowInteraction.collectIsPressedAsState()
+    val cardBorderAlpha by animateFloatAsState(
+        targetValue = when {
+            isIOS -> GlassSheetTokens.GlassBorder.alpha
+            pressed -> GlassSheetTokens.GlassBorderPressed.alpha
+            else -> GlassSheetTokens.GlassBorder.alpha
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "connection_row_glass_border",
+    )
     val rowTapModifier = if (isIOS) {
         Modifier.pointerInput(onClick, onLongPress) {
             detectTapGestures(
@@ -134,6 +154,8 @@ fun ConnectionItem(
         }
     } else {
         Modifier.combinedClickable(
+            interactionSource = rowInteraction,
+            indication = null,
             onClick = onClick,
             onLongClick = {
                 PlatformHapticsPolicy.heavyImpact()
@@ -145,7 +167,13 @@ fun ConnectionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
+            .border(
+                width = 1.dp,
+                color = GlassSheetTokens.GlassBorder.copy(alpha = cardBorderAlpha),
+                shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+            )
+            .background(GlassSheetTokens.GlassSurface)
             .then(rowTapModifier)
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,6 +29,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -198,6 +201,24 @@ fun ProfileBasicsGateScreen(
                 val birthdayPickerState = rememberDatePickerState()
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
+                    colors = DatePickerDefaults.colors(
+                        containerColor = GlassSheetTokens.OledBlack,
+                        titleContentColor = GlassSheetTokens.OnOled,
+                        headlineContentColor = GlassSheetTokens.OnOled,
+                        weekdayContentColor = GlassSheetTokens.OnOledMuted,
+                        subheadContentColor = GlassSheetTokens.OnOledMuted,
+                        navigationContentColor = GlassSheetTokens.OnOled,
+                        yearContentColor = GlassSheetTokens.OnOled,
+                        currentYearContentColor = GlassSheetTokens.OnOled,
+                        selectedYearContentColor = GlassSheetTokens.OnOled,
+                        selectedYearContainerColor = PrimaryBlue,
+                        dayContentColor = GlassSheetTokens.OnOled,
+                        selectedDayContainerColor = PrimaryBlue,
+                        selectedDayContentColor = GlassSheetTokens.OnOled,
+                        todayDateBorderColor = PrimaryBlue,
+                        todayContentColor = PrimaryBlue,
+                        dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface,
+                    ),
                     confirmButton = {
                         TextButton(
                             onClick = {

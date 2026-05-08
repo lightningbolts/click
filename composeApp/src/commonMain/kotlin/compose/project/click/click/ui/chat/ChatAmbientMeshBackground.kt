@@ -41,7 +41,7 @@ private const val MeshAnimDurationMs = 26_000
  * stay tied to a single float driver.
  */
 @Composable
-internal fun ChatAmbientMeshBackground(
+fun ChatAmbientMeshBackground(
     connection: Connection?,
     isHubNeutral: Boolean,
     modifier: Modifier = Modifier,

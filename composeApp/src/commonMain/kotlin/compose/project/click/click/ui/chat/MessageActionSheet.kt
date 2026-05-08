@@ -1,11 +1,13 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -20,16 +22,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -47,16 +44,20 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.ChatMessageType
-import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.copyableText
-import compose.project.click.click.data.models.isEncryptedMedia
-import compose.project.click.click.data.models.mediaUrlOrNull
-import compose.project.click.click.data.models.originalMimeTypeOrNull
-import compose.project.click.click.ui.components.EmojiCatalog
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -87,21 +88,17 @@ internal fun MessageActionSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
-    ModalBottomSheet(
+    GlassModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         LaunchedEffect(Unit) {
             PlatformHapticsPolicy.lightImpact()
         }
-        val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onSurface = MaterialTheme.colorScheme.onSurface
-        val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
+        val sheetBg = GlassSheetTokens.OledBlack
+        val onSurface = GlassSheetTokens.OnOled
+        val onVariant = GlassSheetTokens.OnOledMuted
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -154,24 +151,26 @@ internal fun MessageActionSheet(
                     }
                 }
             } else {
-                ListItem(
-                    headlineContent = {
-                        Text("Reply", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                val optionRadius = 0.dp
+                BentoGlassOptionRow(
+                    title = "Reply",
+                    onClick = {
+                        if (message.messageType != "call_log") {
+                            viewModel.startReplyTo(messageWithUser)
+                            dismiss()
+                        }
                     },
-                    leadingContent = {
+                    cornerRadius = optionRadius,
+                    showBorder = false,
+                    horizontalInset = 0.dp,
+                    verticalInset = 0.dp,
+                    leading = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Reply,
                             contentDescription = "Reply",
                             tint = PrimaryBlue,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        if (message.messageType != "call_log") {
-                            viewModel.startReplyTo(messageWithUser)
-                            dismiss()
-                        }
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
 
                 Row(
@@ -203,22 +202,13 @@ internal fun MessageActionSheet(
                     Text("More emojis…", color = PrimaryBlue)
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 val imageUrl = message.mediaUrlOrNull()
                 if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Save to gallery", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                        },
-                        leadingContent = {
-                            Icon(
-                                imageVector = Icons.Outlined.Save,
-                                contentDescription = "Save to gallery",
-                                tint = PrimaryBlue,
-                            )
-                        },
-                        modifier = Modifier.clickable {
+                    BentoGlassOptionRow(
+                        title = "Save to gallery",
+                        onClick = {
                             scope.launch {
                                 if (message.isEncryptedMedia()) {
                                     val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
@@ -234,21 +224,22 @@ internal fun MessageActionSheet(
                                 }
                             }
                         },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Outlined.Save,
+                                contentDescription = "Save to gallery",
+                                tint = PrimaryBlue,
+                            )
+                        },
                     )
                     if (message.isEncryptedMedia()) {
-                        ListItem(
-                            headlineContent = {
-                                Text("Share image", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                            },
-                            leadingContent = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Share,
-                                    contentDescription = "Share image",
-                                    tint = PrimaryBlue,
-                                )
-                            },
-                            modifier = Modifier.clickable {
+                        BentoGlassOptionRow(
+                            title = "Share image",
+                            onClick = {
                                 scope.launch {
                                     val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
                                     if (bytes != null) {
@@ -262,71 +253,79 @@ internal fun MessageActionSheet(
                                     }
                                 }
                             },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            cornerRadius = optionRadius,
+                            showBorder = false,
+                            horizontalInset = 0.dp,
+                            verticalInset = 0.dp,
+                            leading = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Share,
+                                    contentDescription = "Share image",
+                                    tint = PrimaryBlue,
+                                )
+                            },
                         )
                     }
                 }
 
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
-                                "Copy caption & link"
-                            } else {
-                                "Copy"
-                            },
-                            color = onSurface,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
+                BentoGlassOptionRow(
+                    title = if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
+                        "Copy caption & link"
+                    } else {
+                        "Copy"
                     },
-                    leadingContent = {
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(message.copyableText()))
+                        dismiss()
+                    },
+                    cornerRadius = optionRadius,
+                    showBorder = false,
+                    horizontalInset = 0.dp,
+                    verticalInset = 0.dp,
+                    leading = {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
                             contentDescription = "Copy",
                             tint = onVariant,
                         )
                     },
-                    modifier = Modifier.clickable {
-                        clipboardManager.setText(AnnotatedString(message.copyableText()))
-                        dismiss()
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
 
                 if (isSent) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Edit", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                    BentoGlassOptionRow(
+                        title = "Edit",
+                        onClick = {
+                            viewModel.startEditMessage(message.id, message.content)
+                            dismiss()
                         },
-                        leadingContent = {
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit message",
                                 tint = PrimaryBlue,
                             )
                         },
-                        modifier = Modifier.clickable {
-                            viewModel.startEditMessage(message.id, message.content)
-                            dismiss()
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
 
-                    ListItem(
-                        headlineContent = {
-                            Text("Delete", color = Color(0xFFFF4444), style = MaterialTheme.typography.bodyLarge)
-                        },
-                        leadingContent = {
+                    BentoGlassOptionRow(
+                        title = "Delete",
+                        onClick = { showDeleteMessageConfirm = true },
+                        destructive = true,
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Delete message",
                                 tint = Color(0xFFFF4444),
                             )
                         },
-                        modifier = Modifier.clickable {
-                            showDeleteMessageConfirm = true
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
                 }
             }
@@ -334,7 +333,7 @@ internal fun MessageActionSheet(
     }
 
     if (showDeleteMessageConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeleteMessageConfirm = false },
             title = { Text("Delete Message?") },
             text = { Text("This message will be permanently deleted. This cannot be undone.") },
@@ -357,7 +356,7 @@ internal fun MessageActionSheet(
     }
 
     if (showDeleteMessageFinalConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeleteMessageFinalConfirm = false },
             title = { Text("Delete Message Permanently?") },
             text = { Text("This action is permanent and cannot be undone.") },

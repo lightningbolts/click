@@ -3,6 +3,7 @@ package compose.project.click.click.ui.chat
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
@@ -85,3 +87,26 @@ internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteraction
         scaleY = scale
     }
 }
+
+/** Spring bounce + null indication; pair with glass border tweaks at call sites for tactile feedback. */
+@Composable
+fun Modifier.bouncingClickable(
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    return bouncingClickable(interactionSource, enabled, onClick)
+}
+
+@Composable
+fun Modifier.bouncingClickable(
+    interactionSource: MutableInteractionSource,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+): Modifier =
+    this.chatSpringPressScale(interactionSource).clickable(
+        interactionSource = interactionSource,
+        indication = null,
+        enabled = enabled,
+        onClick = onClick,
+    )

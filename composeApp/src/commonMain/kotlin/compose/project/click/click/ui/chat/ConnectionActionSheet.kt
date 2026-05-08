@@ -1,7 +1,6 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -15,20 +14,20 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Unarchive
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,8 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -111,23 +110,16 @@ internal fun ConnectionActionSheet(
         showFinalConfirm = true
     }
 
-    ModalBottomSheet(
+    GlassModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
-        val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
-        val onSurface = MaterialTheme.colorScheme.onSurface
-        val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(sheetBg)
+                .background(GlassSheetTokens.OledBlack)
                 .padding(bottom = 32.dp),
         ) {
             chatDetails?.let { details ->
@@ -139,137 +131,119 @@ internal fun ConnectionActionSheet(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = onSurface,
+                    color = GlassSheetTokens.OnOled,
                     modifier = Modifier
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                         .align(Alignment.CenterHorizontally),
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
+                HorizontalDivider(color = GlassSheetTokens.GlassBorder.copy(alpha = 0.5f))
             }
 
             if (!isGroup) {
-                ListItem(
-                    headlineContent = {
-                        Text("Nudge 👋", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                    },
-                    supportingContent = {
-                        Text(
-                            "Send a quick ping",
-                            color = onVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    },
-                    modifier = Modifier.clickable {
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Nudge 👋",
+                    subtitle = "Send a quick ping",
+                    onClick = {
                         onNudge()
                         dismiss()
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
 
                 if (isArchived) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Unarchive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                    BentoGlassOptionRow(
+                        title = "Unarchive",
+                        subtitle = if (isServerLifecycleArchived) {
+                            "Remove from your Archived tab (server-archived connections stay read-only)"
+                        } else {
+                            "Move this connection back to Active"
                         },
-                        supportingContent = {
-                            Text(
-                                if (isServerLifecycleArchived) {
-                                    "Remove from your Archived tab (server-archived connections stay read-only)"
-                                } else {
-                                    "Move this connection back to Active"
-                                },
-                                color = onVariant,
-                                style = MaterialTheme.typography.bodySmall,
+                        onClick = { showUnarchiveConfirm = true },
+                        leading = {
+                            Icon(
+                                Icons.Default.Unarchive,
+                                contentDescription = null,
+                                tint = GlassSheetTokens.OnOledMuted,
                             )
                         },
-                        leadingContent = {
-                            Icon(Icons.Default.Unarchive, contentDescription = null, tint = onVariant)
-                        },
-                        modifier = Modifier.clickable {
-                            showUnarchiveConfirm = true
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
                 } else if (!isServerLifecycleArchived) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Archive", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                        },
-                        supportingContent = {
-                            Text(
-                                "Hide this connection (recoverable)",
-                                color = onVariant,
-                                style = MaterialTheme.typography.bodySmall,
+                    BentoGlassOptionRow(
+                        title = "Archive",
+                        subtitle = "Hide this connection (recoverable)",
+                        onClick = { showArchiveConfirm = true },
+                        leading = {
+                            Icon(
+                                Icons.Default.Archive,
+                                contentDescription = null,
+                                tint = GlassSheetTokens.OnOledMuted,
                             )
                         },
-                        leadingContent = {
-                            Icon(Icons.Default.Archive, contentDescription = null, tint = onVariant)
-                        },
-                        modifier = Modifier.clickable {
-                            showArchiveConfirm = true
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            "Remove Connection",
-                            color = Color(0xFFFF4444),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    },
-                    leadingContent = {
-                        Icon(Icons.Default.PersonRemove, contentDescription = null, tint = Color(0xFFFF4444))
-                    },
-                    modifier = Modifier.clickable { showDeleteConfirm = true },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f),
                 )
 
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            "Report",
-                            color = Color(0xFFFF8C00),
-                            style = MaterialTheme.typography.bodyLarge,
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Remove Connection",
+                    subtitle = "Permanently remove this chat",
+                    onClick = { showDeleteConfirm = true },
+                    destructive = true,
+                    leading = {
+                        Icon(
+                            Icons.Default.PersonRemove,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6B6B),
                         )
                     },
-                    leadingContent = {
-                        Icon(Icons.Default.Flag, contentDescription = null, tint = Color(0xFFFF8C00))
-                    },
-                    modifier = Modifier.clickable { showReportDialog = true },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
 
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            "Block",
-                            color = Color(0xFFFF4444),
-                            style = MaterialTheme.typography.bodyLarge,
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Report",
+                    subtitle = "Flag for review",
+                    onClick = {
+                        reportReason = ""
+                        showReportDialog = true
+                    },
+                    titleColor = Color(0xFFFF8C00),
+                    leading = {
+                        Icon(
+                            Icons.Default.Flag,
+                            contentDescription = null,
+                            tint = Color(0xFFFF8C00),
                         )
                     },
-                    leadingContent = {
-                        Icon(Icons.Default.Block, contentDescription = null, tint = Color(0xFFFF4444))
+                )
+
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Block",
+                    subtitle = "They can no longer reach you",
+                    onClick = { showBlockConfirm = true },
+                    destructive = true,
+                    leading = {
+                        Icon(
+                            Icons.Default.Block,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6B6B),
+                        )
                     },
-                    modifier = Modifier.clickable {
-                        showBlockConfirm = true
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
             } else {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-                ListItem(
-                    headlineContent = {
-                        Text("Leave Group", color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                    },
-                    leadingContent = {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = onVariant)
-                    },
-                    modifier = Modifier.clickable {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f),
+                )
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Leave Group",
+                    subtitle = "Lose access to this verified click",
+                    onClick = {
                         openFinalConfirm(
                             title = "Leave group?",
                             body = "You will lose access to this verified click and its messages.",
@@ -280,21 +254,20 @@ internal fun ConnectionActionSheet(
                             dismiss()
                         }
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    leading = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted,
+                        )
+                    },
                 )
                 if (isGroupCreator) {
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                "Delete Group",
-                                color = Color(0xFFFF4444),
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                        },
-                        leadingContent = {
-                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFFF4444))
-                        },
-                        modifier = Modifier.clickable {
+                    BentoGlassOptionRow(
+                        showBorder = false,
+                        title = "Delete Group",
+                        subtitle = "Remove for everyone",
+                        onClick = {
                             openFinalConfirm(
                                 title = "Delete group?",
                                 body = "Permanently deletes this verified click for everyone. This cannot be undone.",
@@ -305,7 +278,14 @@ internal fun ConnectionActionSheet(
                                 dismiss()
                             }
                         },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        destructive = true,
+                        leading = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B6B),
+                            )
+                        },
                     )
                 }
             }
@@ -319,7 +299,7 @@ internal fun ConnectionActionSheet(
     }
 
     if (showUnarchiveConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showUnarchiveConfirm = false },
             title = { Text("Unarchive Connection?") },
             text = { Text("This connection will return to your Active list.") },
@@ -337,19 +317,19 @@ internal fun ConnectionActionSheet(
                         }
                     },
                 ) {
-                    Text("Unarchive")
+                    Text("Unarchive", color = GlassSheetTokens.OnOled)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUnarchiveConfirm = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )
     }
 
     if (showArchiveConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showArchiveConfirm = false },
             title = { Text("Archive Connection?") },
             text = { Text("This connection will be hidden from your list. You can recover it later.") },
@@ -367,19 +347,19 @@ internal fun ConnectionActionSheet(
                         }
                     },
                 ) {
-                    Text("Archive")
+                    Text("Archive", color = GlassSheetTokens.OnOled)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showArchiveConfirm = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )
     }
 
     if (showBlockConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showBlockConfirm = false },
             title = { Text("Block User?") },
             text = {
@@ -404,14 +384,14 @@ internal fun ConnectionActionSheet(
             },
             dismissButton = {
                 TextButton(onClick = { showBlockConfirm = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Remove Connection?") },
             text = {
@@ -436,34 +416,41 @@ internal fun ConnectionActionSheet(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )
     }
 
     if (showReportDialog) {
-        val reportOn = MaterialTheme.colorScheme.onSurface
-        val reportVariant = MaterialTheme.colorScheme.onSurfaceVariant
-        AlertDialog(
-            onDismissRequest = { showReportDialog = false },
-            title = { Text("Report User", color = reportOn) },
+        GlassAlertDialog(
+            onDismissRequest = {
+                reportReason = ""
+                showReportDialog = false
+            },
+            title = { Text("Report User") },
             text = {
                 Column {
                     Text(
                         "Please describe the issue:",
-                        color = reportVariant,
+                        color = GlassSheetTokens.OnOledMuted,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                     OutlinedTextField(
                         value = reportReason,
                         onValueChange = { reportReason = it },
-                        placeholder = { Text("Reason for report...", color = reportVariant.copy(alpha = 0.5f)) },
+                        placeholder = {
+                            Text(
+                                "Reason for report...",
+                                color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
+                            )
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = reportOn,
-                            unfocusedTextColor = reportOn,
+                            focusedTextColor = GlassSheetTokens.OnOled,
+                            unfocusedTextColor = GlassSheetTokens.OnOled,
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            cursorColor = PrimaryBlue,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -473,8 +460,9 @@ internal fun ConnectionActionSheet(
                 TextButton(
                     onClick = {
                         if (reportReason.isNotBlank()) {
-                            showReportDialog = false
                             val reasonToSubmit = reportReason.trim()
+                            reportReason = ""
+                            showReportDialog = false
                             openFinalConfirm(
                                 title = "Confirm Report",
                                 body = "Submit this report for review?",
@@ -490,16 +478,18 @@ internal fun ConnectionActionSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showReportDialog = false }) {
-                    Text("Cancel", color = PrimaryBlue)
+                TextButton(onClick = {
+                    reportReason = ""
+                    showReportDialog = false
+                }) {
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surface,
         )
     }
 
     if (showFinalConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = {
                 showFinalConfirm = false
                 finalConfirmAction = null
@@ -525,7 +515,7 @@ internal fun ConnectionActionSheet(
                         finalConfirmAction = null
                     },
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )

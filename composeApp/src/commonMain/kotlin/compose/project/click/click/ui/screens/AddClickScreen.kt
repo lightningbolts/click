@@ -20,6 +20,8 @@ import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -98,7 +100,7 @@ fun AddClickContent(
     var hubCodeDraft by remember { mutableStateOf("") }
 
     if (showHubCodeDialog) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = {
                 showHubCodeDialog = false
                 hubCodeDraft = ""
@@ -109,15 +111,24 @@ fun AddClickContent(
                     Text(
                         text = "Enter the hub code shown at the venue. You must be within range for location check.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = GlassSheetTokens.OnOledMuted,
                     )
                     OutlinedTextField(
                         value = hubCodeDraft,
                         onValueChange = { hubCodeDraft = it },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        placeholder = { Text("e.g. local_point") },
-                        label = { Text("Hub code") },
+                        placeholder = { Text("e.g. local_point", color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f)) },
+                        label = { Text("Hub code", color = GlassSheetTokens.OnOledMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = GlassSheetTokens.OnOled,
+                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            cursorColor = PrimaryBlue,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                        ),
                     )
                 }
             },
@@ -133,7 +144,7 @@ fun AddClickContent(
                     },
                     enabled = hubCodeDraft.trim().isNotEmpty(),
                 ) {
-                    Text("Join hub")
+                    Text("Join hub", color = GlassSheetTokens.OnOled)
                 }
             },
             dismissButton = {
@@ -143,7 +154,7 @@ fun AddClickContent(
                         hubCodeDraft = ""
                     },
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )

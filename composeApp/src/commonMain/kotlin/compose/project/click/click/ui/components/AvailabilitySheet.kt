@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -33,8 +32,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
 import kotlinx.coroutines.launch
@@ -58,7 +58,6 @@ fun AvailabilitySheet(
 
     val canSubmit = tag.trim().isNotEmpty() && !submitting
 
-    val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
@@ -80,18 +79,15 @@ fun AvailabilitySheet(
         }
     }
 
-    AdaptiveBottomSheet(
+    GlassAdaptiveBottomSheet(
         onDismissRequest = { dismissWithSheetAnimation() },
         adaptiveSheetState = sheetState,
-        containerColor = sheetBg,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(sheetBg),
+                .background(GlassSheetTokens.OledBlack),
         ) {
             Column(
                 modifier = Modifier
@@ -105,6 +101,7 @@ fun AvailabilitySheet(
                     text = if (isEditing) "Edit availability" else "Share availability",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = GlassSheetTokens.OnOled,
                 )
                 Text(
                     text = if (isEditing) {
@@ -113,7 +110,7 @@ fun AvailabilitySheet(
                         "Pick how long you're open, and a short tag so connections know what you're up for."
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = GlassSheetTokens.OnOledMuted,
                 )
 
                 Text(
