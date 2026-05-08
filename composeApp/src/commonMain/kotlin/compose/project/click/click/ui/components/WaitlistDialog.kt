@@ -61,20 +61,14 @@ fun WaitlistDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismiss,
-                    ),
-            )
-            val shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
                     .clip(shape)
