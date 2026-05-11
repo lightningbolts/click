@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Click uses Bluetooth for Tap to Connect when you meet someone nearby.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Click uses your microphone for Tap to Connect and voice features.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

@@ -3,7 +3,8 @@
  *
  * POST JSON { my_token, tokens[], heard_tokens[], latitude?, longitude?, gps_lat?, gps_lon?,
  *   exact_barometric_elevation_m?, noise_level?, exact_noise_level_db?, context_tags?, height_category?,
- *   lux_level?, motion_variance?, compass_azimuth?, battery_level?, client_context_first? (ignored) }
+ *   lux_level?, motion_variance?, compass_azimuth?, battery_level?, client_context_first? (ignored),
+ *   simulator_mock? }
  * Authorization: Bearer <user JWT>
  *
  * Inserts this device's handshake, then returns other users whose pings overlap in time,
@@ -533,6 +534,7 @@ Deno.serve(async (req) => {
     battery_level?: unknown;
     location_name?: unknown;
     weather_snapshot?: unknown;
+    simulator_mock?: unknown;
   };
   try {
     body = await req.json();
@@ -555,6 +557,34 @@ Deno.serve(async (req) => {
   const heardTokens = (Array.isArray(tokenInputs) ? tokenInputs : [])
     .map(normalizeToken)
     .filter((t): t is string => t != null);
+
+  if (body.simulator_mock === true && myToken === '1234' && heardTokens.includes('5678')) {
+    const connectionId = '00000000-0000-4000-8000-000000000123';
+    const mockUserId = '00000000-0000-4000-8000-000000000567';
+    const mockUser: UserProfile = {
+      id: mockUserId,
+      name: 'Simulator Friend',
+      email: 'simulator.friend@click.test',
+      image: null,
+      created_at: Date.now(),
+      connection_id: connectionId,
+      encounter_logged: true,
+      is_new_connection: false,
+      encounter_persisted_on_bind: true,
+    };
+    return new Response(
+      JSON.stringify({
+        success: true,
+        encounter_logged: true,
+        matches: [mockUser],
+        connection_id: connectionId,
+        is_new_connection: false,
+        is_group: false,
+        simulator_mock: true,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
 
   const lat = finiteNumber(body.gps_lat) ?? finiteNumber(body.latitude);
   const lon = finiteNumber(body.gps_lon) ?? finiteNumber(body.longitude);
@@ -913,6 +943,8 @@ Deno.serve(async (req) => {
     reason?: string;
   };
   const peerEncounterLogged: PeerBindMeta[] = [];
+  /** True only when this bind created a new row in `connections` (strict server boolean for clients). */
+  let handshakeCreatedNewConnection = false;
   const ensured = await ensureConnectionForMemberSet(memberIds);
   if (!ensured) {
     ids.forEach((peerId) => {
@@ -920,13 +952,14 @@ Deno.serve(async (req) => {
         peerId,
         connectionId: null,
         encounterLogged: false,
-        isNewConnection: true,
+        isNewConnection: false,
         encounterPersistedOnBind: false,
         reason: 'connection_unavailable',
       });
     });
   } else {
     const { connectionId, isNewConnection } = ensured;
+    handshakeCreatedNewConnection = isNewConnection;
     const peerRows = ids
       .map((peerId) => rows.find((r) => r && String(r.user_id) === peerId) as Record<string, unknown> | undefined)
       .filter((r): r is Record<string, unknown> => r != null);
@@ -1046,7 +1079,7 @@ Deno.serve(async (req) => {
   const sharedConnectionId = peerEncounterLogged.find((p) => p.connectionId != null)?.connectionId ?? null;
   if (sharedConnectionId != null) {
     responseBody.connection_id = sharedConnectionId;
-    responseBody.is_new_connection = peerEncounterLogged.some((p) => p.isNewConnection);
+    responseBody.is_new_connection = handshakeCreatedNewConnection;
     responseBody.is_group = memberIds.length > 2;
   }
   if (memberIds.length > 2) {

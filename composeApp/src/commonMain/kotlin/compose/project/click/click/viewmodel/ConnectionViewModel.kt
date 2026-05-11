@@ -20,7 +20,10 @@ import compose.project.click.click.data.repository.isRetryableForProximityBind /
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
+import compose.project.click.click.proximity.MockProximityManager // pragma: allowlist secret
+import compose.project.click.click.proximity.ProximityHardwarePermissionException // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
@@ -111,6 +114,10 @@ class ConnectionViewModel : ViewModel() {
     companion object {
         const val RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE: String =
             "You recently crossed paths with this person! Wait a bit before logging another memory."
+        const val HARDWARE_PERMISSIONS_MISSING_MESSAGE: String =
+            "Hardware Permissions Missing: enable Bluetooth and Microphone access to use Tap to Connect."
+        private const val SIMULATOR_MOCK_MY_TOKEN: String = "1234"
+        private val SIMULATOR_MOCK_HEARD_TOKENS: List<String> = listOf("5678")
     }
 
     private val _transientNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -180,6 +187,10 @@ class ConnectionViewModel : ViewModel() {
         _connectionState.value = ConnectionState.Loading
     }
 
+    fun showHardwarePermissionsMissing() {
+        _connectionState.value = ConnectionState.Error(HARDWARE_PERMISSIONS_MISSING_MESSAGE)
+    }
+
     private fun shouldBlockForRateLimit(users: List<User>, aggregateEncounterLogged: Boolean): Boolean {
         if (users.isEmpty()) return false
         val allReconnect = users.all { !it.isNewConnection }
@@ -234,18 +245,28 @@ class ConnectionViewModel : ViewModel() {
                 lastProximityLng = location?.longitude
                 lastProximityAltitudeMeters = location?.altitudeMeters
 
-                val myToken = (0..9999).random().toString().padStart(4, '0')
+                val simulatorMock = proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
+                val myToken = if (simulatorMock) {
+                    SIMULATOR_MOCK_MY_TOKEN
+                } else {
+                    (0..9999).random().toString().padStart(4, '0')
+                }
                 _connectionState.value = ConnectionState.ProximityHandshaking
 
-                val tokensOnly = coroutineScope {
-                    val listen = async { proximityManager.startHandshakeListening() }
-                    delay(120L)
-                    // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
-                    delay(Random.nextLong(0, 400))
-                    proximityManager.startHandshakeBroadcast(myToken)
-                    val heard = listen.await()
-                    proximityManager.stopAll()
-                    heard
+                val tokensOnly = if (simulatorMock) {
+                    delay(2_000L)
+                    SIMULATOR_MOCK_HEARD_TOKENS
+                } else {
+                    coroutineScope {
+                        val listen = async { proximityManager.startHandshakeListening() }
+                        delay(120L)
+                        // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
+                        delay(Random.nextLong(0, 400))
+                        proximityManager.startHandshakeBroadcast(myToken)
+                        val heard = listen.await()
+                        proximityManager.stopAll()
+                        heard
+                    }
                 }
 
                 val tokenStorage = createTokenStorage()
@@ -286,6 +307,7 @@ class ConnectionViewModel : ViewModel() {
                                 bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
                                 bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
                                 bindHeightCategory = proximitySensorContext?.heightCategory,
+                                simulatorMock = simulatorMock,
                             ).getOrThrow()
                         }
                     }
@@ -359,6 +381,8 @@ class ConnectionViewModel : ViewModel() {
                         _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
                     }
                 }
+            } catch (e: ProximityHardwarePermissionException) {
+                _connectionState.value = ConnectionState.Error(HARDWARE_PERMISSIONS_MISSING_MESSAGE)
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
             }

@@ -65,9 +65,25 @@ class AndroidProximityManager(
     }
 
     private fun enforceBluetoothRuntimePermissions() {
-        val missing = missingBluetoothRuntimePermissions()
+        val missing = missingHardwareRuntimePermissions()
         if (missing.isNotEmpty()) {
-            throw SecurityException("Missing Bluetooth permission: ${missing.joinToString()}")
+            throw ProximityHardwarePermissionException(
+                "Missing proximity hardware permission: ${missing.joinToString()}",
+            )
+        }
+    }
+
+    private fun missingHardwareRuntimePermissions(): List<String> {
+        val permissions = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            add(Manifest.permission.RECORD_AUDIO)
+        }
+        return permissions.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -300,8 +316,11 @@ class AndroidProximityManager(
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
     val context = LocalContext.current
-    // Directive C11: do not inject [MockProximityManager] on emulators — the UI graph
-    // must reflect real (or empty) database state. [MockProximityManager] is still
-    // available for unit tests via direct instantiation.
-    return remember(context) { AndroidProximityManager(context) }
+    return remember(context) {
+        if (isSimulatorOrEmulatorRuntime()) {
+            MockProximityManager()
+        } else {
+            AndroidProximityManager(context)
+        }
+    }
 }

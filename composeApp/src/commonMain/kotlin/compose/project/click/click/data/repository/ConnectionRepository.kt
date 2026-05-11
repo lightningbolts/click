@@ -201,6 +201,7 @@ private data class BindProximityRequest(
     /** When true, edge function defers encounter rows until connection create. */
     @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
     @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+    @SerialName("simulator_mock") val simulatorMock: Boolean? = null,
 )
 
 /**
@@ -412,6 +413,7 @@ class ConnectionRepository(
         bindNoiseLevelCategory: NoiseLevelCategory? = null,
         bindExactNoiseLevelDb: Double? = null,
         bindHeightCategory: HeightCategory? = null,
+        simulatorMock: Boolean = false,
     ): Result<BindProximityHandshakeOutcome> {
         return try {
             val client = httpClient ?: supabaseFunctionsHttpClient
@@ -441,6 +443,7 @@ class ConnectionRepository(
                 batteryLevel = hardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
                 clientContextFirst = if (clientContextFirst) true else null,
                 weatherSnapshot = trimmedWeather,
+                simulatorMock = if (simulatorMock) true else null,
             )
             val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
                 contentType(ContentType.Application.Json)

@@ -21,6 +21,7 @@ import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
 import platform.AVFAudio.AVAudioSessionCategoryOptionMixWithOthers
 import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
+import platform.AVFAudio.AVAudioSessionRecordPermissionDenied
 import platform.AVFAudio.AVEncoderAudioQualityKey
 import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVLinearPCMBitDepthKey
@@ -124,6 +125,12 @@ private fun prepareProximityAudioSession() {
     }
 }
 
+private fun enforceProximityAudioPermission() {
+    if (AVAudioSession.sharedInstance().recordPermission == AVAudioSessionRecordPermissionDenied) {
+        throw ProximityHardwarePermissionException("Missing proximity hardware permission: microphone")
+    }
+}
+
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun writeBytesToPath(path: String, bytes: ByteArray) {
     if (bytes.isEmpty()) return
@@ -179,6 +186,7 @@ class IosProximityManager : ProximityManager {
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
+        enforceProximityAudioPermission()
         stopAll()
         val payload = runCatching { buildIosManufacturerBlock(ephemeralToken) }.getOrElse { return }
         val serviceUuid = runCatching {
@@ -246,6 +254,7 @@ class IosProximityManager : ProximityManager {
     }
 
     override suspend fun startHandshakeListening(): List<String> {
+        enforceProximityAudioPermission()
         heardTokens.clear()
         prepareProximityAudioSession()
         withTimeoutOrNull(8_000L) {
@@ -397,8 +406,11 @@ private fun extractPcm16MonoFromWav(file: ByteArray): ShortArray? {
 
 @Composable
 actual fun rememberProximityManager(): ProximityManager {
-    // Directive C11: do not inject [MockProximityManager] in the simulator build —
-    // simulators must show real (or empty) database state so the production UI graph
-    // isn't poisoned by mock pins. The mock impl still exists for unit tests only.
-    return remember { IosProximityManager() }
+    return remember {
+        if (isSimulatorOrEmulatorRuntime()) {
+            MockProximityManager()
+        } else {
+            IosProximityManager()
+        }
+    }
 }

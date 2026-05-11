@@ -3,11 +3,10 @@ package compose.project.click.click.proximity
 import kotlinx.coroutines.delay
 
 /**
- * Deterministic tri-factor stand-in for iOS Simulator / Android emulator when
- * [compose.project.click.click.ui.utils.AppSystemSettings.isDebugMode] is enabled.
+ * Deterministic tri-factor stand-in for iOS Simulator / Android emulator.
  *
- * [startHandshakeListening] waits through the debounce window then returns two synthetic
- * token strings so [bind-proximity-connection] can be exercised without radios.
+ * [startHandshakeListening] waits briefly then returns a synthetic token so
+ * [bind-proximity-connection] can be exercised without radios.
  */
 class MockProximityManager : ProximityManager {
 
@@ -16,9 +15,8 @@ class MockProximityManager : ProximityManager {
     }
 
     override suspend fun startHandshakeListening(): List<String> {
-        delay(4_000L)
+        delay(2_000L)
         return listOf(
-            "1234",
             "5678",
         )
     }
@@ -28,7 +26,7 @@ class MockProximityManager : ProximityManager {
     override fun supportsTapExchange(): Boolean = true
 
     override fun capabilityNote(): String =
-        "Simulator / emulator mock: returns fixed heard tokens after 3s (no BLE or ultrasound)."
+        "Simulator / emulator mock: returns a fixed heard token after 2s (no BLE or ultrasound)."
 
     override fun openRadiosSettings() {}
 }

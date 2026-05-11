@@ -39,13 +39,16 @@ import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
+import compose.project.click.click.proximity.MockProximityManager
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
+import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionRequester
 import compose.project.click.click.sensors.HardwareVibeMonitor
 import compose.project.click.click.viewmodel.ConnectionState
 import compose.project.click.click.viewmodel.ConnectionViewModel
@@ -77,6 +80,7 @@ fun NfcScreen(
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     val locationService = remember { compose.project.click.click.utils.LocationService() }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
+    val requestProximityHardwarePermissions = rememberProximityHardwarePermissionRequester()
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
@@ -92,6 +96,39 @@ fun NfcScreen(
     DisposableEffect(Unit) {
         onDispose {
             proximityManager.stopAll()
+        }
+    }
+
+    fun startTapProximityHandshake(skipLocation: Boolean) {
+        connectionViewModel.startTapProximityHandshake(
+            httpClient = httpClient,
+            proximityManager = proximityManager,
+            jwt = authToken,
+            currentUserId = userId,
+            locationService = locationService,
+            skipLocation = skipLocation,
+            ambientNoiseMonitor = ambientNoiseMonitor,
+            barometricHeightMonitor = barometricHeightMonitor,
+        )
+    }
+
+    fun startTapAfterHardwarePermissionGate() {
+        if (proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()) {
+            startTapProximityHandshake(skipLocation = true)
+            return
+        }
+        requestProximityHardwarePermissions { granted ->
+            if (!granted) {
+                connectionViewModel.showHardwarePermissionsMissing()
+            } else if (!AppDataManager.shouldCaptureLocationAtTap()) {
+                startTapProximityHandshake(skipLocation = true)
+            } else if (!locationService.hasLocationPermission()) {
+                requestLocationPermissionThen {
+                    startTapProximityHandshake(skipLocation = !locationService.hasLocationPermission())
+                }
+            } else {
+                startTapProximityHandshake(skipLocation = false)
+            }
         }
     }
 
@@ -142,42 +179,7 @@ fun NfcScreen(
                             NfcIdleContent(
                                 onOpenAppSettings = { openApplicationSystemSettings() },
                                 onStartScanning = {
-                                    if (!AppDataManager.shouldCaptureLocationAtTap()) {
-                                        connectionViewModel.startTapProximityHandshake(
-                                            httpClient = httpClient,
-                                            proximityManager = proximityManager,
-                                            jwt = authToken,
-                                            currentUserId = userId,
-                                            locationService = locationService,
-                                            skipLocation = true,
-                                            ambientNoiseMonitor = ambientNoiseMonitor,
-                                            barometricHeightMonitor = barometricHeightMonitor,
-                                        )
-                                    } else if (!locationService.hasLocationPermission()) {
-                                        requestLocationPermissionThen {
-                                            connectionViewModel.startTapProximityHandshake(
-                                                httpClient = httpClient,
-                                                proximityManager = proximityManager,
-                                                jwt = authToken,
-                                                currentUserId = userId,
-                                                locationService = locationService,
-                                                skipLocation = !locationService.hasLocationPermission(),
-                                                ambientNoiseMonitor = ambientNoiseMonitor,
-                                                barometricHeightMonitor = barometricHeightMonitor,
-                                            )
-                                        }
-                                    } else {
-                                        connectionViewModel.startTapProximityHandshake(
-                                            httpClient = httpClient,
-                                            proximityManager = proximityManager,
-                                            jwt = authToken,
-                                            currentUserId = userId,
-                                            locationService = locationService,
-                                            skipLocation = false,
-                                            ambientNoiseMonitor = ambientNoiseMonitor,
-                                            barometricHeightMonitor = barometricHeightMonitor,
-                                        )
-                                    }
+                                    startTapAfterHardwarePermissionGate()
                                 },
                                 supportsTap = supportsTap,
                                 capabilityNote = capabilityNote,
@@ -274,16 +276,7 @@ fun NfcScreen(
                             NfcErrorContent(
                                 message = state.message,
                                 onRetry = {
-                                    connectionViewModel.startTapProximityHandshake(
-                                        httpClient = httpClient,
-                                        proximityManager = proximityManager,
-                                        jwt = authToken,
-                                        currentUserId = userId,
-                                        locationService = locationService,
-                                        skipLocation = false,
-                                        ambientNoiseMonitor = ambientNoiseMonitor,
-                                        barometricHeightMonitor = barometricHeightMonitor,
-                                    )
+                                    startTapAfterHardwarePermissionGate()
                                 },
                                 onDismiss = { connectionViewModel.resetConnectionState() }
                             )

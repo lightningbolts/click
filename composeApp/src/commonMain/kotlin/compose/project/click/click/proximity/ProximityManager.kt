@@ -25,5 +25,9 @@ interface ProximityManager {
     fun openRadiosSettings()
 }
 
+class ProximityHardwarePermissionException(
+    message: String = "Missing proximity hardware permission",
+) : Exception(message)
+
 @Composable
 expect fun rememberProximityManager(): ProximityManager
