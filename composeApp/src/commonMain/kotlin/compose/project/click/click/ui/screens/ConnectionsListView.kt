@@ -534,13 +534,12 @@ fun ConnectionsListView(
                         )
                         .clip(RoundedCornerShape(segCorner))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f))
-                        .padding(4.dp)
-                        .horizontalScroll(rememberScrollState()),
+                        .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .widthIn(min = 112.dp)
+                            .weight(1f)
                             .clip(RoundedCornerShape(segInnerCorner))
                             .then(
                                 if (selectedTabIndex == 0) Modifier
@@ -562,7 +561,7 @@ fun ConnectionsListView(
                     }
                     Box(
                         modifier = Modifier
-                            .widthIn(min = 112.dp)
+                            .weight(1f)
                             .clip(RoundedCornerShape(segInnerCorner))
                             .then(
                                 if (selectedTabIndex == 1) Modifier
@@ -584,7 +583,7 @@ fun ConnectionsListView(
                     }
                     Box(
                         modifier = Modifier
-                            .widthIn(min = 112.dp)
+                            .weight(1f)
                             .clip(RoundedCornerShape(segInnerCorner))
                             .then(
                                 if (selectedTabIndex == 2) Modifier
