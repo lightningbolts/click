@@ -1,6 +1,11 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,21 +22,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -47,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
+import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.UserProfile
@@ -200,6 +207,8 @@ fun ConnectionContextSheet(
     onDismiss: () -> Unit,
     onConfirm: (ContextTag?, Boolean) -> Unit,
     onSkip: (() -> Unit)? = null,
+    intentHint: ConnectionIntentHint? = null,
+    onSaveEncounterOnly: ((ContextTag?, Boolean) -> Unit)? = null,
 ) {
     val hourOfDay = remember {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
@@ -225,6 +234,22 @@ fun ConnectionContextSheet(
         }
     }
 
+    val heroAnim = remember { Animatable(1f) }
+    LaunchedEffect(intentHint) {
+        if (intentHint != null) {
+            heroAnim.snapTo(0.92f)
+            heroAnim.animateTo(
+                1f,
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            )
+        } else {
+            heroAnim.snapTo(1f)
+        }
+    }
+
     val titleText: String
     val subtitleText: String
     when (connectedUsers.size) {
@@ -240,6 +265,36 @@ fun ConnectionContextSheet(
         else -> {
             titleText = "Set the context for this group"
             subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
+        }
+    }
+
+    val thinHeadline: String? = if (intentHint is ConnectionIntentHint.SparkNew) {
+        "Sparking a new connection..."
+    } else if (intentHint is ConnectionIntentHint.LogExistingEncounter) {
+        "Logging encounter with ${intentHint.peerShortName}..."
+    } else {
+        null
+    }
+
+    val primaryLabel: String = if (intentHint is ConnectionIntentHint.SparkNew) {
+        "Connect"
+    } else if (intentHint is ConnectionIntentHint.LogExistingEncounter) {
+        "Save Encounter"
+    } else {
+        "Continue"
+    }
+
+    val primaryInteraction = remember { MutableInteractionSource() }
+    val skipInteraction = remember { MutableInteractionSource() }
+
+    fun invokePrimary() {
+        val tag = resolveSelectedTag()
+        when (intentHint) {
+            is ConnectionIntentHint.LogExistingEncounter -> {
+                val saver = onSaveEncounterOnly ?: onConfirm
+                saver(tag, ambientNoiseOptIn)
+            }
+            else -> onConfirm(tag, ambientNoiseOptIn)
         }
     }
 
@@ -259,18 +314,35 @@ fun ConnectionContextSheet(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            Text(
-                text = titleText,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = GlassSheetTokens.OnOled,
-            )
+            if (thinHeadline != null) {
+                Text(
+                    text = thinHeadline,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .scale(heroAnim.value),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassSheetTokens.OnOled,
+                )
+                Text(
+                    text = "Add an optional vibe tag — the server keeps the clock and rate limits.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GlassSheetTokens.OnOledMuted,
+                )
+            } else {
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = GlassSheetTokens.OnOled,
+                )
 
-            Text(
-                text = subtitleText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = GlassSheetTokens.OnOledMuted,
-            )
+                Text(
+                    text = subtitleText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GlassSheetTokens.OnOledMuted,
+                )
+            }
 
             if (!locationName.isNullOrBlank()) {
                 Text(
@@ -400,18 +472,58 @@ fun ConnectionContextSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                TextButton(
-                    onClick = dismissSheet,
-                    modifier = Modifier.weight(1f)
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = skipInteraction,
+                            indication = null,
+                            onClick = dismissSheet,
+                        ),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                 ) {
-                    Text("Skip")
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Skip",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = GlassSheetTokens.OnOled,
+                        )
+                    }
                 }
-                Button(
-                    onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isCustomSelectionInvalid
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = primaryInteraction,
+                            indication = null,
+                            enabled = !isCustomSelectionInvalid,
+                            onClick = { invokePrimary() },
+                        ),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (isCustomSelectionInvalid) 0.35f else 0.92f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                 ) {
-                    Text("Continue")
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = primaryLabel,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
                 }
             }
 

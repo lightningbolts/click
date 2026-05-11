@@ -29,6 +29,7 @@ import compose.project.click.click.sensors.ConnectionSensorContext // pragma: al
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionIntentHint // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
@@ -82,6 +83,10 @@ sealed class ConnectionState {
         val targetUsers: List<UserProfile>,
         val isGroup: Boolean = false,
         val memberUserIds: List<String> = emptyList(),
+        /**
+         * From bind-proximity-connection / create outcome: false when every peer is a reconnect edge.
+         */
+        val isNewConnectionAggregate: Boolean = true,
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -90,6 +95,7 @@ sealed class ConnectionState {
         val qrToken: String?,
         val venueId: String?,
         val targetUsers: List<UserProfile>,
+        val intentHint: ConnectionIntentHint,
     ) : ConnectionState()
 
     /** Bind in flight after handshake; avoids [Loading] so the NFC sheet stays responsive. */
@@ -136,12 +142,48 @@ class ConnectionViewModel : ViewModel() {
         viewModelScope.launch {
             val profile = repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()
                 ?: UserProfile(id = scannedUserId, displayName = "Connection")
+            val isNew = repository.fetchEncounterIsNewConnection(scannedUserId).getOrElse { true }
+            val short = profile.displayName.trim()
+                .split(Regex("\\s+"))
+                .firstOrNull()
+                ?.takeIf { it.isNotEmpty() }
+                ?: profile.displayName.trim().ifBlank { "Friend" }
+            val hint = if (isNew) {
+                ConnectionIntentHint.SparkNew(short)
+            } else {
+                ConnectionIntentHint.LogExistingEncounter(short)
+            }
             _connectionState.value = ConnectionState.QrAwaitingContext(
                 scannedUserId = scannedUserId,
                 qrToken = qrToken,
                 venueId = venueId?.takeIf { it.isNotBlank() },
                 targetUsers = listOf(profile),
+                intentHint = hint,
             )
+        }
+    }
+
+    /**
+     * Logs a lightweight encounter row via Flask BFF for reconnect QR flows (no full create).
+     */
+    fun logThinEncounterFromQrContext(
+        awaiting: ConnectionState.QrAwaitingContext,
+        contextTag: ContextTag?,
+    ) {
+        viewModelScope.launch {
+            _connectionState.value = ConnectionState.Loading
+            val line = contextTag?.label?.trim()?.takeIf { it.isNotEmpty() }
+            val r = withContext(Dispatchers.Default) {
+                repository.postThinEncounterLog(awaiting.scannedUserId, line)
+            }
+            if (r.isSuccess) {
+                _transientNotice.tryEmit("Encounter saved.")
+                _connectionState.value = ConnectionState.Idle
+            } else {
+                _connectionState.value = ConnectionState.Error(
+                    r.exceptionOrNull()?.message ?: "Could not save encounter",
+                )
+            }
         }
     }
 
@@ -312,6 +354,7 @@ class ConnectionViewModel : ViewModel() {
                                 targetUsers = users.map { it.toUserProfile() },
                                 isGroup = true,
                                 memberUserIds = groupIds,
+                                isNewConnectionAggregate = users.all { it.isNewConnection },
                             )
                         } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
                             val peer = users.first()
@@ -324,6 +367,7 @@ class ConnectionViewModel : ViewModel() {
                             _connectionState.value = ConnectionState.TaggingContext(
                                 newConnections = listOf(connection),
                                 targetUsers = listOf(peer.toUserProfile()),
+                                isNewConnectionAggregate = users.all { it.isNewConnection },
                             )
                         } else {
                             _connectionState.value = ConnectionState.PendingConfirmation(users)
@@ -557,6 +601,7 @@ class ConnectionViewModel : ViewModel() {
                             _connectionState.value = ConnectionState.TaggingContext(
                                 newConnections = listOf(connection),
                                 targetUsers = listOf(connectedUser.toUserProfile()),
+                                isNewConnectionAggregate = outcome.isNewConnection,
                             )
                         }
                         else -> {
@@ -653,6 +698,7 @@ class ConnectionViewModel : ViewModel() {
                     _connectionState.value = ConnectionState.TaggingContext(
                         newConnections = created,
                         targetUsers = profiles,
+                        isNewConnectionAggregate = peers.all { it.isNewConnection },
                     )
                 }
             } catch (e: Exception) {

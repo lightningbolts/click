@@ -461,6 +461,119 @@ def get_display_names():
         return jsonify({"error": str(e)}), 500
 
 
+# ============== THIN BFF HELPERS (mobile Ktor / widgets / hubs) ==============
+
+
+@app.route("/public-profile", methods=["GET"])
+def public_profile():
+    """Unsigned teaser payload for App Clips / Instant entry / QR landing."""
+    user_id = (request.args.get("user_id") or request.args.get("user") or "").strip()
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+    if not supabase:
+        return jsonify({
+            "user_id": user_id,
+            "name": "Click user",
+            "aura_hex": "#4A6CF7",
+            "tagline": "Tap in to connect privately.",
+        }), 200
+    try:
+        row = supabase.table("users").select("id,name,full_name,first_name,last_name").eq("id", user_id).limit(1).execute()
+        rows = row.data or []
+        data = rows[0] if rows else None
+        if not data:
+            return jsonify({"error": "not_found"}), 404
+        name = (
+            (data.get("full_name") or "").strip()
+            or (data.get("name") or "").strip()
+            or " ".join(
+                x for x in [data.get("first_name") or "", data.get("last_name") or ""]
+                if isinstance(x, str) and x.strip()
+            ).strip()
+            or "Click user"
+        )
+        return jsonify({
+            "user_id": user_id,
+            "name": name,
+            "aura_hex": "#4A6CF7",
+            "tagline": "Accept the connection in Click — your aura travels with you.",
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/connections/encounter-context", methods=["GET"])
+def encounter_context():
+    """Whether the signed-in viewer is starting a net-new edge vs logging another encounter."""
+    if not validate(request.headers.get("Authorization")):
+        return jsonify({"error": "Unauthorized"}), 401
+    peer = (request.args.get("peer_user_id") or "").strip()
+    if not peer or not supabase:
+        return jsonify({"is_new_connection": True}), 200
+    try:
+        uid = None
+        try:
+            user = supabase.auth.get_user(request.headers.get("Authorization", "").replace("Bearer ", "").strip())
+            uid = getattr(user, "user", None)
+            if uid is not None:
+                uid = getattr(uid, "id", None) or (uid.get("id") if isinstance(uid, dict) else None)
+        except Exception:
+            uid = None
+        if not uid:
+            return jsonify({"is_new_connection": True}), 200
+        r = supabase.table("connections").select("id,user_ids").contains("user_ids", [uid]).execute()
+        conns = r.data or []
+        exists = any(
+            isinstance(c.get("user_ids"), list) and peer in c["user_ids"] and uid in c["user_ids"]
+            for c in conns
+        )
+        return jsonify({"is_new_connection": not exists}), 200
+    except Exception:
+        return jsonify({"is_new_connection": True}), 200
+
+
+@app.route("/api/connections/encounter", methods=["POST"])
+def log_encounter():
+    if not validate(request.headers.get("Authorization")):
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    peer_user_id = (body.get("peer_user_id") or "").strip()
+    if not peer_user_id:
+        return jsonify({"error": "peer_user_id required"}), 400
+    # Thin acknowledgement — full encounter fan-out remains owned by Supabase / edge in production.
+    return jsonify({"ok": True, "accepted": True, "peer_user_id": peer_user_id}), 200
+
+
+@app.route("/api/hub/create", methods=["POST"])
+def hub_create():
+    if not validate(request.headers.get("Authorization")):
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "Community hub").strip() or "Community hub"
+    category = (body.get("category") or "general").strip() or "general"
+    lat = body.get("latitude")
+    lon = body.get("longitude")
+    hid = f"hub_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+    return jsonify({
+        "hub_id": hid,
+        "name": name,
+        "category": category,
+        "channel": f"hub:{hid}",
+        "latitude": lat,
+        "longitude": lon,
+    }), 200
+
+
+@app.route("/api/insights/widget-vibe", methods=["GET"])
+def widget_vibe():
+    if not validate(request.headers.get("Authorization")):
+        return jsonify({"error": "Unauthorized"}), 401
+    hues = ["#6C5CE7", "#00CEC9", "#FD79A8", "#FDCB6E", "#74B9FF"]
+    labels = ["Electric calm", "Social lift", "Deep focus", "Golden hour", "Ocean air"]
+    i = random.randint(0, len(hues) - 1)
+    return jsonify({"hex_color": hues[i], "label": labels[i]}), 200
+
+
 # ============== END CHAT API ENDPOINTS ==============
 
 if __name__ == '__main__':

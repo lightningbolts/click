@@ -36,6 +36,7 @@ fun AddClickScreen(
     onScanQRCode: () -> Unit = {},
     /** Hub slug from venue (e.g. local_point); runs proximity check then opens hub chat. */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
+    onCreateHub: () -> Unit = {},
     onStartChatting: () -> Unit = {}
 ) {
     var isClicked by remember { mutableStateOf(false) }
@@ -71,6 +72,7 @@ fun AddClickScreen(
                     onShowMyQRCode = onShowMyQRCode,
                     onScanQRCode = onScanQRCode,
                     onJoinCommunityHub = onJoinCommunityHub,
+                    onCreateHub = onCreateHub,
                 )
             } else {
                 ClickedSuccessContent(
@@ -95,6 +97,7 @@ fun AddClickContent(
     onShowMyQRCode: () -> Unit,
     onScanQRCode: () -> Unit,
     onJoinCommunityHub: (hubId: String) -> Unit = {},
+    onCreateHub: () -> Unit = {},
 ) {
     var showHubCodeDialog by remember { mutableStateOf(false) }
     var hubCodeDraft by remember { mutableStateOf("") }
@@ -307,6 +310,13 @@ fun AddClickContent(
                     textAlign = TextAlign.Center,
                 )
             }
+        }
+
+        AdaptiveButton(
+            onClick = onCreateHub,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Create new hub room", fontWeight = FontWeight.SemiBold)
         }
     }
 }

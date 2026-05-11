@@ -67,6 +67,9 @@ import compose.project.click.click.ui.components.ConnectionRevealUiState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.ConnectionContextSheet
+import compose.project.click.click.ui.components.ConnectionIntentHint // pragma: allowlist secret
+import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
+import compose.project.click.click.ui.components.shouldBypassConnectionRevealForProximity // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.AppShimmerVariant
 import compose.project.click.click.ui.screens.*
@@ -902,6 +905,7 @@ fun App() {
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
+            var showCreateHubModal by remember { mutableStateOf(false) }
 
             LaunchedEffect(connectionViewModel, currentUser.id) {
                 if (currentUser.id.isBlank()) return@LaunchedEffect
@@ -1157,7 +1161,8 @@ fun App() {
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },
-                                        onStartChatting = { navigateTo(NavigationItem.Connections.route) }
+                                        onStartChatting = { navigateTo(NavigationItem.Connections.route) },
+                                        onCreateHub = { showCreateHubModal = true }
                                     )
 
                                     NavigationItem.Connections.route -> {
@@ -1338,11 +1343,13 @@ fun App() {
                                                 transitionMode = NavigationTransitionMode.Tap
                                                 showNfcScreen = false
                                             },
-                                            onProximityFinalizeStart = {
-                                                connectionRevealState = ConnectionRevealUiState(
-                                                    methodLabel = "Tap",
-                                                    phase = ConnectionRevealPhase.Connecting,
-                                                )
+                                            onProximityFinalizeStart = { showReveal ->
+                                                if (showReveal) {
+                                                    connectionRevealState = ConnectionRevealUiState(
+                                                        methodLabel = "Tap",
+                                                        phase = ConnectionRevealPhase.Connecting,
+                                                    )
+                                                }
                                             },
                                         )
                                     }
@@ -1560,6 +1567,18 @@ fun App() {
                             }
                         }
 
+                        if (showCreateHubModal) {
+                            CreateHubModal(
+                                onDismiss = { showCreateHubModal = false },
+                                getJwt = suspend { tokenStorage.getJwt() },
+                                locationService = locationService,
+                                onCreated = { args ->
+                                    hubChatArgs = args
+                                    showCreateHubModal = false
+                                },
+                            )
+                        }
+
                         if (!isInitialLoading && (pendingConnectionsCount > 0 || appError != null)) {
                             Card(
                                 modifier = Modifier
@@ -1622,6 +1641,23 @@ fun App() {
                                     )
                                 }
                             }
+                            val taggingHint = if (!tagging.isGroup) {
+                                run {
+                                    val short = tagging.targetUsers.firstOrNull()?.displayName?.trim()
+                                        ?.split(Regex("\\s+"))
+                                        ?.firstOrNull()
+                                        ?.takeIf { it.isNotEmpty() }
+                                        ?: tagging.targetUsers.firstOrNull()?.displayName?.trim()?.ifBlank { null }
+                                        ?: "Friend"
+                                    if (tagging.isNewConnectionAggregate) {
+                                        ConnectionIntentHint.SparkNew(short)
+                                    } else {
+                                        ConnectionIntentHint.LogExistingEncounter(short)
+                                    }
+                                }
+                            } else {
+                                null
+                            }
                             ConnectionContextSheet(
                                 connectedUsers = tagging.targetUsers,
                                 locationName = null,
@@ -1629,11 +1665,15 @@ fun App() {
                                 noisePermissionGranted = ambientMonitor.hasPermission,
                                 onDismiss = finishWithoutTags,
                                 onSkip = finishWithoutTags,
+                                intentHint = taggingHint,
+                                onSaveEncounterOnly = null,
                                 onConfirm = { contextTag, noiseOptIn ->
-                                    connectionRevealState = ConnectionRevealUiState(
-                                        methodLabel = "QR",
-                                        phase = ConnectionRevealPhase.Connecting,
-                                    )
+                                    if (!shouldBypassConnectionRevealForProximity(tagging.isNewConnectionAggregate)) {
+                                        connectionRevealState = ConnectionRevealUiState(
+                                            methodLabel = "QR",
+                                            phase = ConnectionRevealPhase.Connecting,
+                                        )
+                                    }
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
@@ -1671,11 +1711,15 @@ fun App() {
                                 noisePermissionGranted = ambientMonitor.hasPermission,
                                 onDismiss = cancelQr,
                                 onSkip = cancelQr,
+                                intentHint = awaiting.intentHint,
+                                onSaveEncounterOnly = { contextTag, noiseOptIn ->
+                                    connectionScope.launch {
+                                        ambientNoiseOptIn = noiseOptIn
+                                        tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
+                                        connectionViewModel.logThinEncounterFromQrContext(awaiting, contextTag)
+                                    }
+                                },
                                 onConfirm = { contextTag, noiseOptIn ->
-                                    connectionRevealState = ConnectionRevealUiState(
-                                        methodLabel = "QR",
-                                        phase = ConnectionRevealPhase.Connecting,
-                                    )
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)

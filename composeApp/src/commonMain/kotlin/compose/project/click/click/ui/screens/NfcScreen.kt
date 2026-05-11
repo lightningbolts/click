@@ -41,6 +41,8 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.ConnectionContextSheet
+import compose.project.click.click.ui.components.ConnectionIntentHint // pragma: allowlist secret
+import compose.project.click.click.ui.components.shouldBypassConnectionRevealForProximity // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import compose.project.click.click.ui.theme.*
@@ -63,7 +65,7 @@ fun NfcScreen(
     connectionViewModel: ConnectionViewModel,
     onConnectionCreated: (String) -> Unit,
     onBackPressed: () -> Unit,
-    onProximityFinalizeStart: () -> Unit = {},
+    onProximityFinalizeStart: (showRevealOverlay: Boolean) -> Unit = { _ -> },
 ) {
     val connectionState by connectionViewModel.connectionState.collectAsState()
     val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
@@ -196,7 +198,7 @@ fun NfcScreen(
                             ProximityConfirmConnectionsContent(
                                 users = state.users,
                                 onConfirmAll = {
-                                    onProximityFinalizeStart()
+                                    onProximityFinalizeStart(true)
                                     scope.launch {
                                         val vibe = withContext(Dispatchers.Default) {
                                             runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
@@ -316,6 +318,23 @@ fun NfcScreen(
                             )
                         }
                     }
+                    val taggingHint = if (!tagging.isGroup) {
+                        run {
+                            val short = tagging.targetUsers.firstOrNull()?.displayName?.trim()
+                                ?.split(Regex("\\s+"))
+                                ?.firstOrNull()
+                                ?.takeIf { it.isNotEmpty() }
+                                ?: tagging.targetUsers.firstOrNull()?.displayName?.trim()?.ifBlank { null }
+                                ?: "Friend"
+                            if (tagging.isNewConnectionAggregate) {
+                                ConnectionIntentHint.SparkNew(short)
+                            } else {
+                                ConnectionIntentHint.LogExistingEncounter(short)
+                            }
+                        }
+                    } else {
+                        null
+                    }
                     ConnectionContextSheet(
                         connectedUsers = tagging.targetUsers,
                         locationName = null,
@@ -323,8 +342,10 @@ fun NfcScreen(
                         noisePermissionGranted = ambientNoiseMonitor.hasPermission,
                         onSkip = finishWithoutTags,
                         onDismiss = finishWithoutTags,
+                        intentHint = taggingHint,
+                        onSaveEncounterOnly = null,
                         onConfirm = { contextTag, noiseOptIn ->
-                            onProximityFinalizeStart()
+                            onProximityFinalizeStart(!shouldBypassConnectionRevealForProximity(tagging.isNewConnectionAggregate))
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)

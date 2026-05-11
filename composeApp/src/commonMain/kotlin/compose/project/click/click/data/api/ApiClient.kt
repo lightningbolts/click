@@ -25,6 +25,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -166,6 +167,53 @@ data class PushTokenRegisterBody(
 @Serializable
 data class PushTokenRegisterResponse(
     val ok: Boolean,
+)
+
+@Serializable
+data class ConnectionEncounterContextResponse(
+    @SerialName("is_new_connection") val isNewConnection: Boolean = true,
+)
+
+@Serializable
+data class ConnectionEncounterPostBody(
+    @SerialName("peer_user_id") val peerUserId: String,
+    @SerialName("context_tag") val contextTag: String? = null,
+)
+
+@Serializable
+data class ConnectionEncounterPostResponse(
+    val ok: Boolean = false,
+    val accepted: Boolean? = null,
+)
+
+@Serializable
+data class HubCreatePostBody(
+    val name: String,
+    val category: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
+
+@Serializable
+data class HubCreateResponse(
+    @SerialName("hub_id") val hubId: String,
+    val name: String,
+    val channel: String,
+    val category: String? = null,
+)
+
+@Serializable
+data class WidgetVibeResponse(
+    @SerialName("hex_color") val hexColor: String,
+    val label: String,
+)
+
+@Serializable
+data class PublicProfileResponse(
+    @SerialName("user_id") val userId: String? = null,
+    val name: String,
+    @SerialName("aura_hex") val auraHex: String,
+    val tagline: String? = null,
 )
 
 class ApiClient(private val baseUrl: String = BASE_URL) {
@@ -755,6 +803,99 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                 }
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun bearerAuthHeader(rawJwt: String): String {
+        val t = rawJwt.trim()
+        return if (t.startsWith("Bearer ", ignoreCase = true)) t else "Bearer $t"
+    }
+
+    private val thinBffBase: String get() = ApiConfig.BASE_URL.trimEnd('/')
+
+    suspend fun getConnectionEncounterContext(bearerJwt: String, peerUserId: String): Result<Boolean> {
+        val peer = peerUserId.trim()
+        if (peer.isEmpty()) return Result.failure(IllegalArgumentException("peer_user_id required"))
+        return try {
+            val response = client.get("$thinBffBase/api/connections/encounter-context") {
+                header(HttpHeaders.Authorization, bearerAuthHeader(bearerJwt))
+                parameter("peer_user_id", peer)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ConnectionEncounterContextResponse>().isNewConnection)
+            } else {
+                Result.failure(Exception(response.bodyAsText()))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postConnectionEncounter(bearerJwt: String, peerUserId: String, contextTag: String?): Result<Unit> {
+        val peer = peerUserId.trim()
+        if (peer.isEmpty()) return Result.failure(IllegalArgumentException("peer_user_id required"))
+        return try {
+            val response = client.post("$thinBffBase/api/connections/encounter") {
+                header(HttpHeaders.Authorization, bearerAuthHeader(bearerJwt))
+                contentType(ContentType.Application.Json)
+                setBody(ConnectionEncounterPostBody(peerUserId = peer, contextTag = contextTag?.trim()?.takeIf { it.isNotEmpty() }))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.bodyAsText()))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postHubCreate(bearerJwt: String, body: HubCreatePostBody): Result<HubCreateResponse> {
+        return try {
+            val response = client.post("$thinBffBase/api/hub/create") {
+                header(HttpHeaders.Authorization, bearerAuthHeader(bearerJwt))
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<HubCreateResponse>())
+            } else {
+                Result.failure(Exception(response.bodyAsText()))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getWidgetVibe(bearerJwt: String): Result<WidgetVibeResponse> {
+        return try {
+            val response = client.get("$thinBffBase/api/insights/widget-vibe") {
+                header(HttpHeaders.Authorization, bearerAuthHeader(bearerJwt))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<WidgetVibeResponse>())
+            } else {
+                Result.failure(Exception(response.bodyAsText()))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPublicProfile(userId: String): Result<PublicProfileResponse> {
+        val id = userId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("user_id required"))
+        return try {
+            val response = client.get("$thinBffBase/public-profile") {
+                parameter("user_id", id)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<PublicProfileResponse>())
+            } else {
+                Result.failure(Exception(response.bodyAsText()))
             }
         } catch (e: Exception) {
             Result.failure(e)

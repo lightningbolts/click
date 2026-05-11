@@ -82,6 +82,11 @@ import kotlin.math.*
 data class ConnectionCreateOutcome(
     val connection: Connection,
     val encounterLogged: Boolean,
+    /**
+     * From QR redeem / server pairing: false when reconnecting to an existing edge.
+     * Defaults to true when absent (offline queue / legacy responses).
+     */
+    val isNewConnection: Boolean = true,
 )
 
 internal fun Throwable.isRetryableForProximityBind(): Boolean {
@@ -237,6 +242,18 @@ class ConnectionRepository(
      * part of this payload: message `content` is E2EE on the wire, so link extraction
      * has to run against the locally-decrypted chat state.
      */
+    suspend fun fetchEncounterIsNewConnection(peerUserId: String): Result<Boolean> {
+        val jwt = tokenStorage.getJwt()?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("Please sign in again."))
+        return apiClient.getConnectionEncounterContext(jwt, peerUserId)
+    }
+
+    suspend fun postThinEncounterLog(peerUserId: String, contextTagLine: String?): Result<Unit> {
+        val jwt = tokenStorage.getJwt()?.takeIf { it.isNotBlank() }
+            ?: return Result.failure(Exception("Please sign in again."))
+        return apiClient.postConnectionEncounter(jwt, peerUserId, contextTagLine)
+    }
+
     suspend fun fetchConnectionTabs(
         connectionId: String,
     ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
@@ -782,6 +799,7 @@ class ConnectionRepository(
         val reason: String? = null,
         @SerialName("connection_id") val connectionId: String? = null,
         @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+        @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
     )
 
     @Serializable
@@ -813,6 +831,7 @@ class ConnectionRepository(
         val initiatorId: String? = null,
         val targetUserName: String? = null,
         @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+        @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
     )
 
     @Serializable
@@ -823,6 +842,7 @@ class ConnectionRepository(
         val reason: String? = null,
         @SerialName("connection_id") val connectionId: String? = null,
         @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+        @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
         val data: QrApiRedeemData? = null,
     )
 
@@ -1113,7 +1133,7 @@ class ConnectionRepository(
                 // Non-fatal — connection was created
             }
 
-            Result.success(ConnectionCreateOutcome(result, encounterLogged))
+            Result.success(ConnectionCreateOutcome(result, encounterLogged, isNewConnection = redeemedToken?.isNewConnection ?: true))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1319,7 +1339,7 @@ class ConnectionRepository(
             }
 
             AppDataManager.applyRestoredConnection(result)
-            Result.success(ConnectionCreateOutcome(result, encounterLogged))
+            Result.success(ConnectionCreateOutcome(result, encounterLogged, isNewConnection = false))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1760,6 +1780,9 @@ class ConnectionRepository(
                         encounterLogged = false,
                         reason = encounterReason,
                         connectionId = connectionId,
+                        isNewConnection = envelope.data?.isNewConnection
+                            ?: envelope.isNewConnection
+                            ?: true,
                     )
                 )
             }
@@ -1772,6 +1795,9 @@ class ConnectionRepository(
                     encounterLogged = encounterLogged,
                     reason = encounterReason,
                     connectionId = connectionId,
+                    isNewConnection = envelope.data?.isNewConnection
+                        ?: envelope.isNewConnection
+                        ?: true,
                 )
             )
         } catch (e: Exception) {
