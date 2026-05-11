@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">click</string>
+    <string name="widget_vibe_description">Your Click vibe at a glance — active connections and energy level.</string>
 </resources>

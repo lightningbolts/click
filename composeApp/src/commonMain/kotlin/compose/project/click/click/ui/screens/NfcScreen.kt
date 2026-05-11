@@ -40,6 +40,7 @@ import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
@@ -293,27 +294,31 @@ fun NfcScreen(
                 if (connectionState is ConnectionState.TaggingContext) {
                     val tagging = connectionState as ConnectionState.TaggingContext
                     val finishWithoutTags: () -> Unit = {
-                        scope.launch {
-                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                            val sensors = captureConnectionSensorContext(
-                                ambientNoiseMonitor = ambientNoiseMonitor,
-                                barometricHeightMonitor = barometricHeightMonitor,
-                                ambientNoiseOptIn = noiseOptIn,
-                                barometricContextOptIn = baroOptIn,
-                            )
-                            connectionViewModel.saveContextTags(
-                                tagging = tagging,
-                                contextTag = null,
-                                noiseLevelCategory = sensors.noiseLevelCategory,
-                                exactNoiseLevelDb = sensors.exactNoiseLevelDb,
-                                heightCategory = sensors.heightCategory,
-                                exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
-                                ambientNoiseMonitor = ambientNoiseMonitor,
-                                barometricHeightMonitor = barometricHeightMonitor,
-                                ambientNoiseOptIn = noiseOptIn,
-                                barometricContextOptIn = baroOptIn,
-                            )
+                        if (!tagging.isNewConnection) {
+                            connectionViewModel.resetConnectionState()
+                        } else {
+                            scope.launch {
+                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                val sensors = captureConnectionSensorContext(
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = noiseOptIn,
+                                    barometricContextOptIn = baroOptIn,
+                                )
+                                connectionViewModel.saveContextTags(
+                                    tagging = tagging,
+                                    contextTag = null,
+                                    noiseLevelCategory = sensors.noiseLevelCategory,
+                                    exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                    heightCategory = sensors.heightCategory,
+                                    exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = noiseOptIn,
+                                    barometricContextOptIn = baroOptIn,
+                                )
+                            }
                         }
                     }
                     ConnectionContextSheet(
@@ -323,8 +328,28 @@ fun NfcScreen(
                         noisePermissionGranted = ambientNoiseMonitor.hasPermission,
                         onSkip = finishWithoutTags,
                         onDismiss = finishWithoutTags,
+                        presentation = if (tagging.isNewConnection) {
+                            ConnectionContextPresentation.NewSpark
+                        } else {
+                            ConnectionContextPresentation.ReconnectEncounter
+                        },
+                        encounterSaveInProgress = tagging.encounterSubmitting,
+                        onSaveEncounter = {
+                            scope.launch {
+                                connectionViewModel.saveReconnectEncounter(
+                                    tagging = tagging,
+                                    currentUserId = userId,
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
+                                    barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
+                                )
+                            }
+                        },
                         onConfirm = { contextTag, noiseOptIn ->
-                            onProximityFinalizeStart()
+                            if (tagging.isNewConnection) {
+                                onProximityFinalizeStart()
+                            }
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)

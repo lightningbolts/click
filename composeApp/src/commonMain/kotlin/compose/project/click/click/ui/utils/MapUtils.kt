@@ -107,6 +107,16 @@ data class MapCluster(
         }
 }
 
+/** Community hub from `GET /api/hub/nearby` (ephemeral `hub_venues`). */
+data class CommunityHubPin(
+    val hubId: String,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val radiusMeters: Int,
+    val activeUserCount: Int,
+)
+
 /** Single map item for unified clustering (connections + beacons). */
 private sealed class MapClusterMember {
     data class Conn(val point: ConnectionMapPoint) : MapClusterMember()

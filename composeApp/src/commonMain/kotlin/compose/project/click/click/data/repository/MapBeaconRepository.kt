@@ -1,6 +1,7 @@
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
@@ -42,6 +43,18 @@ class MapBeaconRepository(
 
     suspend fun insertBeacon(insert: MapBeaconInsert): Result<Unit> =
         apiClient.postMapBeacon(insert)
+
+    suspend fun fetchNearbyCommunityHubs(
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+    ): Result<List<CommunityHubNearbyDto>> {
+        val (lat, lon, _) = bboxToCenterRadiusMeters(minLat, maxLat, minLon, maxLon)
+        val diag = haversineMeters(minLat, minLon, maxLat, maxLon)
+        val radius = (diag / 2.0 * 1.35).coerceIn(500.0, 50_000.0)
+        return apiClient.getNearbyCommunityHubs(lat, lon, radius)
+    }
 
     private fun parseBeaconResponsePayload(text: String): List<MapBeacon> {
         val trimmed = text.trim()

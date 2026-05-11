@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
@@ -27,6 +28,7 @@ enum class MapPinKind {
     BEACON_ALERT,
     BEACON_SOCIAL,
     BEACON_OTHER,
+    COMMUNITY_HUB,
 }
 
 data class MapPin(
@@ -129,6 +131,26 @@ data class MapPin(
                 caption = caption,
             )
         }
+
+        fun fromCommunityHub(hub: CommunityHubPin): MapPin {
+            val cap = truncateMapPinCaption(hub.name, 14).takeIf { it.isNotEmpty() }
+            return MapPin(
+                id = "hub:${hub.hubId}",
+                title = hub.name,
+                latitude = hub.latitude,
+                longitude = hub.longitude,
+                isNearby = false,
+                timeState = TimeState.LIVE,
+                opacity = 1f,
+                shouldPulse = true,
+                imageUrl = null,
+                kind = MapPinKind.COMMUNITY_HUB,
+                beaconKind = null,
+                beaconTypeKey = null,
+                zIndex = 11_600f,
+                caption = cap ?: "${hub.activeUserCount} here",
+            )
+        }
     }
 }
 
@@ -211,6 +233,7 @@ fun MapPin.markerHueDegrees(): Float = when {
         MapPinKind.BEACON_ALERT -> 0f
         MapPinKind.BEACON_SOCIAL -> 310f
         MapPinKind.BEACON_OTHER -> 55f
+        MapPinKind.COMMUNITY_HUB -> 195f
         MapPinKind.CONNECTION -> 300f
     }
 }

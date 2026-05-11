@@ -24,6 +24,7 @@ import compose.project.click.click.proximity.ProximityManager // pragma: allowli
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
+import compose.project.click.click.sensors.buildEncounterSensorJson // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.ConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
@@ -82,6 +83,10 @@ sealed class ConnectionState {
         val targetUsers: List<UserProfile>,
         val isGroup: Boolean = false,
         val memberUserIds: List<String> = emptyList(),
+        /** From bind-proximity `is_new_connection` aggregate — false → encounter-log UX. */
+        val isNewConnection: Boolean = true,
+        /** True while POST `/api/connections/encounter` is in flight. */
+        val encounterSubmitting: Boolean = false,
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -312,6 +317,7 @@ class ConnectionViewModel : ViewModel() {
                                 targetUsers = users.map { it.toUserProfile() },
                                 isGroup = true,
                                 memberUserIds = groupIds,
+                                isNewConnection = outcome.isAggregateNewConnection,
                             )
                         } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
                             val peer = users.first()
@@ -324,6 +330,7 @@ class ConnectionViewModel : ViewModel() {
                             _connectionState.value = ConnectionState.TaggingContext(
                                 newConnections = listOf(connection),
                                 targetUsers = listOf(peer.toUserProfile()),
+                                isNewConnection = outcome.isAggregateNewConnection,
                             )
                         } else {
                             _connectionState.value = ConnectionState.PendingConfirmation(users)
@@ -557,6 +564,7 @@ class ConnectionViewModel : ViewModel() {
                             _connectionState.value = ConnectionState.TaggingContext(
                                 newConnections = listOf(connection),
                                 targetUsers = listOf(connectedUser.toUserProfile()),
+                                isNewConnection = true,
                             )
                         }
                         else -> {
@@ -577,6 +585,61 @@ class ConnectionViewModel : ViewModel() {
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
         _connectionState.value = ConnectionState.Idle
+    }
+
+    /**
+     * Reconnection encounter: POST `/api/connections/encounter` with ambient sensor snapshot + last proximity GPS.
+     */
+    fun saveReconnectEncounter(
+        tagging: ConnectionState.TaggingContext,
+        currentUserId: String,
+        ambientNoiseMonitor: AmbientNoiseMonitor? = null,
+        barometricHeightMonitor: BarometricHeightMonitor? = null,
+        ambientNoiseOptIn: Boolean = true,
+        barometricContextOptIn: Boolean = true,
+    ) {
+        if (currentUserId.isBlank()) return
+        val peer = tagging.targetUsers.firstOrNull { it.id.isNotBlank() && it.id != currentUserId }
+            ?: tagging.targetUsers.firstOrNull()
+            ?: return
+        viewModelScope.launch {
+            _connectionState.value = tagging.copy(encounterSubmitting = true)
+            try {
+                val snapshot = if (ambientNoiseMonitor != null && barometricHeightMonitor != null) {
+                    captureConnectionSensorContext(
+                        ambientNoiseMonitor = ambientNoiseMonitor,
+                        barometricHeightMonitor = barometricHeightMonitor,
+                        ambientNoiseOptIn = ambientNoiseOptIn,
+                        barometricContextOptIn = barometricContextOptIn,
+                    )
+                } else {
+                    null
+                }
+                val sensorJson = buildEncounterSensorJson(
+                    context = snapshot,
+                    hardwareVibe = lastProximityHardwareVibe,
+                    latitude = lastProximityLat,
+                    longitude = lastProximityLng,
+                ).takeUnless { it.isEmpty() }
+                val result = withContext(Dispatchers.Default) {
+                    repository.postConnectionEncounter(
+                        userId = currentUserId,
+                        peerId = peer.id,
+                        sensorData = sensorJson,
+                    )
+                }
+                if (result.isSuccess) {
+                    PlatformHapticsPolicy.successNotification()
+                    _connectionState.value = ConnectionState.Idle
+                } else {
+                    _connectionState.value = ConnectionState.Error(
+                        result.exceptionOrNull()?.message ?: "Could not save encounter",
+                    )
+                }
+            } catch (e: Exception) {
+                _connectionState.value = ConnectionState.Error(e.message ?: "Could not save encounter")
+            }
+        }
     }
 
     /**
@@ -653,6 +716,7 @@ class ConnectionViewModel : ViewModel() {
                     _connectionState.value = ConnectionState.TaggingContext(
                         newConnections = created,
                         targetUsers = profiles,
+                        isNewConnection = true,
                     )
                 }
             } catch (e: Exception) {

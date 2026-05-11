@@ -17,6 +17,8 @@ import compose.project.click.click.data.repository.SupabaseChatRepository // pra
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -67,6 +69,11 @@ sealed class MapSelection {
     data class ClusterSelected(val cluster: MapCluster) : MapSelection()
     data class ConnectionSelected(val point: ConnectionMapPoint, val otherUser: User?) : MapSelection()
     data class BeaconSelected(val beacon: MapBeacon, val distanceMeters: Double?) : MapSelection()
+    data class HubSelected(
+        val hub: CommunityHubPin,
+        val distanceMeters: Double?,
+        val canJoinGeofence: Boolean,
+    ) : MapSelection()
 }
 
 /**
@@ -123,6 +130,9 @@ class MapViewModel : ViewModel() {
 
     private val _mapBeacons = MutableStateFlow<List<MapBeacon>>(emptyList())
     val mapBeacons: StateFlow<List<MapBeacon>> = _mapBeacons.asStateFlow()
+
+    private val _communityHubs = MutableStateFlow<List<CommunityHubPin>>(emptyList())
+    val communityHubs: StateFlow<List<CommunityHubPin>> = _communityHubs.asStateFlow()
 
     private val mapBeaconRepository = MapBeaconRepository()
 
@@ -609,12 +619,6 @@ class MapViewModel : ViewModel() {
     }
 
     private fun scheduleBeaconFetchForBounds(bounds: BoundingBox) {
-        val layers = _selectedLayerFilters.value
-        val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
-            layers.contains(MapLayerFilter.SOUNDTRACKS) ||
-            layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
-            layers.contains(MapLayerFilter.SOCIAL_VIBES)
-        if (!wantBeacons) return
         if (AppDataManager.currentUser.value == null) return
 
         beaconPollJob?.cancel()
@@ -622,6 +626,30 @@ class MapViewModel : ViewModel() {
         beaconPollJob = viewModelScope.launch {
             delay(400)
             if (seq != beaconFetchSeq) return@launch
+            mapBeaconRepository.fetchNearbyCommunityHubs(
+                minLat = bounds.minLat,
+                maxLat = bounds.maxLat,
+                minLon = bounds.minLon,
+                maxLon = bounds.maxLon,
+            ).onSuccess { rows ->
+                _communityHubs.value = rows.map { dto ->
+                    CommunityHubPin(
+                        hubId = dto.hubId,
+                        name = dto.name,
+                        latitude = dto.latitude,
+                        longitude = dto.longitude,
+                        radiusMeters = dto.radiusMeters,
+                        activeUserCount = dto.activeUserCount,
+                    )
+                }
+            }
+
+            val layers = _selectedLayerFilters.value
+            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
+                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
+                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
+                layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            if (!wantBeacons) return@launch
             val result = mapBeaconRepository.fetchLocalBeacons(
                 minLat = bounds.minLat,
                 maxLat = bounds.maxLat,
@@ -798,6 +826,19 @@ class MapViewModel : ViewModel() {
     }
 
     fun onMapPinTapped(pin: MapPin) {
+        if (pin.kind == MapPinKind.COMMUNITY_HUB || pin.id.startsWith("hub:")) {
+            val raw = pin.id.removePrefix("hub:")
+            viewModelScope.launch {
+                val hub = _communityHubs.value.firstOrNull { it.hubId == raw }
+                    ?: return@launch
+                val distance = locationService.getHighAccuracyLocation(4500L)?.let { loc ->
+                    haversineDistance(loc.latitude, loc.longitude, hub.latitude, hub.longitude)
+                }
+                val canJoin = distance != null && distance <= 200.0
+                _selection.value = MapSelection.HubSelected(hub, distance, canJoin)
+            }
+            return
+        }
         if (pin.id.startsWith("beacon:")) {
             val raw = pin.id.removePrefix("beacon:")
             onBeaconPinTapped(raw)

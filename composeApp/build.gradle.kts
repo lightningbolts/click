@@ -71,6 +71,9 @@ kotlin {
             implementation("com.google.firebase:firebase-messaging-ktx:23.4.1")
 
             implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+            // Jetpack Glance for home-screen widgets
+            implementation("androidx.glance:glance-appwidget:1.1.1")
         }
         commonMain.dependencies {
             implementation(compose.runtime)

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -17,9 +16,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader
@@ -31,12 +32,16 @@ import androidx.compose.foundation.layout.statusBars
 fun AddClickScreen(
     currentUserId: String = "",
     currentUsername: String? = null,
+    locationService: LocationService,
     onNavigateToNfc: () -> Unit = {},
     onShowMyQRCode: () -> Unit = {},
     onScanQRCode: () -> Unit = {},
     /** Hub slug from venue (e.g. local_point); runs proximity check then opens hub chat. */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
-    onStartChatting: () -> Unit = {}
+    /** After POST `/api/hub/create`, verify geofence and open hub chat. */
+    onCommunityHubCreated: (hubId: String) -> Unit = {},
+    onStartChatting: () -> Unit = {},
+    onHubCreateError: (String) -> Unit = {},
 ) {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
@@ -71,6 +76,9 @@ fun AddClickScreen(
                     onShowMyQRCode = onShowMyQRCode,
                     onScanQRCode = onScanQRCode,
                     onJoinCommunityHub = onJoinCommunityHub,
+                    locationService = locationService,
+                    onCommunityHubCreated = onCommunityHubCreated,
+                    onHubCreateError = onHubCreateError,
                 )
             } else {
                 ClickedSuccessContent(
@@ -95,9 +103,24 @@ fun AddClickContent(
     onShowMyQRCode: () -> Unit,
     onScanQRCode: () -> Unit,
     onJoinCommunityHub: (hubId: String) -> Unit = {},
+    locationService: LocationService,
+    onCommunityHubCreated: (hubId: String) -> Unit = {},
+    onHubCreateError: (String) -> Unit = {},
 ) {
     var showHubCodeDialog by remember { mutableStateOf(false) }
     var hubCodeDraft by remember { mutableStateOf("") }
+    var showCreateHubModal by remember { mutableStateOf(false) }
+
+    CreateHubModal(
+        visible = showCreateHubModal,
+        onDismiss = { showCreateHubModal = false },
+        onHubCreated = { hubId ->
+            showCreateHubModal = false
+            onCommunityHubCreated(hubId)
+        },
+        locationService = locationService,
+        onError = { msg -> onHubCreateError(msg) },
+    )
 
     if (showHubCodeDialog) {
         GlassAlertDialog(
@@ -271,41 +294,15 @@ fun AddClickContent(
             }
         }
 
-        // Ephemeral community hub (venue QR or code)
-        AdaptiveCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp),
-            onClick = { showHubCodeDialog = true },
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    Icons.Filled.Groups,
-                    contentDescription = "Community hub",
-                    tint = MaterialTheme.colorScheme.primary,
-                    // DO NOT REVERT: Fixed size per design specs
-                    modifier = Modifier.size(120.dp),
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Community hub",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "Enter a hub code or scan a hub QR with Scan Code",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
+            TextButton(onClick = { showCreateHubModal = true }) {
+                Text("Create ephemeral hub")
+            }
+            TextButton(onClick = { showHubCodeDialog = true }) {
+                Text("Join community hub")
             }
         }
     }

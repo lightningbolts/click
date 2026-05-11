@@ -125,6 +125,7 @@ actual fun PlatformMap(
                         MapPinKind.BEACON_ALERT -> "⚠️ ${pin.title}"
                         MapPinKind.BEACON_SOCIAL -> "✨ ${pin.title}"
                         MapPinKind.BEACON_OTHER -> "📍 ${pin.title}"
+                        MapPinKind.COMMUNITY_HUB -> "🏟️ ${pin.title}"
                     }
                     ann.setTitle(displayTitle)
                     ann.setSubtitle(pin.id)
@@ -235,6 +236,7 @@ private fun MapPin.markerTintUIColor(): UIColor {
             MapPinKind.BEACON_ALERT -> UIColor.redColor
             MapPinKind.BEACON_SOCIAL -> UIColor.magentaColor
             MapPinKind.BEACON_OTHER -> UIColor.yellowColor
+            MapPinKind.COMMUNITY_HUB -> UIColor.cyanColor
             MapPinKind.CONNECTION -> UIColor.magentaColor
         }
     }

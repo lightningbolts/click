@@ -127,6 +127,11 @@ data class ProximityHandshakeRecoveryPayload(
 data class BindProximityHandshakeOutcome(
     val matches: List<User>,
     /**
+     * Top-level `is_new_connection` from bind-proximity-connection when present; else derived from match rows.
+     * When false, route reconnect UX (encounter logging) instead of the “new spark” sheet.
+     */
+    val isAggregateNewConnection: Boolean = true,
+    /**
      * When false, every matched peer who already had a connection hit the 3h encounter rate limit;
      * the client should skip the post-confirm context-tagging sheet for this crossing.
      */
@@ -241,6 +246,26 @@ class ConnectionRepository(
         connectionId: String,
     ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
         return apiClient.getConnectionTabs(connectionId)
+    }
+
+    /** POST `/api/connections/encounter` on click-web (JWT via ApiClient). */
+    suspend fun postConnectionEncounter(
+        userId: String,
+        peerId: String,
+        sensorData: kotlinx.serialization.json.JsonObject?,
+    ): Result<Unit> {
+        val uid = userId.trim()
+        val pid = peerId.trim()
+        if (uid.isEmpty() || pid.isEmpty()) {
+            return Result.failure(IllegalArgumentException("user_id and peer_id required"))
+        }
+        return apiClient.postConnectionEncounter(
+            compose.project.click.click.data.api.ConnectionEncounterPostBody(
+                userId = uid,
+                peerId = pid,
+                sensorData = sensorData,
+            ),
+        )
     }
 
     suspend fun getProfileTabs(userId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
@@ -440,11 +465,14 @@ class ConnectionRepository(
             val rows = parsed.matches.orEmpty()
             val aggregateEncounterLogged = parsed.encounterLogged
                 ?: rows.none { it.encounterLogged == false }
+            val aggregateNewConnection = parsed.isNewConnection
+                ?: rows.any { it.isNewConnection }
             val groupCliqueCandidateMemberIds =
                 parsed.groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() }
             Result.success(
                 BindProximityHandshakeOutcome(
                     matches = rows,
+                    isAggregateNewConnection = aggregateNewConnection,
                     encounterLogged = aggregateEncounterLogged,
                     groupCliqueCandidateMemberIds = groupCliqueCandidateMemberIds,
                     connectionId = parsed.connectionId,

@@ -14,6 +14,7 @@ import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.auth.Auth
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -33,6 +34,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -168,6 +170,65 @@ data class PushTokenRegisterResponse(
     val ok: Boolean,
 )
 
+/** GET `/api/users/[userId]/public-profile` — no JWT (App Clip / Instant preview). */
+@Serializable
+data class PublicProfileUnauthenticatedResponse(
+    @SerialName("display_name") val displayName: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("aura_colors") val auraColors: List<String> = emptyList(),
+)
+
+@Serializable
+data class HubCreateLocationBody(
+    val latitude: Double,
+    val longitude: Double,
+    @SerialName("radius_meters") val radiusMeters: Int = 50,
+)
+
+@Serializable
+data class HubCreatePostBody(
+    val name: String,
+    val category: String,
+    val location: HubCreateLocationBody,
+)
+
+@Serializable
+data class HubCreateResponseDto(
+    @SerialName("hub_id") val hubId: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+@Serializable
+data class ConnectionEncounterPostBody(
+    @SerialName("user_id") val userId: String,
+    @SerialName("peer_id") val peerId: String,
+    @SerialName("sensor_data") val sensorData: JsonObject? = null,
+)
+
+@Serializable
+data class WidgetVibePayloadDto(
+    @SerialName("status_text") val statusText: String,
+    @SerialName("density_hex_color") val densityHexColor: String,
+    @SerialName("active_counts") val activeCounts: Int,
+)
+
+@Serializable
+data class CommunityHubNearbyDto(
+    @SerialName("hub_id") val hubId: String,
+    val name: String,
+    val category: String = "general",
+    val latitude: Double,
+    val longitude: Double,
+    @SerialName("radius_meters") val radiusMeters: Int,
+    @SerialName("active_user_count") val activeUserCount: Int,
+    @SerialName("distance_meters") val distanceMeters: Double,
+)
+
+@Serializable
+private data class CommunityHubNearbyEnvelope(
+    val hubs: List<CommunityHubNearbyDto> = emptyList(),
+)
+
 class ApiClient(private val baseUrl: String = BASE_URL) {
 
     companion object {
@@ -231,6 +292,13 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                     request.url.host == clickWebAuthHost
                 }
             }
+        }
+    }
+
+    /** click-web calls without bearer (only public routes). */
+    private val clickWebPlainClient = HttpClient {
+        install(ContentNegotiation) {
+            json(json)
         }
     }
 
@@ -761,8 +829,111 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** GET `/api/users/{userId}/public-profile` — unauthenticated. */
+    suspend fun getPublicProfileUnauthenticated(userId: String): Result<PublicProfileUnauthenticatedResponse> {
+        val id = userId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("userId required"))
+        return try {
+            val response: HttpResponse = clickWebPlainClient.get(
+                "$clickWebAuthOrigin/api/users/$id/public-profile",
+            )
+            if (response.status.value in 200..299) {
+                Result.success(response.body<PublicProfileUnauthenticatedResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/hub/create` — JWT bearer. */
+    suspend fun postHubCreate(body: HubCreatePostBody): Result<HubCreateResponseDto> {
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/hub/create") {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<HubCreateResponseDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/encounter` — JWT bearer; inserts encounter row only. */
+    suspend fun postConnectionEncounter(body: ConnectionEncounterPostBody): Result<Unit> {
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            when {
+                response.status.value in 200..299 -> Result.success(Unit)
+                response.status.value == 429 -> Result.failure(Exception("Encounter rate limit — try again later."))
+                else -> Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** GET `/api/insights/widget-vibe` — JWT bearer. */
+    suspend fun getWidgetVibePayload(): Result<WidgetVibePayloadDto> {
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/insights/widget-vibe")
+            if (response.status.value in 200..299) {
+                Result.success(response.body<WidgetVibePayloadDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** GET `/api/hub/nearby` — JWT bearer; active hubs near lat/lon. */
+    suspend fun getNearbyCommunityHubs(
+        lat: Double,
+        lon: Double,
+        radiusMeters: Double = 15_000.0,
+    ): Result<List<CommunityHubNearbyDto>> {
+        if (!lat.isFinite() || !lon.isFinite()) {
+            return Result.failure(IllegalArgumentException("lat/lon required"))
+        }
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/hub/nearby") {
+                parameter("lat", lat)
+                parameter("lon", lon)
+                parameter("radius_meters", radiusMeters)
+            }
+            if (response.status.value in 200..299) {
+                val env = response.body<CommunityHubNearbyEnvelope>()
+                Result.success(env.hubs)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun close() {
         client.close()
         clickWebClient.close()
+        clickWebPlainClient.close()
     }
 }

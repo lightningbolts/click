@@ -66,6 +66,7 @@ import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
+import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.AppShimmerVariant
@@ -1151,11 +1152,20 @@ fun App() {
                                     NavigationItem.AddClick.route -> AddClickScreen(
                                         currentUserId = currentUser.id,
                                         currentUsername = currentUser.name,
+                                        locationService = locationService,
                                         onNavigateToNfc = { showNfcScreen = true },
                                         onShowMyQRCode = { showMyQRCode = true },
                                         onScanQRCode = { showQRScanner = true },
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
+                                        },
+                                        onCommunityHubCreated = { hubId ->
+                                            launchCommunityHubJoin(hubId)
+                                        },
+                                        onHubCreateError = { msg ->
+                                            appScope.launch {
+                                                snackbarHostState.showSnackbar(msg)
+                                            }
                                         },
                                         onStartChatting = { navigateTo(NavigationItem.Connections.route) }
                                     )
@@ -1199,7 +1209,10 @@ fun App() {
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
                                             navigateTo(NavigationItem.Connections.route)
-                                        }
+                                        },
+                                        onJoinCommunityHub = { hubId ->
+                                            launchCommunityHubJoin(hubId)
+                                        },
                                     )
 
                                     NavigationItem.Settings.route -> SettingsScreen(
@@ -1599,27 +1612,31 @@ fun App() {
                         if (connectionState is ConnectionState.TaggingContext && !showNfcScreen && !suppressConnectionContextSheet) {
                             val tagging = connectionState as ConnectionState.TaggingContext
                             val finishWithoutTags: () -> Unit = {
-                                connectionScope.launch {
-                                    val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                    val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                    val sensors = captureConnectionSensorContext(
-                                        ambientNoiseMonitor = ambientMonitor,
-                                        barometricHeightMonitor = baroMonitor,
-                                        ambientNoiseOptIn = noiseOptIn,
-                                        barometricContextOptIn = baroOptIn,
-                                    )
-                                    connectionViewModel.saveContextTags(
-                                        tagging = tagging,
-                                        contextTag = null,
-                                        noiseLevelCategory = sensors.noiseLevelCategory,
-                                        exactNoiseLevelDb = sensors.exactNoiseLevelDb,
-                                        heightCategory = sensors.heightCategory,
-                                        exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
-                                        ambientNoiseMonitor = ambientMonitor,
-                                        barometricHeightMonitor = baroMonitor,
-                                        ambientNoiseOptIn = noiseOptIn,
-                                        barometricContextOptIn = baroOptIn,
-                                    )
+                                if (!tagging.isNewConnection) {
+                                    connectionViewModel.resetConnectionState()
+                                } else {
+                                    connectionScope.launch {
+                                        val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                                        val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                        val sensors = captureConnectionSensorContext(
+                                            ambientNoiseMonitor = ambientMonitor,
+                                            barometricHeightMonitor = baroMonitor,
+                                            ambientNoiseOptIn = noiseOptIn,
+                                            barometricContextOptIn = baroOptIn,
+                                        )
+                                        connectionViewModel.saveContextTags(
+                                            tagging = tagging,
+                                            contextTag = null,
+                                            noiseLevelCategory = sensors.noiseLevelCategory,
+                                            exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                            heightCategory = sensors.heightCategory,
+                                            exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                            ambientNoiseMonitor = ambientMonitor,
+                                            barometricHeightMonitor = baroMonitor,
+                                            ambientNoiseOptIn = noiseOptIn,
+                                            barometricContextOptIn = baroOptIn,
+                                        )
+                                    }
                                 }
                             }
                             ConnectionContextSheet(
@@ -1629,11 +1646,31 @@ fun App() {
                                 noisePermissionGranted = ambientMonitor.hasPermission,
                                 onDismiss = finishWithoutTags,
                                 onSkip = finishWithoutTags,
+                                presentation = if (tagging.isNewConnection) {
+                                    ConnectionContextPresentation.NewSpark
+                                } else {
+                                    ConnectionContextPresentation.ReconnectEncounter
+                                },
+                                encounterSaveInProgress = tagging.encounterSubmitting,
+                                onSaveEncounter = {
+                                    connectionScope.launch {
+                                        connectionViewModel.saveReconnectEncounter(
+                                            tagging = tagging,
+                                            currentUserId = currentUser.id,
+                                            ambientNoiseMonitor = ambientMonitor,
+                                            barometricHeightMonitor = baroMonitor,
+                                            ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
+                                            barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
+                                        )
+                                    }
+                                },
                                 onConfirm = { contextTag, noiseOptIn ->
-                                    connectionRevealState = ConnectionRevealUiState(
-                                        methodLabel = "QR",
-                                        phase = ConnectionRevealPhase.Connecting,
-                                    )
+                                    if (tagging.isNewConnection) {
+                                        connectionRevealState = ConnectionRevealUiState(
+                                            methodLabel = "Tap",
+                                            phase = ConnectionRevealPhase.Connecting,
+                                        )
+                                    }
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
@@ -1671,11 +1708,8 @@ fun App() {
                                 noisePermissionGranted = ambientMonitor.hasPermission,
                                 onDismiss = cancelQr,
                                 onSkip = cancelQr,
+                                presentation = ConnectionContextPresentation.QrFlow,
                                 onConfirm = { contextTag, noiseOptIn ->
-                                    connectionRevealState = ConnectionRevealUiState(
-                                        methodLabel = "QR",
-                                        phase = ConnectionRevealPhase.Connecting,
-                                    )
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)

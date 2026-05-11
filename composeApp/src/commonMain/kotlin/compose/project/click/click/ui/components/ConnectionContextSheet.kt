@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -39,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -50,12 +54,22 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.UserProfile
+import androidx.compose.material3.CircularProgressIndicator
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 /** Matches DB limits for profile-style short labels (align with interests max length). */
 private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
+
+enum class ConnectionContextPresentation {
+    /** Proximity new edge — “Sparking…” + tag chips + Connect. */
+    NewSpark,
+    /** QR scan — same tag UX; App layer skips reveal overlay on confirm. */
+    QrFlow,
+    /** Existing edge — encounter POST only. */
+    ReconnectEncounter,
+}
 
 @Composable
 private fun ConnectionContextHeaderAvatars(connectedUsers: List<UserProfile>) {
@@ -200,6 +214,9 @@ fun ConnectionContextSheet(
     onDismiss: () -> Unit,
     onConfirm: (ContextTag?, Boolean) -> Unit,
     onSkip: (() -> Unit)? = null,
+    presentation: ConnectionContextPresentation = ConnectionContextPresentation.NewSpark,
+    encounterSaveInProgress: Boolean = false,
+    onSaveEncounter: (() -> Unit)? = null,
 ) {
     val hourOfDay = remember {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
@@ -227,19 +244,39 @@ fun ConnectionContextSheet(
 
     val titleText: String
     val subtitleText: String
-    when (connectedUsers.size) {
-        0 -> {
-            titleText = "Add context"
-            subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
+    when (presentation) {
+        ConnectionContextPresentation.ReconnectEncounter -> {
+            val name = connectedUsers.firstOrNull()?.displayName?.trim()?.takeIf { it.isNotEmpty() } ?: "them"
+            titleText = "Logging encounter with $name…"
+            subtitleText = "Save this crossing to your shared encounter history."
         }
-        1 -> {
-            val name = connectedUsers.first().displayName
-            titleText = "How was meeting $name?"
-            subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
+        ConnectionContextPresentation.QrFlow -> when (connectedUsers.size) {
+            0 -> {
+                titleText = "Sparking a new connection…"
+                subtitleText = "Pick what best describes this moment. You can skip and keep going."
+            }
+            1 -> {
+                titleText = "Sparking a new connection…"
+                subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
+            }
+            else -> {
+                titleText = "Set the context for this group"
+                subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
+            }
         }
-        else -> {
-            titleText = "Set the context for this group"
-            subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
+        ConnectionContextPresentation.NewSpark -> when (connectedUsers.size) {
+            0 -> {
+                titleText = "Sparking a new connection…"
+                subtitleText = "Pick what best describes this moment. You can skip and keep going."
+            }
+            1 -> {
+                titleText = "Sparking a new connection…"
+                subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
+            }
+            else -> {
+                titleText = "Set the context for this group"
+                subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
+            }
         }
     }
 
@@ -280,121 +317,137 @@ fun ConnectionContextSheet(
                 )
             }
 
-            Text(
-                text = "Suggested",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                suggestions.forEach { tag ->
-                    FilterChip(
-                        selected = selectedTagId == tag.id,
-                        onClick = { selectedTagId = tag.id },
-                        label = { Text("${tag.emoji} ${tag.label}") }
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            Text(
-                text = "All tags",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                allTags.forEach { tag ->
-                    FilterChip(
-                        selected = selectedTagId == tag.id,
-                        onClick = { selectedTagId = tag.id },
-                        label = { Text("${tag.emoji} ${tag.label}") }
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            Text(
-                text = "Custom activity",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Text(
-                text = "If none of the presets fit, write what you were doing. Short, natural labels work best.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            FilterChip(
-                selected = selectedTagId == "custom",
-                onClick = { selectedTagId = "custom" },
-                label = { Text("✏️ Write your own") }
-            )
-
-            OutlinedTextField(
-                value = customTagText,
-                onValueChange = { input ->
-                    customTagText = input
-                        .replace(Regex("\\s+"), " ")
-                        .trimStart()
-                        .take(CUSTOM_CONTEXT_MAX_LENGTH)
-                    if (customTagText.isNotBlank()) {
-                        selectedTagId = "custom"
-                    }
+            val showTagPickers = presentation != ConnectionContextPresentation.ReconnectEncounter
+            val springBtn by animateFloatAsState(
+                targetValue = if (presentation == ConnectionContextPresentation.ReconnectEncounter && encounterSaveInProgress) {
+                    0.94f
+                } else {
+                    1f
                 },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Custom activity") },
-                placeholder = { Text("Dorm lounge, coffee line, hackathon kickoff...") },
-                supportingText = {
-                    Text(
-                        text = if (isCustomSelectionInvalid) {
-                            "Add a quick label before continuing."
-                        } else {
-                            "${customTagText.length}/$CUSTOM_CONTEXT_MAX_LENGTH characters"
-                        }
-                    )
-                },
-                isError = isCustomSelectionInvalid,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words,
-                    imeAction = ImeAction.Done
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                label = "connection_ctx_primary",
+            )
+
+            if (showTagPickers) {
+                Text(
+                    text = "Suggested",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
-            )
 
-            HorizontalDivider()
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    suggestions.forEach { tag ->
+                        FilterChip(
+                            selected = selectedTagId == tag.id,
+                            onClick = { selectedTagId = tag.id },
+                            label = { Text("${tag.emoji} ${tag.label}") }
+                        )
+                    }
+                }
 
-            Text(
-                text = "Ambient noise",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
+                HorizontalDivider()
 
-            Text(
-                text = when {
-                    ambientNoiseOptIn && noisePermissionGranted ->
-                        "Ambient sound enrichment is enabled from onboarding. Click stores only a 2-second noise category for this encounter."
-                    ambientNoiseOptIn ->
-                        "Ambient sound enrichment is enabled, but microphone permission is unavailable right now so Click will skip it for this encounter."
-                    else ->
-                        "Ambient sound enrichment is currently off. You can change it later in Settings."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = "All tags",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
 
-            Spacer(modifier = Modifier.height(4.dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    allTags.forEach { tag ->
+                        FilterChip(
+                            selected = selectedTagId == tag.id,
+                            onClick = { selectedTagId = tag.id },
+                            label = { Text("${tag.emoji} ${tag.label}") }
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+
+                Text(
+                    text = "Custom activity",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    text = "If none of the presets fit, write what you were doing. Short, natural labels work best.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                FilterChip(
+                    selected = selectedTagId == "custom",
+                    onClick = { selectedTagId = "custom" },
+                    label = { Text("✏️ Write your own") }
+                )
+
+                OutlinedTextField(
+                    value = customTagText,
+                    onValueChange = { input ->
+                        customTagText = input
+                            .replace(Regex("\\s+"), " ")
+                            .trimStart()
+                            .take(CUSTOM_CONTEXT_MAX_LENGTH)
+                        if (customTagText.isNotBlank()) {
+                            selectedTagId = "custom"
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Custom activity") },
+                    placeholder = { Text("Dorm lounge, coffee line, hackathon kickoff...") },
+                    supportingText = {
+                        Text(
+                            text = if (isCustomSelectionInvalid) {
+                                "Add a quick label before continuing."
+                            } else {
+                                "${customTagText.length}/$CUSTOM_CONTEXT_MAX_LENGTH characters"
+                            }
+                        )
+                    },
+                    isError = isCustomSelectionInvalid,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    )
+                )
+
+                HorizontalDivider()
+
+                Text(
+                    text = "Ambient noise",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    text = when {
+                        ambientNoiseOptIn && noisePermissionGranted ->
+                            "Ambient sound enrichment is enabled from onboarding. Click stores only a 2-second noise category for this encounter."
+                        ambientNoiseOptIn ->
+                            "Ambient sound enrichment is enabled, but microphone permission is unavailable right now so Click will skip it for this encounter."
+                        else ->
+                            "Ambient sound enrichment is currently off. You can change it later in Settings."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -406,12 +459,33 @@ fun ConnectionContextSheet(
                 ) {
                     Text("Skip")
                 }
-                Button(
-                    onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isCustomSelectionInvalid
-                ) {
-                    Text("Continue")
+                if (presentation == ConnectionContextPresentation.ReconnectEncounter) {
+                    Button(
+                        onClick = { onSaveEncounter?.invoke() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(springBtn),
+                        enabled = !encounterSaveInProgress && onSaveEncounter != null,
+                    ) {
+                        if (encounterSaveInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("Save Encounter")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(springBtn),
+                        enabled = !isCustomSelectionInvalid
+                    ) {
+                        Text("Connect")
+                    }
                 }
             }
 

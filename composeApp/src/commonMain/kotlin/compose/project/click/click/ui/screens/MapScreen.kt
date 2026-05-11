@@ -43,6 +43,7 @@ import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: a
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
 import androidx.compose.ui.graphics.graphicsLayer
+import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
@@ -86,6 +87,8 @@ import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 fun MapScreen(
     viewModel: MapViewModel = viewModel { MapViewModel() },
     onNavigateToChat: ((String) -> Unit)? = null,
+    /** Proximity verify + hop into hub chat (matches Add Click hub join). */
+    onJoinCommunityHub: (hubId: String) -> Unit = {},
 ) {
     val mapState by viewModel.mapState.collectAsState()
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
@@ -96,6 +99,7 @@ fun MapScreen(
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
     val beaconDropFailureToast by viewModel.beaconDropFailureToast.collectAsState()
+    val communityHubs by viewModel.communityHubs.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
@@ -149,6 +153,7 @@ fun MapScreen(
     }
     val showBottomSheet = selectedProfileId != null && selection is MapSelection.ConnectionSelected
     val showBeaconDetailSheet = selection is MapSelection.BeaconSelected
+    val showCommunityHubSheet = selection is MapSelection.HubSelected
 
     LaunchedEffect(selection) {
         val sel = selection
@@ -164,7 +169,7 @@ fun MapScreen(
     // whole view gains a subtle depth effect. Kept intentionally small (-56.dp) to
     // avoid fighting the map's own gesture handling.
     val parallaxOffset by animateFloatAsState(
-        targetValue = if (showBottomSheet || showBeaconDetailSheet) -56f else 0f,
+        targetValue = if (showBottomSheet || showBeaconDetailSheet || showCommunityHubSheet) -56f else 0f,
         animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
         label = "profile_sheet_map_parallax",
     )
@@ -191,12 +196,15 @@ fun MapScreen(
                 is MapState.Success -> {
                     MapContent(
                         renderData = renderData,
+                        communityHubs = communityHubs,
                         zoom = cameraTarget?.zoom ?: mapBindingZoom,
                         ghostMode = ghostModeEnabled,
                         cameraTarget = cameraTarget,
                         onPinTapped = { pin ->
                             if (pin.kind == MapPinKind.CONNECTION) {
                                 selectedProfileId = pin.id
+                            } else {
+                                selectedProfileId = null
                             }
                             viewModel.onMapPinTapped(pin)
                         },
@@ -302,6 +310,47 @@ fun MapScreen(
                             onRemoteFinished = { },
                         )
                     },
+                )
+            }
+        }
+    }
+
+    if (showCommunityHubSheet && selection is MapSelection.HubSelected) {
+        val hubSel = selection as MapSelection.HubSelected
+        val hubSheetBg = GlassSheetTokens.OledBlack
+        val onHubSheet = GlassSheetTokens.OnOled
+        MapBeaconSheetRoot(
+            visible = true,
+            onDismissRequest = { viewModel.clearSelection() },
+            containerColor = hubSheetBg,
+            contentColor = onHubSheet,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            appColorScheme = MaterialTheme.colorScheme,
+            appTypography = MaterialTheme.typography,
+            modifier = Modifier,
+        ) {
+            MapDialogChrome(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                sheetColor = hubSheetBg,
+                onSurface = onHubSheet,
+                alignSemanticColorsToSheet = true,
+            ) {
+                CommunityHubBottomSheet(
+                    hub = hubSel.hub,
+                    distanceMeters = hubSel.distanceMeters,
+                    canJoinGeofence = hubSel.canJoinGeofence,
+                    onJoin = {
+                        onJoinCommunityHub(hubSel.hub.hubId)
+                        viewModel.clearSelection()
+                    },
+                    onDismiss = { viewModel.clearSelection() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
         }
@@ -984,8 +1033,63 @@ private fun LiveIndicator(count: Int) {
 }
 
 @Composable
+private fun CommunityHubBottomSheet(
+    hub: CommunityHubPin,
+    distanceMeters: Double?,
+    canJoinGeofence: Boolean,
+    onJoin: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = hub.name,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = GlassSheetTokens.OnOled,
+        )
+        Text(
+            text = "${hub.activeUserCount} active nearby",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GlassSheetTokens.OnOledMuted,
+        )
+        val distLabel = distanceMeters?.let { d ->
+            if (d >= 1000) {
+                val kmTenths = (d / 100.0).toInt()
+                "${kmTenths / 10.0} km away"
+            } else {
+                "${d.toInt()} m away"
+            }
+        } ?: "Distance unavailable"
+        Text(
+            text = distLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = GlassSheetTokens.OnOledMuted,
+        )
+        if (canJoinGeofence) {
+            Button(
+                onClick = onJoin,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Join Hub")
+            }
+        } else {
+            Text(
+                text = "Move closer to join this hub.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = GlassSheetTokens.OnOledMuted,
+            )
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Close")
+        }
+    }
+}
+
+@Composable
 private fun MapContent(
     renderData: MapRenderData,
+    communityHubs: List<CommunityHubPin>,
     zoom: Double,
     ghostMode: Boolean,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
@@ -995,15 +1099,16 @@ private fun MapContent(
     onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
     onCameraAnimationComplete: () -> Unit,
 ) {
+    val hubPins = communityHubs.map { MapPin.fromCommunityHub(it) }
     val pins = when (renderData) {
         is MapRenderData.IndividualPins -> {
             val conn = renderData.points.map { MapPin.fromConnectionPoint(it) }
             val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
-            (conn + bc).sortedByDescending { it.zIndex }
+            (conn + bc + hubPins).sortedByDescending { it.zIndex }
         }
         is MapRenderData.Clusters -> {
             val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
-            standalone.sortedByDescending { it.zIndex }
+            (standalone + hubPins).sortedByDescending { it.zIndex }
         }
     }
 
