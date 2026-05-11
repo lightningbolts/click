@@ -64,6 +64,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
+        private const val KEY_ACTIVE_HUBS = "active_hubs"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -247,6 +248,17 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
 
     override suspend fun getPendingProximityHandshakeQueue(): String? {
         return sharedPreferences.getString(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE, null)
+    }
+
+    override suspend fun saveActiveHubs(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_ACTIVE_HUBS) else putString(KEY_ACTIVE_HUBS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getActiveHubs(): String? {
+        return sharedPreferences.getString(KEY_ACTIVE_HUBS, null)
     }
 
     override suspend fun clearSessionData() {

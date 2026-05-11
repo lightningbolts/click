@@ -38,8 +38,22 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+/**
+ * Lightweight model for a community hub the user has successfully joined this session.
+ * Surfaced in the connections feed so the user can re-enter the chat without the map.
+ */
+@Serializable
+data class ActiveHubEntry(
+    val hubId: String,
+    val name: String,
+    val realtimeChannel: String,
+    val occupantCount: Int = 1,
+    val joinedAtMs: Long = 0L,
+)
 
 /**
  * Singleton app state manager that loads data once at app startup.
@@ -160,6 +174,39 @@ object AppDataManager {
         scope.launch { _transientUserMessages.emit(message.trim()) }
     }
 
+    // ── Active Community Hubs (persisted across cold starts) ───
+    private val _activeHubs = MutableStateFlow<List<ActiveHubEntry>>(emptyList())
+    val activeHubs: StateFlow<List<ActiveHubEntry>> = _activeHubs.asStateFlow()
+
+    fun registerActiveHub(entry: ActiveHubEntry) {
+        _activeHubs.value = (_activeHubs.value.filterNot { it.hubId == entry.hubId } + entry)
+            .sortedByDescending { it.joinedAtMs }
+        persistActiveHubs()
+    }
+
+    fun removeActiveHub(hubId: String) {
+        _activeHubs.value = _activeHubs.value.filterNot { it.hubId == hubId }
+        persistActiveHubs()
+    }
+
+    private fun persistActiveHubs() {
+        scope.launch {
+            val json = if (_activeHubs.value.isEmpty()) null
+            else Json.encodeToString(_activeHubs.value)
+            tokenStorage.saveActiveHubs(json)
+        }
+    }
+
+    private suspend fun restoreActiveHubs() {
+        val json = tokenStorage.getActiveHubs() ?: return
+        runCatching {
+            _activeHubs.value = Json.decodeFromString<List<ActiveHubEntry>>(json)
+        }.onFailure {
+            println("AppDataManager: Failed to restore active hubs: ${it.message}")
+            tokenStorage.saveActiveHubs(null)
+        }
+    }
+
     // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
     private val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
@@ -235,6 +282,7 @@ object AppDataManager {
         _isLoading.value = true
         _error.value = null
         restoreCachedSnapshot()
+        restoreActiveHubs()
 
         try {
             // Get current user from auth

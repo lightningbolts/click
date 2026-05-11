@@ -120,6 +120,9 @@ class HubChatViewModel(
     private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
         _secureChatMediaLoadState.asStateFlow()
+
+    private val _channelReady = MutableStateFlow(false)
+    val channelReady: StateFlow<Boolean> = _channelReady.asStateFlow()
     private val secureImageBytesCache =
         LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
     private val secureAudioPathCache =
@@ -136,10 +139,12 @@ class HubChatViewModel(
         sessionJob = viewModelScope.launch {
             try {
                 loadInitialMessages()
+                _channelReady.value = true
                 runRealtimeSession()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                _channelReady.value = true
                 println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
             }
         }

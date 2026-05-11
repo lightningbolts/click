@@ -51,6 +51,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_CACHED_APP_SNAPSHOT = "cached_app_snapshot"
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
+        private const val KEY_ACTIVE_HUBS = "active_hubs"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -313,6 +314,19 @@ class IosTokenStorage : TokenStorage {
 
     override suspend fun getPendingProximityHandshakeQueue(): String? {
         return userDefaults.stringForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
+    }
+
+    override suspend fun saveActiveHubs(json: String?) {
+        if (json == null) {
+            userDefaults.removeObjectForKey(KEY_ACTIVE_HUBS)
+        } else {
+            userDefaults.setObject(json, KEY_ACTIVE_HUBS)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getActiveHubs(): String? {
+        return userDefaults.stringForKey(KEY_ACTIVE_HUBS)
     }
 
     override suspend fun clearSessionData() {

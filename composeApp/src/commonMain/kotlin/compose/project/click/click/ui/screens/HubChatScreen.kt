@@ -1,10 +1,16 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -61,6 +67,7 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
 import compose.project.click.click.ui.chat.ChatChannelLoadingView
 import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
 import compose.project.click.click.ui.chat.chatSpringPressScale
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
 import compose.project.click.click.ui.chat.ChatMessageBubble
@@ -82,7 +89,6 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
 import compose.project.click.click.viewmodel.HubChatViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -127,19 +133,11 @@ fun HubChatScreen(
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
 
-    val inLobby = occupantCount < 3
+    val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hubNavBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    // Loading state: show the same loading view as regular chats until initial messages arrive.
-    var channelReady by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(2500)
-        channelReady = true
-    }
-    LaunchedEffect(messages) {
-        if (messages.isNotEmpty()) channelReady = true
-    }
+    val channelReady by viewModel.channelReady.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         ChatAmbientMeshBackground(
@@ -153,19 +151,29 @@ fun HubChatScreen(
                 topInset = topInset,
                 onBackPressed = onNavigateBack,
             )
-        } else {
+        }
+
+        AnimatedVisibility(
+            visible = channelReady || messages.isNotEmpty(),
+            enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
+            exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)),
+        ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Glass header ────────────────────────────────────────────
-                Column(
+                // ── Glass header with translucent backdrop ───────────────────
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = topInset)
-                        .height(56.dp)
-                        .padding(horizontal = 12.dp)
-                        .testTag(ChatGlassHeaderPlateTestTag),
+                        .height(56.dp),
                 ) {
+                    ChatLiquidGlassPlate(
+                        modifier = Modifier.matchParentSize(),
+                        testTag = ChatGlassHeaderPlateTestTag,
+                    )
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = onNavigateBack) {
@@ -333,7 +341,7 @@ fun HubChatScreen(
                             val mwu = messages[index]
                             val isCallLog = mwu.message.messageType == "call_log"
                             Column(
-                                Modifier.padding(
+                                Modifier.animateItem().padding(
                                     top = chatHubMessageRowTopPadding(index, messages, ChatInterMessageHubBaseCompact),
                                 ),
                             ) {
@@ -399,7 +407,15 @@ fun HubChatScreen(
                 }
 
                 // ── Composer (matches ConnectionChatMessageComposer layout) ─
-                Box(modifier = Modifier.fillMaxWidth()) {
+                // iOS: imePadding on the composer only so the field lifts above the keyboard
+                // without pushing the header off-screen. Android adjustResize handles it.
+                val composerStyle = LocalPlatformStyle.current
+                val composerImeLift = if (composerStyle.isIOS) Modifier.imePadding() else Modifier
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(composerImeLift),
+                ) {
                     ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                     HubChatInputBar(
                         viewModel = viewModel,

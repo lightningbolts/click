@@ -6,7 +6,13 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -52,6 +58,7 @@ import compose.project.click.click.calls.CallPreviewOverlay
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
 import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.ActiveHubEntry
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.HeightCategory
@@ -70,6 +77,7 @@ import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.AppShimmerVariant
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
@@ -919,7 +927,6 @@ fun App() {
                 }
             }
             val activeScreenKey = when {
-                hubChatArgs != null -> "hub_chat"
                 showMyQRCode -> "my_qr"
                 showQRScanner -> "qr_scanner"
                 showNfcScreen -> "nfc"
@@ -929,14 +936,15 @@ fun App() {
             val canSwipeBackMainRoute = isIOS &&
                 isPrimaryNavRoute(currentRoute) &&
                 currentRoute != NavigationItem.Home.route &&
-                hubChatArgs == null &&
                 !showMyQRCode &&
                 !showQRScanner &&
                 !showNfcScreen &&
-                !isConnectionsChatOpen
+                !isConnectionsChatOpen &&
+                hubChatArgs == null
             val iOSSwipeOwnsBack = isIOS && (
                 isSwipeBackScreen(activeScreenKey) ||
                     (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen) ||
+                    hubChatArgs != null ||
                     canSwipeBackMainRoute
                 )
 
@@ -1024,6 +1032,14 @@ fun App() {
                                 )
                                 lastHubChatArgs = args
                                 hubChatArgs = args
+                                AppDataManager.registerActiveHub(
+                                    ActiveHubEntry(
+                                        hubId = outcome.hubId,
+                                        name = outcome.name,
+                                        realtimeChannel = outcome.channel,
+                                        joinedAtMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                                    )
+                                )
                             }
                             is HubVerifyResult.Failure -> {
                                 snackbarHostState.showSnackbar(outcome.userMessage)
@@ -1197,6 +1213,13 @@ fun App() {
                                                     }
                                                 },
                                                 onNavigateToLocationSettings = { navigateTo(NavigationItem.Settings.route) },
+                                                onHubSelected = { hub ->
+                                                    hubChatArgs = HubChatNavArgs(
+                                                        hubId = hub.hubId,
+                                                        realtimeChannel = hub.realtimeChannel,
+                                                        hubTitle = hub.name,
+                                                    )
+                                                },
                                                 viewModel = chatViewModel,
                                                 verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofillIntent,
                                                 onVerifiedCliqueProximityAutofillConsumed = {
@@ -1385,73 +1408,6 @@ fun App() {
                                     }
                                 }
 
-                                "hub_chat" -> {
-                                    var hubChatRightToLeftPeek by remember {
-                                        mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
-                                    }
-                                    val previousKey = currentRoute
-                                    val interactive = allowInteractiveSwipeBack &&
-                                        swipeBackEnabled &&
-                                        previousKey != animatedScreen
-                                    val hubArgs = hubChatArgs
-                                    LaunchedEffect(hubArgs) {
-                                        if (hubArgs == null) {
-                                            hubChatRightToLeftPeek = null
-                                        }
-                                    }
-                                    val hubUserId = when (val state = authViewModel.authState) {
-                                        is AuthState.Success -> state.userId
-                                        else -> ""
-                                    }
-
-                                    val content: @Composable () -> Unit = {
-                                        if (hubArgs != null && hubUserId.isNotEmpty()) {
-                                            HubChatScreen(
-                                                args = hubArgs,
-                                                currentUserId = hubUserId,
-                                                onNavigateBack = {
-                                                    transitionMode = NavigationTransitionMode.Tap
-                                                    hubChatArgs = null
-                                                },
-                                                resolveHubGatekeeperLocation = { resolveConnectionLocation() },
-                                                integrateTimestampPeekWithSwipeBackContainer = interactive,
-                                                onRegisterSwipeBackRightToLeftPeek = {
-                                                    hubChatRightToLeftPeek = it
-                                                },
-                                            )
-                                        } else {
-                                            Box(
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Text("Unable to open hub chat.")
-                                            }
-                                        }
-                                    }
-
-                                    if (interactive) {
-                                        val hubKeyboardController = LocalSoftwareKeyboardController.current
-                                        val hubFocusManager = LocalFocusManager.current
-                                        InteractiveSwipeBackContainer(
-                                            enabled = true,
-                                            edgeSwipeWidth = 44.dp,
-                                            onBack = {
-                                                hubFocusManager.clearFocus()
-                                                if (!isIOS) {
-                                                    hubKeyboardController?.hide()
-                                                }
-                                                transitionMode = NavigationTransitionMode.GestureBack
-                                                hubChatArgs = null
-                                            },
-                                            previousContent = { renderScreen(previousKey, false) },
-                                            rightToLeftPeek = hubChatRightToLeftPeek,
-                                            currentContent = content,
-                                        )
-                                    } else {
-                                        content()
-                                    }
-                                }
-
                                 "search" -> {
                                     val previousKey = routeHistory.lastOrNull()
                                     val interactive = allowInteractiveSwipeBack &&
@@ -1513,6 +1469,18 @@ fun App() {
                             }
                         }
 
+                        var hubChatTransitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
+                        var hubChatRightToLeftPeek by remember {
+                            mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
+                        }
+                        LaunchedEffect(hubChatArgs) {
+                            if (hubChatArgs != null) {
+                                lastHubChatArgs = hubChatArgs
+                            } else {
+                                hubChatRightToLeftPeek = null
+                            }
+                        }
+
                         AnimatedContent(
                             targetState = screenKey,
                             transitionSpec = {
@@ -1529,7 +1497,6 @@ fun App() {
                                     "my_qr",
                                     "qr_scanner",
                                     "nfc",
-                                    "hub_chat",
                                 )
 
                                 val initialIndex = routeOrder.indexOf(initialState).let { if (it >= 0) it else 0 }
@@ -1561,23 +1528,136 @@ fun App() {
                             renderScreen(animatedScreen)
                         }
 
-                        if (hubVerifyInProgress) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.background),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    AdaptiveCircularProgressIndicator(color = PrimaryBlue)
-                                    Text(
-                                        text = "Joining hub…",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // ── Hub Chat Overlay (mirrors ConnectionsScreen iOS chat overlay) ──
+                        val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                        val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = hubChatArgs != null,
+                            modifier = Modifier.fillMaxSize(),
+                            enter = slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
+                                fadeIn(animationSpec = hubFadeSpec),
+                            exit = if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
+                                ExitTransition.None
+                            } else {
+                                slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
+                                    fadeOut(animationSpec = hubFadeSpec)
+                            },
+                            label = "hub_chat_overlay",
+                        ) {
+                            val activeHubArgs = lastHubChatArgs
+                            val hubUserId = when (val state = authViewModel.authState) {
+                                is AuthState.Success -> state.userId
+                                else -> ""
+                            }
+                            if (activeHubArgs != null && hubUserId.isNotEmpty()) {
+                                if (isIOS) {
+                                    val hubKeyboardController = LocalSoftwareKeyboardController.current
+                                    val hubFocusManager = LocalFocusManager.current
+                                    InteractiveSwipeBackContainer(
+                                        enabled = true,
+                                        opaquePreviousBackground = false,
+                                        onBack = {
+                                            hubFocusManager.clearFocus()
+                                            hubChatTransitionMode = NavigationTransitionMode.GestureBack
+                                            hubChatArgs = null
+                                        },
+                                        rightToLeftPeek = hubChatRightToLeftPeek,
+                                        previousContent = {},
+                                        currentContent = {
+                                            HubChatScreen(
+                                                args = activeHubArgs,
+                                                currentUserId = hubUserId,
+                                                onNavigateBack = {
+                                                    hubChatTransitionMode = NavigationTransitionMode.Tap
+                                                    hubChatArgs = null
+                                                },
+                                                resolveHubGatekeeperLocation = { resolveConnectionLocation() },
+                                                integrateTimestampPeekWithSwipeBackContainer = true,
+                                                onRegisterSwipeBackRightToLeftPeek = {
+                                                    hubChatRightToLeftPeek = it
+                                                },
+                                            )
+                                        },
                                     )
+                                } else {
+                                    HubChatScreen(
+                                        args = activeHubArgs,
+                                        currentUserId = hubUserId,
+                                        onNavigateBack = {
+                                            hubChatTransitionMode = NavigationTransitionMode.Tap
+                                            hubChatArgs = null
+                                        },
+                                        resolveHubGatekeeperLocation = { resolveConnectionLocation() },
+                                        integrateTimestampPeekWithSwipeBackContainer = false,
+                                        onRegisterSwipeBackRightToLeftPeek = {},
+                                    )
+                                }
+                            }
+                        }
+
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = hubVerifyInProgress,
+                            enter = androidx.compose.animation.fadeIn(
+                                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                            ),
+                            exit = androidx.compose.animation.fadeOut(
+                                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            ),
+                        ) {
+                            val hubLoadTransition = rememberInfiniteTransition(label = "hub_verify_pulse")
+                            val hubPulseAlpha by hubLoadTransition.animateFloat(
+                                initialValue = 0.6f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                                label = "hub_verify_alpha",
+                            )
+                            val hubPulseMix by hubLoadTransition.animateFloat(
+                                initialValue = 0f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(durationMillis = 1400, easing = LinearOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                                label = "hub_verify_mix",
+                            )
+                            val hubAccentColor = androidx.compose.ui.graphics.lerp(PrimaryBlue, LightBlue, hubPulseMix)
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                ChatAmbientMeshBackground(
+                                    connection = null,
+                                    isHubNeutral = true,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .graphicsLayer { alpha = hubPulseAlpha },
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            AdaptiveCircularProgressIndicator(
+                                                modifier = Modifier.size(36.dp),
+                                                strokeWidth = 2.5.dp,
+                                                color = hubAccentColor,
+                                            )
+                                        }
+                                        Text(
+                                            text = "Joining hub…",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1945,8 +2025,7 @@ private fun isSwipeBackScreen(screenKey: String): Boolean {
     return screenKey == "search" ||
         screenKey == "my_qr" ||
         screenKey == "qr_scanner" ||
-        screenKey == "nfc" ||
-        screenKey == "hub_chat"
+        screenKey == "nfc"
 }
 
 private fun isPrimaryNavRoute(route: String): Boolean {

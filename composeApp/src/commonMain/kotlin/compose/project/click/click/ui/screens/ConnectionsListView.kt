@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,6 +45,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
@@ -115,6 +117,7 @@ import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
+import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -237,6 +240,7 @@ fun ConnectionsListView(
     viewModel: ChatViewModel,
     searchQuery: String = "",
     onChatSelected: (String) -> Unit,
+    onHubSelected: ((ActiveHubEntry) -> Unit)? = null,
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onUserProfileClick: (String) -> Unit = {},
     onGroupMembersPicker: (List<User>) -> Unit = {},
@@ -248,6 +252,7 @@ fun ConnectionsListView(
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
+    val activeHubs by AppDataManager.activeHubs.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -513,7 +518,7 @@ fun ConnectionsListView(
                 val groupCount = effectiveChats.count {
                     it.groupClique != null &&
                         it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
+                } + activeHubs.size
                 val archivedCount = effectiveChats.count {
                     it.groupClique == null &&
                     it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
@@ -743,11 +748,22 @@ fun ConnectionsListView(
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
+                            // ── Active community hubs (shown in Groups tab) ─────
+                            if (selectedTabIndex == 1 && activeHubs.isNotEmpty()) {
+                                items(
+                                    activeHubs.filter { hub ->
+                                        searchQuery.isBlank() || hub.name.contains(searchQuery, ignoreCase = true)
+                                    },
+                                    key = { "hub_${it.hubId}" }
+                                ) { hub ->
+                                    ActiveHubFeedRow(
+                                        hub = hub,
+                                        onClick = { onHubSelected?.invoke(hub) },
+                                    )
+                                }
+                            }
                             items(
                                 filteredChats,
-                                // R1.3: key must be stable across content mutations (last message changing,
-                                // typing indicator toggling, etc.) so LazyColumn can update in-place rather
-                                // than dispose/recreate the row. The chat identity is the connection.
                                 key = { it.connection.id }
                             ) { chatDetails ->
                                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -1106,4 +1122,86 @@ fun ConnectionsListView(
         )
     }
     } // End outer Box
+}
+
+@Composable
+private fun ActiveHubFeedRow(
+    hub: ActiveHubEntry,
+    onClick: () -> Unit,
+) {
+    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    val rowInteraction = remember { MutableInteractionSource() }
+    val pressed by rowInteraction.collectIsPressedAsState()
+    val cardBorderAlpha by animateFloatAsState(
+        targetValue = when {
+            isIOS -> GlassSheetTokens.GlassBorder.alpha
+            pressed -> GlassSheetTokens.GlassBorderPressed.alpha
+            else -> GlassSheetTokens.GlassBorder.alpha
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "hub_row_glass_border",
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
+            .border(
+                width = 1.dp,
+                color = GlassSheetTokens.GlassBorder.copy(alpha = cardBorderAlpha),
+                shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+            )
+            .background(GlassSheetTokens.GlassSurface)
+            .clickable(
+                interactionSource = rowInteraction,
+                indication = ripple(),
+                onClick = onClick,
+            )
+            .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(44.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Public,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = hub.name,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "${hub.occupantCount} ${if (hub.occupantCount == 1) "person" else "people"} • Community Hub",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }

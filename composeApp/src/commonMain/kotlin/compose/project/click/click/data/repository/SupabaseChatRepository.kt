@@ -286,6 +286,20 @@ class SupabaseChatRepository(
         @SerialName("group_id") val groupId: String,
     )
 
+    @Serializable
+    private data class GroupMemberFullRow(
+        @SerialName("group_id") val groupId: String,
+        @SerialName("user_id") val userId: String,
+    )
+
+    private data class GroupChatsParallelResult(
+        val latestByChatId: Map<String, MessageRow>,
+        val unreadByChatId: Map<String, Int>,
+        val allGroups: List<GroupRow>,
+        val allMemberRows: List<GroupMemberFullRow>,
+        val allUsers: List<User>,
+    )
+
     private suspend fun findConnectionIdBetween(userA: String, userB: String): String? {
         if (userA.isBlank() || userB.isBlank()) return null
         return try {
@@ -786,42 +800,68 @@ class SupabaseChatRepository(
             }
 
             val chatIds = groupChats.map { it.id }
-            val latestByChatId = runCatching { fetchLatestMessageRowPerChat(chatIds) }
-                .getOrElse { emptyMap() }
 
-            val unreadRows = if (chatIds.isNotEmpty()) {
-                supabase.from("messages")
-                    .select {
-                        filter {
-                            isIn("chat_id", chatIds)
-                            eq("is_read", false)
-                            neq("user_id", userId)
-                        }
-                        limit(10_000)
+            // Batch all independent network calls in parallel using coroutineScope
+            val (latestByChatId, unreadByChatId, allGroups, allMemberRows, allUsers) = coroutineScope {
+                val latestDeferred = async {
+                    runCatching { fetchLatestMessageRowPerChat(chatIds) }.getOrElse { emptyMap() }
+                }
+                val unreadDeferred = async {
+                    if (chatIds.isNotEmpty()) {
+                        supabase.from("messages")
+                            .select {
+                                filter {
+                                    isIn("chat_id", chatIds)
+                                    eq("is_read", false)
+                                    neq("user_id", userId)
+                                }
+                                limit(10_000)
+                            }
+                            .decodeList<MessageRow>()
+                            .groupingBy { it.chatId }.eachCount()
+                    } else {
+                        emptyMap()
                     }
-                    .decodeList<MessageRow>()
-            } else {
-                emptyList()
+                }
+                val groupsDeferred = async {
+                    supabase.from("groups")
+                        .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id")) {
+                            filter { isIn("id", myGroupIds) }
+                        }
+                        .decodeList<GroupRow>()
+                }
+                val membersDeferred = async {
+                    supabase.from("group_members")
+                        .select(columns = Columns.list("group_id", "user_id")) {
+                            filter { isIn("group_id", myGroupIds) }
+                            limit(5000)
+                        }
+                        .decodeList<GroupMemberFullRow>()
+                }
+                val allMembersResult = membersDeferred.await()
+                val allMemberUserIds = allMembersResult.map { it.userId }.distinct()
+                val usersDeferred = async { fetchUsersByIdsSafe(allMemberUserIds) }
+
+                GroupChatsParallelResult(
+                    latestByChatId = latestDeferred.await(),
+                    unreadByChatId = unreadDeferred.await(),
+                    allGroups = groupsDeferred.await(),
+                    allMemberRows = allMembersResult,
+                    allUsers = usersDeferred.await(),
+                )
             }
-            val unreadByChatId = unreadRows.groupingBy { it.chatId }.eachCount()
+
+            val groupsById = allGroups.associateBy { it.id }
+            val membersByGroupId = allMemberRows.groupBy { it.groupId }
+            val usersById = allUsers.associateBy { it.id }
 
             groupChats.mapNotNull { chatRow ->
                 val gid = chatRow.groupId ?: return@mapNotNull null
-                val group = supabase.from("groups")
-                    .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id")) {
-                        filter { eq("id", gid) }
-                        limit(1)
-                    }
-                    .decodeList<GroupRow>()
-                    .firstOrNull() ?: return@mapNotNull null
+                val group = groupsById[gid] ?: return@mapNotNull null
 
-                val memberRows = supabase.from("group_members")
-                    .select(columns = Columns.list("user_id")) {
-                        filter { eq("group_id", gid) }
-                        limit(100)
-                    }
-                    .decodeList<GroupMemberUidRow>()
-                val memberIds = memberRows.map { it.userId }.distinct()
+                val memberIds = membersByGroupId[gid]
+                    ?.map { it.userId }?.distinct()
+                    ?: return@mapNotNull null
                 if (memberIds.isEmpty()) return@mapNotNull null
 
                 val title = group.name.ifBlank { "Clique" }
@@ -830,7 +870,6 @@ class SupabaseChatRepository(
                     ?: memberIds.firstOrNull()
                     ?: return@mapNotNull null
                 val displayPeer = memberIds.firstOrNull { it != userId } ?: userId
-                val usersById = fetchUsersByIdsSafe(memberIds).associateBy { it.id }
                 val otherUser = usersById[displayPeer] ?: User(
                     id = gid,
                     name = title,

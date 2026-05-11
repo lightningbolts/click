@@ -50,6 +50,9 @@ interface TokenStorage {
     suspend fun savePendingProximityHandshakeQueue(queue: String?)
     suspend fun getPendingProximityHandshakeQueue(): String?
 
+    suspend fun saveActiveHubs(json: String?)
+    suspend fun getActiveHubs(): String?
+
     suspend fun clearSessionData()
 }
 
