@@ -21,6 +21,7 @@ import platform.MapKit.MKUserLocation
 import platform.MapKit.MKUserTrackingModeNone
 import platform.MapKit.MKStandardMapConfiguration
 import platform.MapKit.MKMapElevationStyleFlat
+import platform.MapKit.MKFeatureDisplayPriorityRequired
 import platform.UIKit.UIColor
 import platform.UIKit.UIUserInterfaceStyle
 import platform.darwin.NSObject
@@ -568,15 +569,20 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
                 view.zPriority = cluster.zIndex
             }
             pin != null -> {
+                val isHub = pin.kind == MapPinKind.COMMUNITY_HUB
                 val cap = pin.caption?.trim().orEmpty()
-                // MKMarker glyph is tiny; show a short snippet so nearby pins of the same tint differ.
                 view.glyphText = when {
+                    isHub && cap.isNotEmpty() -> cap
                     cap.isEmpty() -> ""
                     cap.length <= 3 -> cap
                     else -> cap.take(3)
                 }
                 view.markerTintColor = pin.markerTintUIColor()
                 view.zPriority = pin.zIndex
+                if (isHub) {
+                    view.displayPriority = MKFeatureDisplayPriorityRequired
+                    view.titleVisibility = platform.MapKit.MKFeatureVisibility.MKFeatureVisibilityVisible
+                }
             }
             else -> {
                 view.glyphText = ""

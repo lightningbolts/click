@@ -147,7 +147,7 @@ data class MapPin(
                 kind = MapPinKind.COMMUNITY_HUB,
                 beaconKind = null,
                 beaconTypeKey = null,
-                zIndex = 11_600f,
+                zIndex = 15_000f,
                 caption = cap ?: "${hub.activeUserCount} here",
             )
         }

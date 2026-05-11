@@ -903,6 +903,7 @@ fun App() {
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
+            var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
 
             LaunchedEffect(connectionViewModel, currentUser.id) {
                 if (currentUser.id.isBlank()) return@LaunchedEffect
@@ -974,6 +975,12 @@ fun App() {
 
             fun launchCommunityHubJoin(hubId: String) {
                 if (hubId.isBlank() || currentUser.id.isBlank()) return
+                // If we already have cached args for this hub, skip verification and re-enter.
+                val cached = lastHubChatArgs
+                if (cached != null && cached.hubId == hubId) {
+                    hubChatArgs = cached
+                    return
+                }
                 connectionScope.launch {
                     hubVerifyInProgress = true
                     try {
@@ -1010,11 +1017,13 @@ fun App() {
                             )
                         ) {
                             is HubVerifyResult.Success -> {
-                                hubChatArgs = HubChatNavArgs(
+                                val args = HubChatNavArgs(
                                     hubId = outcome.hubId,
                                     realtimeChannel = outcome.channel,
                                     hubTitle = outcome.name,
                                 )
+                                lastHubChatArgs = args
+                                hubChatArgs = args
                             }
                             is HubVerifyResult.Failure -> {
                                 snackbarHostState.showSnackbar(outcome.userMessage)
@@ -1556,7 +1565,7 @@ fun App() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.38f)),
+                                    .background(MaterialTheme.colorScheme.background),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Column(
@@ -1565,9 +1574,9 @@ fun App() {
                                 ) {
                                     AdaptiveCircularProgressIndicator(color = PrimaryBlue)
                                     Text(
-                                        text = "Verifying you're at the hub…",
+                                        text = "Joining hub…",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
