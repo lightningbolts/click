@@ -235,10 +235,6 @@ internal fun ConnectionActionSheet(
                     },
                 )
             } else {
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 6.dp),
-                    color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f),
-                )
                 BentoGlassOptionRow(
                     showBorder = false,
                     title = "Leave Group",

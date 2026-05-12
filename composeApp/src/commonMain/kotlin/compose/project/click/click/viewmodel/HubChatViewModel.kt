@@ -61,6 +61,11 @@ import kotlin.random.Random
 private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
 
 @Serializable
+private data class HubCreatorRow(
+    @SerialName("creator_id") val creatorId: String,
+)
+
+@Serializable
 private data class HubMessageRow(
     val id: String,
     @SerialName("hub_id") val hubId: String,
@@ -117,12 +122,19 @@ class HubChatViewModel(
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
 
+    private val _outOfBounds = MutableStateFlow(false)
+    val outOfBounds: StateFlow<Boolean> = _outOfBounds.asStateFlow()
+
     private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
         _secureChatMediaLoadState.asStateFlow()
 
     private val _channelReady = MutableStateFlow(false)
     val channelReady: StateFlow<Boolean> = _channelReady.asStateFlow()
+
+    private val _isCreator = MutableStateFlow(false)
+    val isCreator: StateFlow<Boolean> = _isCreator.asStateFlow()
+
     private val secureImageBytesCache =
         LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
     private val secureAudioPathCache =
@@ -135,6 +147,17 @@ class HubChatViewModel(
     private var sessionJob: Job? = null
 
     init {
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val rows = supabase.from("hub_venues")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("creator_id")) {
+                        filter { eq("id", hubId) }
+                        limit(1)
+                    }
+                    .decodeList<HubCreatorRow>()
+                _isCreator.value = rows.firstOrNull()?.creatorId == currentUserId
+            } catch (_: Exception) { }
+        }
         sessionJob?.cancel()
         sessionJob = viewModelScope.launch {
             try {
@@ -361,7 +384,13 @@ class HubChatViewModel(
                 ).getOrElse { e -> throw e }
                 _draft.value = ""
             } catch (e: Exception) {
-                _sendError.value = e.message ?: "Could not send"
+                val isOutOfBounds = e.message?.contains("OUT_OF_BOUNDS") == true
+                if (isOutOfBounds) {
+                    _outOfBounds.value = true
+                    _sendError.value = "You are no longer at this location."
+                } else {
+                    _sendError.value = e.message ?: "Could not send"
+                }
             } finally {
                 _isSending.value = false
             }
@@ -409,7 +438,13 @@ class HubChatViewModel(
                     metadata = metadata,
                 ).getOrElse { e -> throw e }
             } catch (e: Exception) {
-                _sendError.value = e.message ?: "Could not send image"
+                val isOutOfBounds = e.message?.contains("OUT_OF_BOUNDS") == true
+                if (isOutOfBounds) {
+                    _outOfBounds.value = true
+                    _sendError.value = "You are no longer at this location."
+                } else {
+                    _sendError.value = e.message ?: "Could not send image"
+                }
             } finally {
                 _isSending.value = false
             }
@@ -505,6 +540,42 @@ class HubChatViewModel(
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
                 }
+            }
+        }
+    }
+
+    fun editHubDetails(name: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Please sign in again.")
+                chatApi.updateHub(
+                    hubId = hubId,
+                    name = name.trim().takeIf { it.isNotEmpty() },
+                    category = null,
+                    authToken = jwt,
+                ).getOrThrow()
+                onResult(true)
+            } catch (e: Exception) {
+                _sendError.value = e.message ?: "Could not update hub"
+                onResult(false)
+            }
+        }
+    }
+
+    fun deleteHub(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Please sign in again.")
+                chatApi.deleteHub(
+                    hubId = hubId,
+                    authToken = jwt,
+                ).getOrThrow()
+                onResult(true)
+            } catch (e: Exception) {
+                _sendError.value = e.message ?: "Could not delete hub"
+                onResult(false)
             }
         }
     }

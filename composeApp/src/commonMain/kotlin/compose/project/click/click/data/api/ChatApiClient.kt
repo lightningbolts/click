@@ -5,6 +5,7 @@ import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.util.redactedRestMessage
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.MultiPartFormDataContent
@@ -17,6 +18,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * API client for chat-related operations with the Flask backend
@@ -734,7 +737,14 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebHubMessageEnvelope>().message)
             } else {
-                Result.failure(Exception("Failed to send hub message: ${response.status}"))
+                val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                val isOutOfBounds = errorBody.contains("OUT_OF_BOUNDS")
+                val message = if (isOutOfBounds) {
+                    "OUT_OF_BOUNDS"
+                } else {
+                    "Failed to send hub message: ${response.status}"
+                }
+                Result.failure(Exception(message))
             }
         } catch (e: Exception) {
             println("Error sending hub message: ${e.redactedRestMessage()}")
@@ -776,6 +786,50 @@ class ChatApiClient(
                 Result.success(response.body<ChatMediaUploadPathResponse>().path)
             } else {
                 Result.failure(Exception("Failed to upload hub media: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateHub(
+        hubId: String,
+        name: String?,
+        category: String?,
+        authToken: String,
+    ): Result<Unit> {
+        return try {
+            val body = buildJsonObject {
+                if (name != null) put("name", name)
+                if (category != null) put("category", category)
+            }
+            val response = client.patch("$clickWebBaseUrl/api/hub/$hubId") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to update hub: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteHub(
+        hubId: String,
+        authToken: String,
+    ): Result<Unit> {
+        return try {
+            val response = client.delete("$clickWebBaseUrl/api/hub/$hubId") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to delete hub: ${response.status}"))
             }
         } catch (e: Exception) {
             Result.failure(e)

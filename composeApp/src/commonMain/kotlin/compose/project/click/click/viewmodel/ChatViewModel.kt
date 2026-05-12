@@ -23,6 +23,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
@@ -75,7 +76,9 @@ import kotlinx.serialization.json.put
 import kotlin.random.Random
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 @Serializable
 private data class ConnectionRealtimeRow(
@@ -169,6 +172,9 @@ class ChatViewModel(
 
     private val _chatListState = MutableStateFlow<ChatListState>(ChatListState.Loading)
     val chatListState: StateFlow<ChatListState> = _chatListState.asStateFlow()
+
+    private val _decryptedPreviews = MutableStateFlow<Map<String, String>>(emptyMap())
+    val decryptedPreviews: StateFlow<Map<String, String>> = _decryptedPreviews.asStateFlow()
 
     private val _chatMessagesState = MutableStateFlow<ChatMessagesState>(ChatMessagesState.Loading)
     val chatMessagesState: StateFlow<ChatMessagesState> = _chatMessagesState.asStateFlow()
@@ -269,6 +275,7 @@ class ChatViewModel(
     private var connectionsRealtimeJob: Job? = null
     private var connectionsRealtimeChannel: RealtimeChannel? = null
     private var globalMessageListJob: Job? = null
+    private var previewDecryptJob: Job? = null
     private var debouncedChatListRefreshJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var loadChatMessagesJob: Job? = null
@@ -549,6 +556,8 @@ class ChatViewModel(
         // Avoid reload if already success and not forced
         if (!isForced && _chatListState.value is ChatListState.Success) return
 
+        previewDecryptJob?.cancel()
+
         viewModelScope.launch {
             // Clearing junction caches during an in-session refresh (e.g. iOS tap-back from a
             // thread) can yield transient empty/stale combine steps and make Archived tab counts
@@ -653,6 +662,13 @@ class ChatViewModel(
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
                             prefetchChatPayloads(userId, enriched)
                         }
+
+                        if (combinedInbox.groupLoaded) {
+                            val groupChats = visibilityFiltered.filter { it.groupClique != null }
+                            if (groupChats.isNotEmpty()) {
+                                launchGroupPreviewDecryption(userId, groupChats)
+                            }
+                        }
                     } else {
                         _chatListState.value = ChatListState.Success(emptyList())
                     }
@@ -663,6 +679,32 @@ class ChatViewModel(
                     _chatListState.value = ChatListState.Error(
                         e.redactedRestMessage().ifBlank { "Failed to load chats" },
                     )
+                }
+            }
+        }
+    }
+
+    private fun launchGroupPreviewDecryption(userId: String, groupChats: List<ChatWithDetails>) {
+        previewDecryptJob?.cancel()
+        previewDecryptJob = viewModelScope.launch(Dispatchers.Default) {
+            val concurrency = Semaphore(8)
+            coroutineScope {
+                for (chat in groupChats) {
+                    val chatId = chat.chat.id ?: continue
+                    val connId = chat.connection.id
+                    if (_decryptedPreviews.value.containsKey(connId)) continue
+                    launch {
+                        concurrency.withPermit {
+                            try {
+                                val decrypted = chatRepository.decryptGroupChatPreview(chatId, userId)
+                                    ?: return@launch
+                                val label = decrypted.previewLabel()
+                                if (label != "New message") {
+                                    _decryptedPreviews.update { it + (connId to label) }
+                                }
+                            } catch (_: Exception) { }
+                        }
+                    }
                 }
             }
         }

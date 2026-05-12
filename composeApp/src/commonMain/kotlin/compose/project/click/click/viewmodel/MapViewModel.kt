@@ -626,25 +626,29 @@ class MapViewModel : ViewModel() {
         beaconPollJob = viewModelScope.launch {
             delay(400)
             if (seq != beaconFetchSeq) return@launch
-            mapBeaconRepository.fetchNearbyCommunityHubs(
-                minLat = bounds.minLat,
-                maxLat = bounds.maxLat,
-                minLon = bounds.minLon,
-                maxLon = bounds.maxLon,
-            ).onSuccess { rows ->
-                _communityHubs.value = rows.map { dto ->
-                    CommunityHubPin(
-                        hubId = dto.hubId,
-                        name = dto.name,
-                        latitude = dto.latitude,
-                        longitude = dto.longitude,
-                        radiusMeters = dto.radiusMeters,
-                        activeUserCount = dto.activeUserCount,
-                    )
-                }
-            }
-
             val layers = _selectedLayerFilters.value
+            val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
+            if (wantHubs) {
+                mapBeaconRepository.fetchNearbyCommunityHubs(
+                    minLat = bounds.minLat,
+                    maxLat = bounds.maxLat,
+                    minLon = bounds.minLon,
+                    maxLon = bounds.maxLon,
+                ).onSuccess { rows ->
+                    _communityHubs.value = rows.map { dto ->
+                        CommunityHubPin(
+                            hubId = dto.hubId,
+                            name = dto.name,
+                            latitude = dto.latitude,
+                            longitude = dto.longitude,
+                            radiusMeters = dto.radiusMeters,
+                            activeUserCount = dto.activeUserCount,
+                        )
+                    }
+                }
+            } else {
+                _communityHubs.value = emptyList()
+            }
             val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
                 layers.contains(MapLayerFilter.SOUNDTRACKS) ||
                 layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||

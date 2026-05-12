@@ -62,6 +62,10 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import compose.project.click.click.ui.components.CreateHubModal
+import compose.project.click.click.utils.LocationService
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.Instant
@@ -145,6 +149,10 @@ fun MapScreen(
     // sheet visibility is decoupled from any race in the selection StateFlow.
     var selectedProfileId by remember { mutableStateOf<String?>(null) }
     var showBeaconDropSheet by remember { mutableStateOf(false) }
+    var showCreateHubModal by remember { mutableStateOf(false) }
+    var pendingHubName by remember { mutableStateOf("") }
+    var pendingHubCategory by remember { mutableStateOf("general") }
+    val mapScope = rememberCoroutineScope()
 
     LaunchedEffect(showBeaconDropSheet) {
         if (showBeaconDropSheet) {
@@ -248,10 +256,6 @@ fun MapScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        MapLayerFilterDropdown(
-                            selected = layerFilters,
-                            onToggle = { viewModel.toggleLayerFilter(it) },
-                        )
                         FloatingActionButton(
                             onClick = { showBeaconDropSheet = true },
                             modifier = Modifier.size(56.dp),
@@ -260,6 +264,10 @@ fun MapScreen(
                         ) {
                             Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
                         }
+                        MapLayerFilterDropdown(
+                            selected = layerFilters,
+                            onToggle = { viewModel.toggleLayerFilter(it) },
+                        )
                         Spacer(modifier = Modifier.weight(1f))
                         ZoomControls(
                             onZoomIn = { viewModel.zoomIn() },
@@ -309,6 +317,12 @@ fun MapScreen(
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
                         )
+                    },
+                    onCreateHub = { name, hubCat ->
+                        showBeaconDropSheet = false
+                        showCreateHubModal = true
+                        pendingHubName = name
+                        pendingHubCategory = hubCat
                     },
                 )
             }
@@ -437,6 +451,21 @@ fun MapScreen(
             }
         }
     }
+
+    val mapLocationService = remember { LocationService() }
+    CreateHubModal(
+        visible = showCreateHubModal,
+        onDismiss = { showCreateHubModal = false },
+        onHubCreated = { hubId -> onJoinCommunityHub(hubId) },
+        locationService = mapLocationService,
+        initialName = pendingHubName,
+        initialCategory = pendingHubCategory,
+        onError = { msg ->
+            mapScope.launch {
+                snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
+            }
+        },
+    )
 }
 
 @Composable
@@ -579,6 +608,7 @@ private fun mapLayerFilterShortLabel(selected: Set<MapLayerFilter>): String {
             MapLayerFilter.SOUNDTRACKS -> "Audio"
             MapLayerFilter.ALERTS_UTILITIES -> "Alerts"
             MapLayerFilter.SOCIAL_VIBES -> "Social"
+            MapLayerFilter.COMMUNITY_HUBS -> "Hubs"
             else -> f.label.take(6)
         }
     }

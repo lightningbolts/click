@@ -71,6 +71,12 @@ interface ChatRepository {
     /** Group clique chats only. */
     suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
+    /**
+     * Resolves E2EE crypto for [chatId] and decrypts its newest message.
+     * Returns `null` when the key cannot be unwrapped or the chat has no messages.
+     */
+    suspend fun decryptGroupChatPreview(chatId: String, viewerUserId: String): Message?
+
     suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
     /**

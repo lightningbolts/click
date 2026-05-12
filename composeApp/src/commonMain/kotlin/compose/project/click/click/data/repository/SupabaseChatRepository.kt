@@ -895,9 +895,8 @@ class SupabaseChatRepository(
                     memberUserIds = memberIds,
                 )
 
-                val crypto = resolveChatCrypto(chatRow.id, userId)
                 val rawLast = latestByChatId[chatRow.id]?.toMessage()
-                val lastMessage = rawLast?.let { decryptMessage(it, crypto) }
+                val lastMessage = rawLast?.let { decryptMessage(it, null) }
                 val synthetic = syntheticConnectionForGroupClique(
                     groupId = gid,
                     memberUserIds = memberIds,
@@ -926,6 +925,17 @@ class SupabaseChatRepository(
         } catch (e: Exception) {
             println("ChatRepository: group chats fetch failed: ${e.redactedRestMessage()}")
             emptyList()
+        }
+    }
+
+    override suspend fun decryptGroupChatPreview(chatId: String, viewerUserId: String): Message? {
+        return try {
+            val crypto = resolveChatCrypto(chatId, viewerUserId) ?: return null
+            val rows = fetchLatestMessageRowPerChat(listOf(chatId))
+            val raw = rows[chatId]?.toMessage() ?: return null
+            decryptMessage(raw, crypto)
+        } catch (_: Exception) {
+            null
         }
     }
 

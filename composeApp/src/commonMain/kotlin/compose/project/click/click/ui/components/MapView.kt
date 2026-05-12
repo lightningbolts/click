@@ -233,7 +233,7 @@ fun MapPin.markerHueDegrees(): Float = when {
         MapPinKind.BEACON_ALERT -> 0f
         MapPinKind.BEACON_SOCIAL -> 310f
         MapPinKind.BEACON_OTHER -> 55f
-        MapPinKind.COMMUNITY_HUB -> 195f
+        MapPinKind.COMMUNITY_HUB -> 260f
         MapPinKind.CONNECTION -> 300f
     }
 }

@@ -237,7 +237,7 @@ private fun MapPin.markerTintUIColor(): UIColor {
             MapPinKind.BEACON_ALERT -> UIColor.redColor
             MapPinKind.BEACON_SOCIAL -> UIColor.magentaColor
             MapPinKind.BEACON_OTHER -> UIColor.yellowColor
-            MapPinKind.COMMUNITY_HUB -> UIColor.cyanColor
+            MapPinKind.COMMUNITY_HUB -> UIColor(red = 0.18, green = 0.0, blue = 0.45, alpha = 1.0)
             MapPinKind.CONNECTION -> UIColor.magentaColor
         }
     }

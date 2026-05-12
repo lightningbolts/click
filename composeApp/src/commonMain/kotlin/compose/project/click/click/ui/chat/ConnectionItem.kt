@@ -54,6 +54,8 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -79,6 +81,7 @@ fun ConnectionItem(
     chatDetails: ChatWithDetails,
     viewerUserId: String? = null,
     showOnlineIndicator: Boolean = false,
+    decryptedPreview: String? = null,
     onAvatarClick: () -> Unit = {},
     onGroupMembersPicker: (List<User>) -> Unit = {},
     onClick: () -> Unit,
@@ -282,21 +285,32 @@ fun ConnectionItem(
                         LoadingSubtitlePlaceholder()
                     }
                 } else {
-                    val previewText = when {
+                    val rawPreview = when {
                         previewNeedsRefresh -> "New message"
                         lastMessage != null -> lastMessage.previewLabel()
                         connection.last_message_at != null -> "New message"
                         else -> "Start a conversation"
                     }
-                    Text(
-                        previewText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
+                    val previewText = if (rawPreview == "New message" && decryptedPreview != null) {
+                        decryptedPreview
+                    } else {
+                        rawPreview
+                    }
+                    Crossfade(
+                        targetState = previewText,
+                        animationSpec = tween(durationMillis = 300),
                         modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        label = "preview_fade",
+                    ) { text ->
+                        Text(
+                            text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
                 if (unreadCount > 0) {

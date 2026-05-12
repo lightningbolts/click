@@ -22,16 +22,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -94,6 +102,7 @@ data class HubChatNavArgs(
     val hubId: String,
     val realtimeChannel: String,
     val hubTitle: String,
+    val creatorId: String? = null,
 )
 
 @Composable
@@ -122,7 +131,13 @@ fun HubChatScreen(
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
+    val outOfBounds by viewModel.outOfBounds.collectAsState()
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
+
+    val isCreator by viewModel.isCreator.collectAsState()
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var editNameDraft by remember { mutableStateOf(args.hubTitle) }
 
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
@@ -132,6 +147,17 @@ fun HubChatScreen(
 
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
+
+    val hubSnackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(outOfBounds) {
+        if (outOfBounds) {
+            hubSnackbarHostState.showSnackbar(
+                message = "You are no longer at this location.",
+                duration = SnackbarDuration.Long,
+            )
+        }
+    }
 
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -200,6 +226,15 @@ fun HubChatScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        if (isCreator) {
+                            IconButton(onClick = { showEditDialog = true }) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = "Hub settings",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                )
+                            }
                         }
                     }
                 }
@@ -420,11 +455,93 @@ fun HubChatScreen(
                     HubChatInputBar(
                         viewModel = viewModel,
                         inLobby = inLobby,
+                        isOutOfBounds = outOfBounds,
                         onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
                     )
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = hubSnackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp),
+        )
+    }
+
+    if (showEditDialog && isCreator) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Hub Settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = editNameDraft,
+                        onValueChange = { editNameDraft = it.take(80) },
+                        label = { Text("Hub name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(
+                        onClick = {
+                            showEditDialog = false
+                            showDeleteConfirm = true
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text("Delete Hub")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.editHubDetails(editNameDraft) { success ->
+                            if (success) showEditDialog = false
+                        }
+                    },
+                    enabled = editNameDraft.isNotBlank(),
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showDeleteConfirm && isCreator) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Hub?") },
+            text = { Text("This will permanently delete the hub and all messages. This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteHub { success ->
+                            showDeleteConfirm = false
+                            if (success) onNavigateBack()
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -437,9 +554,18 @@ fun HubChatScreen(
 private fun HubChatInputBar(
     viewModel: HubChatViewModel,
     inLobby: Boolean,
+    isOutOfBounds: Boolean = false,
     onOpenPhotoLibrary: () -> Unit,
 ) {
-    val draft by viewModel.draft.collectAsState()
+    var localDraft by remember { mutableStateOf("") }
+    val vmDraft by viewModel.draft.collectAsState()
+
+    LaunchedEffect(vmDraft) {
+        if (vmDraft != localDraft) {
+            localDraft = vmDraft
+        }
+    }
+
     val isSending by viewModel.isSending.collectAsState()
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
@@ -470,8 +596,8 @@ private fun HubChatInputBar(
     val composerFieldInteraction = remember { MutableInteractionSource() }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
 
-    val canSend = !inLobby && draft.trim().isNotEmpty() && !isSending
-    val enabled = !inLobby && !isSending
+    val canSend = !inLobby && !isOutOfBounds && localDraft.trim().isNotEmpty() && !isSending
+    val enabled = !inLobby && !isOutOfBounds
     val attachTint = PrimaryBlue.copy(alpha = 0.92f)
     val sendGradient = Brush.linearGradient(
         colors = if (canSend) {
@@ -531,8 +657,11 @@ private fun HubChatInputBar(
                     .heightIn(min = auxButtonSize),
             ) {
                 BasicTextField(
-                    value = draft,
-                    onValueChange = viewModel::updateDraft,
+                    value = localDraft,
+                    onValueChange = { newText ->
+                        localDraft = newText
+                        viewModel.updateDraft(newText)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = fieldSideInset, end = fieldSideInset)
@@ -555,7 +684,7 @@ private fun HubChatInputBar(
                     cursorBrush = SolidColor(PrimaryBlue),
                     decorationBox = { innerTextField ->
                         OutlinedTextFieldDefaults.DecorationBox(
-                            value = draft,
+                            value = localDraft,
                             innerTextField = innerTextField,
                             enabled = enabled,
                             singleLine = false,
@@ -564,6 +693,7 @@ private fun HubChatInputBar(
                             placeholder = {
                                 Text(
                                     if (inLobby) "Chat unlocks when 3+ join"
+                                    else if (isOutOfBounds) "You are no longer at this location"
                                     else "Message the hub…",
                                     style = composerTextStyleCentered,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),

@@ -248,6 +248,7 @@ fun ConnectionsListView(
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
+    val decryptedPreviews by viewModel.decryptedPreviews.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
@@ -772,6 +773,7 @@ fun ConnectionsListView(
                                         viewerUserId = currentUserId,
                                         showOnlineIndicator = chatDetails.groupClique == null &&
                                             chatDetails.otherUser.id in onlineUsers,
+                                        decryptedPreview = decryptedPreviews[chatDetails.connection.id],
                                         onAvatarClick = {
                                             if (chatDetails.groupClique == null) {
                                                 onUserProfileClick(chatDetails.otherUser.id)

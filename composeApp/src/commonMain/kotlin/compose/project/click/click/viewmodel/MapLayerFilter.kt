@@ -10,6 +10,7 @@ enum class MapLayerFilter(val label: String) {
     SOUNDTRACKS("Soundtracks"),
     ALERTS_UTILITIES("Alerts & Utilities"),
     SOCIAL_VIBES("Social Vibes"),
+    COMMUNITY_HUBS("Community Hubs"),
 }
 
 fun defaultMapLayerFilters(): Set<MapLayerFilter> =
@@ -18,4 +19,5 @@ fun defaultMapLayerFilters(): Set<MapLayerFilter> =
         MapLayerFilter.SOUNDTRACKS,
         MapLayerFilter.ALERTS_UTILITIES,
         MapLayerFilter.SOCIAL_VIBES,
+        MapLayerFilter.COMMUNITY_HUBS,
     )

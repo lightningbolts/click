@@ -73,6 +73,8 @@ fun CreateHubModal(
     onHubCreated: (hubId: String) -> Unit,
     locationService: LocationService,
     onError: (String) -> Unit = {},
+    initialName: String = "",
+    initialCategory: String = "",
 ) {
     val scope = rememberCoroutineScope()
     val api = remember { ApiClient() }
@@ -85,8 +87,12 @@ fun CreateHubModal(
 
     LaunchedEffect(visible) {
         if (visible) {
-            nameDraft = ""
-            category = hubCategories.first()
+            nameDraft = initialName.ifBlank { "" }
+            category = if (initialCategory.isNotBlank() && initialCategory in hubCategories) {
+                initialCategory
+            } else {
+                hubCategories.first()
+            }
             isCustomCategory = false
             customCategoryDraft = ""
             submitting = false
