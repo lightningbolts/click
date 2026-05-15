@@ -53,6 +53,8 @@ data class CachedAppSnapshot(
     val archivedConnectionIds: Set<String> = emptySet(),
     val hiddenConnectionIds: Set<String> = emptySet(),
     val cachedChatThreads: List<CachedChatThread> = emptyList(),
+    /** Hydrated user profiles restored on cold start so profile sheets can open without a network wait. */
+    val cachedUserPublicProfiles: List<UserPublicProfile> = emptyList(),
     /**
      * Last successful unified inbox (direct + group rows) for instant Clicks list paint on cold start.
      */

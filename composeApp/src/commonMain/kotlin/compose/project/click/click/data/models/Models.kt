@@ -252,6 +252,7 @@ data class UserInterests(
 )
 
 /** Hydrated profile for the profile viewer (connections may read via RLS). */
+@Serializable
 data class UserPublicProfile(
     val user: User,
     val interestTags: List<String>,

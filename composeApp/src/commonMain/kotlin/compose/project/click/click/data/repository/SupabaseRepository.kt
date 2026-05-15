@@ -110,6 +110,21 @@ class SupabaseRepository {
             .distinctUntilChanged()
     }
 
+    fun snapshotCachedUserPublicProfiles(): List<UserPublicProfile> =
+        userPublicProfileCache.value.values.toList()
+
+    fun seedCachedUserPublicProfiles(profiles: List<UserPublicProfile>) {
+        val seeded = profiles
+            .filter { it.user.id.isNotBlank() }
+            .associateBy { it.user.id.trim() }
+        if (seeded.isEmpty()) return
+        userPublicProfileCache.value = userPublicProfileCache.value + seeded
+    }
+
+    fun clearCachedUserPublicProfiles() {
+        userPublicProfileCache.value = emptyMap()
+    }
+
     private fun cacheUserPublicProfile(targetUserId: String, profile: UserPublicProfile) {
         val key = targetUserId.trim()
         if (key.isEmpty()) return

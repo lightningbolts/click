@@ -79,6 +79,7 @@ object AppDataManager {
     private var chatPrefetchJob: Job? = null
     private var aggressiveBackgroundChatSyncJob: Job? = null
     private var profilePrefetchJob: Job? = null
+    private var queuedProfilePrefetchIds: Set<String> = emptySet()
     private var pendingSyncPausedForAuth: Boolean = false
     
     /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
@@ -167,7 +168,6 @@ object AppDataManager {
     private const val CHAT_PREFETCH_LIMIT = 12
     private const val CHAT_PREFETCH_MAX_MESSAGES = 80
     private const val GROUP_CHAT_PREFETCH_MAX_MESSAGES = 50
-    private const val PROFILE_PREFETCH_LIMIT = 250
 
     private var loadAllDataJob: Job? = null
     private var lastForegroundRecoveryMs: Long = 0L
@@ -434,30 +434,44 @@ object AppDataManager {
 
     private fun startBackgroundProfilePrefetch(viewerUserId: String, peerUserIds: List<String>) {
         if (_ghostModeEnabled.value || viewerUserId.isBlank()) return
-        val ids = peerUserIds
+        val knownProfileIds = peerUserIds +
+            _connections.value.flatMap { it.user_ids } +
+            _connectedUsers.value.keys +
+            _inboxFeedChats.value.flatMap { row ->
+                listOf(row.otherUser.id) + row.groupMemberUsers.map { it.id } + row.connection.user_ids
+            }
+        val ids = knownProfileIds
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() && it != viewerUserId }
             .distinct()
-            .take(PROFILE_PREFETCH_LIMIT)
             .toList()
         if (ids.isEmpty()) return
 
-        profilePrefetchJob?.cancel()
+        queuedProfilePrefetchIds = queuedProfilePrefetchIds + ids
+        if (profilePrefetchJob?.isActive == true) return
+
         profilePrefetchJob = scope.launch(chatMediaDispatcher) {
-            val concurrency = Semaphore(8)
-            coroutineScope {
-                ids.map { peerId ->
-                    async {
-                        concurrency.withPermit {
-                            runCatching {
-                                supabaseRepository.refreshUserPublicProfile(viewerUserId, peerId)
-                            }.onFailure { e ->
-                                println("AppDataManager: profile prefetch failed for $peerId: ${e.redactedRestMessage()}")
+            while (true) {
+                val batch = queuedProfilePrefetchIds.toList()
+                if (batch.isEmpty()) break
+                queuedProfilePrefetchIds = emptySet()
+
+                val concurrency = Semaphore(8)
+                coroutineScope {
+                    batch.map { peerId ->
+                        async {
+                            concurrency.withPermit {
+                                runCatching {
+                                    supabaseRepository.refreshUserPublicProfile(viewerUserId, peerId)
+                                }.onFailure { e ->
+                                    println("AppDataManager: profile prefetch failed for $peerId: ${e.redactedRestMessage()}")
+                                }
                             }
                         }
-                    }
-                }.awaitAll()
+                    }.awaitAll()
+                }
+                persistSnapshot()
             }
         }
     }
@@ -797,6 +811,7 @@ object AppDataManager {
         aggressiveBackgroundChatSyncJob = null
         profilePrefetchJob?.cancel()
         profilePrefetchJob = null
+        queuedProfilePrefetchIds = emptySet()
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call
         // replaces the old stopGlobalPresence() + leaks derived keys into the
@@ -812,6 +827,7 @@ object AppDataManager {
         _connectedUsers.value = emptyMap()
         _cachedChatThreads.value = emptyMap()
         _inboxFeedChats.value = emptyList()
+        supabaseRepository.clearCachedUserPublicProfiles()
         _userAvailability.value = null
         _isDataLoaded.value = false
         _isLoading.value = false
@@ -1477,6 +1493,7 @@ object AppDataManager {
             _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
             _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
             _inboxFeedChats.value = snapshot.inboxFeedChats
+            supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
             _isDataLoaded.value =
                 snapshot.currentUser != null ||
                     snapshot.connections.isNotEmpty() ||
@@ -1496,6 +1513,7 @@ object AppDataManager {
             archivedConnectionIds = _archivedConnectionIds.value,
             hiddenConnectionIds = _hiddenConnectionIds.value,
             cachedChatThreads = _cachedChatThreads.value.values.toList(),
+            cachedUserPublicProfiles = supabaseRepository.snapshotCachedUserPublicProfiles(),
             inboxFeedChats = _inboxFeedChats.value,
         )
         runCatching {
