@@ -19,6 +19,7 @@ import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
@@ -26,6 +27,7 @@ import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -71,6 +75,8 @@ object AppDataManager {
     private var presenceHeartbeatJob: Job? = null
     private var pendingSyncJob: Job? = null
     private var chatPrefetchJob: Job? = null
+    private var aggressiveBackgroundChatSyncJob: Job? = null
+    private var profilePrefetchJob: Job? = null
     private var pendingSyncPausedForAuth: Boolean = false
     
     /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
@@ -158,6 +164,8 @@ object AppDataManager {
     private const val FOREGROUND_RECOVERY_DEBOUNCE_MS = 900L
     private const val CHAT_PREFETCH_LIMIT = 12
     private const val CHAT_PREFETCH_MAX_MESSAGES = 80
+    private const val GROUP_CHAT_PREFETCH_MAX_MESSAGES = 50
+    private const val PROFILE_PREFETCH_LIMIT = 250
 
     private var loadAllDataJob: Job? = null
     private var lastForegroundRecoveryMs: Long = 0L
@@ -314,8 +322,31 @@ object AppDataManager {
         val last = boundedMessages.lastOrNull()
         if (last != null) {
             updateConnectionChatActivity(connectionId, last.timeCreated, last)
+            updateInboxFeedChatActivity(connectionId, last)
         } else {
             scope.launch { persistSnapshot() }
+        }
+    }
+
+    private fun updateInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
+        if (connectionId.isBlank()) return
+        val updated = _inboxFeedChats.value.map { row ->
+            if (row.connection.id != connectionId) return@map row
+            row.copy(
+                lastMessage = lastMessagePreview,
+                connection = row.connection.copy(
+                    last_message_at = listOfNotNull(
+                        row.connection.last_message_at,
+                        lastMessagePreview.timeCreated,
+                    ).maxOrNull(),
+                    chat = row.connection.chat.copy(messages = listOf(lastMessagePreview)),
+                ),
+            )
+        }
+        if (updated != _inboxFeedChats.value) {
+            _inboxFeedChats.value = updated.sortedByDescending {
+                it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created
+            }
         }
     }
 
@@ -326,7 +357,7 @@ object AppDataManager {
             runCatching {
                 val direct = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
                 val groups = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
-                val rows = (direct.await() + groups.await())
+                val directRows = direct.await()
                     .filter {
                         it.connection.isActiveForUser(_archivedConnectionIds.value, _hiddenConnectionIds.value) ||
                             it.connection.isArchivedChannelForUser(_archivedConnectionIds.value, _hiddenConnectionIds.value)
@@ -334,13 +365,30 @@ object AppDataManager {
                     .distinctBy { it.connection.id }
                     .sortedByDescending { it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created }
                     .take(CHAT_PREFETCH_LIMIT)
+                val groupRows = groups.await()
+                    .distinctBy { it.connection.id }
+                    .sortedByDescending { it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created }
+                val rows = (directRows + groupRows).distinctBy { it.connection.id }
+                val groupMemberProfileIds = groupRows
+                    .flatMap { it.groupMemberUsers.map { member -> member.id } }
+                    .filter { it != userId }
+                startBackgroundProfilePrefetch(
+                    viewerUserId = userId,
+                    peerUserIds = _connectedUsers.value.keys.toList() + groupMemberProfileIds,
+                )
                 for (chat in rows) {
                     val chatId = chat.chat.id ?: continue
                     if (chat.groupClique == null) {
                         chatRepository.cacheEncryptionKeys(chatId, chat.connection.id, chat.connection.user_ids)
                     }
-                    val messages = chatRepository.fetchMessagesForChat(chatId, userId)?.takeLast(CHAT_PREFETCH_MAX_MESSAGES)
+                    val limit = if (chat.groupClique != null) {
+                        GROUP_CHAT_PREFETCH_MAX_MESSAGES
+                    } else {
+                        CHAT_PREFETCH_MAX_MESSAGES
+                    }
+                    val decryptedMessages = chatRepository.fetchMessagesForChat(chatId, userId)?.takeLast(limit)
                         ?: continue
+                    val messages = chatRepository.vaultEncryptedMediaMessages(chatId, userId, decryptedMessages)
                     val participants = chatRepository.fetchChatParticipants(chatId)
                     val reactions = runCatching { chatRepository.fetchReactionsForChat(chatId) }.getOrElse { emptyList() }
                     withContext(Dispatchers.Default) {
@@ -356,6 +404,87 @@ object AppDataManager {
             }.onFailure { e ->
                 if (e is CancellationException) throw e
                 println("AppDataManager: silent chat prefetch failed: ${e.redactedRestMessage()}")
+            }
+        }
+    }
+
+    private fun startBackgroundProfilePrefetch(viewerUserId: String, peerUserIds: List<String>) {
+        if (_ghostModeEnabled.value || viewerUserId.isBlank()) return
+        val ids = peerUserIds
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != viewerUserId }
+            .distinct()
+            .take(PROFILE_PREFETCH_LIMIT)
+            .toList()
+        if (ids.isEmpty()) return
+
+        profilePrefetchJob?.cancel()
+        profilePrefetchJob = scope.launch(chatMediaDispatcher) {
+            val concurrency = Semaphore(8)
+            coroutineScope {
+                ids.map { peerId ->
+                    async {
+                        concurrency.withPermit {
+                            runCatching {
+                                supabaseRepository.refreshUserPublicProfile(viewerUserId, peerId)
+                            }.onFailure { e ->
+                                println("AppDataManager: profile prefetch failed for $peerId: ${e.redactedRestMessage()}")
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+    }
+
+    private fun startAggressiveBackgroundChatSync(userId: String) {
+        if (_ghostModeEnabled.value || userId.isBlank()) return
+        aggressiveBackgroundChatSyncJob?.cancel()
+        aggressiveBackgroundChatSyncJob = scope.launch(chatMediaDispatcher) {
+            var subscription: ChatMessageSubscription? = null
+            try {
+                val (sub, flow) = chatRepository.subscribeToMessageInserts()
+                subscription = sub
+                sub.attach()
+                flow.collect { event ->
+                    val vaulted = chatRepository
+                        .vaultEncryptedMediaMessages(event.chatId, userId, listOf(event.message))
+                        .firstOrNull()
+                        ?: event.message
+                    updateConnectionChatActivity(event.connectionId, vaulted.timeCreated, vaulted)
+                    updateInboxFeedChatActivity(event.connectionId, vaulted)
+
+                    val cached = cachedChatThreadFor(event.connectionId)
+                    if (cached != null) {
+                        val messages = (cached.messages.filterNot { it.id == vaulted.id } + vaulted)
+                            .sortedBy { it.timeCreated }
+                            .takeLast(CHAT_PREFETCH_MAX_MESSAGES)
+                        cacheChatThread(
+                            connectionId = cached.connectionId,
+                            chatId = cached.chatId,
+                            messages = messages,
+                            participants = cached.participants,
+                            reactions = cached.reactions,
+                        )
+                    } else {
+                        val participants = runCatching { chatRepository.fetchChatParticipants(event.chatId) }
+                            .getOrElse { emptyList() }
+                        cacheChatThread(
+                            connectionId = event.connectionId,
+                            chatId = event.chatId,
+                            messages = listOf(vaulted),
+                            participants = participants,
+                        )
+                    }
+                    persistSnapshot()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("AppDataManager: aggressive chat background sync failed: ${e.redactedRestMessage()}")
+            } finally {
+                runCatching { subscription?.detach() }
             }
         }
     }
@@ -478,6 +607,7 @@ object AppDataManager {
                 runCatching { chatRepository.startGlobalPresence(user.id) }
                     .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.redactedRestMessage()}") }
                 startPresenceHeartbeat(user.id)
+                startAggressiveBackgroundChatSync(user.id)
 
                 // Interest tags are not required for first Home paint.
                 scope.launch {
@@ -577,6 +707,12 @@ object AppDataManager {
                                 .onFailure { e ->
                                     println("AppDataManager: Background connected-user hydration failed: ${e.redactedRestMessage()}")
                                 }
+                                .onSuccess {
+                                    startBackgroundProfilePrefetch(
+                                        viewerUserId = user.id,
+                                        peerUserIds = _connectedUsers.value.keys.toList(),
+                                    )
+                                }
                         }
                     }
 
@@ -633,6 +769,10 @@ object AppDataManager {
         loadAllDataJob = null
         chatPrefetchJob?.cancel()
         chatPrefetchJob = null
+        aggressiveBackgroundChatSyncJob?.cancel()
+        aggressiveBackgroundChatSyncJob = null
+        profilePrefetchJob?.cancel()
+        profilePrefetchJob = null
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call
         // replaces the old stopGlobalPresence() + leaks derived keys into the

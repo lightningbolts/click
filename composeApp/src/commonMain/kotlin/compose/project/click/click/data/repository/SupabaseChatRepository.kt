@@ -71,7 +71,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import compose.project.click.click.util.compressOutgoingChatImageForUpload
+import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.writeChatMediaVaultFile
 
 /**
  * Repository for chat operations
@@ -867,6 +869,18 @@ class SupabaseChatRepository(
             val groupsById = allGroups.associateBy { it.id }
             val membersByGroupId = allMemberRows.groupBy { it.groupId }
             val usersById = allUsers.associateBy { it.id }
+            val cryptoByChatId = coroutineScope {
+                val concurrency = Semaphore(6)
+                groupChats.map { chatRow ->
+                    async {
+                        concurrency.withPermit {
+                            chatRow.id to resolveChatCrypto(chatRow.id, userId)
+                        }
+                    }
+                }.awaitAll()
+                    .mapNotNull { (chatId, crypto) -> crypto?.let { chatId to it } }
+                    .toMap()
+            }
 
             withContext(Dispatchers.Default) {
                 groupChats.mapNotNull { chatRow ->
@@ -910,7 +924,9 @@ class SupabaseChatRepository(
                     )
 
                     val rawLast = latestByChatId[chatRow.id]?.toMessage()
-                    val lastMessage = rawLast?.let { decryptMessageOnCurrentThread(it, null) }
+                    val lastMessage = rawLast?.let {
+                        decryptMessageOnCurrentThread(it, cryptoByChatId[chatRow.id])
+                    }
                     val synthetic = syntheticConnectionForGroupClique(
                         groupId = gid,
                         memberUserIds = memberIds,
@@ -1317,7 +1333,7 @@ class SupabaseChatRepository(
                         rawMessage.copy(content = "New message")
                     else -> rawMessage
                 }
-                send(MessageListInsertEvent(connectionId = listKey, message = message))
+                send(MessageListInsertEvent(connectionId = listKey, chatId = row.chatId, message = message))
             }
         }
         return SupabaseMessageSubscription(channel) to flow
@@ -2137,6 +2153,62 @@ class SupabaseChatRepository(
         } catch (e: Exception) {
             println("ChatRepository: downloadAttachmentPlaintext failed: ${e.redactedRestMessage()}")
             null
+        }
+    }
+
+    override suspend fun vaultEncryptedMediaMessages(
+        chatId: String,
+        viewerUserId: String,
+        messages: List<Message>,
+    ): List<Message> {
+        if (chatId.isBlank() || viewerUserId.isBlank() || messages.isEmpty()) return messages
+        return withContext(chatMediaDispatcher) {
+            val concurrency = Semaphore(4)
+            coroutineScope {
+                messages.map { message ->
+                    async {
+                        concurrency.withPermit {
+                            vaultEncryptedMediaMessage(chatId, viewerUserId, message)
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+    }
+
+    private suspend fun vaultEncryptedMediaMessage(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+    ): Message {
+        val type = message.messageType.lowercase()
+        if (type != ChatMessageType.IMAGE && type != ChatMessageType.AUDIO) return message
+        if (!message.isEncryptedMedia() || message.hasLocalMediaUri()) return message
+        val remoteUrl = message.mediaUrlOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return message
+        val plain = downloadAndDecryptChatMedia(chatId, viewerUserId, remoteUrl)
+            ?.takeIf { it.isNotEmpty() }
+            ?: return message
+        val extension = when (type) {
+            ChatMessageType.AUDIO -> message.audioCacheFileExtension()
+            else -> imageCacheFileExtension(message.originalMimeTypeOrNull(), remoteUrl)
+        }
+        val localUri = writeChatMediaVaultFile(message.id, plain, extension) ?: return message
+        return message.withLocalMediaUri(localUri)
+    }
+
+    private fun imageCacheFileExtension(mimeType: String?, mediaUrl: String): String {
+        val mime = mimeType?.lowercase().orEmpty()
+        return when {
+            "png" in mime -> "png"
+            "webp" in mime -> "webp"
+            "gif" in mime -> "gif"
+            "heic" in mime || "heif" in mime -> "heic"
+            "jpeg" in mime || "jpg" in mime -> "jpg"
+            else -> mediaUrl.substringBefore('?')
+                .substringAfterLast('/', "")
+                .substringAfterLast('.', "")
+                .takeIf { it.length in 2..5 && it.all { ch -> ch.isLetterOrDigit() } }
+                ?: "jpg"
         }
     }
 

@@ -214,6 +214,12 @@ class FakeChatRepository(
         mediaUrl: String,
     ): ByteArray? = null
 
+    override suspend fun vaultEncryptedMediaMessages(
+        chatId: String,
+        viewerUserId: String,
+        messages: List<Message>,
+    ): List<Message> = messages
+
     override suspend fun uploadEncryptedBlob(
         bucketName: String,
         chatId: String,

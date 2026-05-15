@@ -28,7 +28,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -127,25 +126,7 @@ fun ChatMessageBubble(
     val secureSt = secureMediaState
         ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
     val hapticFeedback = LocalHapticFeedback.current
-    val onRequestSecureAudio = remember(message.id, activeChatId, currentUserId, encryptedMedia, secureMediaHost) {
-        {
-            val chatId = activeChatId
-            val viewer = currentUserId
-            if (encryptedMedia && secureMediaHost != null && chatId != null && viewer != null) {
-                secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
-            }
-        }
-    }
-    LaunchedEffect(message.id, mediaUrl, activeChatId, currentUserId, mt, encryptedMedia) {
-        val chatId = activeChatId
-        val viewer = currentUserId
-        if (encryptedMedia && secureMediaHost != null && chatId != null && viewer != null) {
-            when (mt) {
-                ChatMessageType.IMAGE -> secureMediaHost.ensureSecureChatImageLoaded(chatId, viewer, message)
-                ChatMessageType.AUDIO -> secureMediaHost.ensureSecureChatAudioLoaded(chatId, viewer, message)
-            }
-        }
-    }
+    val onRequestSecureAudio = remember(message.id) { {} }
 
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
 

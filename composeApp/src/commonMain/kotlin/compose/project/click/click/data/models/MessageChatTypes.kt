@@ -4,8 +4,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /**
  * Values for [Message.messageType] aligned with `public.messages.message_type` (lowercase in DB).
@@ -72,6 +74,23 @@ fun Message.parsedMediaMetadata(): MessageMediaMetadata? {
 }
 
 fun Message.mediaUrlOrNull(): String? = parsedMediaMetadata()?.mediaUrl
+
+fun Message.hasLocalMediaUri(): Boolean =
+    mediaUrlOrNull()?.startsWith("file://", ignoreCase = true) == true
+
+fun Message.withLocalMediaUri(localUri: String): Message {
+    val trimmed = localUri.trim()
+    if (trimmed.isEmpty()) return this
+    val existing = metadata as? JsonObject
+    val updated = buildJsonObject {
+        existing?.forEach { (key, value) -> put(key, value) }
+        put("media_url", trimmed)
+        put("mediaUrl", trimmed)
+        put("is_encrypted_media", false)
+        put("isEncryptedMedia", false)
+    }
+    return copy(metadata = updated)
+}
 
 /**
  * click-web stores **plaintext** blobs under `chat-media/web/<userId>/...`. Those URLs must

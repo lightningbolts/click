@@ -212,6 +212,16 @@ interface ChatRepository {
     suspend fun downloadAndDecryptChatMedia(chatId: String, viewerUserId: String, mediaUrl: String): ByteArray?
 
     /**
+     * Background-only media worker: downloads/decrypts recent encrypted media and rewrites message
+     * metadata to local file:// URIs so render code never performs network or crypto work.
+     */
+    suspend fun vaultEncryptedMediaMessages(
+        chatId: String,
+        viewerUserId: String,
+        messages: List<Message>,
+    ): List<Message>
+
+    /**
      * Outcome of an encrypted attachment upload. The sender embeds [fileMasterKeyBase64] +
      * [sha256Base64] inside the `ccx:v1:` envelope, which is then E2EE-wrapped into the message
      * body. [path] is the canonical Storage object path (signed URLs minted on demand for readers).

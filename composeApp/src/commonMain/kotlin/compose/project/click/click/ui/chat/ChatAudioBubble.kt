@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -230,25 +229,12 @@ fun ChatAudioBubble(
         VoiceNoteChromeShell(palette, widthModifier) {
             Box(
                 modifier = Modifier
-                    .size(chatBubbleScaledDp(60f))
-                    .clip(CircleShape)
-                    .background(palette.playFill, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(chatBubbleScaledDp(33f)),
-                    strokeWidth = chatBubbleScaledDp(2f),
-                    color = palette.playIcon,
-                )
-            }
-            Box(
-                modifier = Modifier
                     .weight(1f)
                     .height(chatBubbleScaledDp(54f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Decrypting…",
+                    text = "Preparing voice message",
                     style = chatBubbleReplyLabelStyle(),
                     color = palette.timeColor,
                 )
@@ -259,29 +245,6 @@ fun ChatAudioBubble(
 
     if (needsDecryptBeforePlay) {
         VoiceNoteChromeShell(palette, widthModifier) {
-            Box(
-                modifier = Modifier
-                    .size(chatBubbleScaledDp(60f))
-                    .clip(CircleShape)
-                    .border(1.dp, palette.playBorder, CircleShape)
-                    .background(palette.playFill, CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {
-                            pendingAutoPlayAfterDecrypt = true
-                            onRequestDecrypt()
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = "Decrypt and play",
-                    tint = palette.playIcon,
-                    modifier = Modifier.size(chatBubbleScaledDp(30f)),
-                )
-            }
             Column(Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
@@ -291,6 +254,13 @@ fun ChatAudioBubble(
                         .background(palette.trackBg),
                 )
                 Spacer(Modifier.height(chatBubbleScaledDp(9f)))
+                Text(
+                    text = "Preparing voice message",
+                    style = chatBubbleReplyLabelStyle(),
+                    color = palette.timeColor,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(chatBubbleScaledDp(3f)))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

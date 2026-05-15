@@ -288,6 +288,10 @@ class ConnectionRepository(
         val cachedConnection = AppDataManager.connections.value.firstOrNull { it.id == cid }
         val cachedMessages = cachedConnection?.chat?.messages.orEmpty()
         val cachedChatId = cachedConnection?.chat?.id
+        val cachedThread = AppDataManager.cachedChatThreadFor(cid)
+        if (cachedThread != null && cachedThread.messages.isNotEmpty()) {
+            return cachedThread.messages
+        }
 
         val chatId = runCatching {
             chatRepository.resolveChatIdForConnection(cid)
@@ -299,7 +303,13 @@ class ConnectionRepository(
             chatRepository.fetchMessagesForChat(chatId, viewerUserId).orEmpty()
         }.getOrDefault(emptyList())
 
-        return if (fetched.isNotEmpty()) fetched else cachedMessages
+        if (fetched.isEmpty()) return cachedMessages
+        val uid = viewerUserId?.trim().orEmpty()
+        return if (uid.isNotBlank()) {
+            chatRepository.vaultEncryptedMediaMessages(chatId, uid, fetched)
+        } else {
+            fetched
+        }
     }
 
     /**

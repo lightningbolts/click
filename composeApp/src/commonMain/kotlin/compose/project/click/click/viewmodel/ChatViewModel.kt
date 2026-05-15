@@ -275,7 +275,6 @@ class ChatViewModel(
     private var connectionsRealtimeJob: Job? = null
     private var connectionsRealtimeChannel: RealtimeChannel? = null
     private var globalMessageListJob: Job? = null
-    private var previewDecryptJob: Job? = null
     private var debouncedChatListRefreshJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var loadChatMessagesJob: Job? = null
@@ -590,8 +589,6 @@ class ChatViewModel(
         // Avoid reload if already success and not forced
         if (!isForced && _chatListState.value is ChatListState.Success) return
 
-        previewDecryptJob?.cancel()
-
         viewModelScope.launch {
             // Clearing junction caches during an in-session refresh (e.g. iOS tap-back from a
             // thread) can yield transient empty/stale combine steps and make Archived tab counts
@@ -702,12 +699,6 @@ class ChatViewModel(
                             prefetchChatPayloads(userId, enriched)
                         }
 
-                        if (combinedInbox.groupLoaded) {
-                            val groupChats = visibilityFiltered.filter { it.groupClique != null }
-                            if (groupChats.isNotEmpty()) {
-                                launchGroupPreviewDecryption(userId, groupChats)
-                            }
-                        }
                     } else {
                         _chatListState.value = ChatListState.Success(emptyList())
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
@@ -721,32 +712,6 @@ class ChatViewModel(
                     _chatListState.value = ChatListState.Error(
                         e.redactedRestMessage().ifBlank { "Failed to load chats" },
                     )
-                }
-            }
-        }
-    }
-
-    private fun launchGroupPreviewDecryption(userId: String, groupChats: List<ChatWithDetails>) {
-        previewDecryptJob?.cancel()
-        previewDecryptJob = viewModelScope.launch(Dispatchers.Default) {
-            val concurrency = Semaphore(8)
-            coroutineScope {
-                for (chat in groupChats) {
-                    val chatId = chat.chat.id ?: continue
-                    val connId = chat.connection.id
-                    if (_decryptedPreviews.value.containsKey(connId)) continue
-                    launch {
-                        concurrency.withPermit {
-                            try {
-                                val decrypted = chatRepository.decryptGroupChatPreview(chatId, userId)
-                                    ?: return@launch
-                                val label = decrypted.previewLabel()
-                                if (label != "New message") {
-                                    _decryptedPreviews.update { it + (connId to label) }
-                                }
-                            } catch (_: Exception) { }
-                        }
-                    }
                 }
             }
         }
@@ -1319,8 +1284,9 @@ class ChatViewModel(
         val reactionsDeferred = async { chatRepository.fetchReactionsForChat(apiChatId) }
 
         val participants = participantsDeferred.await().associateBy { it.id }
-        val rawMessages = messagesDeferred.await()
+        val decryptedMessages = messagesDeferred.await()
             ?: error("Failed to load messages for chat")
+        val rawMessages = chatRepository.vaultEncryptedMediaMessages(apiChatId, userId, decryptedMessages)
         val messagesWithUsers = rawMessages.map { message ->
             val user = participants[message.user_id] ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
             MessageWithUser(
@@ -1512,12 +1478,13 @@ class ChatViewModel(
                             when (envelope) {
                                 is ChatRealtimeEvent.Message -> when (val event = envelope.event) {
                                     is MessageChangeEvent.Insert -> {
-                                        val user = resolveMessageUser(event.message.user_id, chatId)
-                                            ?: User(id = event.message.user_id, name = null, createdAt = 0L)
-                                        applyInsertedMessage(event.message, user, userId)
-                                        if (event.message.user_id != userId) {
-                                            if (event.message.deliveredAt == null) {
-                                                enqueueInboundDeliveredAck(chatId, userId, listOf(event.message))
+                                        val vaulted = vaultMessagesForUi(chatId, userId, listOf(event.message)).first()
+                                        val user = resolveMessageUser(vaulted.user_id, chatId)
+                                            ?: User(id = vaulted.user_id, name = null, createdAt = 0L)
+                                        applyInsertedMessage(vaulted, user, userId)
+                                        if (vaulted.user_id != userId) {
+                                            if (vaulted.deliveredAt == null) {
+                                                enqueueInboundDeliveredAck(chatId, userId, listOf(vaulted))
                                             }
                                             val active = _chatMessagesState.value as? ChatMessagesState.Success
                                             val activeApiChatId = active?.chatDetails?.chat?.id
@@ -1537,7 +1504,9 @@ class ChatViewModel(
                                     is MessageChangeEvent.Update -> {
                                         val currentState = _chatMessagesState.value
                                         if (currentState is ChatMessagesState.Success) {
-                                            val normalized = event.message.withDbDerivedDeliveryState()
+                                            val normalized = vaultMessagesForUi(chatId, userId, listOf(event.message))
+                                                .first()
+                                                .withDbDerivedDeliveryState()
                                             val updatedMessages = currentState.messages.map { mwu ->
                                                 if (mwu.message.id == normalized.id) {
                                                     mwu.copy(message = normalized)
@@ -1679,7 +1648,8 @@ class ChatViewModel(
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         if (currentState.chatDetails.chat.id != chatId) return
 
-        val latestMessages = chatRepository.fetchMessagesForChat(chatId, userId) ?: return
+        val fetchedMessages = chatRepository.fetchMessagesForChat(chatId, userId) ?: return
+        val latestMessages = vaultMessagesForUi(chatId, userId, fetchedMessages)
         val pendingOptimistic = currentState.messages.filter { mwu ->
             val m = mwu.message
             m.id.startsWith("temp-") &&
@@ -1749,6 +1719,15 @@ class ChatViewModel(
         }
 
         enqueueInboundDeliveredAck(chatId, userId, latestMessages)
+    }
+
+    private suspend fun vaultMessagesForUi(
+        chatId: String,
+        userId: String,
+        messages: List<Message>,
+    ): List<Message> {
+        if (messages.isEmpty()) return messages
+        return chatRepository.vaultEncryptedMediaMessages(chatId, userId, messages)
     }
 
     private fun enqueueInboundDeliveredAck(chatId: String, viewerUserId: String, messages: List<Message>) {

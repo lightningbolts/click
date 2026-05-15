@@ -730,20 +730,22 @@ fun UserProfileBottomSheet(
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     val repository = remember { SupabaseRepository() }
-    var profile by remember(userId) { mutableStateOf<UserPublicProfile?>(null) }
-    var loading by remember(userId) { mutableStateOf(true) }
+    var profile by remember(userId) { mutableStateOf(repository.getCachedUserPublicProfile(userId)) }
+    var loading by remember(userId) { mutableStateOf(profile == null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(userId, viewerUserId) {
-        loading = true
+        profile = repository.getCachedUserPublicProfile(userId)
+        loading = profile == null
         error = null
-        profile = null
         val result = runCatching {
             withContext(Dispatchers.Default) {
-                repository.fetchUserPublicProfile(viewerUserId, userId)
+                repository.refreshUserPublicProfile(viewerUserId, userId)
             }
         }
-        profile = result.getOrNull()
-        error = result.exceptionOrNull()?.message
+        result.getOrNull()?.let { profile = it }
+        if (profile == null) {
+            error = result.exceptionOrNull()?.message
+        }
         loading = false
     }
 

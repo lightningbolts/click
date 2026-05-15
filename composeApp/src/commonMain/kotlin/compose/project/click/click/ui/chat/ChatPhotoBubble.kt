@@ -66,14 +66,7 @@ internal fun ChatBubblePhotoContent(
     Box(modifier = modifier.fillMaxWidth()) {
         when {
             isEncrypted && secureState?.loading == true -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = chatBubbleScaledDp(180f), max = chatBubbleScaledDp(330f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
+                PreparingSecureMediaText()
             }
             isEncrypted && secureState?.error?.isNotBlank() == true -> {
                 Text(
@@ -142,16 +135,7 @@ internal fun ChatBubblePhotoContent(
                     )
                 }
             }
-            isEncrypted -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = chatBubbleScaledDp(180f), max = chatBubbleScaledDp(330f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
+            isEncrypted -> PreparingSecureMediaText()
             else -> {
                 AsyncImage(
                     model = mediaUrl,
@@ -171,5 +155,21 @@ internal fun ChatBubblePhotoContent(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PreparingSecureMediaText() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(220f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Preparing photo",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
