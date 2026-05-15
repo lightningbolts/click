@@ -60,6 +60,7 @@ import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
@@ -182,9 +183,15 @@ fun ConnectionItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (isGroup) {
+            val groupListAvatarSize = 40.dp
+            val groupClusterWidth = groupAvatarClusterWidth(
+                chatDetails.groupMemberUsers.size,
+                groupListAvatarSize,
+            )
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .width(groupClusterWidth)
+                    .height(44.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = false, radius = 24.dp),
@@ -211,7 +218,7 @@ fun ConnectionItem(
                 } else {
                     GroupAvatar(
                         members = chatDetails.groupMemberUsers,
-                        avatarSize = 40.dp,
+                        avatarSize = groupListAvatarSize,
                     )
                 }
             }

@@ -35,6 +35,28 @@ import compose.project.click.click.data.models.toUserProfile
 
 private val OnlineGreen = Color(0xFF22C55E)
 
+/** Diameter of the "+N" overflow chip — must match [GroupAvatar] layout. */
+private val GroupAvatarOverflowDiameter = 40.dp
+
+/** Horizontal overlap between stacked faces in [GroupAvatar]. */
+fun groupAvatarOverlapDp(avatarSize: Dp): Dp =
+    (avatarSize.value * 0.36f).dp
+
+/**
+ * Width occupied by [GroupAvatar] for [memberCount] members (including "+N"),
+ * so parent Rows can reserve space and avoid overlap with neighboring text.
+ */
+fun groupAvatarClusterWidth(memberCount: Int, avatarSize: Dp): Dp {
+    if (memberCount <= 0) return avatarSize
+    val extraCount = (memberCount - 2).coerceAtLeast(0)
+    val visibleFaceCount = if (extraCount > 0) 2 else minOf(3, memberCount)
+    val stackCount = visibleFaceCount + if (extraCount > 0) 1 else 0
+    if (stackCount <= 0) return avatarSize
+    val overlap = groupAvatarOverlapDp(avatarSize)
+    val trailingDiameter = if (extraCount > 0) GroupAvatarOverflowDiameter else avatarSize
+    return overlap * (stackCount - 1).coerceAtLeast(0) + trailingDiameter
+}
+
 /** Saturated backgrounds that keep white initials readable. */
 private val PlaceholderAvatarColors = listOf(
     Color(0xFF4F46E5),
@@ -188,10 +210,12 @@ fun GroupAvatar(
     val extraCount = (sortedUsers.size - 2).coerceAtLeast(0)
     val visibleUsers = if (extraCount > 0) sortedUsers.take(2) else sortedUsers.take(3)
     val stackCount = visibleUsers.size + if (extraCount > 0) 1 else 0
-    val overlap = (avatarSize.value * 0.36f).dp
-    val stackWidth = avatarSize + overlap * (stackCount - 1).coerceAtLeast(0)
+    val overlap = groupAvatarOverlapDp(avatarSize)
+    val trailingDiameter = if (extraCount > 0) GroupAvatarOverflowDiameter else avatarSize
+    val stackWidth =
+        overlap * (stackCount - 1).coerceAtLeast(0) + trailingDiameter
     val ringColor = MaterialTheme.colorScheme.background
-    val overflowDiameter = 40.dp
+    val overflowDiameter = GroupAvatarOverflowDiameter
     Box(
         modifier = modifier
             .width(stackWidth)

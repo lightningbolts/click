@@ -131,6 +131,7 @@ import androidx.compose.material3.ripple
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
@@ -592,9 +593,15 @@ fun ChatView(
                                 }
 
                                 if (isGroupChat) {
+                                    val chatHeaderGroupAvatarSize = 34.dp
+                                    val groupClusterWidth = groupAvatarClusterWidth(
+                                        chatDetails.groupMemberUsers.size,
+                                        chatHeaderGroupAvatarSize,
+                                    )
                                     Box(
                                         modifier = Modifier
-                                            .size(40.dp)
+                                            .width(groupClusterWidth)
+                                            .heightIn(min = 40.dp)
                                             .clickable(
                                                 interactionSource = remember { MutableInteractionSource() },
                                                 indication = ripple(bounded = false, radius = 22.dp),
@@ -608,7 +615,7 @@ fun ChatView(
                                     ) {
                                         GroupAvatar(
                                             members = chatDetails.groupMemberUsers,
-                                            avatarSize = 34.dp,
+                                            avatarSize = chatHeaderGroupAvatarSize,
                                         )
                                     }
                                 } else {
@@ -635,7 +642,7 @@ fun ChatView(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
