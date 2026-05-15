@@ -4,12 +4,22 @@ import android.annotation.SuppressLint
 import android.Manifest
 import android.content.pm.PackageManager
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.app.Activity
@@ -28,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -44,11 +55,17 @@ class AndroidProximityManager(
 ) : ProximityManager {
 
     private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private val bluetoothManager: BluetoothManager? =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val advertiser: BluetoothLeAdvertiser? get() = adapter?.bluetoothLeAdvertiser
     private val scanner: BluetoothLeScanner? get() = adapter?.bluetoothLeScanner
 
     private var advertiseCallback: AdvertiseCallback? = null
     private var scanCallback: ScanCallback? = null
+    private var gattServer: BluetoothGattServer? = null
+    private var tokenCharacteristic: BluetoothGattCharacteristic? = null
+    private val activeClientGatts = ConcurrentHashMap.newKeySet<BluetoothGatt>()
+    private val connectingDeviceAddresses = ConcurrentHashMap.newKeySet<String>()
     private var audioTrack: AudioTrack? = null
 
     override fun supportsTapExchange(): Boolean {
@@ -119,10 +136,11 @@ class AndroidProximityManager(
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
         enforceBluetoothRuntimePermissions()
-        stopAll()
+        stopBroadcastOnly()
         val adv = advertiser ?: return
-        val payload = runCatching { buildBleManufacturerPayload(ephemeralToken) }.getOrElse { return }
-        val dynamicServiceUuid = ParcelUuid.fromString(buildProximityServiceUuidString(ephemeralToken))
+        val payload = runCatching { buildGattTokenPayload(ephemeralToken) }.getOrElse { return }
+        val serviceUuid = ParcelUuid.fromString(CLICK_SERVICE_UUID)
+        startGattServer(payload)
 
         withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { cont ->
@@ -139,12 +157,11 @@ class AndroidProximityManager(
                 val settings = AdvertiseSettings.Builder()
                     .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                     .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                    .setConnectable(false)
+                    .setConnectable(true)
                     .build()
                 val data = AdvertiseData.Builder()
                     .setIncludeDeviceName(false)
-                    .addManufacturerData(CLICK_BLE_MANUFACTURER_ID, payload)
-                    .addServiceUuid(dynamicServiceUuid)
+                    .addServiceUuid(serviceUuid)
                     .build()
                 adv.startAdvertising(settings, data, cb)
                 cont.invokeOnCancellation { runCatching { adv.stopAdvertising(cb) } }
@@ -162,14 +179,12 @@ class AndroidProximityManager(
         val tokens = ConcurrentHashMap.newKeySet<String>()
         stopScanOnly()
         val sc = scanner
+        val serviceUuid = ParcelUuid.fromString(CLICK_SERVICE_UUID)
         val cb = if (sc != null) {
             object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult?) {
-                    result?.scanRecord?.serviceUuids?.forEach { uuid ->
-                        parseProximityServiceUuidString(uuid?.uuid?.toString())?.let { tokens.add(it) }
-                    }
-                    val raw = result?.scanRecord?.getManufacturerSpecificData(CLICK_BLE_MANUFACTURER_ID)
-                    parseBleManufacturerPayload(raw)?.let { tokens.add(it) }
+                    val device = result?.device ?: return
+                    connectAndReadToken(device, tokens)
                 }
 
                 override fun onBatchScanResults(results: MutableList<ScanResult>?) {
@@ -186,7 +201,12 @@ class AndroidProximityManager(
                     .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                     .setReportDelay(0L)
                     .build()
-                sc.startScan(emptyList(), settings, cb)
+                val filters = listOf(
+                    ScanFilter.Builder()
+                        .setServiceUuid(serviceUuid)
+                        .build(),
+                )
+                sc.startScan(filters, settings, cb)
             }
         }
         coroutineScope {
@@ -198,6 +218,106 @@ class AndroidProximityManager(
             stopScanOnly()
         }
         return tokens.sorted()
+    }
+
+    private fun startGattServer(tokenPayload: ByteArray) {
+        val manager = bluetoothManager ?: return
+        val serviceUuid = UUID.fromString(CLICK_SERVICE_UUID)
+        val characteristicUuid = UUID.fromString(CLICK_TOKEN_CHARACTERISTIC_UUID)
+        val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val characteristic = BluetoothGattCharacteristic(
+            characteristicUuid,
+            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PERMISSION_READ,
+        ).apply {
+            value = tokenPayload
+        }
+        service.addCharacteristic(characteristic)
+        tokenCharacteristic = characteristic
+        val callback = object : BluetoothGattServerCallback() {
+            override fun onCharacteristicReadRequest(
+                device: BluetoothDevice?,
+                requestId: Int,
+                offset: Int,
+                characteristic: BluetoothGattCharacteristic?,
+            ) {
+                val value = tokenCharacteristic?.value ?: ByteArray(0)
+                val slice = if (offset in value.indices) {
+                    value.copyOfRange(offset, value.size)
+                } else if (offset == value.size) {
+                    ByteArray(0)
+                } else {
+                    null
+                }
+                val status = if (slice != null) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_INVALID_OFFSET
+                gattServer?.sendResponse(device, requestId, status, offset, slice)
+            }
+        }
+        gattServer = manager.openGattServer(context, callback)?.also { server ->
+            server.addService(service)
+        }
+    }
+
+    private fun connectAndReadToken(device: BluetoothDevice, sink: MutableSet<String>) {
+        val address = device.address ?: return
+        if (!connectingDeviceAddresses.add(address)) return
+        val callback = object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                    gatt.discoverServices()
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    activeClientGatts.remove(gatt)
+                    connectingDeviceAddresses.remove(address)
+                    runCatching { gatt.close() }
+                } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                    activeClientGatts.remove(gatt)
+                    connectingDeviceAddresses.remove(address)
+                    runCatching { gatt.disconnect() }
+                    runCatching { gatt.close() }
+                }
+            }
+
+            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    finishGatt(gatt, address)
+                    return
+                }
+                val characteristic = gatt
+                    .getService(UUID.fromString(CLICK_SERVICE_UUID))
+                    ?.getCharacteristic(UUID.fromString(CLICK_TOKEN_CHARACTERISTIC_UUID))
+                if (characteristic == null || !gatt.readCharacteristic(characteristic)) {
+                    finishGatt(gatt, address)
+                }
+            }
+
+            @Deprecated("Deprecated in Android API 33 but still called on older runtimes.")
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                if (
+                    status == BluetoothGatt.GATT_SUCCESS &&
+                    characteristic.uuid == UUID.fromString(CLICK_TOKEN_CHARACTERISTIC_UUID)
+                ) {
+                    parseGattTokenPayload(characteristic.value)?.let { sink.add(it) }
+                }
+                finishGatt(gatt, address)
+            }
+        }
+        val gatt = device.connectGatt(context, false, callback)
+        if (gatt != null) {
+            activeClientGatts.add(gatt)
+        } else {
+            connectingDeviceAddresses.remove(address)
+        }
+    }
+
+    private fun finishGatt(gatt: BluetoothGatt, address: String) {
+        activeClientGatts.remove(gatt)
+        connectingDeviceAddresses.remove(address)
+        runCatching { gatt.disconnect() }
+        runCatching { gatt.close() }
     }
 
     private suspend fun collectAudioToken(durationMs: Long, sink: MutableSet<String>) {
@@ -297,19 +417,32 @@ class AndroidProximityManager(
         scanCallback = null
     }
 
-    override fun stopAll() {
-        stopScanOnly()
+    private fun stopBroadcastOnly() {
         val adv = advertiser
         val cb = advertiseCallback
         if (adv != null && cb != null) {
             runCatching { adv.stopAdvertising(cb) }
         }
         advertiseCallback = null
+        runCatching { gattServer?.close() }
+        gattServer = null
+        tokenCharacteristic = null
         audioTrack?.let {
             runCatching { it.stop() }
             it.release()
         }
         audioTrack = null
+    }
+
+    override fun stopAll() {
+        stopScanOnly()
+        activeClientGatts.forEach { gatt ->
+            runCatching { gatt.disconnect() }
+            runCatching { gatt.close() }
+        }
+        activeClientGatts.clear()
+        connectingDeviceAddresses.clear()
+        stopBroadcastOnly()
     }
 }
 

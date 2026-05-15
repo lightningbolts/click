@@ -4,6 +4,8 @@ package compose.project.click.click.data.storage
  * In-memory [TokenStorage] for tests (avoids Android [createTokenStorage] init requirements).
  */
 class FakeTokenStorage : TokenStorage {
+    private var activeHubsJson: String? = null
+
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {}
     override suspend fun getJwt(): String? = null
     override suspend fun getRefreshToken(): String? = null
@@ -36,5 +38,12 @@ class FakeTokenStorage : TokenStorage {
     override suspend fun getPendingConnectionQueue(): String? = null
     override suspend fun savePendingProximityHandshakeQueue(queue: String?) {}
     override suspend fun getPendingProximityHandshakeQueue(): String? = null
+
+    override suspend fun saveActiveHubs(json: String?) {
+        activeHubsJson = json
+    }
+
+    override suspend fun getActiveHubs(): String? = activeHubsJson
+
     override suspend fun clearSessionData() {}
 }

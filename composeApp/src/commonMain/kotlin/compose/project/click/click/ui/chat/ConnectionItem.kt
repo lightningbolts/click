@@ -197,7 +197,8 @@ fun ConnectionItem(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(

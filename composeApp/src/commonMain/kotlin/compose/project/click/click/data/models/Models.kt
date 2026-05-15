@@ -362,6 +362,7 @@ data class Chat(
 )
 
 /** Metadata for a mathematically verified group clique chat (pairwise connections only). */
+@Serializable
 data class GroupCliqueDetails(
     val groupId: String,
     val name: String,
@@ -656,6 +657,7 @@ fun syntheticConnectionForGroupClique(
 )
 
 // UI models for chat functionality
+@Serializable
 data class ChatWithDetails(
     val chat: Chat,
     val connection: Connection,

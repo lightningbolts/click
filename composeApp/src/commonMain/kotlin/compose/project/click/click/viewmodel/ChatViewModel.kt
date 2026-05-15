@@ -298,7 +298,41 @@ class ChatViewModel(
 
     /** List rows may omit prefetch; still reuse any [prefetchedChatPayloads] so refresh never blanks the thread. */
     private fun bootstrapMessagesFromPrefetch(connectionId: String): List<MessageWithUser> =
-        prefetchedChatPayloads[connectionId]?.messages.orEmpty()
+        prefetchedChatPayloads[connectionId]?.messages
+            ?: payloadFromLocalCache(connectionId)?.messages
+            ?: emptyList()
+
+    private fun payloadFromLocalCache(threadId: String): PrefetchedChatPayload? {
+        val cached = AppDataManager.cachedChatThreadFor(threadId) ?: return null
+        val userId = _currentUserId.value
+        val participants = cached.participants.associateBy { it.id }
+        val messagesWithUsers = cached.messages.map { message ->
+            val user = participants[message.user_id]
+                ?: AppDataManager.currentUser.value?.takeIf { it.id == message.user_id }
+                ?: AppDataManager.getConnectedUser(message.user_id)
+                ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
+            MessageWithUser(
+                message = message,
+                user = user,
+                isSent = userId != null && message.user_id == userId,
+            )
+        }
+        val shouldShowIcebreaker = messagesWithUsers.size < 5
+        return PrefetchedChatPayload(
+            messages = messagesWithUsers,
+            reactionsByMessageId = cached.reactions.groupBy { it.messageId },
+            icebreakerPrompts = if (shouldShowIcebreaker) {
+                IcebreakerRepository.getPromptsForContext(
+                    cachedChatRowForThreadId(threadId)?.connection?.context_tag,
+                    count = 3,
+                    stableSelectionKey = cached.connectionId,
+                )
+            } else {
+                emptyList()
+            },
+            showIcebreakerPanel = shouldShowIcebreaker,
+        )
+    }
 
     init {
         viewModelScope.launch {
@@ -567,14 +601,20 @@ class ChatViewModel(
             }
             val cachedConnections = AppDataManager.connections.value
             val cachedUsers = AppDataManager.connectedUsers.value
+            val persistedInbox = AppDataManager.inboxFeedChats.value
 
             // CRITICAL: Never revert a Success state to Loading. When navigating
             // back to the connections list the previously loaded data must remain
             // visible while the background refresh runs. Only show Loading when
             // no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
+            val fromConnectionsOnly = buildCachedChats(cachedConnections, cachedUsers, userId)
             val cachedSeedChats = applyChatListVisibility(
-                buildCachedChats(cachedConnections, cachedUsers, userId),
+                if (persistedInbox.isNotEmpty()) {
+                    enrichInboxRowsFromConnectedUsers(persistedInbox, cachedUsers)
+                } else {
+                    fromConnectionsOnly
+                },
             )
             if (!alreadyHasRealData) {
                 if (cachedSeedChats.isNotEmpty()) {
@@ -655,11 +695,10 @@ class ChatViewModel(
                         }
                         val visibilityFiltered = applyChatListVisibility(mergedWithLocalPreview)
                         pruneStaleReadClearedHints(visibilityFiltered)
-                        _chatListState.value = ChatListState.Success(
-                            applyUnreadClearHintsToInboxRows(visibilityFiltered),
-                        )
-
+                        val finalRows = applyUnreadClearHintsToInboxRows(visibilityFiltered)
+                        _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                            AppDataManager.persistInboxFeedChats(finalRows)
                             prefetchChatPayloads(userId, enriched)
                         }
 
@@ -671,6 +710,9 @@ class ChatViewModel(
                         }
                     } else {
                         _chatListState.value = ChatListState.Success(emptyList())
+                        if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                            AppDataManager.persistInboxFeedChats(emptyList())
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -707,6 +749,29 @@ class ChatViewModel(
                     }
                 }
             }
+        }
+    }
+
+    private fun enrichInboxRowsFromConnectedUsers(
+        rows: List<ChatWithDetails>,
+        cachedUsers: Map<String, User>,
+    ): List<ChatWithDetails> = rows.map { chat ->
+        if (chat.groupClique == null) {
+            val cached = cachedUsers[chat.otherUser.id]
+            if (cached != null &&
+                isResolvedDisplayName(cached.name) &&
+                !isResolvedDisplayName(chat.otherUser.name)
+            ) {
+                chat.copy(otherUser = cached)
+            } else {
+                chat
+            }
+        } else {
+            chat.copy(
+                groupMemberUsers = chat.groupMemberUsers.map { m ->
+                    cachedUsers[m.id]?.takeIf { isResolvedDisplayName(it.name) } ?: m
+                },
+            )
         }
     }
 
@@ -934,12 +999,32 @@ class ChatViewModel(
             ?.chats?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
         val connectionId = cachedChat?.connection?.id ?: chatId
 
+        payloadFromLocalCache(connectionId)?.let { disk ->
+            if (connectionId !in prefetchedChatPayloads) {
+                prefetchedChatPayloads[connectionId] = disk
+            }
+        }
+        val mergedPrefetch = prefetchedChatPayloads[connectionId]
+        val hasCachedTimeline = mergedPrefetch?.messages?.isNotEmpty() == true
+
         val userId = _currentUserId.value
         if (userId == null) {
             val successMatchesTarget = (_chatMessagesState.value as? ChatMessagesState.Success)?.let { s ->
                 s.chatDetails.connection.id == connectionId ||
                     (!s.chatDetails.chat.id.isNullOrBlank() && s.chatDetails.chat.id == chatId)
             } == true
+            val rowForDisk = cachedChat ?: cachedChatRowForThreadId(chatId)
+            if (rowForDisk != null && hasCachedTimeline && mergedPrefetch != null) {
+                _messageReactions.value = mergedPrefetch.reactionsByMessageId
+                _icebreakerPrompts.value = mergedPrefetch.icebreakerPrompts
+                _showIcebreakerPanel.value = mergedPrefetch.showIcebreakerPanel
+                _chatMessagesState.value = ChatMessagesState.Success(
+                    messages = mergedPrefetch.messages,
+                    chatDetails = rowForDisk,
+                    isLoadingMessages = false,
+                )
+                return
+            }
             if (!successMatchesTarget) {
                 _chatMessagesState.value = ChatMessagesState.Loading
             }
@@ -963,7 +1048,7 @@ class ChatViewModel(
 
         if (currentConnectionId == connectionId && currentState != null && hasLiveSubscriptions) return
 
-        if (_chatMessagesState.value is ChatMessagesState.Error) {
+        if (_chatMessagesState.value is ChatMessagesState.Error && !hasCachedTimeline) {
             _chatMessagesState.value = ChatMessagesState.Loading
         }
 
@@ -975,7 +1060,7 @@ class ChatViewModel(
         currentConnectionId = connectionId
 
         // Instantly show the chat header from cached list data (no loading spinner)
-        val prefetchedPayload = prefetchedChatPayloads[connectionId]
+        val prefetchedPayload = mergedPrefetch
 
         if (cachedChat != null && prefetchedPayload == null) {
             _icebreakerPrompts.value =
@@ -995,17 +1080,20 @@ class ChatViewModel(
             _chatMessagesState.value = ChatMessagesState.Success(
                 messages = prefetchedPayload.messages,
                 chatDetails = cachedChat,
-                isLoadingMessages = true
+                isLoadingMessages = !hasCachedTimeline,
             )
         } else if (hasRenderableStateForTarget && currentState != null) {
             // Keep current content visible while refreshing in background.
-            _chatMessagesState.value = currentState.copy(isLoadingMessages = true)
+            _chatMessagesState.value = currentState.copy(
+                isLoadingMessages = currentState.messages.isEmpty(),
+            )
         } else if (cachedChat != null) {
             // Show header, composer, and conversation starters immediately instead of a blank loading screen.
+            val boot = bootstrapMessagesFromPrefetch(connectionId)
             _chatMessagesState.value = ChatMessagesState.Success(
-                messages = bootstrapMessagesFromPrefetch(connectionId),
+                messages = boot,
                 chatDetails = cachedChat,
-                isLoadingMessages = true
+                isLoadingMessages = boot.isEmpty(),
             )
         } else {
             _chatMessagesState.value = ChatMessagesState.Loading
@@ -1079,10 +1167,11 @@ class ChatViewModel(
                             stableSelectionKey = hydratedChatDetails.connection.id,
                         )
                     _showIcebreakerPanel.value = true
+                    val bridgeMessages = bootstrapMessagesFromPrefetch(resolvedConnectionId)
                     _chatMessagesState.value = ChatMessagesState.Success(
-                        messages = bootstrapMessagesFromPrefetch(resolvedConnectionId),
+                        messages = bridgeMessages,
                         chatDetails = hydratedChatDetails,
-                        isLoadingMessages = true,
+                        isLoadingMessages = bridgeMessages.isEmpty(),
                     )
                 }
 
@@ -1102,6 +1191,13 @@ class ChatViewModel(
                     }
                 }
                 prefetchedChatPayloads[resolvedConnectionId] = payload!!
+                AppDataManager.cacheChatThread(
+                    connectionId = resolvedConnectionId,
+                    chatId = apiChatId,
+                    messages = payload.messages.map { it.message },
+                    participants = payload.messages.map { it.user }.distinctBy { it.id },
+                    reactions = payload.reactionsByMessageId.values.flatten(),
+                )
 
                 _messageReactions.value = payload.reactionsByMessageId
                 _showIcebreakerPanel.value = payload.showIcebreakerPanel
@@ -1201,6 +1297,13 @@ class ChatViewModel(
                         if (!prefetchedChatPayloads.containsKey(connectionId)) {
                             prefetchedChatPayloads[connectionId] = payload
                         }
+                        AppDataManager.cacheChatThread(
+                            connectionId = connectionId,
+                            chatId = apiChatId,
+                            messages = payload.messages.map { it.message },
+                            participants = payload.messages.map { it.user }.distinctBy { it.id },
+                            reactions = payload.reactionsByMessageId.values.flatten(),
+                        )
                     }
                 }
         }
@@ -1242,7 +1345,7 @@ class ChatViewModel(
             messages = messagesWithUsers,
             reactionsByMessageId = reactionsByMessageId,
             icebreakerPrompts = prompts,
-            showIcebreakerPanel = shouldShowIcebreaker
+            showIcebreakerPanel = shouldShowIcebreaker,
         )
     }
 

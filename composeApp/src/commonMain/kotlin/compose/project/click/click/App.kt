@@ -1755,6 +1755,7 @@ fun App() {
                                 },
                                 onConfirm = { contextTag, noiseOptIn ->
                                     if (tagging.isNewConnection) {
+                                        PlatformHapticsPolicy.successNotification()
                                         connectionRevealState = ConnectionRevealUiState(
                                             methodLabel = "Tap",
                                             phase = ConnectionRevealPhase.Connecting,
@@ -1799,6 +1800,11 @@ fun App() {
                                 onSkip = cancelQr,
                                 presentation = ConnectionContextPresentation.QrFlow,
                                 onConfirm = { contextTag, noiseOptIn ->
+                                    PlatformHapticsPolicy.successNotification()
+                                    connectionRevealState = ConnectionRevealUiState(
+                                        methodLabel = "QR",
+                                        phase = ConnectionRevealPhase.Connecting,
+                                    )
                                     connectionScope.launch {
                                         ambientNoiseOptIn = noiseOptIn
                                         tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)

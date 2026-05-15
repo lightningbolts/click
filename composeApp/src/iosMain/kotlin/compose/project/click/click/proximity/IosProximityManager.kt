@@ -32,14 +32,23 @@ import platform.AVFAudio.AVSampleRateKey
 import platform.AVFAudio.setActive
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
-import platform.CoreBluetooth.CBAdvertisementDataManufacturerDataKey
-import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.CoreBluetooth.CBCentralManagerScanOptionAllowDuplicatesKey
+import platform.CoreBluetooth.CBATTErrorInvalidOffset
+import platform.CoreBluetooth.CBATTErrorSuccess
+import platform.CoreBluetooth.CBATTRequest
+import platform.CoreBluetooth.CBAttributePermissionsReadable
+import platform.CoreBluetooth.CBCharacteristic
+import platform.CoreBluetooth.CBCharacteristicPropertyRead
 import platform.CoreBluetooth.CBUUID
 import platform.CoreBluetooth.CBManagerStatePoweredOn
 import platform.CoreBluetooth.CBPeripheral
+import platform.CoreBluetooth.CBPeripheralDelegateProtocol
 import platform.CoreBluetooth.CBPeripheralManager
 import platform.CoreBluetooth.CBPeripheralManagerDelegateProtocol
+import platform.CoreBluetooth.CBMutableCharacteristic
+import platform.CoreBluetooth.CBMutableService
+import platform.CoreBluetooth.CBService
+import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSMutableData
@@ -76,39 +85,14 @@ private fun NSData.toByteArray(): ByteArray {
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private fun buildIosManufacturerBlock(token: String): NSData {
-    val payload = buildBleManufacturerPayload(token)
-    val id = CLICK_BLE_MANUFACTURER_ID
-    val full = ByteArray(2 + payload.size)
-    full[0] = (id and 0xFF).toByte()
-    full[1] = ((id shr 8) and 0xFF).toByte()
-    payload.copyInto(full, destinationOffset = 2)
-    return full.usePinned { pinned ->
+private fun ByteArray.toNSData(): NSData =
+    usePinned { pinned ->
         val m = NSMutableData()
-        m.setLength(full.size.convert())
+        m.setLength(size.convert())
         val dest = m.mutableBytes ?: error("mutableBytes")
-        memcpy(dest, pinned.addressOf(0), full.size.convert())
+        memcpy(dest, pinned.addressOf(0), size.convert())
         m
     }
-}
-
-private fun parseManufacturerFromIosAdvertisement(data: NSData): String? {
-    val bytes = data.toByteArray()
-    if (bytes.size < 2 + 6) return null
-    val id = (bytes[0].toInt() and 0xFF) or ((bytes[1].toInt() and 0xFF) shl 8)
-    if (id != CLICK_BLE_MANUFACTURER_ID) return null
-    val rest = bytes.copyOfRange(2, bytes.size)
-    return parseBleManufacturerPayload(rest)
-}
-
-private fun parseServiceUuidFromIosAdvertisement(raw: Any?): String? {
-    val uuids = raw as? List<*> ?: return null
-    for (uuid in uuids) {
-        val token = parseProximityServiceUuidString((uuid as? CBUUID)?.UUIDString)
-        if (token != null) return token
-    }
-    return null
-}
 
 @OptIn(ExperimentalForeignApi::class)
 private fun prepareProximityAudioSession() {
@@ -167,6 +151,11 @@ class IosProximityManager : ProximityManager {
 
     private var peripheralManager: CBPeripheralManager? = null
     private var centralManager: CBCentralManager? = null
+    private var peripheralDelegate: NSObject? = null
+    private var centralDelegate: NSObject? = null
+    private var discoveredPeripheralDelegate: NSObject? = null
+    private var tokenCharacteristic: CBMutableCharacteristic? = null
+    private val connectingPeripheralIds = mutableSetOf<String>()
     private var audioPlayer: AVAudioPlayer? = null
     private var audioRecorder: AVAudioRecorder? = null
 
@@ -187,11 +176,12 @@ class IosProximityManager : ProximityManager {
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
         enforceProximityAudioPermission()
-        stopAll()
-        val payload = runCatching { buildIosManufacturerBlock(ephemeralToken) }.getOrElse { return }
+        stopPeripheralOnly()
+        val payload = runCatching { buildGattTokenPayload(ephemeralToken).toNSData() }.getOrElse { return }
         val serviceUuid = runCatching {
-            CBUUID.UUIDWithString(buildProximityServiceUuidString(ephemeralToken))
+            CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
         }.getOrElse { return }
+        val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
         prepareProximityAudioSession()
 
         withTimeoutOrNull(8_000L) {
@@ -206,14 +196,20 @@ class IosProximityManager : ProximityManager {
                 val del = object : NSObject(), CBPeripheralManagerDelegateProtocol {
                     override fun peripheralManagerDidUpdateState(peripheral: CBPeripheralManager) {
                         if (peripheral.state == CBManagerStatePoweredOn) {
+                            val characteristic = CBMutableCharacteristic(
+                                type = characteristicUuid,
+                                properties = CBCharacteristicPropertyRead,
+                                value = payload,
+                                permissions = CBAttributePermissionsReadable,
+                            )
+                            tokenCharacteristic = characteristic
+                            val service = CBMutableService(type = serviceUuid, primary = true)
+                            service.setCharacteristics(listOf(characteristic))
+                            peripheral.addService(service)
                             val adv = NSMutableDictionary()
                             adv.setObject(
                                 listOf(serviceUuid),
                                 forKey = NSString.create(string = CBAdvertisementDataServiceUUIDsKey),
-                            )
-                            adv.setObject(
-                                payload,
-                                forKey = NSString.create(string = CBAdvertisementDataManufacturerDataKey),
                             )
                             peripheral.startAdvertising(adv as Map<Any?, *>)
                         } else {
@@ -227,7 +223,30 @@ class IosProximityManager : ProximityManager {
                     ) {
                         finish()
                     }
+
+                    override fun peripheralManager(
+                        peripheral: CBPeripheralManager,
+                        didReceiveReadRequest: CBATTRequest,
+                    ) {
+                        if (didReceiveReadRequest.characteristic.UUID.UUIDString != CLICK_TOKEN_CHARACTERISTIC_UUID.uppercase()) {
+                            peripheral.respondToRequest(didReceiveReadRequest, withResult = CBATTErrorInvalidOffset)
+                            return
+                        }
+                        val value = tokenCharacteristic?.value ?: payload
+                        val offset = didReceiveReadRequest.offset.toInt()
+                        if (offset > value.length.toInt()) {
+                            peripheral.respondToRequest(didReceiveReadRequest, withResult = CBATTErrorInvalidOffset)
+                            return
+                        }
+                        if (offset != 0) {
+                            peripheral.respondToRequest(didReceiveReadRequest, withResult = CBATTErrorInvalidOffset)
+                            return
+                        }
+                        didReceiveReadRequest.value = value
+                        peripheral.respondToRequest(didReceiveReadRequest, withResult = CBATTErrorSuccess)
+                    }
                 }
+                peripheralDelegate = del
                 peripheralManager = CBPeripheralManager(delegate = del, queue = null)
                 cont.invokeOnCancellation {
                     peripheralManager?.stopAdvertising()
@@ -260,6 +279,48 @@ class IosProximityManager : ProximityManager {
         withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { cont ->
                 var started = false
+                val serviceUuid = CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
+                val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
+                val peripheralDel = object : NSObject(), CBPeripheralDelegateProtocol {
+                    override fun peripheral(
+                        peripheral: CBPeripheral,
+                        didDiscoverServices: NSError?,
+                    ) {
+                        peripheral.services?.forEach { service ->
+                            val svc = service as? CBService ?: return@forEach
+                            if (svc.UUID.UUIDString == CLICK_SERVICE_UUID.uppercase()) {
+                                peripheral.discoverCharacteristics(listOf(characteristicUuid), forService = svc)
+                            }
+                        }
+                    }
+
+                    override fun peripheral(
+                        peripheral: CBPeripheral,
+                        didDiscoverCharacteristicsForService: CBService,
+                        error: NSError?,
+                    ) {
+                        didDiscoverCharacteristicsForService.characteristics?.forEach { ch ->
+                            val characteristic = ch as? CBCharacteristic ?: return@forEach
+                            if (characteristic.UUID.UUIDString == CLICK_TOKEN_CHARACTERISTIC_UUID.uppercase()) {
+                                peripheral.readValueForCharacteristic(characteristic)
+                            }
+                        }
+                    }
+
+                    override fun peripheral(
+                        peripheral: CBPeripheral,
+                        didUpdateValueForCharacteristic: CBCharacteristic,
+                        error: NSError?,
+                    ) {
+                        if (didUpdateValueForCharacteristic.UUID.UUIDString == CLICK_TOKEN_CHARACTERISTIC_UUID.uppercase()) {
+                            val value = didUpdateValueForCharacteristic.value as? NSData
+                            parseGattTokenPayload(value?.toByteArray())?.let { heardTokens.add(it) }
+                        }
+                        centralManager?.cancelPeripheralConnection(peripheral)
+                        connectingPeripheralIds.remove(peripheral.identifier.UUIDString)
+                    }
+                }
+                discoveredPeripheralDelegate = peripheralDel
                 val del = object : NSObject(), CBCentralManagerDelegateProtocol {
                     override fun centralManagerDidUpdateState(central: CBCentralManager) {
                         if (central.state == CBManagerStatePoweredOn && !started) {
@@ -267,7 +328,7 @@ class IosProximityManager : ProximityManager {
                             val opts = mutableMapOf<Any?, Any?>(
                                 CBCentralManagerScanOptionAllowDuplicatesKey to NSNumber(bool = true),
                             )
-                            central.scanForPeripheralsWithServices(null, options = opts)
+                            central.scanForPeripheralsWithServices(listOf(serviceUuid), options = opts)
                             cont.resume(Unit)
                         }
                     }
@@ -278,12 +339,39 @@ class IosProximityManager : ProximityManager {
                         advertisementData: Map<Any?, *>,
                         RSSI: NSNumber,
                     ) {
-                        parseServiceUuidFromIosAdvertisement(advertisementData[CBAdvertisementDataServiceUUIDsKey])
-                            ?.let { heardTokens.add(it) }
-                        val raw = advertisementData[CBAdvertisementDataManufacturerDataKey] as? NSData
-                        parseManufacturerFromIosAdvertisement(raw ?: return)?.let { heardTokens.add(it) }
+                        val id = didDiscoverPeripheral.identifier.UUIDString
+                        if (connectingPeripheralIds.add(id)) {
+                            didDiscoverPeripheral.delegate = peripheralDel
+                            central.connectPeripheral(didDiscoverPeripheral, options = null)
+                        }
+                    }
+
+                    override fun centralManager(
+                        central: CBCentralManager,
+                        didConnectPeripheral: CBPeripheral,
+                    ) {
+                        didConnectPeripheral.discoverServices(listOf(serviceUuid))
+                    }
+
+                    @kotlinx.cinterop.ObjCSignatureOverride
+                    override fun centralManager(
+                        central: CBCentralManager,
+                        didFailToConnectPeripheral: CBPeripheral,
+                        error: NSError?,
+                    ) {
+                        connectingPeripheralIds.remove(didFailToConnectPeripheral.identifier.UUIDString)
+                    }
+
+                    @kotlinx.cinterop.ObjCSignatureOverride
+                    override fun centralManager(
+                        central: CBCentralManager,
+                        didDisconnectPeripheral: CBPeripheral,
+                        error: NSError?,
+                    ) {
+                        connectingPeripheralIds.remove(didDisconnectPeripheral.identifier.UUIDString)
                     }
                 }
+                centralDelegate = del
                 centralManager = CBCentralManager(delegate = del, queue = null)
                 cont.invokeOnCancellation {
                     centralManager?.stopScan()
@@ -331,14 +419,23 @@ class IosProximityManager : ProximityManager {
     }
 
     override fun stopAll() {
-        peripheralManager?.stopAdvertising()
-        peripheralManager = null
         centralManager?.stopScan()
         centralManager = null
+        centralDelegate = null
+        discoveredPeripheralDelegate = null
+        connectingPeripheralIds.clear()
+        stopPeripheralOnly()
+    }
+
+    private fun stopPeripheralOnly() {
+        peripheralManager?.stopAdvertising()
+        peripheralManager = null
         audioPlayer?.stop()
         audioPlayer = null
         audioRecorder?.stop()
         audioRecorder = null
+        tokenCharacteristic = null
+        peripheralDelegate = null
     }
 }
 

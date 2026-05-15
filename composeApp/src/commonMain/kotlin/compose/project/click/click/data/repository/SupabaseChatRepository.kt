@@ -54,6 +54,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -354,12 +355,14 @@ class SupabaseChatRepository(
             } ?: return null
 
             val connId = findConnectionIdBetween(viewerUserId, wrapPeer) ?: return null
-            val keys = MessageCrypto.deriveKeysForConnection(
-                connId,
-                listOf(viewerUserId, wrapPeer).sorted(),
-            )
-            val plain = MessageCrypto.decryptContent(memberRow.encryptedGroupKey, keys)
-            MessageCrypto.decodeGroupMasterKeyBase64(plain)
+            withContext(Dispatchers.Default) {
+                val keys = MessageCrypto.deriveKeysForConnection(
+                    connId,
+                    listOf(viewerUserId, wrapPeer).sorted(),
+                )
+                val plain = MessageCrypto.decryptContent(memberRow.encryptedGroupKey, keys)
+                MessageCrypto.decodeGroupMasterKeyBase64(plain)
+            }
         } catch (e: Exception) {
             println("ChatRepository: unwrap group key failed: ${e.redactedRestMessage()}")
             null
@@ -461,7 +464,7 @@ class SupabaseChatRepository(
         }
     }
 
-    private fun decryptMessage(message: Message, crypto: ResolvedChatCrypto?): Message {
+    private fun decryptMessageOnCurrentThread(message: Message, crypto: ResolvedChatCrypto?): Message {
         val decrypted =
             if (message.messageType == "call_log") {
                 message
@@ -491,6 +494,11 @@ class SupabaseChatRepository(
             }
         return decrypted.withDbDerivedDeliveryState()
     }
+
+    private suspend fun decryptMessage(message: Message, crypto: ResolvedChatCrypto?): Message =
+        withContext(Dispatchers.Default) {
+            decryptMessageOnCurrentThread(message, crypto)
+        }
 
     private suspend fun rememberChatConnectionRouting(chatId: String, connectionId: String) {
         if (chatId.isBlank() || connectionId.isBlank()) return
@@ -733,47 +741,52 @@ class SupabaseChatRepository(
         // Batch pairwise-key derivations so the crypto cache is written to once
         // under a single withLock instead of per-iteration inside mapNotNull
         // (which is a non-suspending lambda). Keeps NASA-P10 bounded-loop OK.
-        val derivedPairwise = HashMap<String, ResolvedChatCrypto.Pairwise>(connections.size)
-        for (connection in connections) {
-            val chatRow = chatByConnectionId[connection.id] ?: continue
-            val keys = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
-            derivedPairwise[chatRow.id] = ResolvedChatCrypto.Pairwise(keys)
+        val derivedPairwise = withContext(Dispatchers.Default) {
+            val result = HashMap<String, ResolvedChatCrypto.Pairwise>(connections.size)
+            for (connection in connections) {
+                val chatRow = chatByConnectionId[connection.id] ?: continue
+                val keys = MessageCrypto.deriveKeysForConnection(connection.id, connection.user_ids)
+                result[chatRow.id] = ResolvedChatCrypto.Pairwise(keys)
+            }
+            result
         }
         if (derivedPairwise.isNotEmpty()) {
             chatCryptoMutex.withLock { chatCryptoCache.putAll(derivedPairwise) }
         }
 
-        return connections.mapNotNull { connection ->
-            val chatRow = chatByConnectionId[connection.id]
-            val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
-            val otherUser = usersById[otherUserId] ?: User(
-                id = otherUserId,
-                name = "Connection",
-                email = null,
-                image = null,
-                createdAt = 0L
-            )
+        return withContext(Dispatchers.Default) {
+            connections.mapNotNull { connection ->
+                val chatRow = chatByConnectionId[connection.id]
+                val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return@mapNotNull null
+                val otherUser = usersById[otherUserId] ?: User(
+                    id = otherUserId,
+                    name = "Connection",
+                    email = null,
+                    image = null,
+                    createdAt = 0L
+                )
 
-            val rawLastMessage = chatRow?.let { latestByChatId[it.id]?.toMessage() }
-            val pairwise = chatRow?.let { derivedPairwise[it.id] }
-            val lastMessage = rawLastMessage?.let { decryptMessage(it, pairwise) }
-            val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
+                val rawLastMessage = chatRow?.let { latestByChatId[it.id]?.toMessage() }
+                val pairwise = chatRow?.let { derivedPairwise[it.id] }
+                val lastMessage = rawLastMessage?.let { decryptMessageOnCurrentThread(it, pairwise) }
+                val unreadCount = chatRow?.let { unreadByChatId[it.id] ?: 0 } ?: 0
 
-            ChatWithDetails(
-                chat = Chat(
-                    id = chatRow?.id,
-                    connectionId = connection.id,
-                    messages = emptyList()
-                ),
-                connection = connection,
-                otherUser = otherUser,
-                lastMessage = lastMessage,
-                unreadCount = unreadCount
-            )
-        }.sortedByDescending { chatDetails ->
-            chatDetails.lastMessage?.timeCreated
-                ?: chatDetails.connection.last_message_at
-                ?: chatDetails.connection.created
+                ChatWithDetails(
+                    chat = Chat(
+                        id = chatRow?.id,
+                        connectionId = connection.id,
+                        messages = emptyList()
+                    ),
+                    connection = connection,
+                    otherUser = otherUser,
+                    lastMessage = lastMessage,
+                    unreadCount = unreadCount
+                )
+            }.sortedByDescending { chatDetails ->
+                chatDetails.lastMessage?.timeCreated
+                    ?: chatDetails.connection.last_message_at
+                    ?: chatDetails.connection.created
+            }
         }
     }
 
@@ -855,72 +868,74 @@ class SupabaseChatRepository(
             val membersByGroupId = allMemberRows.groupBy { it.groupId }
             val usersById = allUsers.associateBy { it.id }
 
-            groupChats.mapNotNull { chatRow ->
-                val gid = chatRow.groupId ?: return@mapNotNull null
-                val group = groupsById[gid] ?: return@mapNotNull null
+            withContext(Dispatchers.Default) {
+                groupChats.mapNotNull { chatRow ->
+                    val gid = chatRow.groupId ?: return@mapNotNull null
+                    val group = groupsById[gid] ?: return@mapNotNull null
 
-                val memberIds = membersByGroupId[gid]
-                    ?.map { it.userId }?.distinct()
-                    ?: return@mapNotNull null
-                if (memberIds.isEmpty()) return@mapNotNull null
+                    val memberIds = membersByGroupId[gid]
+                        ?.map { it.userId }?.distinct()
+                        ?: return@mapNotNull null
+                    if (memberIds.isEmpty()) return@mapNotNull null
 
-                val title = group.name.ifBlank { "Clique" }
-                val anchor = group.keyAnchorUserId
-                    ?: memberIds.filter { it != group.createdBy }.minOrNull()
-                    ?: memberIds.firstOrNull()
-                    ?: return@mapNotNull null
-                val displayPeer = memberIds.firstOrNull { it != userId } ?: userId
-                val otherUser = usersById[displayPeer] ?: User(
-                    id = gid,
-                    name = title,
-                    email = null,
-                    image = null,
-                    createdAt = 0L,
-                )
-                val groupMemberUsers = memberIds
-                    .filter { it != userId }
-                    .mapNotNull { uid -> usersById[uid] }
-                    .sortedWith(
-                        compareByDescending<User> {
-                            maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L)
-                        }.thenBy { it.name ?: "" }
-                            .thenBy { it.id },
+                    val title = group.name.ifBlank { "Clique" }
+                    val anchor = group.keyAnchorUserId
+                        ?: memberIds.filter { it != group.createdBy }.minOrNull()
+                        ?: memberIds.firstOrNull()
+                        ?: return@mapNotNull null
+                    val displayPeer = memberIds.firstOrNull { it != userId } ?: userId
+                    val otherUser = usersById[displayPeer] ?: User(
+                        id = gid,
+                        name = title,
+                        email = null,
+                        image = null,
+                        createdAt = 0L,
+                    )
+                    val groupMemberUsers = memberIds
+                        .filter { it != userId }
+                        .mapNotNull { uid -> usersById[uid] }
+                        .sortedWith(
+                            compareByDescending<User> {
+                                maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L)
+                            }.thenBy { it.name ?: "" }
+                                .thenBy { it.id },
+                        )
+
+                    val clique = GroupCliqueDetails(
+                        groupId = gid,
+                        name = title,
+                        createdByUserId = group.createdBy,
+                        keyAnchorUserId = anchor,
+                        memberUserIds = memberIds,
                     )
 
-                val clique = GroupCliqueDetails(
-                    groupId = gid,
-                    name = title,
-                    createdByUserId = group.createdBy,
-                    keyAnchorUserId = anchor,
-                    memberUserIds = memberIds,
-                )
-
-                val rawLast = latestByChatId[chatRow.id]?.toMessage()
-                val lastMessage = rawLast?.let { decryptMessage(it, null) }
-                val synthetic = syntheticConnectionForGroupClique(
-                    groupId = gid,
-                    memberUserIds = memberIds,
-                    lastMessageAt = lastMessage?.timeCreated ?: chatRow.updatedAt,
-                )
-
-                ChatWithDetails(
-                    chat = Chat(
-                        id = chatRow.id,
-                        connectionId = null,
+                    val rawLast = latestByChatId[chatRow.id]?.toMessage()
+                    val lastMessage = rawLast?.let { decryptMessageOnCurrentThread(it, null) }
+                    val synthetic = syntheticConnectionForGroupClique(
                         groupId = gid,
-                        messages = emptyList(),
-                    ),
-                    connection = synthetic,
-                    otherUser = otherUser,
-                    lastMessage = lastMessage,
-                    unreadCount = unreadByChatId[chatRow.id] ?: 0,
-                    groupClique = clique,
-                    groupMemberUsers = groupMemberUsers,
-                )
-            }.sortedByDescending { d ->
-                d.lastMessage?.timeCreated
-                    ?: d.connection.last_message_at
-                    ?: d.connection.created
+                        memberUserIds = memberIds,
+                        lastMessageAt = lastMessage?.timeCreated ?: chatRow.updatedAt,
+                    )
+
+                    ChatWithDetails(
+                        chat = Chat(
+                            id = chatRow.id,
+                            connectionId = null,
+                            groupId = gid,
+                            messages = emptyList(),
+                        ),
+                        connection = synthetic,
+                        otherUser = otherUser,
+                        lastMessage = lastMessage,
+                        unreadCount = unreadByChatId[chatRow.id] ?: 0,
+                        groupClique = clique,
+                        groupMemberUsers = groupMemberUsers,
+                    )
+                }.sortedByDescending { d ->
+                    d.lastMessage?.timeCreated
+                        ?: d.connection.last_message_at
+                        ?: d.connection.created
+                }
             }
         } catch (e: Exception) {
             println("ChatRepository: group chats fetch failed: ${e.redactedRestMessage()}")
@@ -1024,7 +1039,7 @@ class SupabaseChatRepository(
     override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId)
-            supabase.from("messages")
+            val rows = supabase.from("messages")
                 .select {
                     filter {
                         eq("chat_id", chatId)
@@ -1032,7 +1047,9 @@ class SupabaseChatRepository(
                     order("time_created", Order.ASCENDING)
                 }
                 .decodeList<Message>()
-                .map { decryptMessage(it, crypto) }
+            withContext(Dispatchers.Default) {
+                rows.map { decryptMessageOnCurrentThread(it, crypto) }
+            }
         } catch (e: Exception) {
             println("Error fetching messages: ${e.redactedRestMessage()}")
             null
@@ -2139,9 +2156,11 @@ class SupabaseChatRepository(
                 println("ChatRepository: decoded base64-wrapped encrypted media payload for chat=$chatId")
             }
             runCatching {
-                when (crypto) {
-                    is ResolvedChatCrypto.GroupMaster -> MessageCrypto.decryptMediaBytes(normalized, crypto.masterKey)
-                    is ResolvedChatCrypto.Pairwise -> MessageCrypto.decryptMediaBytes(normalized, crypto.keys)
+                withContext(Dispatchers.Default) {
+                    when (crypto) {
+                        is ResolvedChatCrypto.GroupMaster -> MessageCrypto.decryptMediaBytes(normalized, crypto.masterKey)
+                        is ResolvedChatCrypto.Pairwise -> MessageCrypto.decryptMediaBytes(normalized, crypto.keys)
+                    }
                 }
             }.onFailure { err ->
                 println("ChatRepository: media decrypt failed for chat=$chatId: ${err.redactedRestMessage()}")

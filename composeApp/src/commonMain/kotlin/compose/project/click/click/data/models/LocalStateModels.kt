@@ -52,6 +52,25 @@ data class CachedAppSnapshot(
     val locationPreferences: LocationPreferences = LocationPreferences(),
     val archivedConnectionIds: Set<String> = emptySet(),
     val hiddenConnectionIds: Set<String> = emptySet(),
+    val cachedChatThreads: List<CachedChatThread> = emptyList(),
+    /**
+     * Last successful unified inbox (direct + group rows) for instant Clicks list paint on cold start.
+     */
+    val inboxFeedChats: List<ChatWithDetails> = emptyList(),
+)
+
+/**
+ * Locally decrypted chat payload cached after sync. This is persisted inside the encrypted
+ * app snapshot so chat navigation can paint from disk without waiting on network or E2EE.
+ */
+@Serializable
+data class CachedChatThread(
+    val connectionId: String,
+    val chatId: String,
+    val cachedAtMs: Long,
+    val messages: List<Message> = emptyList(),
+    val participants: List<User> = emptyList(),
+    val reactions: List<MessageReaction> = emptyList(),
 )
 
 @Serializable

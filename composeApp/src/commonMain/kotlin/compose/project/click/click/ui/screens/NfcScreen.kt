@@ -1,7 +1,14 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.ProximityManager
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
@@ -174,112 +182,132 @@ fun NfcScreen(
                         .padding(horizontal = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    when (val state = connectionState) {
-                        is ConnectionState.Idle -> {
-                            NfcIdleContent(
-                                onOpenAppSettings = { openApplicationSystemSettings() },
-                                onStartScanning = {
-                                    startTapAfterHardwarePermissionGate()
-                                },
-                                supportsTap = supportsTap,
-                                capabilityNote = capabilityNote,
-                                onOpenSettings = { proximityManager.openRadiosSettings() },
-                            )
-                        }
-                        is ConnectionState.ProximityFetchingLocation -> {
-                            NfcFetchingLocationContent()
-                        }
-                        is ConnectionState.ProximityHandshaking -> {
-                            NfcScanningContent()
-                        }
-                        is ConnectionState.ProximityResolving -> {
-                            NfcMatchingPeersContent()
-                        }
-                        is ConnectionState.PendingConfirmation -> {
-                            ProximityConfirmConnectionsContent(
-                                users = state.users,
-                                onConfirmAll = {
-                                    onProximityFinalizeStart()
-                                    scope.launch {
-                                        val vibe = withContext(Dispatchers.Default) {
-                                            runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                                        }
-                                        val (la, lo) = connectionViewModel.lastProximityCoordinates()
-                                        val weatherLabel = withContext(Dispatchers.Default) {
-                                            if (
-                                                la != null && lo != null &&
-                                                la.isFinite() && lo.isFinite() &&
-                                                !(la == 0.0 && lo == 0.0)
-                                            ) {
-                                                openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
-                                            } else {
-                                                null
+                    AnimatedContent(
+                        targetState = connectionState,
+                        transitionSpec = {
+                            (fadeIn(spring(dampingRatio = 0.82f, stiffness = 420f)) +
+                                scaleIn(
+                                    initialScale = 0.96f,
+                                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f),
+                                ))
+                                .togetherWith(
+                                    fadeOut(spring(dampingRatio = 0.9f, stiffness = 520f)) +
+                                        scaleOut(
+                                            targetScale = 0.98f,
+                                            animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
+                                        )
+                                )
+                                .using(SizeTransform(clip = false))
+                        },
+                        label = "tap_connect_state",
+                    ) { state ->
+                        when (state) {
+                            is ConnectionState.Idle -> {
+                                NfcIdleContent(
+                                    onOpenAppSettings = { openApplicationSystemSettings() },
+                                    onStartScanning = {
+                                        startTapAfterHardwarePermissionGate()
+                                    },
+                                    supportsTap = supportsTap,
+                                    capabilityNote = capabilityNote,
+                                    onOpenSettings = { proximityManager.openRadiosSettings() },
+                                )
+                            }
+                            is ConnectionState.ProximityFetchingLocation -> {
+                                NfcFetchingLocationContent()
+                            }
+                            is ConnectionState.ProximityHandshaking -> {
+                                NfcScanningContent()
+                            }
+                            is ConnectionState.ProximityResolving -> {
+                                NfcMatchingPeersContent()
+                            }
+                            is ConnectionState.PendingConfirmation -> {
+                                ProximityConfirmConnectionsContent(
+                                    users = state.users,
+                                    onConfirmAll = {
+                                        onProximityFinalizeStart()
+                                        scope.launch {
+                                            val vibe = withContext(Dispatchers.Default) {
+                                                runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
                                             }
+                                            val (la, lo) = connectionViewModel.lastProximityCoordinates()
+                                            val weatherLabel = withContext(Dispatchers.Default) {
+                                                if (
+                                                    la != null && lo != null &&
+                                                    la.isFinite() && lo.isFinite() &&
+                                                    !(la == 0.0 && lo == 0.0)
+                                                ) {
+                                                    openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
+                                                } else {
+                                                    null
+                                                }
+                                            }
+                                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                            val sensors = captureConnectionSensorContext(
+                                                ambientNoiseMonitor = ambientNoiseMonitor,
+                                                barometricHeightMonitor = barometricHeightMonitor,
+                                                ambientNoiseOptIn = noiseOptIn,
+                                                barometricContextOptIn = baroOptIn,
+                                            )
+                                            connectionViewModel.confirmProximityConnection(
+                                                peerUsers = state.users,
+                                                currentUserId = userId,
+                                                hardwareVibe = vibe,
+                                                weatherSnapshotLabel = weatherLabel,
+                                                sensorContext = sensors,
+                                            )
                                         }
-                                        val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                        val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                        val sensors = captureConnectionSensorContext(
-                                            ambientNoiseMonitor = ambientNoiseMonitor,
-                                            barometricHeightMonitor = barometricHeightMonitor,
-                                            ambientNoiseOptIn = noiseOptIn,
-                                            barometricContextOptIn = baroOptIn,
-                                        )
-                                        connectionViewModel.confirmProximityConnection(
-                                            peerUsers = state.users,
+                                    },
+                                    onCancel = { connectionViewModel.resetConnectionState() },
+                                )
+                            }
+                            is ConnectionState.TaggingContext -> {
+                                ProximityAwaitingContextContent(targetUsers = state.targetUsers)
+                            }
+                            is ConnectionState.Loading -> {
+                                NfcCreatingConnectionContent()
+                            }
+                            is ConnectionState.SecuringConnection -> {
+                                NfcCreatingConnectionContent(title = "Securing Connection...")
+                            }
+                            is ConnectionState.ProximityCapturedOfflineSyncing -> {
+                                ProximityOfflineCapturedContent(
+                                    message = state.message,
+                                    onTryNow = {
+                                        connectionViewModel.tryFlushPendingProximityHandshakes(
+                                            jwt = authToken,
                                             currentUserId = userId,
-                                            hardwareVibe = vibe,
-                                            weatherSnapshotLabel = weatherLabel,
-                                            sensorContext = sensors,
                                         )
+                                    },
+                                    onDismiss = { connectionViewModel.resetConnectionState() },
+                                )
+                            }
+                            is ConnectionState.Success -> {
+                                NfcSuccessContent(
+                                    connection = state.connection,
+                                    connectedUser = state.connectedUser,
+                                    onViewConnection = {
+                                        onConnectionCreated(state.connection.id)
+                                    },
+                                    onCreateAnother = {
+                                        connectionViewModel.resetConnectionState()
                                     }
-                                },
-                                onCancel = { connectionViewModel.resetConnectionState() },
-                            )
-                        }
-                        is ConnectionState.TaggingContext -> {
-                            ProximityAwaitingContextContent(targetUsers = state.targetUsers)
-                        }
-                        is ConnectionState.Loading -> {
-                            NfcCreatingConnectionContent()
-                        }
-                        is ConnectionState.SecuringConnection -> {
-                            NfcCreatingConnectionContent(title = "Securing Connection...")
-                        }
-                        is ConnectionState.ProximityCapturedOfflineSyncing -> {
-                            ProximityOfflineCapturedContent(
-                                message = state.message,
-                                onTryNow = {
-                                    connectionViewModel.tryFlushPendingProximityHandshakes(
-                                        jwt = authToken,
-                                        currentUserId = userId,
-                                    )
-                                },
-                                onDismiss = { connectionViewModel.resetConnectionState() },
-                            )
-                        }
-                        is ConnectionState.Success -> {
-                            NfcSuccessContent(
-                                connection = state.connection,
-                                connectedUser = state.connectedUser,
-                                onViewConnection = {
-                                    onConnectionCreated(state.connection.id)
-                                },
-                                onCreateAnother = {
-                                    connectionViewModel.resetConnectionState()
-                                }
-                            )
-                        }
-                        is ConnectionState.QrAwaitingContext -> {
-                            Box(modifier = Modifier.fillMaxSize())
-                        }
-                        is ConnectionState.Error -> {
-                            NfcErrorContent(
-                                message = state.message,
-                                onRetry = {
-                                    startTapAfterHardwarePermissionGate()
-                                },
-                                onDismiss = { connectionViewModel.resetConnectionState() }
-                            )
+                                )
+                            }
+                            is ConnectionState.QrAwaitingContext -> {
+                                Box(modifier = Modifier.fillMaxSize())
+                            }
+                            is ConnectionState.Error -> {
+                                NfcErrorContent(
+                                    message = state.message,
+                                    onRetry = {
+                                        startTapAfterHardwarePermissionGate()
+                                    },
+                                    onDismiss = { connectionViewModel.resetConnectionState() }
+                                )
+                            }
                         }
                     }
                 }
@@ -341,6 +369,7 @@ fun NfcScreen(
                         },
                         onConfirm = { contextTag, noiseOptIn ->
                             if (tagging.isNewConnection) {
+                                PlatformHapticsPolicy.successNotification()
                                 onProximityFinalizeStart()
                             }
                             scope.launch {
@@ -594,22 +623,81 @@ private fun NfcIdleContent(
     capabilityNote: String,
     onOpenSettings: () -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "tap_idle")
+    val haloScale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "tap_idle_halo_scale",
+    )
+    val haloAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.16f,
+        targetValue = 0.34f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "tap_idle_halo_alpha",
+    )
     Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 430.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Default.BluetoothSearching,
-            contentDescription = null,
-            modifier = Modifier.size(120.dp),
-            tint = if (supportsTap) {
-                PrimaryBlue
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+        Box(
+            modifier = Modifier.size(184.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .scale(haloScale)
+                    .alpha(if (supportsTap) haloAlpha else 0.12f)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                PrimaryBlue.copy(alpha = 0.48f),
+                                PrimaryBlue.copy(alpha = 0.08f),
+                                Color.Transparent,
+                            ),
+                        ),
+                        shape = CircleShape,
+                    ),
+            )
+            Surface(
+                modifier = Modifier.size(128.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                tonalElevation = 8.dp,
+                shadowElevation = 18.dp,
+                border = BorderStroke(
+                    1.dp,
+                    PrimaryBlue.copy(alpha = if (supportsTap) 0.28f else 0.1f),
+                ),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.BluetoothSearching,
+                        contentDescription = null,
+                        modifier = Modifier.size(58.dp),
+                        tint = if (supportsTap) {
+                            PrimaryBlue
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        },
+                    )
+                }
             }
-        )
+        }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(22.dp))
 
         Text(
             text = if (supportsTap) "Ready to Connect" else "Tap to Connect unavailable",
@@ -629,21 +717,22 @@ private fun NfcIdleContent(
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 20.dp)
         )
 
         Spacer(modifier = Modifier.height(20.dp))
 
         Card(
-            modifier = Modifier.fillMaxWidth(0.86f),
-            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
-            )
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "How Tap to Connect works",
@@ -658,13 +747,13 @@ private fun NfcIdleContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(26.dp))
 
         if (supportsTap) {
             Button(
                 onClick = onStartScanning,
                 modifier = Modifier
-                    .fillMaxWidth(0.7f)
+                    .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -690,7 +779,7 @@ private fun NfcIdleContent(
             Button(
                 onClick = onOpenSettings,
                 modifier = Modifier
-                    .fillMaxWidth(0.7f)
+                    .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
                 colors = ButtonDefaults.buttonColors(

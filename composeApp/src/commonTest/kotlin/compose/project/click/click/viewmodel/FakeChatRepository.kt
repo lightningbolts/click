@@ -35,6 +35,7 @@ class FakeChatRepository(
     var onFetchUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchDirectUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchGroupUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
+    var onDecryptGroupChatPreview: suspend (String, String) -> Message? = { _, _ -> null },
     var onFetchArchivedUserChatsWithDetails: suspend (String) -> List<ChatWithDetails> = { emptyList() },
     var onFetchChatWithDetails: suspend (String, String) -> ChatWithDetails? = { _, _ -> null },
     var onFetchMessagesForChat: suspend (String, String?) -> List<Message>? = { _, _ -> emptyList() },
@@ -85,6 +86,9 @@ class FakeChatRepository(
 
     override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchGroupUserChatsWithDetails(userId)
+
+    override suspend fun decryptGroupChatPreview(chatId: String, viewerUserId: String): Message? =
+        onDecryptGroupChatPreview(chatId, viewerUserId)
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)

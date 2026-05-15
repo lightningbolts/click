@@ -1,12 +1,17 @@
 package compose.project.click.click.data
 
+import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.CachedChatThread
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.CachedAppSnapshot
+import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.models.isResolvedDisplayName
+import compose.project.click.click.data.models.isActiveForUser
+import compose.project.click.click.data.models.isArchivedChannelForUser
 import compose.project.click.click.data.models.resolveDisplayName
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.repository.NotificationPreferencesRepository
@@ -19,6 +24,7 @@ import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +44,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -63,6 +70,7 @@ object AppDataManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var presenceHeartbeatJob: Job? = null
     private var pendingSyncJob: Job? = null
+    private var chatPrefetchJob: Job? = null
     private var pendingSyncPausedForAuth: Boolean = false
     
     /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
@@ -113,6 +121,21 @@ object AppDataManager {
     private val _connectedUsers = MutableStateFlow<Map<String, User>>(emptyMap())
     val connectedUsers: StateFlow<Map<String, User>> = _connectedUsers.asStateFlow()
 
+    private val _cachedChatThreads = MutableStateFlow<Map<String, CachedChatThread>>(emptyMap())
+    val cachedChatThreads: StateFlow<Map<String, CachedChatThread>> = _cachedChatThreads.asStateFlow()
+
+    /**
+     * Unified inbox rows persisted in [CachedAppSnapshot] for instant Clicks list on cold start
+     * (includes verified group chats, not only [connections]).
+     */
+    private val _inboxFeedChats = MutableStateFlow<List<ChatWithDetails>>(emptyList())
+    val inboxFeedChats: StateFlow<List<ChatWithDetails>> = _inboxFeedChats.asStateFlow()
+
+    fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
+        _inboxFeedChats.value = chats
+        scope.launch { persistSnapshot() }
+    }
+
     // Current user's availability
     private val _userAvailability = MutableStateFlow<UserAvailability?>(null)
     val userAvailability: StateFlow<UserAvailability?> = _userAvailability.asStateFlow()
@@ -133,6 +156,8 @@ object AppDataManager {
     private const val STARTUP_TIMEOUT_MS = 15_000L
     private const val TOKEN_REFRESH_SKEW_MS = 60_000L
     private const val FOREGROUND_RECOVERY_DEBOUNCE_MS = 900L
+    private const val CHAT_PREFETCH_LIMIT = 12
+    private const val CHAT_PREFETCH_MAX_MESSAGES = 80
 
     private var loadAllDataJob: Job? = null
     private var lastForegroundRecoveryMs: Long = 0L
@@ -259,6 +284,79 @@ object AppDataManager {
         loadAllDataJob?.cancel()
         loadAllDataJob = scope.launch {
             loadAllData()
+        }
+    }
+
+    fun cachedChatThreadFor(threadId: String): CachedChatThread? {
+        if (threadId.isBlank()) return null
+        val threads = _cachedChatThreads.value
+        return threads[threadId] ?: threads.values.firstOrNull { it.chatId == threadId }
+    }
+
+    fun cacheChatThread(
+        connectionId: String,
+        chatId: String,
+        messages: List<Message>,
+        participants: List<User>,
+        reactions: List<MessageReaction> = emptyList(),
+    ) {
+        if (connectionId.isBlank() || chatId.isBlank()) return
+        val boundedMessages = messages.takeLast(CHAT_PREFETCH_MAX_MESSAGES)
+        val thread = CachedChatThread(
+            connectionId = connectionId,
+            chatId = chatId,
+            cachedAtMs = Clock.System.now().toEpochMilliseconds(),
+            messages = boundedMessages,
+            participants = participants.distinctBy { it.id },
+            reactions = reactions,
+        )
+        _cachedChatThreads.value = _cachedChatThreads.value + (connectionId to thread)
+        val last = boundedMessages.lastOrNull()
+        if (last != null) {
+            updateConnectionChatActivity(connectionId, last.timeCreated, last)
+        } else {
+            scope.launch { persistSnapshot() }
+        }
+    }
+
+    private fun startSilentChatPrefetch(userId: String) {
+        if (_ghostModeEnabled.value || userId.isBlank()) return
+        chatPrefetchJob?.cancel()
+        chatPrefetchJob = scope.launch(chatMediaDispatcher) {
+            runCatching {
+                val direct = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
+                val groups = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                val rows = (direct.await() + groups.await())
+                    .filter {
+                        it.connection.isActiveForUser(_archivedConnectionIds.value, _hiddenConnectionIds.value) ||
+                            it.connection.isArchivedChannelForUser(_archivedConnectionIds.value, _hiddenConnectionIds.value)
+                    }
+                    .distinctBy { it.connection.id }
+                    .sortedByDescending { it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created }
+                    .take(CHAT_PREFETCH_LIMIT)
+                for (chat in rows) {
+                    val chatId = chat.chat.id ?: continue
+                    if (chat.groupClique == null) {
+                        chatRepository.cacheEncryptionKeys(chatId, chat.connection.id, chat.connection.user_ids)
+                    }
+                    val messages = chatRepository.fetchMessagesForChat(chatId, userId)?.takeLast(CHAT_PREFETCH_MAX_MESSAGES)
+                        ?: continue
+                    val participants = chatRepository.fetchChatParticipants(chatId)
+                    val reactions = runCatching { chatRepository.fetchReactionsForChat(chatId) }.getOrElse { emptyList() }
+                    withContext(Dispatchers.Default) {
+                        cacheChatThread(
+                            connectionId = chat.connection.id,
+                            chatId = chatId,
+                            messages = messages,
+                            participants = participants,
+                            reactions = reactions,
+                        )
+                    }
+                }
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
+                println("AppDataManager: silent chat prefetch failed: ${e.redactedRestMessage()}")
+            }
         }
     }
     
@@ -469,6 +567,7 @@ object AppDataManager {
                     _isDataLoaded.value = true
                     lastRefreshTime = Clock.System.now().toEpochMilliseconds()
                     persistSnapshot()
+                    startSilentChatPrefetch(user.id)
 
                     // Keep first paint fast: hydrate connected users in background instead of
                     // blocking Home readiness on this network call.
@@ -532,6 +631,8 @@ object AppDataManager {
     suspend fun clearData() {
         loadAllDataJob?.cancel()
         loadAllDataJob = null
+        chatPrefetchJob?.cancel()
+        chatPrefetchJob = null
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call
         // replaces the old stopGlobalPresence() + leaks derived keys into the
@@ -545,6 +646,8 @@ object AppDataManager {
         _archivedConnectionIds.value = emptySet()
         _hiddenConnectionIds.value = emptySet()
         _connectedUsers.value = emptyMap()
+        _cachedChatThreads.value = emptyMap()
+        _inboxFeedChats.value = emptyList()
         _userAvailability.value = null
         _isDataLoaded.value = false
         _isLoading.value = false
@@ -1208,7 +1311,12 @@ object AppDataManager {
             _locationPreferences.value = snapshot.locationPreferences
             _archivedConnectionIds.value = snapshot.archivedConnectionIds
             _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
-            _isDataLoaded.value = snapshot.currentUser != null || snapshot.connections.isNotEmpty()
+            _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
+            _inboxFeedChats.value = snapshot.inboxFeedChats
+            _isDataLoaded.value =
+                snapshot.currentUser != null ||
+                    snapshot.connections.isNotEmpty() ||
+                    snapshot.inboxFeedChats.isNotEmpty()
             snapshot
         }.onFailure {
             println("AppDataManager: Failed to restore cached snapshot: ${it.message}")
@@ -1223,6 +1331,8 @@ object AppDataManager {
             locationPreferences = _locationPreferences.value,
             archivedConnectionIds = _archivedConnectionIds.value,
             hiddenConnectionIds = _hiddenConnectionIds.value,
+            cachedChatThreads = _cachedChatThreads.value.values.toList(),
+            inboxFeedChats = _inboxFeedChats.value,
         )
         runCatching {
             tokenStorage.saveCachedAppSnapshot(json.encodeToString(snapshot))
@@ -1231,4 +1341,3 @@ object AppDataManager {
         }
     }
 }
-

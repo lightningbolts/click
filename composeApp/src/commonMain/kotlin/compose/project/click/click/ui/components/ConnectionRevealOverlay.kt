@@ -3,8 +3,10 @@ package compose.project.click.click.ui.components
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +29,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import compose.project.click.click.PlatformHapticsPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +66,26 @@ fun ConnectionRevealOverlay(
             PlatformHapticsPolicy.successNotification()
         }
     }
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        entered = true
+    }
+    val cardScale by animateFloatAsState(
+        targetValue = if (entered) 1f else 0.88f,
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = 360f,
+        ),
+        label = "reveal_card_scale",
+    )
+    val cardAlpha by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.86f,
+            stiffness = 420f,
+        ),
+        label = "reveal_card_alpha",
+    )
     val infiniteTransition = rememberInfiniteTransition(label = "connection_reveal")
     val ringScale = infiniteTransition.animateFloat(
         initialValue = 0.72f,
@@ -103,7 +129,10 @@ fun ConnectionRevealOverlay(
         )
 
         Surface(
-            modifier = Modifier.widthIn(max = 340.dp),
+            modifier = Modifier
+                .widthIn(max = 340.dp)
+                .scale(cardScale)
+                .alpha(cardAlpha),
             shape = RoundedCornerShape(32.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
             tonalElevation = 8.dp,

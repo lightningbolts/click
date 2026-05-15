@@ -1,6 +1,5 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +23,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -112,6 +112,9 @@ fun ConnectionListUserAvatarFace(
                 text = initials,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.Center,
                 style = if (useCompactTypography) {
                     MaterialTheme.typography.labelMedium
                 } else {
@@ -166,9 +169,8 @@ fun AvatarWithOnlineIndicator(
 }
 
 /**
- * Stacked trio for verified group chats on the chat list.
- * When there are more than three members, shows the three most recently active (by [User.lastPolled] / [User.last_paired])
- * in a compact overlapping cluster (slight vertical fan) — never a single-face placeholder for large groups.
+ * Stacked cluster for verified group chats on the chat list. Overflow is rendered as a
+ * bounded "+N" circle so text never overlaps neighboring faces.
  */
 @Composable
 fun GroupAvatar(
@@ -177,24 +179,27 @@ fun GroupAvatar(
     avatarSize: Dp = 36.dp,
 ) {
     if (members.isEmpty()) return
-    val topUsers: List<User> = members
+    val sortedUsers: List<User> = members
         .sortedWith(
             compareByDescending<User> { maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L) }
                 .thenBy { it.name?.lowercase().orEmpty() }
                 .thenBy { it.id },
         )
-        .take(3)
+    val extraCount = (sortedUsers.size - 2).coerceAtLeast(0)
+    val visibleUsers = if (extraCount > 0) sortedUsers.take(2) else sortedUsers.take(3)
+    val stackCount = visibleUsers.size + if (extraCount > 0) 1 else 0
     val overlap = (avatarSize.value * 0.36f).dp
-    val stackWidth = avatarSize + overlap * (topUsers.size - 1).coerceAtLeast(0)
-    val borderColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val stackWidth = avatarSize + overlap * (stackCount - 1).coerceAtLeast(0)
+    val ringColor = MaterialTheme.colorScheme.background
+    val overflowDiameter = 40.dp
     Box(
         modifier = modifier
             .width(stackWidth)
             .height(avatarSize + 4.dp),
     ) {
-        topUsers.forEachIndexed { index, member ->
+        visibleUsers.forEachIndexed { index, member ->
             val profile: UserProfile = member.toUserProfile()
-            val verticalNudge = when (topUsers.size) {
+            val verticalNudge = when (stackCount) {
                 1 -> 0.dp
                 2 -> if (index == 0) 2.dp else 0.dp
                 else -> when (index) {
@@ -203,24 +208,59 @@ fun GroupAvatar(
                     else -> 3.dp
                 }
             }
-            Surface(
+            Box(
                 modifier = Modifier
                     .offset(x = overlap * index, y = verticalNudge)
                     .size(avatarSize)
                     .zIndex(index.toFloat())
                     .align(Alignment.BottomStart),
-                shape = CircleShape,
-                color = Color.Transparent,
-                border = BorderStroke(2.dp, borderColor),
             ) {
-                ConnectionListUserAvatarFace(
-                    displayName = profile.displayName,
-                    email = member.email,
-                    avatarUrl = profile.avatarUrl,
-                    userId = profile.id,
-                    modifier = Modifier.fillMaxSize(),
-                    useCompactTypography = avatarSize <= 38.dp,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .border(2.dp, ringColor, CircleShape),
+                ) {
+                    ConnectionListUserAvatarFace(
+                        displayName = profile.displayName,
+                        email = member.email,
+                        avatarUrl = profile.avatarUrl,
+                        userId = profile.id,
+                        modifier = Modifier.fillMaxSize(),
+                        useCompactTypography = avatarSize <= 38.dp,
+                    )
+                }
+            }
+        }
+        if (extraCount > 0) {
+            val index = visibleUsers.size
+            Box(
+                modifier = Modifier
+                    .offset(x = overlap * index, y = 3.dp)
+                    .size(overflowDiameter)
+                    .zIndex(100f + index.toFloat())
+                    .align(Alignment.BottomStart),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .border(2.dp, ringColor, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "+$extraCount",
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip,
+                        softWrap = false,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
