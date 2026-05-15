@@ -123,6 +123,7 @@ import compose.project.click.click.notifications.NotificationRuntimeState // pra
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
@@ -138,6 +139,8 @@ import compose.project.click.click.ui.components.ConnectionListUserAvatarFace //
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
@@ -149,6 +152,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
@@ -291,6 +295,7 @@ fun ConnectionsListView(
 
     // Connection menu state: holds the chatWithDetails for which the menu is open
     var pendingMenuChat by remember { mutableStateOf<ChatWithDetails?>(null) }
+    var pendingHubMenu by remember { mutableStateOf<ActiveHubEntry?>(null) }
 
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
@@ -760,6 +765,8 @@ fun ConnectionsListView(
                                     ActiveHubFeedRow(
                                         hub = hub,
                                         onClick = { onHubSelected?.invoke(hub) },
+                                        onOpenMenu = { pendingHubMenu = hub },
+                                        onLongPress = { pendingHubMenu = hub },
                                     )
                                 }
                             }
@@ -1123,13 +1130,274 @@ fun ConnectionsListView(
             },
         )
     }
+
+    if (pendingHubMenu != null) {
+        HubActionSheet(
+            hub = pendingHubMenu!!,
+            currentUserId = currentUserId,
+            viewModel = viewModel,
+            onDismiss = { pendingHubMenu = null },
+        )
+    }
     } // End outer Box
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HubActionSheet(
+    hub: ActiveHubEntry,
+    currentUserId: String?,
+    viewModel: ChatViewModel,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val scope = rememberCoroutineScope()
+    var details by remember(hub.hubId) {
+        mutableStateOf<ChatApiClient.HubDetailsDto?>(null)
+    }
+    var detailsLoadAttempted by remember(hub.hubId) { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showConfirm by remember { mutableStateOf(false) }
+    var confirmTitle by remember { mutableStateOf("") }
+    var confirmBody by remember { mutableStateOf("") }
+    var confirmButton by remember { mutableStateOf("") }
+    var confirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var editNameDraft by remember(hub.hubId) { mutableStateOf(hub.name) }
+    var editCategoryDraft by remember(hub.hubId) { mutableStateOf(hub.category) }
+
+    val resolvedCreatorId = details?.creatorId ?: hub.creatorId
+    val isCreator = !currentUserId.isNullOrBlank() && currentUserId == resolvedCreatorId
+
+    LaunchedEffect(hub.hubId) {
+        viewModel.fetchActiveHubDetails(hub.hubId) { result ->
+            scope.launch {
+                detailsLoadAttempted = true
+                result.onSuccess { loaded ->
+                    details = loaded
+                    editNameDraft = loaded.name
+                    editCategoryDraft = loaded.category
+                }
+            }
+        }
+    }
+
+    fun openConfirm(title: String, body: String, button: String, action: () -> Unit) {
+        confirmTitle = title
+        confirmBody = body
+        confirmButton = button
+        confirmAction = action
+        showConfirm = true
+    }
+
+    GlassModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(GlassSheetTokens.OledBlack)
+                .padding(bottom = 32.dp),
+        ) {
+            val title = details?.name ?: hub.name
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = GlassSheetTokens.OnOled,
+                modifier = Modifier
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+            HorizontalDivider(color = GlassSheetTokens.GlassBorder.copy(alpha = 0.5f))
+
+            BentoGlassOptionRow(
+                showBorder = false,
+                title = "Leave Hub",
+                subtitle = "Remove this hub from your list",
+                onClick = {
+                    openConfirm(
+                        title = "Leave hub?",
+                        body = "You will leave this community hub and lose quick access from your Groups list.",
+                        button = "Leave",
+                    ) {
+                        viewModel.leaveActiveHub(hub.hubId) { ok ->
+                            if (ok) scope.launch { onDismiss() }
+                        }
+                    }
+                },
+                destructive = true,
+                leading = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        tint = Color(0xFFFF6B6B),
+                    )
+                },
+            )
+
+            if (isCreator) {
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Edit Hub",
+                    subtitle = "Update name and category",
+                    onClick = {
+                        editNameDraft = details?.name ?: hub.name
+                        editCategoryDraft = details?.category ?: hub.category
+                        showEditDialog = true
+                    },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Edit,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted,
+                        )
+                    },
+                )
+
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Delete Hub",
+                    subtitle = "Kick all users and delete history",
+                    onClick = {
+                        openConfirm(
+                            title = "Delete hub?",
+                            body = "Are you sure? This will kick all users and delete the history.",
+                            button = "Delete",
+                        ) {
+                            viewModel.deleteActiveHub(hub.hubId) { ok ->
+                                if (ok) scope.launch { onDismiss() }
+                            }
+                        }
+                    },
+                    destructive = true,
+                    leading = {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6B6B),
+                        )
+                    },
+                )
+            } else if (!detailsLoadAttempted) {
+                Text(
+                    text = "Loading hub options…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = GlassSheetTokens.OnOledMuted,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+
+            Spacer(
+                modifier = Modifier
+                    .weight(1f, fill = true)
+                    .fillMaxWidth(),
+            )
+        }
+    }
+
+    if (showEditDialog && isCreator) {
+        GlassAlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit Hub") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = editNameDraft,
+                        onValueChange = { editNameDraft = it.take(80) },
+                        singleLine = true,
+                        label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = GlassSheetTokens.OnOled,
+                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            cursorColor = PrimaryBlue,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                        ),
+                    )
+                    OutlinedTextField(
+                        value = editCategoryDraft,
+                        onValueChange = { editCategoryDraft = it.take(40) },
+                        singleLine = true,
+                        label = { Text("Category", color = GlassSheetTokens.OnOledMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = GlassSheetTokens.OnOled,
+                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            cursorColor = PrimaryBlue,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                        ),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateActiveHub(
+                            hubId = hub.hubId,
+                            name = editNameDraft,
+                            category = editCategoryDraft,
+                        ) { ok ->
+                            if (ok) {
+                                scope.launch {
+                                    details = details?.copy(
+                                        name = editNameDraft.trim(),
+                                        category = editCategoryDraft.trim(),
+                                    )
+                                    showEditDialog = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = editNameDraft.isNotBlank() && editCategoryDraft.isNotBlank(),
+                ) {
+                    Text("Save", color = GlassSheetTokens.OnOled)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                }
+            },
+        )
+    }
+
+    if (showConfirm) {
+        GlassAlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text(confirmTitle) },
+            text = { Text(confirmBody) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val action = confirmAction
+                        showConfirm = false
+                        action?.invoke()
+                    },
+                ) {
+                    Text(confirmButton, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) {
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun ActiveHubFeedRow(
     hub: ActiveHubEntry,
     onClick: () -> Unit,
+    onOpenMenu: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     val rowInteraction = remember { MutableInteractionSource() }
@@ -1146,6 +1414,27 @@ private fun ActiveHubFeedRow(
         ),
         label = "hub_row_glass_border",
     )
+    val rowTapModifier = if (isIOS) {
+        Modifier.pointerInput(onClick, onLongPress) {
+            detectTapGestures(
+                onTap = { onClick() },
+                onLongPress = {
+                    PlatformHapticsPolicy.heavyImpact()
+                    onLongPress()
+                },
+            )
+        }
+    } else {
+        Modifier.combinedClickable(
+            interactionSource = rowInteraction,
+            indication = null,
+            onClick = onClick,
+            onLongClick = {
+                PlatformHapticsPolicy.heavyImpact()
+                onLongPress()
+            },
+        )
+    }
 
     Row(
         modifier = Modifier
@@ -1157,12 +1446,8 @@ private fun ActiveHubFeedRow(
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
             .background(GlassSheetTokens.GlassSurface)
-            .clickable(
-                interactionSource = rowInteraction,
-                indication = ripple(),
-                onClick = onClick,
-            )
-            .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 12.dp),
+            .then(rowTapModifier)
+            .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -1203,6 +1488,17 @@ private fun ActiveHubFeedRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconButton(
+            onClick = onOpenMenu,
+            modifier = Modifier.size(36.dp),
+        ) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = "Hub options",
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

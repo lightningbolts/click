@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
@@ -34,14 +35,18 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -61,9 +66,59 @@ import kotlin.random.Random
 private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
 
 @Serializable
-private data class HubCreatorRow(
+private data class HubDetailsRow(
+    val name: String? = null,
+    val category: String? = null,
     @SerialName("creator_id") val creatorId: String,
 )
+
+data class HubDetailsState(
+    val name: String,
+    val category: String,
+    val isCreator: Boolean,
+)
+
+sealed interface HubChatNavigationEvent {
+    data object PopBackToConnections : HubChatNavigationEvent
+}
+
+interface HubLifecycleGateway {
+    suspend fun updateHub(hubId: String, name: String, category: String, authToken: String): Result<Unit>
+    suspend fun deleteHub(hubId: String, authToken: String): Result<Unit>
+    suspend fun leaveHub(hubId: String, authToken: String): Result<Unit>
+}
+
+private class ChatApiHubLifecycleGateway(
+    private val chatApi: ChatApiClient,
+) : HubLifecycleGateway {
+    override suspend fun updateHub(
+        hubId: String,
+        name: String,
+        category: String,
+        authToken: String,
+    ): Result<Unit> = chatApi.updateHub(
+        hubId = hubId,
+        name = name,
+        category = category,
+        authToken = authToken,
+    )
+
+    override suspend fun deleteHub(hubId: String, authToken: String): Result<Unit> =
+        chatApi.deleteHub(hubId = hubId, authToken = authToken)
+
+    override suspend fun leaveHub(hubId: String, authToken: String): Result<Unit> =
+        chatApi.leaveHub(hubId = hubId, authToken = authToken)
+}
+
+interface ActiveHubCache {
+    fun removeActiveHub(hubId: String)
+}
+
+private object AppDataManagerActiveHubCache : ActiveHubCache {
+    override fun removeActiveHub(hubId: String) {
+        AppDataManager.removeActiveHub(hubId)
+    }
+}
 
 @Serializable
 private data class HubMessageRow(
@@ -99,9 +154,16 @@ class HubChatViewModel(
     private val realtimeChannelName: String,
     private val hubTitle: String,
     private val currentUserId: String,
+    private val hubCategory: String = "general",
+    private val creatorId: String? = null,
     private val hubLocationResolver: suspend () -> LocationResult? = { null },
     private val tokenStorage: TokenStorage = createTokenStorage(),
     private val chatApi: ChatApiClient = ChatApiClient(),
+    private val hubLifecycleGateway: HubLifecycleGateway = ChatApiHubLifecycleGateway(chatApi),
+    private val activeHubCache: ActiveHubCache = AppDataManagerActiveHubCache,
+    private val mutationDispatcher: CoroutineDispatcher = chatMediaDispatcher,
+    private val startRealtime: Boolean = true,
+    private val loadHubDetails: Boolean = true,
 ) : ViewModel(), SecureChatMediaHost {
 
     private val supabase by lazy { SupabaseConfig.client }
@@ -135,40 +197,68 @@ class HubChatViewModel(
     private val _isCreator = MutableStateFlow(false)
     val isCreator: StateFlow<Boolean> = _isCreator.asStateFlow()
 
+    private val _hubDetails = MutableStateFlow(
+        HubDetailsState(
+            name = hubTitle,
+            category = hubCategory.ifBlank { "general" },
+            isCreator = creatorId != null && creatorId == currentUserId,
+        ),
+    )
+    val hubDetails: StateFlow<HubDetailsState> = _hubDetails.asStateFlow()
+
+    private val navigationEventChannel = Channel<HubChatNavigationEvent>(capacity = Channel.BUFFERED)
+    val navigationEvents: Flow<HubChatNavigationEvent> = navigationEventChannel.receiveAsFlow()
+
     private val secureImageBytesCache =
         LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
     private val secureAudioPathCache =
         LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
-    val title: String get() = hubTitle
+    val title: String get() = _hubDetails.value.name
 
     private val senderUiCache = mutableMapOf<String, Pair<String, String?>>()
     private var hubChannel: RealtimeChannel? = null
     private var sessionJob: Job? = null
 
     init {
-        viewModelScope.launch(Dispatchers.Default) {
-            try {
-                val rows = supabase.from("hub_venues")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("creator_id")) {
-                        filter { eq("id", hubId) }
-                        limit(1)
+        _isCreator.value = _hubDetails.value.isCreator
+        if (loadHubDetails) {
+            viewModelScope.launch(chatMediaDispatcher) {
+                try {
+                    val rows = supabase.from("hub_venues")
+                        .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("name", "category", "creator_id")) {
+                            filter { eq("id", hubId) }
+                            limit(1)
+                        }
+                        .decodeList<HubDetailsRow>()
+                    val row = rows.firstOrNull()
+                    val ownsHub = row?.creatorId == currentUserId
+                    _isCreator.value = ownsHub
+                    _hubDetails.update { current ->
+                        current.copy(
+                            name = row?.name?.takeIf { it.isNotBlank() } ?: current.name,
+                            category = row?.category?.takeIf { it.isNotBlank() } ?: current.category,
+                            isCreator = ownsHub,
+                        )
                     }
-                    .decodeList<HubCreatorRow>()
-                _isCreator.value = rows.firstOrNull()?.creatorId == currentUserId
-            } catch (_: Exception) { }
+                } catch (_: Exception) { }
+            }
         }
-        sessionJob?.cancel()
-        sessionJob = viewModelScope.launch {
-            try {
-                loadInitialMessages()
-                _channelReady.value = true
-                runRealtimeSession()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _channelReady.value = true
-                println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
+        if (!startRealtime) {
+            _channelReady.value = true
+        } else {
+            sessionJob?.cancel()
+            sessionJob = viewModelScope.launch {
+                try {
+                    loadInitialMessages()
+                    _channelReady.value = true
+                    runRealtimeSession()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _channelReady.value = true
+                    println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
+                }
             }
         }
     }
@@ -234,6 +324,17 @@ class HubChatViewModel(
             secureAudioPathCache.clear()
             secureImageBytesCache.clear()
         }
+    }
+
+    private fun clearLocalHubState() {
+        sessionJob?.cancel()
+        sessionJob = null
+        _messages.value = emptyList()
+        _draft.value = ""
+        _occupantCount.value = 1
+        _outOfBounds.value = false
+        clearHubSecureMediaCache(purgePersistentCache = true)
+        activeHubCache.removeActiveHub(hubId)
     }
 
     private suspend fun CoroutineScope.runRealtimeSession() {
@@ -544,17 +645,25 @@ class HubChatViewModel(
         }
     }
 
-    fun editHubDetails(name: String, onResult: (Boolean) -> Unit) {
-        viewModelScope.launch {
+    fun editHubDetails(name: String, category: String, onResult: (Boolean) -> Unit = {}) {
+        val nextName = name.trim().take(80)
+        val nextCategory = category.trim().take(40)
+        if (nextName.isEmpty() || nextCategory.isEmpty()) {
+            _sendError.value = "Hub name and category are required"
+            onResult(false)
+            return
+        }
+        viewModelScope.launch(mutationDispatcher) {
             try {
                 val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                     ?: throw IllegalStateException("Please sign in again.")
-                chatApi.updateHub(
+                hubLifecycleGateway.updateHub(
                     hubId = hubId,
-                    name = name.trim().takeIf { it.isNotEmpty() },
-                    category = null,
+                    name = nextName,
+                    category = nextCategory,
                     authToken = jwt,
                 ).getOrThrow()
+                _hubDetails.update { it.copy(name = nextName, category = nextCategory) }
                 onResult(true)
             } catch (e: Exception) {
                 _sendError.value = e.message ?: "Could not update hub"
@@ -563,15 +672,36 @@ class HubChatViewModel(
         }
     }
 
-    fun deleteHub(onResult: (Boolean) -> Unit) {
-        viewModelScope.launch {
+    fun leaveHub(onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(mutationDispatcher) {
             try {
                 val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                     ?: throw IllegalStateException("Please sign in again.")
-                chatApi.deleteHub(
+                hubLifecycleGateway.leaveHub(
                     hubId = hubId,
                     authToken = jwt,
                 ).getOrThrow()
+                clearLocalHubState()
+                navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
+                onResult(true)
+            } catch (e: Exception) {
+                _sendError.value = e.message ?: "Could not leave hub"
+                onResult(false)
+            }
+        }
+    }
+
+    fun deleteHub(onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(mutationDispatcher) {
+            try {
+                val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Please sign in again.")
+                hubLifecycleGateway.deleteHub(
+                    hubId = hubId,
+                    authToken = jwt,
+                ).getOrThrow()
+                clearLocalHubState()
+                navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
                 onResult(true)
             } catch (e: Exception) {
                 _sendError.value = e.message ?: "Could not delete hub"

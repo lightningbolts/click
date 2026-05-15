@@ -28,6 +28,7 @@ import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: 
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
@@ -156,9 +157,10 @@ data class StagedChatImage(
 )
 
 class ChatViewModel(
-    tokenStorage: TokenStorage = createTokenStorage(),
+    private val tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
-    private val supabaseRepository: SupabaseRepository = SupabaseRepository()
+    private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
+    private val chatApi: ChatApiClient = ChatApiClient(),
 ) : ViewModel(), SecureChatMediaHost {
 
     private data class PrefetchedChatPayload(
@@ -3192,6 +3194,105 @@ class ChatViewModel(
                 _nudgeResult.value = "Could not rename group"
             }
             onComplete(ok)
+        }
+    }
+
+    fun fetchActiveHubDetails(
+        hubId: String,
+        onComplete: (Result<ChatApiClient.HubDetailsDto>) -> Unit,
+    ) {
+        viewModelScope.launch(chatMediaDispatcher) {
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            if (jwt == null) {
+                onComplete(Result.failure(IllegalStateException("Please sign in again.")))
+                return@launch
+            }
+            val result = chatApi.getHubDetails(hubId = hubId, authToken = jwt)
+            result.onSuccess { details ->
+                AppDataManager.updateActiveHubDetails(
+                    hubId = hubId,
+                    name = details.name,
+                    category = details.category,
+                    creatorId = details.creatorId,
+                )
+            }
+            onComplete(result)
+        }
+    }
+
+    fun updateActiveHub(
+        hubId: String,
+        name: String,
+        category: String,
+        onComplete: (Boolean) -> Unit = {},
+    ) {
+        val trimmedName = name.trim().take(80)
+        val trimmedCategory = category.trim().take(40)
+        if (trimmedName.isEmpty() || trimmedCategory.isEmpty()) {
+            _nudgeResult.value = "Hub name and category are required"
+            onComplete(false)
+            return
+        }
+        viewModelScope.launch(chatMediaDispatcher) {
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            if (jwt == null) {
+                _nudgeResult.value = "Please sign in again"
+                onComplete(false)
+                return@launch
+            }
+            val ok = chatApi.updateHub(
+                hubId = hubId,
+                name = trimmedName,
+                category = trimmedCategory,
+                authToken = jwt,
+            ).isSuccess
+            if (ok) {
+                AppDataManager.updateActiveHubDetails(hubId, trimmedName, trimmedCategory)
+                _nudgeResult.value = "Hub updated"
+            } else {
+                _nudgeResult.value = "Could not update hub"
+            }
+            onComplete(ok)
+        }
+    }
+
+    fun leaveActiveHub(hubId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(chatMediaDispatcher) {
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            if (jwt == null) {
+                _nudgeResult.value = "Please sign in again"
+                onComplete(false)
+                return@launch
+            }
+            val result = chatApi.leaveHub(hubId = hubId, authToken = jwt)
+            if (result.isSuccess) {
+                AppDataManager.removeActiveHub(hubId)
+                _nudgeResult.value = "You left the hub"
+            } else {
+                _nudgeResult.value = result.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+                    ?: "Could not leave hub"
+            }
+            onComplete(result.isSuccess)
+        }
+    }
+
+    fun deleteActiveHub(hubId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(chatMediaDispatcher) {
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            if (jwt == null) {
+                _nudgeResult.value = "Please sign in again"
+                onComplete(false)
+                return@launch
+            }
+            val result = chatApi.deleteHub(hubId = hubId, authToken = jwt)
+            if (result.isSuccess) {
+                AppDataManager.removeActiveHub(hubId)
+                _nudgeResult.value = "Hub deleted"
+            } else {
+                _nudgeResult.value = result.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+                    ?: "Could not delete hub"
+            }
+            onComplete(result.isSuccess)
         }
     }
 

@@ -64,6 +64,8 @@ data class ActiveHubEntry(
     val realtimeChannel: String,
     val occupantCount: Int = 1,
     val joinedAtMs: Long = 0L,
+    val category: String = "general",
+    val creatorId: String? = null,
 )
 
 /**
@@ -219,6 +221,28 @@ object AppDataManager {
 
     fun removeActiveHub(hubId: String) {
         _activeHubs.value = _activeHubs.value.filterNot { it.hubId == hubId }
+        persistActiveHubs()
+    }
+
+    fun updateActiveHubDetails(
+        hubId: String,
+        name: String,
+        category: String,
+        creatorId: String? = null,
+    ) {
+        val trimmedId = hubId.trim()
+        if (trimmedId.isEmpty()) return
+        _activeHubs.value = _activeHubs.value.map { entry ->
+            if (entry.hubId != trimmedId) {
+                entry
+            } else {
+                entry.copy(
+                    name = name.trim().ifBlank { entry.name },
+                    category = category.trim().ifBlank { entry.category },
+                    creatorId = creatorId ?: entry.creatorId,
+                )
+            }
+        }
         persistActiveHubs()
     }
 

@@ -95,6 +95,7 @@ import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
+import compose.project.click.click.viewmodel.HubChatNavigationEvent
 import compose.project.click.click.viewmodel.HubChatViewModel
 import kotlinx.coroutines.Job
 
@@ -103,7 +104,23 @@ data class HubChatNavArgs(
     val realtimeChannel: String,
     val hubTitle: String,
     val creatorId: String? = null,
+    val hubCategory: String = "general",
 )
+
+enum class HubSettingsMenuItem {
+    Leave,
+    Edit,
+    Delete,
+}
+
+fun visibleHubSettingsMenuItems(currentUserId: String, creatorId: String?): List<HubSettingsMenuItem> {
+    val isCreator = creatorId != null && currentUserId == creatorId
+    return if (isCreator) {
+        listOf(HubSettingsMenuItem.Leave, HubSettingsMenuItem.Edit, HubSettingsMenuItem.Delete)
+    } else {
+        listOf(HubSettingsMenuItem.Leave)
+    }
+}
 
 @Composable
 fun HubChatScreen(
@@ -124,6 +141,8 @@ fun HubChatScreen(
             realtimeChannelName = args.realtimeChannel,
             hubTitle = args.hubTitle,
             currentUserId = currentUserId,
+            hubCategory = args.hubCategory,
+            creatorId = args.creatorId,
             hubLocationResolver = resolveHubGatekeeperLocation,
         )
     }
@@ -135,9 +154,12 @@ fun HubChatScreen(
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
 
     val isCreator by viewModel.isCreator.collectAsState()
+    val hubDetails by viewModel.hubDetails.collectAsState()
+    var settingsMenuExpanded by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var editNameDraft by remember { mutableStateOf(args.hubTitle) }
+    var editNameDraft by remember { mutableStateOf(hubDetails.name) }
+    var editCategoryDraft by remember { mutableStateOf(hubDetails.category) }
 
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
@@ -156,6 +178,21 @@ fun HubChatScreen(
                 message = "You are no longer at this location.",
                 duration = SnackbarDuration.Long,
             )
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.navigationEvents.collect { event ->
+            when (event) {
+                HubChatNavigationEvent.PopBackToConnections -> onNavigateBack()
+            }
+        }
+    }
+
+    LaunchedEffect(hubDetails.name, hubDetails.category, showEditDialog) {
+        if (!showEditDialog) {
+            editNameDraft = hubDetails.name
+            editCategoryDraft = hubDetails.category
         }
     }
 
@@ -212,7 +249,7 @@ fun HubChatScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = viewModel.title,
+                                text = hubDetails.name,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -227,13 +264,64 @@ fun HubChatScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (isCreator) {
-                            IconButton(onClick = { showEditDialog = true }) {
+                        Box {
+                            IconButton(onClick = { settingsMenuExpanded = true }) {
                                 Icon(
                                     Icons.Filled.MoreVert,
                                     contentDescription = "Hub settings",
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 )
+                            }
+                            DropdownMenu(
+                                expanded = settingsMenuExpanded,
+                                onDismissRequest = { settingsMenuExpanded = false },
+                            ) {
+                                val items = visibleHubSettingsMenuItems(
+                                    currentUserId = currentUserId,
+                                    creatorId = if (isCreator) currentUserId else args.creatorId,
+                                )
+                                if (HubSettingsMenuItem.Leave in items) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Leave Hub",
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        },
+                                        onClick = {
+                                            settingsMenuExpanded = false
+                                            viewModel.leaveHub()
+                                        },
+                                        modifier = Modifier.testTag("hub_settings_leave"),
+                                    )
+                                }
+                                if (HubSettingsMenuItem.Edit in items) {
+                                    DropdownMenuItem(
+                                        text = { Text("Edit Hub") },
+                                        onClick = {
+                                            settingsMenuExpanded = false
+                                            editNameDraft = hubDetails.name
+                                            editCategoryDraft = hubDetails.category
+                                            showEditDialog = true
+                                        },
+                                        modifier = Modifier.testTag("hub_settings_edit"),
+                                    )
+                                }
+                                if (HubSettingsMenuItem.Delete in items) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Delete Hub",
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        },
+                                        onClick = {
+                                            settingsMenuExpanded = false
+                                            showDeleteConfirm = true
+                                        },
+                                        modifier = Modifier.testTag("hub_settings_delete"),
+                                    )
+                                }
                             }
                         }
                     }
@@ -473,7 +561,7 @@ fun HubChatScreen(
     if (showEditDialog && isCreator) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Hub Settings") },
+            title = { Text("Edit Hub") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
@@ -483,27 +571,23 @@ fun HubChatScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    TextButton(
-                        onClick = {
-                            showEditDialog = false
-                            showDeleteConfirm = true
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) {
-                        Text("Delete Hub")
-                    }
+                    OutlinedTextField(
+                        value = editCategoryDraft,
+                        onValueChange = { editCategoryDraft = it.take(40) },
+                        label = { Text("Category") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.editHubDetails(editNameDraft) { success ->
+                        viewModel.editHubDetails(editNameDraft, editCategoryDraft) { success ->
                             if (success) showEditDialog = false
                         }
                     },
-                    enabled = editNameDraft.isNotBlank(),
+                    enabled = editNameDraft.isNotBlank() && editCategoryDraft.isNotBlank(),
                 ) {
                     Text("Save")
                 }
@@ -520,14 +604,12 @@ fun HubChatScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete Hub?") },
-            text = { Text("This will permanently delete the hub and all messages. This cannot be undone.") },
+            text = { Text("Are you sure? This will kick all users and delete the history.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.deleteHub { success ->
-                            showDeleteConfirm = false
-                            if (success) onNavigateBack()
-                        }
+                        showDeleteConfirm = false
+                        viewModel.deleteHub()
                     },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error,

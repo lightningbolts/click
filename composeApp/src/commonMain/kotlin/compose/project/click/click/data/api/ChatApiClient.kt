@@ -103,6 +103,22 @@ class ChatApiClient(
     private data class ClickWebMessageEnvelope(val message: ClickWebMessageDto)
 
     @Serializable
+    data class HubDetailsDto(
+        val id: String,
+        val name: String,
+        val category: String = "general",
+        @SerialName("creator_id") val creatorId: String,
+    )
+
+    @Serializable
+    private data class HubDetailsEnvelope(val hub: HubDetailsDto)
+
+    @Serializable
+    private data class HubLeaveRequestBody(
+        @SerialName("hub_id") val hubId: String,
+    )
+
+    @Serializable
     private data class ClickWebSendMessageBody(
         @SerialName("chat_id") val chat_id: String,
         @SerialName("user_id") val user_id: String,
@@ -818,6 +834,25 @@ class ChatApiClient(
         }
     }
 
+    suspend fun getHubDetails(
+        hubId: String,
+        authToken: String,
+    ): Result<HubDetailsDto> {
+        return try {
+            val response = client.get("$clickWebBaseUrl/api/hub/$hubId") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<HubDetailsEnvelope>().hub)
+            } else {
+                val message = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                Result.failure(Exception(message.ifBlank { "Failed to fetch hub: ${response.status}" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteHub(
         hubId: String,
         authToken: String,
@@ -830,6 +865,27 @@ class ChatApiClient(
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("Failed to delete hub: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun leaveHub(
+        hubId: String,
+        authToken: String,
+    ): Result<Unit> {
+        return try {
+            val response = client.post("$clickWebBaseUrl/api/hub/leave") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(HubLeaveRequestBody(hubId = hubId))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                val message = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                Result.failure(Exception(message.ifBlank { "Failed to leave hub: ${response.status}" }))
             }
         } catch (e: Exception) {
             Result.failure(e)

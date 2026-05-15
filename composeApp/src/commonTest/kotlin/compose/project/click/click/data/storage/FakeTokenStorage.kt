@@ -3,11 +3,13 @@ package compose.project.click.click.data.storage
 /**
  * In-memory [TokenStorage] for tests (avoids Android [createTokenStorage] init requirements).
  */
-class FakeTokenStorage : TokenStorage {
+class FakeTokenStorage(
+    private val jwt: String? = null,
+) : TokenStorage {
     private var activeHubsJson: String? = null
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {}
-    override suspend fun getJwt(): String? = null
+    override suspend fun getJwt(): String? = jwt
     override suspend fun getRefreshToken(): String? = null
     override suspend fun getExpiresAt(): Long? = null
     override suspend fun getTokenType(): String? = null

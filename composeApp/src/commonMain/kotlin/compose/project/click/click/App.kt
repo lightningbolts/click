@@ -1218,6 +1218,8 @@ fun App() {
                                                         hubId = hub.hubId,
                                                         realtimeChannel = hub.realtimeChannel,
                                                         hubTitle = hub.name,
+                                                        creatorId = hub.creatorId,
+                                                        hubCategory = hub.category,
                                                     )
                                                 },
                                                 viewModel = chatViewModel,
