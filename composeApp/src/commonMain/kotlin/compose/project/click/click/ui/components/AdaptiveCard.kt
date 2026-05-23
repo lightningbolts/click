@@ -84,52 +84,6 @@ fun AdaptiveBackground(
 }
 
 @Composable
-fun AdaptiveButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    content: @Composable RowScope.() -> Unit
-) {
-    val style = LocalPlatformStyle.current
-
-    if (style.isIOS) {
-        Button(
-            onClick = onClick,
-            modifier = modifier,
-            enabled = enabled,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = PrimaryBlue.copy(alpha = 0.15f),
-                contentColor = PrimaryBlue,
-                disabledContainerColor = Color.Gray.copy(alpha = 0.08f),
-                disabledContentColor = Color.Gray
-            ),
-            elevation = ButtonDefaults.buttonElevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 0.dp,
-                focusedElevation = 0.dp,
-            ),
-            shape = RoundedCornerShape(style.buttonCornerRadius),
-            content = content
-        )
-    } else {
-        Button(
-            onClick = onClick,
-            modifier = modifier,
-            enabled = enabled,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                disabledContainerColor = Color.Gray.copy(alpha = 0.1f),
-                disabledContentColor = Color.Gray
-            ),
-            border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.5f)),
-            shape = RoundedCornerShape(style.buttonCornerRadius),
-            content = content
-        )
-    }
-}
-
-@Composable
 fun getAdaptiveCornerRadius(): Dp {
     return LocalPlatformStyle.current.cardCornerRadius
 }
