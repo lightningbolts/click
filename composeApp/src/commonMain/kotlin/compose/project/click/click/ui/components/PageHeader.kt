@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -89,7 +90,12 @@ fun PageHeader(
     val radius = getAdaptiveCornerRadius()
 
     if (style.isIOS) {
-        when (displayMode) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            NativeLiquidGlassView(
+                modifier = Modifier.matchParentSize(),
+                material = NativeLiquidGlassMaterial.AdaptiveThin,
+            )
+            when (displayMode) {
             HeaderDisplayMode.Inline -> {
                 Row(
                     modifier = Modifier
@@ -162,6 +168,7 @@ fun PageHeader(
                         PresenceSubtitleRow(online = presenceOnline)
                     }
                 }
+            }
             }
         }
     } else {
