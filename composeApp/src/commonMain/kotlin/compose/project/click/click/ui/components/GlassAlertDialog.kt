@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 /**
  * Centered OLED dialog replacing rigid Material [androidx.compose.material3.AlertDialog] chrome.
@@ -37,36 +35,21 @@ fun GlassAlertDialog(
     showActionRow: Boolean = true,
     properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false),
 ) {
-    val style = LocalPlatformStyle.current
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = properties,
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (style.isIOS) {
-                PlatformGlassBackdrop(
-                    modifier = Modifier.fillMaxSize(),
-                    material = NativeLiquidGlassMaterial.DarkThin,
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha)),
-                )
-            }
-            val shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp)
-                    .align(Alignment.Center)
-                    .clip(shape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder, shape)
-                    .background(GlassSheetTokens.OledBlack)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+        val shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp)
+                .clip(shape)
+                .border(1.dp, GlassSheetTokens.GlassBorder, shape)
+                .background(GlassSheetTokens.OledBlack)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             if (icon != null) {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -96,7 +79,6 @@ fun GlassAlertDialog(
                     dismissButton?.invoke()
                     confirmButton?.invoke()
                 }
-            }
             }
         }
     }

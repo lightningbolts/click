@@ -8,22 +8,14 @@ import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secre
 import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
-import platform.CoreGraphics.CGPointMake
-import platform.CoreGraphics.CGRectMake
 import platform.CoreLocation.CLLocationCoordinate2DMake
-import platform.UIKit.UIBlurEffect
-import platform.UIKit.UIBlurEffectStyle
-import platform.UIKit.UIFont
-import platform.UIKit.UILabel
-import platform.UIKit.UITextAlignmentCenter
-import platform.UIKit.UIVisualEffectView
-import platform.UIKit.UIView
 import platform.MapKit.MKAnnotationProtocol
 import platform.MapKit.MKAnnotationView
 import platform.MapKit.MKCircle
 import platform.MapKit.MKCoordinateRegionMakeWithDistance
 import platform.MapKit.MKMapView
 import platform.MapKit.MKMapViewDelegateProtocol
+import platform.MapKit.MKMarkerAnnotationView
 import platform.MapKit.MKPointAnnotation
 import platform.MapKit.MKUserLocation
 import platform.MapKit.MKUserTrackingModeNone
@@ -558,37 +550,47 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
             pin != null -> "P|${pin.id}"
             else -> "X|orphan"
         }
-        val (glyph, tint, zPriority) = when {
+        val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
+        val view = (reused as? MKMarkerAnnotationView)
+            ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+        view.annotation = viewForAnnotation
+        view.canShowCallout = false
+        view.setEnabled(true)
+        view.setSelected(false, animated = false)
+        when {
             cluster != null -> {
                 val label = if (cluster.count > 99) "99+" else cluster.count.toString()
-                val color = when {
+                view.glyphText = label
+                view.markerTintColor = when {
                     cluster.isConnectionOnly -> UIColor.magentaColor
                     cluster.hasLiveConnections -> UIColor.blueColor
                     else -> UIColor.orangeColor
                 }
-                Triple(label, color, cluster.zIndex)
+                view.zPriority = cluster.zIndex
             }
             pin != null -> {
                 val isHub = pin.kind == MapPinKind.COMMUNITY_HUB
                 val cap = pin.caption?.trim().orEmpty()
-                val label = when {
+                view.glyphText = when {
                     isHub && cap.isNotEmpty() -> cap
-                    cap.isEmpty() -> "•"
+                    cap.isEmpty() -> ""
                     cap.length <= 3 -> cap
                     else -> cap.take(3)
                 }
-                Triple(label, pin.markerTintUIColor(), pin.zIndex)
+                view.markerTintColor = pin.markerTintUIColor()
+                view.zPriority = pin.zIndex
+                if (isHub) {
+                    view.displayPriority = MKFeatureDisplayPriorityRequired
+                    view.titleVisibility = platform.MapKit.MKFeatureVisibility.MKFeatureVisibilityVisible
+                }
             }
-            else -> Triple("•", UIColor.yellowColor, 0f)
+            else -> {
+                view.glyphText = ""
+                view.markerTintColor = UIColor.yellowColor
+                view.zPriority = 0f
+            }
         }
-        return glassPinAnnotationView(
-            mapView = mapView,
-            annotation = viewForAnnotation,
-            reuseIdentifier = identifier,
-            glyphText = glyph,
-            markerTint = tint,
-            zPriority = zPriority,
-        )
+        return view
     }
 
     override fun mapViewDidFinishLoadingMap(mapView: MKMapView) {
@@ -600,60 +602,6 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         dispatchViewportIfChanged(mapView)
         maybeFinishProgrammaticCamera(mapView)
     }
-}
-
-private const val GLASS_PIN_HOST_TAG: Long = 7001
-private const val GLASS_PIN_LABEL_TAG: Long = 7002
-
-@OptIn(ExperimentalForeignApi::class)
-private fun glassPinAnnotationView(
-    mapView: MKMapView,
-    annotation: MKAnnotationProtocol,
-    reuseIdentifier: String,
-    glyphText: String,
-    markerTint: UIColor,
-    zPriority: Float,
-): MKAnnotationView {
-    val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(reuseIdentifier)
-    val view = (reused as? MKAnnotationView)
-        ?: MKAnnotationView(annotation = annotation, reuseIdentifier = reuseIdentifier)
-    view.annotation = annotation
-    view.canShowCallout = false
-    view.setEnabled(true)
-    view.setSelected(false, animated = false)
-    view.zPriority = zPriority
-    val width = 44.0
-    val height = 28.0
-    view.setFrame(CGRectMake(0.0, 0.0, width, height))
-    view.centerOffset = CGPointMake(0.0, -height / 2.0)
-
-    var host = view.viewWithTag(GLASS_PIN_HOST_TAG) as? UIView
-    if (host == null) {
-        host = UIView(frame = CGRectMake(0.0, 0.0, width, height))
-        host.tag = GLASS_PIN_HOST_TAG
-        val blurStyle = UIBlurEffect.effectWithStyle(
-            UIBlurEffectStyle.UIBlurEffectStyleSystemThinMaterialDark,
-        )
-        val blur = UIVisualEffectView(blurStyle)
-        blur.setFrame(host.bounds)
-        blur.layer.cornerRadius = height / 2.0
-        blur.clipsToBounds = true
-        val label = UILabel(frame = host.bounds)
-        label.tag = GLASS_PIN_LABEL_TAG
-        label.textAlignment = UITextAlignmentCenter
-        label.font = UIFont.boldSystemFontOfSize(11.0)
-        label.adjustsFontSizeToFitWidth = true
-        host.addSubview(blur)
-        host.addSubview(label)
-        view.addSubview(host)
-    }
-    host.setFrame(CGRectMake(0.0, 0.0, width, height))
-    (host.viewWithTag(GLASS_PIN_LABEL_TAG) as? UILabel)?.let { label ->
-        label.setFrame(host.bounds)
-        label.text = glyphText
-        label.textColor = markerTint
-    }
-    return view
 }
 
 private fun metersForZoom(zoomLevel: Double): Double {

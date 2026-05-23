@@ -62,7 +62,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -108,8 +107,6 @@ internal fun ConnectionChatMessageComposer(
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
-    var composerHasFocus by remember { mutableStateOf(false) }
-    val composerStyle = LocalPlatformStyle.current
 
     LaunchedEffect(isSending) {
         if (isSending) {
@@ -118,10 +115,11 @@ internal fun ConnectionChatMessageComposer(
         }
         if (!hadSubmitInFlight) return@LaunchedEffect
         hadSubmitInFlight = false
-        if (composerStyle.isIOS && composerHasFocus) return@LaunchedEffect
         // Keep the IME session stable during rapid sends — avoid show() + extra frames that delay bubbles.
         composerFocusRequester.requestFocus()
     }
+
+    val composerStyle = LocalPlatformStyle.current
     val replyBannerVisible = replyingTo != null && editingMessageId == null
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
@@ -350,8 +348,7 @@ internal fun ConnectionChatMessageComposer(
                         .padding(start = fieldSideInset, end = fieldSideInset)
                         .heightIn(min = auxButtonSize)
                         .align(Alignment.BottomCenter)
-                        .focusRequester(composerFocusRequester)
-                        .onFocusChanged { composerHasFocus = it.isFocused },
+                        .focusRequester(composerFocusRequester),
                     enabled = true,
                     textStyle = composerTextStyleCentered.merge(
                         TextStyle(color = MaterialTheme.colorScheme.onSurface),

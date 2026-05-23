@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -15,7 +14,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveSheetState
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 /**
  * Calf [AdaptiveBottomSheet] with OLED shell + [GlassSheetGrabber], matching Material
@@ -44,28 +42,15 @@ fun GlassAdaptiveBottomSheet(
         contentWindowInsets = contentWindowInsets,
         dragHandle = dragHandle,
     ) {
-        val style = LocalPlatformStyle.current
-        Box(modifier = Modifier.fillMaxWidth()) {
-            if (style.isIOS) {
-                PlatformGlassBackdrop(
-                    modifier = Modifier.matchParentSize(),
-                    cornerRadius = GlassSheetTokens.SheetTopCorner,
-                    material = NativeLiquidGlassMaterial.DarkThin,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (style.isIOS) GlassSheetTokens.OledBlack.copy(alpha = 0.72f)
-                        else GlassSheetTokens.OledBlack,
-                    ),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    content = content,
-                )
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(GlassSheetTokens.OledBlack),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                content = content,
+            )
         }
     }
 }

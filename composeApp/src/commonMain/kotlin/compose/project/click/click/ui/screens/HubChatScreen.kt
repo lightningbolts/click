@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
@@ -200,8 +199,6 @@ fun HubChatScreen(
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hubNavBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val hubImeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val composerStyle = LocalPlatformStyle.current
 
     val channelReady by viewModel.channelReady.collectAsState()
 
@@ -456,8 +453,7 @@ fun HubChatScreen(
                             start = 6.dp,
                             end = 6.dp,
                             top = 12.dp,
-                            bottom = hubNavBottomDp + 72.dp +
-                                if (composerStyle.isIOS) hubImeBottomPadding else 0.dp,
+                            bottom = hubNavBottomDp + 72.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
@@ -536,6 +532,7 @@ fun HubChatScreen(
                 // ── Composer (matches ConnectionChatMessageComposer layout) ─
                 // iOS: imePadding on the composer only so the field lifts above the keyboard
                 // without pushing the header off-screen. Android adjustResize handles it.
+                val composerStyle = LocalPlatformStyle.current
                 val composerImeLift = if (composerStyle.isIOS) Modifier.imePadding() else Modifier
                 Box(
                     modifier = Modifier
