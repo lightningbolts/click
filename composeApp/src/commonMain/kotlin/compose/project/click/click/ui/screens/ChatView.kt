@@ -141,6 +141,7 @@ import compose.project.click.click.data.models.replyRef // pragma: allowlist sec
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalFocusManager
@@ -198,6 +199,7 @@ import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowli
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.callLogLabel // pragma: allowlist secret
 import compose.project.click.click.ui.chat.formatCallDurationForLog // pragma: allowlist secret
@@ -305,7 +307,10 @@ fun ChatView(
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val platformStyle = LocalPlatformStyle.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val imeBottomPaddingState = rememberUpdatedState(imeBottomPadding)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -317,8 +322,10 @@ fun ChatView(
      * A tiny threshold avoids spurious [clearFocus] calls when the IME opens/closes and the
      * reverse [LazyColumn] reports small consumed deltas — a common source of simulator jank.
      */
-    val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
-    val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
+    val keyboardDismissScrollThresholdPx = remember(density, platformStyle.isIOS) {
+        with(density) { if (platformStyle.isIOS) 40.dp.toPx() else 16.dp.toPx() }
+    }
+    val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx, platformStyle.isIOS) {
         object : NestedScrollConnection {
             override fun onPostScroll(
                 consumed: Offset,
@@ -326,6 +333,7 @@ fun ChatView(
                 source: NestedScrollSource,
             ): Offset {
                 if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
+                if (platformStyle.isIOS && imeBottomPaddingState.value > 0.dp) return Offset.Zero
                 if (source == NestedScrollSource.UserInput &&
                     kotlin.math.abs(consumed.y) > keyboardDismissScrollThresholdPx
                 ) {
@@ -343,8 +351,10 @@ fun ChatView(
             when {
                 offset > 20f && !imeClearedForInteractiveBackSwipe -> {
                     imeClearedForInteractiveBackSwipe = true
-                    keyboardControllerState.value?.hide()
                     focusManagerState.value.clearFocus()
+                    if (!platformStyle.isIOS) {
+                        keyboardControllerState.value?.hide()
+                    }
                 }
                 offset <= 0f -> imeClearedForInteractiveBackSwipe = false
             }
@@ -394,18 +404,29 @@ fun ChatView(
     // Newest-first + reverseLayout pins latest messages next to the composer; snap to index 0 after layout
     val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
     val scrollAnchor = successMessages.lastOrNull()?.message?.id to successMessages.size
-    LaunchedEffect(chatId, scrollAnchor) {
+    LaunchedEffect(chatId) {
         if (successMessages.isEmpty()) return@LaunchedEffect
-        repeat(50) {
-            if (listState.layoutInfo.totalItemsCount > 0) {
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
-                listState.scrollToItem(0)
-                delay(120)
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
-                return@LaunchedEffect
-            }
+        var attempts = 0
+        while (attempts < 50 && listState.layoutInfo.totalItemsCount == 0) {
             delay(16L)
+            attempts++
         }
+        if (listState.layoutInfo.totalItemsCount > 0) {
+            suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
+            listState.scrollToItem(0)
+            suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
+        }
+    }
+    LaunchedEffect(chatId, scrollAnchor, imeBottomPadding) {
+        if (successMessages.isEmpty()) return@LaunchedEffect
+        if (imeBottomPadding > 0.dp) return@LaunchedEffect
+        if (listState.layoutInfo.totalItemsCount == 0) return@LaunchedEffect
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            return@LaunchedEffect
+        }
+        suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
+        listState.scrollToItem(0)
+        suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -561,6 +582,7 @@ fun ChatView(
                      * only so the field stays above the keyboard without pushing the header off-screen.
                      */
                     val reverseListNewestEdgePad = 6.dp
+                    val listImeTopPad = if (chatChromeStyle.isIOS) imeBottomPadding else 0.dp
                     val messageContentModifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -572,14 +594,23 @@ fun ChatView(
                             modifier = Modifier.fillMaxSize(),
                         )
                     Column(modifier = Modifier.fillMaxSize()) {
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = topInset)
-                                .height(56.dp)
-                                .padding(horizontal = 20.dp)
-                                .testTag(ChatGlassHeaderPlateTestTag),
+                                .height(56.dp),
                         ) {
+                            if (chatChromeStyle.isIOS) {
+                                ChatLiquidGlassPlate(
+                                    modifier = Modifier.fillMaxSize(),
+                                    testTag = ChatGlassHeaderPlateTestTag,
+                                )
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 20.dp),
+                            ) {
                             Row(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -870,6 +901,7 @@ fun ChatView(
                                     )
                                 }
                             }
+                            }
                         }
 
                         Column(
@@ -1060,7 +1092,7 @@ fun ChatView(
                                 contentPadding = PaddingValues(
                                     start = 12.dp,
                                     end = 12.dp,
-                                    top = 24.dp + reverseListNewestEdgePad,
+                                    top = 24.dp + reverseListNewestEdgePad + listImeTopPad,
                                     bottom = 28.dp,
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -1184,16 +1216,24 @@ fun ChatView(
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
                             visible = isPeerTyping,
-                            enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                                slideInVertically(
-                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                    initialOffsetY = { it / 2 },
-                                ),
-                            exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-                                slideOutVertically(
-                                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                                    targetOffsetY = { it / 2 },
-                                ),
+                            enter = if (chatChromeStyle.isIOS) {
+                                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                            } else {
+                                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                                    slideInVertically(
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                        initialOffsetY = { it / 2 },
+                                    )
+                            },
+                            exit = if (chatChromeStyle.isIOS) {
+                                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium))
+                            } else {
+                                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                                    slideOutVertically(
+                                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                        targetOffsetY = { it / 2 },
+                                    )
+                            },
                         ) {
                             Row(
                                 modifier = Modifier
