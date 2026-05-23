@@ -22,7 +22,7 @@ actual fun AdaptiveButton(
 ) {
     val style = LocalPlatformStyle.current
     val shape = RoundedCornerShape(style.buttonCornerRadius)
-    Box(modifier = modifier) {
+    Box {
         NativeLiquidGlassView(
             modifier = Modifier.fillMaxSize(),
             cornerRadius = style.buttonCornerRadius,
@@ -31,7 +31,7 @@ actual fun AdaptiveButton(
         )
         Button(
             onClick = onClick,
-            modifier = Modifier.fillMaxSize(),
+            modifier = modifier.fillMaxSize(),
             enabled = enabled,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color.Transparent,

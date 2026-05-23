@@ -412,9 +412,12 @@ fun ChatView(
             attempts++
         }
         if (listState.layoutInfo.totalItemsCount > 0) {
-            suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
-            listState.scrollToItem(0)
-            suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
+            try {
+                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
+                listState.scrollToItem(0)
+            } finally {
+                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
+            }
         }
     }
     LaunchedEffect(chatId, scrollAnchor, imeBottomPadding) {
@@ -424,9 +427,12 @@ fun ChatView(
         if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
             return@LaunchedEffect
         }
-        suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
-        listState.scrollToItem(0)
-        suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
+        try {
+            suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
+            listState.scrollToItem(0)
+        } finally {
+            suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
