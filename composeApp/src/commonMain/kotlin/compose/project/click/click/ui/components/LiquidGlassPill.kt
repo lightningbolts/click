@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -63,7 +64,7 @@ fun LiquidGlassPill(
             .border(1.dp, scheme.onSurface.copy(alpha = 0.08f), shape),
     ) {
         // Procedural noise overlay — keeps the surface reading as glass on every platform.
-        Canvas(modifier = Modifier.matchParentSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val density = noiseDensity.coerceIn(0.0f, 0.2f)
             val total = (size.width * size.height * density).toInt().coerceAtMost(4_000)
             val rng = Random(seed = (size.width.toInt() xor size.height.toInt()))
