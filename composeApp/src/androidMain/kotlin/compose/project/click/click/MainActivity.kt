@@ -16,6 +16,7 @@ import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
+import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
@@ -97,6 +98,10 @@ class MainActivity : ComponentActivity() {
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID)
         val connectionId = intent.getStringExtra(EXTRA_CHAT_CONNECTION_ID)
         val deepLinkId = chatId?.takeIf { it.isNotBlank() } ?: connectionId ?: return
+        ChatNotificationDismisser.dismissForThread(
+            chatId = chatId.orEmpty(),
+            connectionId = connectionId.orEmpty(),
+        )
         ChatDeepLinkManager.setPendingChat(deepLinkId)
     }
 

@@ -200,10 +200,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let chatId = userInfo["chat_id"] as? String, !chatId.isEmpty {
-            ClickKt.setChatDeepLink(chatId: chatId)
-        } else if let connectionId = userInfo["connection_id"] as? String, !connectionId.isEmpty {
-            ClickKt.setChatDeepLink(chatId: connectionId)
+        let chatId = userInfo["chat_id"] as? String ?? ""
+        let connectionId = userInfo["connection_id"] as? String ?? ""
+        let deepLinkId = chatId.isEmpty ? connectionId : chatId
+        if !deepLinkId.isEmpty {
+            UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+                let ids = notifications.compactMap { delivered -> String? in
+                    let info = delivered.request.content.userInfo
+                    let payloadChatId = info["chat_id"] as? String ?? ""
+                    let payloadConnectionId = info["connection_id"] as? String ?? ""
+                    let matches = (!chatId.isEmpty && (payloadChatId == chatId || payloadConnectionId == chatId))
+                        || (!connectionId.isEmpty && (payloadChatId == connectionId || payloadConnectionId == connectionId))
+                        || (!deepLinkId.isEmpty && (payloadChatId == deepLinkId || payloadConnectionId == deepLinkId))
+                    return matches ? delivered.request.identifier : nil
+                }
+                if !ids.isEmpty {
+                    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+                }
+            }
+            ClickKt.setChatDeepLink(chatId: deepLinkId, connectionId: connectionId)
         }
         completionHandler()
     }

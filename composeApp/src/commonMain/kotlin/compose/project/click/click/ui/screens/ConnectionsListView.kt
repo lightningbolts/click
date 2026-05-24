@@ -144,8 +144,8 @@ import compose.project.click.click.ui.components.ClickActionBottomSheet // pragm
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionsHeaderTabControls // pragma: allowlist secret
-import compose.project.click.click.ui.components.LiquidGlassPageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
@@ -264,6 +264,7 @@ fun ConnectionsListView(
     val activeHubs by AppDataManager.activeHubs.collectAsState()
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomChrome = rememberBottomChromePadding()
+    val fabAboveNav = rememberFabAboveNavPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Groups, 2 = Archived
@@ -519,15 +520,16 @@ fun ConnectionsListView(
         }
     }
     val listTopPadding = remember(collapseFraction, statusBarTop, effectiveChats.isNotEmpty()) {
-        val collapsed = AppScreenDefaults.FloatingHeaderCompactHeight
-        val expanded = AppScreenDefaults.FloatingHeaderLargeHeight
-        val headerH = statusBarTop + collapsed + (expanded - collapsed) * (1f - collapseFraction)
-        val tabH = if (effectiveChats.isNotEmpty()) {
-            if (collapseFraction > 0.42f) 52.dp else 68.dp
+        val compactHeader = effectiveChats.isNotEmpty() && collapseFraction > 0.42f
+        if (compactHeader) {
+            statusBarTop + 76.dp
         } else {
-            0.dp
+            val collapsed = AppScreenDefaults.FloatingHeaderCompactHeight
+            val expanded = AppScreenDefaults.FloatingHeaderLargeHeight
+            val headerH = statusBarTop + collapsed + (expanded - collapsed) * (1f - collapseFraction)
+            val tabH = if (effectiveChats.isNotEmpty()) 76.dp else 0.dp
+            headerH + tabH + 8.dp
         }
-        headerH + tabH + 10.dp
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -743,22 +745,17 @@ fun ConnectionsListView(
                 .fillMaxWidth()
                 .padding(start = 20.dp, end = 20.dp, top = statusBarTop),
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                LiquidGlassPageHeader(
-                    title = "Clicks",
-                    subtitle = headerSubtitle.takeIf { it.isNotBlank() },
-                    collapseFraction = collapseFraction,
-                )
-                ConnectionsHeaderTabControls(
-                    collapseFraction = collapseFraction,
-                    selectedTabIndex = selectedTabIndex,
-                    onTabSelected = { selectedTabIndex = it },
-                    activeCount = activeCount,
-                    groupCount = groupCount,
-                    archivedCount = archivedCount,
-                    showTabs = effectiveChats.isNotEmpty(),
-                )
-            }
+            ConnectionsFloatingHeader(
+                collapseFraction = collapseFraction,
+                title = "Clicks",
+                subtitle = headerSubtitle.takeIf { it.isNotBlank() },
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = { selectedTabIndex = it },
+                activeCount = activeCount,
+                groupCount = groupCount,
+                archivedCount = archivedCount,
+                showTabs = effectiveChats.isNotEmpty(),
+            )
         }
     }
     }
@@ -778,7 +775,7 @@ fun ConnectionsListView(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 24.dp + bottomChrome),
+                .padding(end = 20.dp, bottom = fabAboveNav),
             containerColor = PrimaryBlue,
             contentColor = Color.White,
         ) {

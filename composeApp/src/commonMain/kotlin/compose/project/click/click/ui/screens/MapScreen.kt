@@ -73,6 +73,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberFabAboveNavPadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 
 /**
@@ -101,6 +102,7 @@ fun MapScreen(
     val selection by viewModel.selection.collectAsState()
     val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
     val mapBottomChrome = rememberBottomChromePadding()
+    val mapFabAboveNav = rememberFabAboveNavPadding()
     val cameraTarget by viewModel.cameraTarget.collectAsState()
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
@@ -257,7 +259,7 @@ fun MapScreen(
                                 start = 16.dp,
                                 end = 16.dp,
                                 top = 24.dp,
-                                bottom = 24.dp + mapBottomChrome,
+                                bottom = mapFabAboveNav,
                             ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -1,12 +1,5 @@
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -39,16 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 
 /**
@@ -95,23 +86,13 @@ internal fun ChatWarmLoadingView(
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            contentAlignment = Alignment.Center,
         ) {
-            AdaptiveCircularProgressIndicator(
-                modifier = Modifier.size(36.dp),
-                strokeWidth = 3.dp,
-                color = PrimaryBlue,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Loading conversation…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            ClickLogoPulse(logoSize = 72.dp)
         }
     }
 }
@@ -125,27 +106,6 @@ internal fun ChatChannelLoadingView(
     topInset: Dp,
     onBackPressed: () -> Unit,
 ) {
-    val transition = rememberInfiniteTransition(label = "chat_loading_spinner")
-    val spinnerScale by transition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "chat_loading_scale",
-    )
-    val spinnerMix by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "chat_loading_mix",
-    )
-    val spinnerColor = lerp(PrimaryBlue, LightBlue, spinnerMix)
-
     Box(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
             Row(
@@ -177,11 +137,7 @@ internal fun ChatChannelLoadingView(
                 .padding(top = topInset + 56.dp),
             contentAlignment = Alignment.Center,
         ) {
-            AdaptiveCircularProgressIndicator(
-                modifier = Modifier.size((34f * spinnerScale).dp),
-                strokeWidth = 3.dp,
-                color = spinnerColor,
-            )
+            ClickLogoPulse(logoSize = 72.dp)
         }
     }
 }

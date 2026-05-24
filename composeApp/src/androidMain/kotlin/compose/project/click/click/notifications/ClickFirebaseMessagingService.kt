@@ -117,7 +117,16 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        NotificationManagerCompat.from(this).notify(message.messageId?.hashCode() ?: body.hashCode(), notification)
+        val notifyTag = if (deepLinkId.isNotBlank()) {
+            chatNotificationTag(deepLinkId)
+        } else {
+            message.messageId?.let { chatNotificationTag(it) }
+        }
+        if (notifyTag != null) {
+            NotificationManagerCompat.from(this).notify(notifyTag, 0, notification)
+        } else {
+            NotificationManagerCompat.from(this).notify(body.hashCode(), notification)
+        }
     }
 
     private fun decryptMessagePreview(

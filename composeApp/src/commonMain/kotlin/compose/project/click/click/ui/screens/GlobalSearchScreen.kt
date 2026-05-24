@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
@@ -74,7 +75,8 @@ import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import compose.project.click.click.ui.components.ClickLogoPulse
+import compose.project.click.click.ui.components.rememberBottomChromePadding
 
 /**
  * Full-screen global search — unified results across connections, archives, cliques,
@@ -99,6 +101,7 @@ fun GlobalSearchScreen(
 
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val bottomChrome = rememberBottomChromePadding()
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -192,9 +195,9 @@ fun GlobalSearchScreen(
         ) {
             when {
                 isSearching -> {
-                    AdaptiveCircularProgressIndicator(
+                    ClickLogoPulse(
                         modifier = Modifier.align(Alignment.Center),
-                        color = PrimaryBlue,
+                        logoSize = 72.dp,
                     )
                 }
 
@@ -227,6 +230,7 @@ fun GlobalSearchScreen(
                 else -> {
                     UnifiedSearchResultsList(
                         results = visibleResults,
+                        bottomPadding = bottomChrome,
                         onNavigateToChat = onNavigateToChat,
                         onNavigateToMap = onNavigateToMap,
                     )
@@ -275,6 +279,7 @@ private fun EmptySearchHint(
 @Composable
 private fun UnifiedSearchResultsList(
     results: List<SearchResult>,
+    bottomPadding: Dp,
     onNavigateToChat: (String) -> Unit,
     onNavigateToMap: () -> Unit,
 ) {
@@ -283,7 +288,7 @@ private fun UnifiedSearchResultsList(
     )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {

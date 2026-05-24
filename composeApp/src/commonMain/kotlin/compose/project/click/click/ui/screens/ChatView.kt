@@ -571,16 +571,7 @@ fun ChatView(
                             isHubNeutral = false,
                             modifier = Modifier.fillMaxSize(),
                         )
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .animateContentSize(
-                                animationSpec = spring(
-                                    dampingRatio = 0.82f,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                            ),
-                    ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1189,7 +1180,16 @@ fun ChatView(
                         )
                     }
 
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(
+                                animationSpec = spring(
+                                    dampingRatio = 0.92f,
+                                    stiffness = Spring.StiffnessHigh,
+                                ),
+                            ),
+                    ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
                             visible = isPeerTyping,

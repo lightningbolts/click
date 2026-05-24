@@ -224,16 +224,7 @@ fun HubChatScreen(
             enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
             exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .animateContentSize(
-                        animationSpec = spring(
-                            dampingRatio = 0.82f,
-                            stiffness = Spring.StiffnessMediumLow,
-                        ),
-                    ),
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 // ── Glass header with translucent backdrop ───────────────────
                 Box(
                     modifier = Modifier
@@ -545,6 +536,12 @@ fun HubChatScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = 0.92f,
+                                stiffness = Spring.StiffnessHigh,
+                            ),
+                        )
                         .composerBottomPadding(),
                 ) {
                     ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())

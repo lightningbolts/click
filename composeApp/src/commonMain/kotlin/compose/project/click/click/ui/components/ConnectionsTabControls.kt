@@ -1,11 +1,10 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,92 +32,128 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
- * Active / Groups / Archived filter — exterior radius matches chat list bubbles ([GlassSheetTokens.BentoExteriorCorner]).
+ * Floating connections header: large title + segment bar when expanded;
+ * compact single-row title + filter menu when scrolled.
  */
 @Composable
-fun ConnectionsSegmentBar(
+fun ConnectionsFloatingHeader(
+    collapseFraction: Float,
+    title: String,
+    subtitle: String?,
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
     activeCount: Int,
     groupCount: Int,
     archivedCount: Int,
+    showTabs: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val segStyle = LocalPlatformStyle.current
-    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
-    val exterior = GlassSheetTokens.BentoExteriorCorner
-    val interior = GlassSheetTokens.BentoInteriorCorner
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(
-                width = segBorderWidth,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                shape = RoundedCornerShape(exterior),
+    val compact = showTabs && collapseFraction > 0.42f
+    AnimatedContent(
+        targetState = compact,
+        modifier = modifier.fillMaxWidth(),
+        transitionSpec = {
+            fadeIn(tween(160)) togetherWith fadeOut(tween(120))
+        },
+        label = "connections_header_mode",
+    ) { isCompact ->
+        if (isCompact) {
+            ConnectionsCompactHeaderRow(
+                title = title,
+                subtitle = subtitle,
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = onTabSelected,
+                activeCount = activeCount,
+                groupCount = groupCount,
+                archivedCount = archivedCount,
             )
-            .clip(RoundedCornerShape(exterior))
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(
-                    alpha = if (segStyle.isIOS) 0.25f else 0.35f,
-                ),
-            )
-            .padding(6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        listOf(
-            Triple(0, "Active", activeCount),
-            Triple(1, "Groups", groupCount),
-            Triple(2, "Archived", archivedCount),
-        ).forEach { (index, label, count) ->
-            val selected = selectedTabIndex == index
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(interior))
-                    .then(
-                        if (selected) {
-                            Modifier
-                                .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
-                                .border(
-                                    segBorderWidth,
-                                    PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f),
-                                    RoundedCornerShape(interior),
-                                )
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .clickable { onTabSelected(index) }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "$label ($count)",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (selected) LightBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+        } else {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LiquidGlassPageHeader(
+                    title = title,
+                    subtitle = subtitle,
+                    collapseFraction = collapseFraction,
                 )
+                if (showTabs) {
+                    ConnectionsSegmentBar(
+                        selectedTabIndex = selectedTabIndex,
+                        onTabSelected = onTabSelected,
+                        activeCount = activeCount,
+                        groupCount = groupCount,
+                        archivedCount = archivedCount,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         }
     }
 }
 
-/** Compact liquid-glass filter when the connections header is collapsed. */
 @Composable
-fun ConnectionsTabFilterDropdown(
+private fun ConnectionsCompactHeaderRow(
+    title: String,
+    subtitle: String?,
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
     activeCount: Int,
     groupCount: Int,
     archivedCount: Int,
-    modifier: Modifier = Modifier,
+) {
+    LiquidGlassPill(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadiusDp = GlassSheetTokens.BentoExteriorCorner.value.toInt(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            ConnectionsTabFilterMenuChip(
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = onTabSelected,
+                activeCount = activeCount,
+                groupCount = groupCount,
+                archivedCount = archivedCount,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConnectionsTabFilterMenuChip(
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    activeCount: Int,
+    groupCount: Int,
+    archivedCount: Int,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val labels = listOf(
@@ -127,31 +162,38 @@ fun ConnectionsTabFilterDropdown(
         "Archived ($archivedCount)",
     )
     val currentLabel = labels.getOrElse(selectedTabIndex) { labels[0] }
+    val segStyle = LocalPlatformStyle.current
+    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
+    val chipCorner = GlassSheetTokens.BentoExteriorCorner - 6.dp
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        LiquidGlassPill(
+    Box {
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = true },
-            cornerRadiusDp = GlassSheetTokens.BentoExteriorCorner.value.toInt(),
+                .clip(RoundedCornerShape(chipCorner))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (segStyle.isIOS) 0.35f else 0.45f))
+                .border(
+                    segBorderWidth,
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    RoundedCornerShape(chipCorner),
+                )
+                .clickable { expanded = true }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = currentLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Icon(
-                    Icons.Filled.ArrowDropDown,
-                    contentDescription = "Change filter",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = currentLabel,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = LightBlue,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = "Change filter",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         DropdownMenu(
             expanded = expanded,
@@ -177,48 +219,75 @@ fun ConnectionsTabFilterDropdown(
     }
 }
 
+/**
+ * Active / Groups / Archived filter — exterior radius matches chat list bubbles ([GlassSheetTokens.BentoExteriorCorner]).
+ */
 @Composable
-fun ConnectionsHeaderTabControls(
-    collapseFraction: Float,
+fun ConnectionsSegmentBar(
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
     activeCount: Int,
     groupCount: Int,
     archivedCount: Int,
-    showTabs: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    if (!showTabs) return
+    val segStyle = LocalPlatformStyle.current
+    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
+    val exterior = GlassSheetTokens.BentoExteriorCorner
+    val trackPadding = 6.dp
+    val segmentCorner = exterior - trackPadding
 
-    val showDropdown = collapseFraction > 0.42f
-    Column(modifier = modifier.fillMaxWidth()) {
-        AnimatedVisibility(
-            visible = !showDropdown,
-            enter = fadeIn(tween(180)) + expandVertically(),
-            exit = fadeOut(tween(140)) + shrinkVertically(),
-        ) {
-            ConnectionsSegmentBar(
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = onTabSelected,
-                activeCount = activeCount,
-                groupCount = groupCount,
-                archivedCount = archivedCount,
-                modifier = Modifier.padding(top = 8.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(
+                width = segBorderWidth,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                shape = RoundedCornerShape(exterior),
             )
-        }
-        AnimatedVisibility(
-            visible = showDropdown,
-            enter = fadeIn(tween(180)) + expandVertically(),
-            exit = fadeOut(tween(140)) + shrinkVertically(),
-        ) {
-            ConnectionsTabFilterDropdown(
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = onTabSelected,
-                activeCount = activeCount,
-                groupCount = groupCount,
-                archivedCount = archivedCount,
-                modifier = Modifier.padding(top = 6.dp),
+            .clip(RoundedCornerShape(exterior))
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(
+                    alpha = if (segStyle.isIOS) 0.25f else 0.35f,
+                ),
             )
+            .padding(trackPadding),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        listOf(
+            Triple(0, "Active", activeCount),
+            Triple(1, "Groups", groupCount),
+            Triple(2, "Archived", archivedCount),
+        ).forEach { (index, label, count) ->
+            val selected = selectedTabIndex == index
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(segmentCorner))
+                    .then(
+                        if (selected) {
+                            Modifier
+                                .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
+                                .border(
+                                    segBorderWidth,
+                                    PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f),
+                                    RoundedCornerShape(segmentCorner),
+                                )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clickable { onTabSelected(index) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$label ($count)",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (selected) LightBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

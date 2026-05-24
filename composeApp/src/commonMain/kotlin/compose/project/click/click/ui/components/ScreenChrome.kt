@@ -47,6 +47,10 @@ fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomP
     return AppScreenChromeState.bottomChromeHeight + extra
 }
 
+/** FABs and map controls sit 6dp above the floating tab bar. */
+@Composable
+fun rememberFabAboveNavPadding(): Dp = AppScreenChromeState.bottomChromeHeight + 6.dp
+
 /** Bottom inset for composers and FABs sitting above the floating tab bar. */
 @Composable
 fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
@@ -57,8 +61,8 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
     val animatedIme by animateDpAsState(
         targetValue = imeTarget,
         animationSpec = spring(
-            dampingRatio = 0.82f,
-            stiffness = Spring.StiffnessMediumLow,
+            dampingRatio = 0.92f,
+            stiffness = Spring.StiffnessHigh,
         ),
         label = "composer_ime_pad",
     )

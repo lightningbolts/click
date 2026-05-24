@@ -6,6 +6,7 @@ import compose.project.click.click.data.repository.PushTokenRepository
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
+import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.notifications.savePendingPushToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +46,8 @@ fun savePushToken(token: String, platform: String, tokenType: String) {
     }
 }
 
-fun setChatDeepLink(chatId: String) {
+fun setChatDeepLink(chatId: String, connectionId: String = "") {
+    ChatNotificationDismisser.dismissForThread(chatId, connectionId.ifBlank { chatId })
     ChatDeepLinkManager.setPendingChat(chatId)
 }
 

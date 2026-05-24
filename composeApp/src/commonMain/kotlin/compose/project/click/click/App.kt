@@ -91,6 +91,7 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
+import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
@@ -911,13 +912,15 @@ fun App() {
             }
 
             val deepLinkConnectionId by ChatDeepLinkManager.pendingConnectionId.collectAsState()
-            LaunchedEffect(deepLinkConnectionId) {
-                val connId = deepLinkConnectionId
-                if (!connId.isNullOrBlank()) {
-                    ChatDeepLinkManager.consume()
-                    pendingChatId = connId
-                    navigateTo(NavigationItem.Connections.route)
-                }
+            LaunchedEffect(deepLinkConnectionId, currentUser.id) {
+                val connId = deepLinkConnectionId ?: return@LaunchedEffect
+                if (connId.isBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+                chatViewModel.setCurrentUser(currentUser.id)
+                chatViewModel.loadChatMessages(connId)
+                ChatNotificationDismisser.dismissForThread(connId, connId)
+                ChatDeepLinkManager.consume()
+                pendingChatId = connId
+                navigateTo(NavigationItem.Connections.route)
             }
 
             val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()

@@ -41,6 +41,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPee
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
+import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
 import kotlinx.coroutines.Job
@@ -122,8 +123,9 @@ fun ConnectionsScreen(
     LaunchedEffect(userId, initialChatId) {
         viewModel.setCurrentUser(userId)
         if (initialChatId != null) {
+            viewModel.loadChatMessages(initialChatId)
             selectedChatId = initialChatId
-            viewModel.loadChats(isForced = true)
+            viewModel.loadChats(isForced = false)
         }
     }
 
@@ -159,8 +161,9 @@ fun ConnectionsScreen(
         closeCleanupJob?.cancel()
         isTapCloseInFlight = false
         chatTransitionMode = ChatTransitionMode.Tap
-        selectedChatId = chatId
+        ChatNotificationDismisser.dismissForThread(chatId, chatId)
         viewModel.loadChatMessages(chatId)
+        selectedChatId = chatId
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
