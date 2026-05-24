@@ -105,6 +105,18 @@ fun ChatAmbientMeshBackground(
                     radius = r * 0.75f,
                 )
                 drawRect(brush2)
+                // Soft floor wash so tint continues through the composer / home-indicator zone.
+                val floorBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        c1.copy(alpha = alpha * 0.35f),
+                        c2.copy(alpha = alpha * 0.28f),
+                        c0.copy(alpha = alpha * 0.18f),
+                    ),
+                    startY = h * 0.45f,
+                    endY = h * 1.08f,
+                )
+                drawRect(floorBrush)
             },
     ) {}
 }

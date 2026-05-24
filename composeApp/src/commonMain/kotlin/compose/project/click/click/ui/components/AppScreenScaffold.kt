@@ -38,6 +38,7 @@ fun AppScreenScaffold(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
+    onOpenSearch: (() -> Unit)? = null,
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     lazyListState: LazyListState = rememberLazyListState(),
     headerBelowContent: @Composable (() -> Unit)? = null,
@@ -84,7 +85,16 @@ fun AppScreenScaffold(
                 subtitle = subtitle,
                 presenceOnline = presenceOnline,
                 navigationIcon = navigationIcon,
-                actions = actions,
+                actions = if (onOpenSearch != null || actions != null) {
+                    {
+                        if (onOpenSearch != null) {
+                            HeaderSearchIconButton(onClick = onOpenSearch)
+                        }
+                        actions?.invoke(this)
+                    }
+                } else {
+                    null
+                },
                 collapseFraction = collapseFraction,
             )
             headerBelowContent?.invoke()

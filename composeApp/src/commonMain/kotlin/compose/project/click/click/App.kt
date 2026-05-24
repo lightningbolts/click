@@ -869,6 +869,8 @@ fun App() {
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
+            var showUnifiedSearchSheet by remember { mutableStateOf(false) }
+            var mapPipExpanded by remember { mutableStateOf(false) }
 
             LaunchedEffect(connectionViewModel, currentUser.id) {
                 if (currentUser.id.isBlank()) return@LaunchedEffect
@@ -887,7 +889,6 @@ fun App() {
                 showMyQRCode -> "my_qr"
                 showQRScanner -> "qr_scanner"
                 showNfcScreen -> "nfc"
-                currentRoute == "search" -> "search"
                 else -> currentRoute
             }
             val canSwipeBackMainRoute = isIOS &&
@@ -1056,7 +1057,8 @@ fun App() {
             // Platform back handler — intercepts Android back gesture/button
             compose.project.click.click.ui.components.PlatformBackHandler(
                 enabled = (
-                    hubChatArgs != null ||
+                    showUnifiedSearchSheet ||
+                        hubChatArgs != null ||
                         showMyQRCode ||
                         showQRScanner ||
                         showNfcScreen ||
@@ -1066,6 +1068,7 @@ fun App() {
                     ) && !iOSSwipeOwnsBack
             ) {
                 when {
+                    showUnifiedSearchSheet -> showUnifiedSearchSheet = false
                     hubChatArgs != null -> hubChatArgs = null
                     showMyQRCode -> showMyQRCode = false
                     showQRScanner -> showQRScanner = false
@@ -1079,6 +1082,9 @@ fun App() {
                 }
             }
 
+            val hideMainBottomBar =
+                isConnectionsChatOpen || hubChatArgs != null || showUnifiedSearchSheet || mapPipExpanded
+
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
             Scaffold(
@@ -1086,8 +1092,9 @@ fun App() {
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
                     PlatformBottomBar(
-                        items = bottomNavItems + NavigationItem.Search,
+                        items = bottomNavItems,
                         currentRoute = currentRoute,
+                        visible = !hideMainBottomBar,
                         onItemSelected = { item ->
                             navigateTo(item.route)
                             hubChatArgs = null
@@ -1095,7 +1102,7 @@ fun App() {
                             showQRScanner = false
                             showNfcScreen = false
                             focusManager.clearFocus()
-                        }
+                        },
                     )
                 }
             ) { paddingValues ->
@@ -1129,7 +1136,8 @@ fun App() {
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
                                             navigateTo(NavigationItem.Connections.route)
-                                        }
+                                        },
+                                        onOpenSearch = { showUnifiedSearchSheet = true },
                                     )
 
                                     NavigationItem.AddClick.route -> AddClickScreen(
@@ -1162,6 +1170,7 @@ fun App() {
                                             ConnectionsScreen(
                                                 userId = userId,
                                                 searchQuery = "",
+                                                onOpenSearch = { showUnifiedSearchSheet = true },
                                                 initialChatId = pendingChatId,
                                                 onChatDismissed = { pendingChatId = null },
                                                 onChatOpenStateChanged = { isOpen ->
@@ -1205,6 +1214,7 @@ fun App() {
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },
+                                        onMapPipExpandedChanged = { mapPipExpanded = it },
                                     )
 
                                     NavigationItem.Settings.route -> SettingsScreen(
@@ -1368,43 +1378,6 @@ fun App() {
                                     }
                                 }
 
-                                "search" -> {
-                                    val previousKey = routeHistory.lastOrNull()
-                                    val interactive = allowInteractiveSwipeBack &&
-                                        swipeBackEnabled &&
-                                        previousKey != null &&
-                                        previousKey != animatedScreen
-
-                                    val content: @Composable () -> Unit = {
-                                        val userId = when (val state = authViewModel.authState) {
-                                            is AuthState.Success -> state.userId
-                                            else -> ""
-                                        }
-                                        GlobalSearchScreen(
-                                            userId = userId,
-                                            onNavigateToChat = { connectionId ->
-                                                pendingChatId = connectionId
-                                                navigateTo(NavigationItem.Connections.route)
-                                            },
-                                            onNavigateToMap = {
-                                                navigateTo(NavigationItem.Map.route)
-                                            },
-                                        )
-                                    }
-
-                                    if (interactive) {
-                                        InteractiveSwipeBackContainer(
-                                            enabled = true,
-                                            edgeSwipeWidth = 44.dp,
-                                            onBack = { navigateBack(NavigationTransitionMode.GestureBack) },
-                                            previousContent = { renderScreen(previousKey, false) },
-                                            currentContent = content
-                                        )
-                                    } else {
-                                        content()
-                                    }
-                                }
-
                                 else -> {
                                     val previousKey = NavigationItem.Home.route
                                     val interactivePrimary = allowInteractiveSwipeBack &&
@@ -1453,7 +1426,6 @@ fun App() {
                                     NavigationItem.Connections.route,
                                     NavigationItem.Map.route,
                                     NavigationItem.Settings.route,
-                                    "search",
                                     "my_qr",
                                     "qr_scanner",
                                     "nfc",
@@ -1983,6 +1955,27 @@ fun App() {
                     }
                 }
             }
+            if (showUnifiedSearchSheet) {
+                val searchUserId = when (val state = authViewModel.authState) {
+                    is AuthState.Success -> state.userId
+                    else -> ""
+                }
+                if (searchUserId.isNotEmpty()) {
+                    UnifiedSearchSheet(
+                        onDismissRequest = { showUnifiedSearchSheet = false },
+                        userId = searchUserId,
+                        onNavigateToChat = { connectionId ->
+                            showUnifiedSearchSheet = false
+                            pendingChatId = connectionId
+                            navigateTo(NavigationItem.Connections.route)
+                        },
+                        onNavigateToMap = {
+                            showUnifiedSearchSheet = false
+                            navigateTo(NavigationItem.Map.route)
+                        },
+                    )
+                }
+            }
             } // End of Scaffold wrapper Box
 
             } // End of onboarding gate
@@ -1998,8 +1991,7 @@ private enum class NavigationTransitionMode {
 }
 
 private fun isSwipeBackScreen(screenKey: String): Boolean {
-    return screenKey == "search" ||
-        screenKey == "my_qr" ||
+    return screenKey == "my_qr" ||
         screenKey == "qr_scanner" ||
         screenKey == "nfc"
 }

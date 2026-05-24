@@ -95,6 +95,7 @@ fun MapScreen(
     onNavigateToChat: ((String) -> Unit)? = null,
     /** Proximity verify + hop into hub chat (matches Add Click hub join). */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
+    onMapPipExpandedChanged: (Boolean) -> Unit = {},
 ) {
     val mapState by viewModel.mapState.collectAsState()
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
@@ -107,9 +108,18 @@ fun MapScreen(
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
     val beaconDropFailureToast by viewModel.beaconDropFailureToast.collectAsState()
     val communityHubs by viewModel.communityHubs.collectAsState()
+    val mapBeacons by viewModel.mapBeacons.collectAsState()
+    val bottomChrome = rememberBottomChromePadding()
+    var mapPipExpanded by remember { mutableStateOf(false) }
+    val locationService = remember { LocationService() }
+    var userLat by remember { mutableStateOf<Double?>(null) }
+    var userLon by remember { mutableStateOf<Double?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
+        val loc = locationService.getCurrentLocation()
+        userLat = loc?.latitude
+        userLon = loc?.longitude
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -205,81 +215,111 @@ fun MapScreen(
                 is MapState.Loading -> LoadingState()
                 is MapState.Error -> ErrorState(message = state.message, onRetry = { viewModel.refresh() })
                 is MapState.Success -> {
-                    MapContent(
-                        renderData = renderData,
-                        communityHubs = communityHubs,
-                        zoom = cameraTarget?.zoom ?: mapBindingZoom,
-                        ghostMode = ghostModeEnabled,
-                        cameraTarget = cameraTarget,
-                        onPinTapped = { pin ->
-                            if (pin.kind == MapPinKind.CONNECTION) {
-                                selectedProfileId = pin.id
-                            } else {
-                                selectedProfileId = null
-                            }
-                            viewModel.onMapPinTapped(pin)
-                        },
-                        onClusterTapped = { clusterPin ->
-                            viewModel.onClusterTappedFromMap(clusterPin.id)
-                        },
-                        onZoomChanged = { viewModel.setZoomLevel(it) },
-                        onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
-                            viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
-                        },
-                        onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() },
-                    )
-
-                    // Liquid Glass memories pill — replaces the old PageHeader + stats chip.
-                    // Directive: apply Modifier.windowInsetsPadding(safeDrawing.only(Top + Horizontal))
-                    // so the pill always sits *below* the system status bar / notch instead of
-                    // clipping into it on notched devices.
                     val stats = viewModel.getMapStats()
-                    LiquidGlassPill(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .statusBarsPadding()
-                            .padding(top = 12.dp, start = 16.dp),
-                    ) {
-                        MemoriesPillContent(
-                            memories = stats.totalConnections,
-                            liveCount = stats.liveCount,
-                            ghostMode = ghostModeEnabled,
+                    val statsLine = "${stats.liveCount} live · ${stats.totalConnections} memories"
+                    val feedItems = remember(communityHubs, mapBeacons, renderData, userLat, userLon) {
+                        buildDiscoveryFeedItems(
+                            hubs = communityHubs,
+                            beacons = mapBeacons,
+                            renderData = renderData,
+                            userLat = userLat,
+                            userLon = userLon,
                         )
                     }
-
-                    // Bottom bar: narrow layer control (no weight(1) so it does not span under the FAB or zoom),
-                    // add-location FAB, and zoom — single row to avoid map hit-stealing and overlap.
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .zIndex(4f)
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                            .padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = mapFabAboveNav,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
+                    MapDiscoveryScreen(
+                        feedItems = feedItems,
+                        bottomListPadding = bottomChrome,
+                        mapPipExpanded = mapPipExpanded,
+                        onMapPipExpandedChange = {
+                            mapPipExpanded = it
+                            onMapPipExpandedChanged(it)
+                        },
+                        statsLine = statsLine,
+                        ghostMode = ghostModeEnabled,
+                        mapContent = { mapModifier ->
+                            MapContent(
+                                modifier = mapModifier.graphicsLayer {
+                                    translationY = if (mapPipExpanded) parallaxOffset else 0f
+                                },
+                                renderData = renderData,
+                                communityHubs = communityHubs,
+                                zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                                ghostMode = ghostModeEnabled,
+                                cameraTarget = cameraTarget,
+                                onPinTapped = { pin ->
+                                    if (pin.kind == MapPinKind.CONNECTION) {
+                                        selectedProfileId = pin.id
+                                    } else {
+                                        selectedProfileId = null
+                                    }
+                                    viewModel.onMapPinTapped(pin)
+                                },
+                                onClusterTapped = { clusterPin ->
+                                    viewModel.onClusterTappedFromMap(clusterPin.id)
+                                },
+                                onZoomChanged = { viewModel.setZoomLevel(it) },
+                                onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
+                                    viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
+                                },
+                                onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() },
+                            )
+                        },
+                        onHubClick = { hub ->
+                            viewModel.onMapPinTapped(MapPin.fromCommunityHub(hub))
+                        },
+                        onBeaconClick = { beacon ->
+                            viewModel.onMapPinTapped(MapPin.fromBeacon(beacon))
+                        },
+                        onConnectionClick = { point ->
+                            selectedProfileId = point.connection.id
+                            viewModel.onMapPinTapped(MapPin.fromConnectionPoint(point))
+                        },
+                    )
+                    if (mapPipExpanded) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .zIndex(10f)
+                                .fillMaxWidth()
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                                .padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    bottom = mapFabAboveNav,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            FloatingActionButton(
+                                onClick = { showBeaconDropSheet = true },
+                                modifier = Modifier.size(56.dp),
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ) {
+                                Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
+                            }
+                            MapLayerFilterDropdown(
+                                selected = layerFilters,
+                                onToggle = { viewModel.toggleLayerFilter(it) },
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            ZoomControls(
+                                onZoomIn = { viewModel.zoomIn() },
+                                onZoomOut = { viewModel.zoomOut() },
+                            )
+                        }
+                    } else {
                         FloatingActionButton(
                             onClick = { showBeaconDropSheet = true },
-                            modifier = Modifier.size(56.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .zIndex(5f)
+                                .padding(start = 16.dp, bottom = bottomChrome + 180.dp),
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         ) {
                             Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
                         }
-                        MapLayerFilterDropdown(
-                            selected = layerFilters,
-                            onToggle = { viewModel.toggleLayerFilter(it) },
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        ZoomControls(
-                            onZoomIn = { viewModel.zoomIn() },
-                            onZoomOut = { viewModel.zoomOut() },
-                        )
                     }
                 }
             }
@@ -1036,6 +1076,7 @@ private fun CommunityHubBottomSheet(
 
 @Composable
 private fun MapContent(
+    modifier: Modifier = Modifier.fillMaxSize(),
     renderData: MapRenderData,
     communityHubs: List<CommunityHubPin>,
     zoom: Double,
@@ -1066,7 +1107,7 @@ private fun MapContent(
     }
 
     PlatformMap(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
         pins = pins,
         clusters = clusters,
         zoom = zoom,

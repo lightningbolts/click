@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -153,38 +157,56 @@ fun LiquidGlassPageHeader(
                     }
                 }
                 HeaderDisplayMode.Large -> {
-                    if (actions != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Spacer(modifier = Modifier.weight(1f))
-                            actions()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = titleSize,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            if (subtitle != null) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (presenceOnline != null) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                PresenceSubtitleRow(online = presenceOnline)
+                            }
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = titleSize,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (subtitle != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (presenceOnline != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        PresenceSubtitleRow(online = presenceOnline)
+                        if (actions != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                actions()
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** Magnifying-glass action for tab headers — opens [compose.project.click.click.ui.screens.UnifiedSearchSheet]. */
+@Composable
+fun HeaderSearchIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onClick, modifier = modifier) {
+        Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = "Search",
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        )
     }
 }
 

@@ -57,6 +57,7 @@ fun ConnectionsScreen(
     onChatOpenStateChanged: (Boolean) -> Unit = {},
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onHubSelected: ((compose.project.click.click.data.ActiveHubEntry) -> Unit)? = null,
+    onOpenSearch: (() -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() },
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
@@ -191,6 +192,7 @@ fun ConnectionsScreen(
                 ConnectionsListView(
                     viewModel = viewModel,
                     searchQuery = searchQuery,
+                    onOpenSearch = onOpenSearch,
                     onChatSelected = { chatId -> openChat(chatId) },
                     onHubSelected = onHubSelected,
                     onNavigateToLocationSettings = onNavigateToLocationSettings,
@@ -295,6 +297,7 @@ fun ConnectionsScreen(
                 ConnectionsListView(
                     viewModel = viewModel,
                     searchQuery = searchQuery,
+                    onOpenSearch = onOpenSearch,
                     onChatSelected = { chatId -> openChat(chatId) },
                     onHubSelected = onHubSelected,
                     onNavigateToLocationSettings = onNavigateToLocationSettings,

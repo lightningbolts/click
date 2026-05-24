@@ -247,6 +247,7 @@ import compose.project.click.click.util.redactedRestMessage // pragma: allowlist
 fun ConnectionsListView(
     viewModel: ChatViewModel,
     searchQuery: String = "",
+    onOpenSearch: (() -> Unit)? = null,
     onChatSelected: (String) -> Unit,
     onHubSelected: ((ActiveHubEntry) -> Unit)? = null,
     onNavigateToLocationSettings: (() -> Unit)? = null,
@@ -755,6 +756,7 @@ fun ConnectionsListView(
                 groupCount = groupCount,
                 archivedCount = archivedCount,
                 showTabs = effectiveChats.isNotEmpty(),
+                onOpenSearch = onOpenSearch,
             )
         }
     }

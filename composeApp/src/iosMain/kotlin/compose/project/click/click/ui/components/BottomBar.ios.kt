@@ -36,7 +36,8 @@ import platform.darwin.NSObject
 actual fun PlatformBottomBar(
     items: List<NavigationItem>,
     currentRoute: String,
-    onItemSelected: (NavigationItem) -> Unit
+    onItemSelected: (NavigationItem) -> Unit,
+    visible: Boolean,
 ) {
     val density = LocalDensity.current
     val viewController = LocalUIViewController.current
@@ -94,12 +95,23 @@ actual fun PlatformBottomBar(
         else viewController.view.safeAreaInsets.useContents { bottom.dp }
     }
 
+    LaunchedEffect(visible, tabBar, safeAreaBottom) {
+        tabBar.hidden = !visible
+        tabBar.alpha = if (visible) 1.0 else 0.0
+        if (!visible) {
+            AppScreenChromeState.updateBottomChromeHeight(
+                safeAreaBottom + AppScreenDefaults.ExtraScrollBottomPadding,
+            )
+        }
+    }
+
     var topLeft by remember { mutableStateOf(DpOffset.Zero) }
     var positionInRoot by remember { mutableStateOf(DpOffset.Zero) }
     var tabBarWidth by remember { mutableStateOf(0.dp) }
     var tabBarHeight by remember { mutableStateOf(safeAreaBottom + AppScreenDefaults.IosTabBarContentHeight) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, visible) {
+        if (!visible) return@LaunchedEffect
         var stable = 0
         while (true) {
             val viewHeightPx = viewController.view.bounds.useContents { size.height }
@@ -129,6 +141,8 @@ actual fun PlatformBottomBar(
             withFrameMillis { }
         }
     }
+
+    if (!visible) return
 
     Box(
         modifier = Modifier

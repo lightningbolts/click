@@ -79,9 +79,9 @@ import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 
 /**
- * Full-screen global search — unified results across connections, archives, cliques,
- * interests, memory context, intents, messages, and locations.
+ * @deprecated Use [UnifiedSearchSheet] from the current screen context instead of routing here.
  */
+@Deprecated("Replaced by UnifiedSearchSheet")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlobalSearchScreen(
@@ -241,16 +241,16 @@ fun GlobalSearchScreen(
 }
 
 @Composable
-private fun categoryLabel(cat: SearchResultCategory): String =
+internal fun categoryLabel(cat: SearchResultCategory): String =
     when (cat) {
         SearchResultCategory.Active -> "Active"
         SearchResultCategory.Archived -> "Archived"
         SearchResultCategory.Cliques -> "Cliques"
-        SearchResultCategory.Nearby -> "Nearby"
+        SearchResultCategory.Nearby -> "Beacons"
     }
 
 @Composable
-private fun EmptySearchHint(
+internal fun EmptySearchHint(
     modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     body: String,
@@ -277,7 +277,7 @@ private fun EmptySearchHint(
 }
 
 @Composable
-private fun UnifiedSearchResultsList(
+internal fun UnifiedSearchResultsList(
     results: List<SearchResult>,
     bottomPadding: Dp,
     onNavigateToChat: (String) -> Unit,
@@ -309,7 +309,7 @@ private fun UnifiedSearchResultsList(
     }
 }
 
-private fun searchResultStableKey(r: SearchResult): String =
+internal fun searchResultStableKey(r: SearchResult): String =
     when (r) {
         is SearchResult.ActiveConnection -> "a:${r.details.connection.id}"
         is SearchResult.ArchivedConnection -> "ar:${r.details.connection.id}"
@@ -322,7 +322,7 @@ private fun searchResultStableKey(r: SearchResult): String =
     }
 
 @Composable
-private fun SearchSectionHeader(label: String, brush: Brush) {
+internal fun SearchSectionHeader(label: String, brush: Brush) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -339,7 +339,7 @@ private fun SearchSectionHeader(label: String, brush: Brush) {
 }
 
 @Composable
-private fun SearchResultRow(
+internal fun SearchResultRow(
     result: SearchResult,
     onNavigateToChat: (String) -> Unit,
     onNavigateToMap: () -> Unit,
@@ -398,7 +398,7 @@ private fun SearchResultRow(
 }
 
 @Composable
-private fun BadgeRow(result: SearchResult) {
+internal fun BadgeRow(result: SearchResult) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         when (result) {
             is SearchResult.ArchivedConnection -> TinyBadge("Archived")
@@ -414,7 +414,7 @@ private fun BadgeRow(result: SearchResult) {
 }
 
 @Composable
-private fun TinyBadge(text: String) {
+internal fun TinyBadge(text: String) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = Color.White.copy(alpha = 0.1f),
@@ -430,7 +430,7 @@ private fun TinyBadge(text: String) {
 }
 
 @Composable
-private fun TitleAndSubtitle(result: SearchResult) {
+internal fun TitleAndSubtitle(result: SearchResult) {
     val titleStyle = MaterialTheme.typography.bodyLarge.copy(
         color = Color.White,
         fontWeight = FontWeight.SemiBold,
@@ -494,7 +494,7 @@ private fun TitleAndSubtitle(result: SearchResult) {
 }
 
 @Composable
-private fun PersonLeadingAvatar(details: ChatWithDetails) {
+internal fun PersonLeadingAvatar(details: ChatWithDetails) {
     val initials = details.otherUser.name
         ?.split(" ")
         ?.take(2)
@@ -517,7 +517,7 @@ private fun PersonLeadingAvatar(details: ChatWithDetails) {
 }
 
 @Composable
-private fun MessageLeadingIcon() {
+internal fun MessageLeadingIcon() {
     Box(
         modifier = Modifier
             .size(42.dp)
@@ -535,7 +535,7 @@ private fun MessageLeadingIcon() {
 }
 
 @Composable
-private fun LocationLeadingIcon() {
+internal fun LocationLeadingIcon() {
     Box(
         modifier = Modifier
             .size(42.dp)
@@ -552,7 +552,7 @@ private fun LocationLeadingIcon() {
     }
 }
 
-private fun formatSearchTime(timestamp: Long): String {
+internal fun formatSearchTime(timestamp: Long): String {
     val instant = Instant.fromEpochMilliseconds(timestamp)
     val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
     val hour = dateTime.hour

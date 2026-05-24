@@ -7,6 +7,7 @@ import compose.project.click.click.navigation.NavigationItem
 expect fun PlatformBottomBar(
     items: List<NavigationItem>,
     currentRoute: String,
-    onItemSelected: (NavigationItem) -> Unit
+    onItemSelected: (NavigationItem) -> Unit,
+    visible: Boolean = true,
 )
 

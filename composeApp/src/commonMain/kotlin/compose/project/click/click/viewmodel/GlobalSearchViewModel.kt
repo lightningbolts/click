@@ -202,6 +202,10 @@ class GlobalSearchViewModel(
         _visibleCategories.value = if (category in cur) cur - category else cur + category
     }
 
+    fun selectAllFilters() {
+        _visibleCategories.value = SearchResultCategory.entries.toSet()
+    }
+
     fun search(query: String, viewerUserId: String) {
         _searchQuery.value = query
         searchJob?.cancel()

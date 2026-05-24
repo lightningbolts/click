@@ -115,7 +115,6 @@ import compose.project.click.click.calls.CallSessionManager // pragma: allowlist
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
@@ -123,10 +122,10 @@ import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allo
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatComposerDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatComposerDockEdgeToEdge // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatHeaderImeIsolation // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatScreenImeIsolation // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -292,7 +291,7 @@ fun ChatView(
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
-    val bottomChrome = rememberBottomChromePadding()
+    val edgeBottomInset = rememberEdgeToEdgeBottomPadding()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -414,7 +413,14 @@ fun ChatView(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        val successForMesh = chatMessagesState as? ChatMessagesState.Success
+        if (successForMesh != null) {
+            ChatAmbientMeshBackground(
+                connection = successForMesh.chatDetails.connection,
+                isHubNeutral = successForMesh.chatDetails.groupClique != null,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
@@ -571,11 +577,6 @@ fun ChatView(
                             .fillMaxSize()
                             .chatScreenImeIsolation(),
                     ) {
-                        ChatAmbientMeshBackground(
-                            connection = chatDetails.connection,
-                            isHubNeutral = false,
-                            modifier = Modifier.fillMaxSize(),
-                        )
                     Column(modifier = Modifier.fillMaxSize()) {
                         Column(
                             modifier = Modifier
@@ -1189,7 +1190,7 @@ fun ChatView(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .chatComposerDock(),
+                            .chatComposerDockEdgeToEdge(),
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
@@ -1294,7 +1295,6 @@ fun ChatView(
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                             ConnectionChatMessageComposer(
                                 viewModel = viewModel,
                                 chatDetails = chatDetails,
@@ -1313,14 +1313,13 @@ fun ChatView(
                 }
             }
         }
-    }
 
     // Snackbar overlay
     SnackbarHost(
         hostState = snackbarHostState,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .padding(bottom = bottomChrome + 56.dp)
+            .padding(bottom = edgeBottomInset + 56.dp)
     )
 
     // Message long-press context sheet

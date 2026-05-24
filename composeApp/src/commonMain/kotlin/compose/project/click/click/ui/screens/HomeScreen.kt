@@ -90,7 +90,8 @@ private fun headerGradientBrush() = Brush.horizontalGradient(
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel { HomeViewModel() },
-    onNavigateToChat: (String) -> Unit = {}
+    onNavigateToChat: (String) -> Unit = {},
+    onOpenSearch: (() -> Unit)? = null,
 ) {
     val homeState by viewModel.homeState.collectAsState()
     val reconnectReminders by viewModel.reconnectReminders.collectAsState()
@@ -207,6 +208,7 @@ fun HomeScreen(
                 AppScreenScaffold(
                     title = "Home",
                     subtitle = "Welcome back, ${state.user.name ?: "User"}!",
+                    onOpenSearch = onOpenSearch,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
                 ) {
                         archiveBannerNotice?.let { notice ->

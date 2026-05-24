@@ -95,6 +95,28 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
     Modifier.padding(bottom = maxOf(tabStack, imeBottom))
 }
 
+/**
+ * Pins the chat composer to the physical bottom edge when the main tab bar is hidden.
+ * Uses home-indicator inset only on Android ([adjustResize] handles the IME). On iOS, keeps the
+ * composer above the keyboard via [maxOf] navigation-bar and IME padding.
+ */
+fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier = composed {
+    val style = LocalPlatformStyle.current
+    val homeIndicator =
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + extraBottom
+    if (!style.isIOS) {
+        return@composed Modifier.padding(bottom = homeIndicator)
+    }
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    Modifier.padding(bottom = maxOf(homeIndicator, imeBottom))
+}
+
+@Composable
+fun rememberEdgeToEdgeBottomPadding(extra: Dp = 0.dp): Dp {
+    val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return navigationBar + extra
+}
+
 /** Keeps the chat header fixed when the IME opens (iOS). */
 fun Modifier.chatHeaderImeIsolation(): Modifier = composed {
     val style = LocalPlatformStyle.current

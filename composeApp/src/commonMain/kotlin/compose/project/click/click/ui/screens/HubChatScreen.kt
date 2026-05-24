@@ -92,10 +92,10 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.components.chatComposerDock
+import compose.project.click.click.ui.components.chatComposerDockEdgeToEdge
 import compose.project.click.click.ui.components.chatHeaderImeIsolation
 import compose.project.click.click.ui.components.chatScreenImeIsolation
-import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
@@ -202,7 +202,7 @@ fun HubChatScreen(
 
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val bottomChrome = rememberBottomChromePadding()
+    val edgeBottomInset = rememberEdgeToEdgeBottomPadding()
 
     val channelReady by viewModel.channelReady.collectAsState()
 
@@ -229,7 +229,8 @@ fun HubChatScreen(
             enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
             exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)),
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
                 // ── Glass header with translucent backdrop ───────────────────
                 Box(
                     modifier = Modifier
@@ -462,7 +463,7 @@ fun HubChatScreen(
                             start = 6.dp,
                             end = 6.dp,
                             top = 12.dp,
-                            bottom = bottomChrome + 72.dp,
+                            bottom = 96.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
@@ -537,14 +538,14 @@ fun HubChatScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     )
                 }
+                }
 
-                // ── Composer (matches ConnectionChatMessageComposer layout) ─
                 Box(
                     modifier = Modifier
+                        .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .chatComposerDock(),
+                        .chatComposerDockEdgeToEdge(),
                 ) {
-                    ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                     HubChatInputBar(
                         viewModel = viewModel,
                         inLobby = inLobby,
@@ -559,7 +560,7 @@ fun HubChatScreen(
             hostState = hubSnackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = bottomChrome + 56.dp),
+                .padding(bottom = edgeBottomInset + 56.dp),
         )
     }
 

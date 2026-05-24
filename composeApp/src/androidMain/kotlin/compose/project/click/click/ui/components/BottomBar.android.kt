@@ -18,13 +18,20 @@ import androidx.compose.material3.MaterialTheme
 actual fun PlatformBottomBar(
     items: List<NavigationItem>,
     currentRoute: String,
-    onItemSelected: (NavigationItem) -> Unit
+    onItemSelected: (NavigationItem) -> Unit,
+    visible: Boolean,
 ) {
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val chromeHeight = AppScreenDefaults.AndroidNavBarContentHeight + navBarBottom
-    LaunchedEffect(chromeHeight) {
+    val chromeHeight = if (visible) {
+        AppScreenDefaults.AndroidNavBarContentHeight + navBarBottom
+    } else {
+        navBarBottom
+    }
+    LaunchedEffect(chromeHeight, visible) {
         AppScreenChromeState.updateBottomChromeHeight(chromeHeight)
     }
+
+    if (!visible) return
 
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),

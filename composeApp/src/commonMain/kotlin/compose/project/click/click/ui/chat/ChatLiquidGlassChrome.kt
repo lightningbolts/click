@@ -52,19 +52,21 @@ internal fun ChatComposerChromeFadeUnderlay(
     testTag: String = ChatGlassComposerPlateTestTag,
 ) {
     val bg = MaterialTheme.colorScheme.background
-    val mid = MaterialTheme.colorScheme.surface.copy(alpha = 0.18f)
+    val mid = MaterialTheme.colorScheme.surface.copy(alpha = 0.12f)
     BoxWithConstraints(modifier = modifier.testTag(testTag)) {
         val h = constraints.maxHeight.toFloat().coerceAtLeast(1f)
+        val extension = h * 0.35f
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .background(
                     Brush.verticalGradient(
                         0f to Color.Transparent,
-                        0.42f to mid,
-                        1f to bg,
-                        startY = 0f,
-                        endY = h,
+                        0.35f to mid.copy(alpha = 0.08f),
+                        0.72f to bg.copy(alpha = 0.22f),
+                        1f to Color.Transparent,
+                        startY = -extension,
+                        endY = h + extension,
                     ),
                 ),
         )

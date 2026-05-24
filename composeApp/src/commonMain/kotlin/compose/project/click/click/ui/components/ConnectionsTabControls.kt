@@ -53,6 +53,7 @@ fun ConnectionsFloatingHeader(
     groupCount: Int,
     archivedCount: Int,
     showTabs: Boolean,
+    onOpenSearch: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val compact = showTabs && collapseFraction > 0.42f
@@ -73,6 +74,7 @@ fun ConnectionsFloatingHeader(
                 activeCount = activeCount,
                 groupCount = groupCount,
                 archivedCount = archivedCount,
+                onOpenSearch = onOpenSearch,
             )
         } else {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -80,6 +82,11 @@ fun ConnectionsFloatingHeader(
                     title = title,
                     subtitle = subtitle,
                     collapseFraction = collapseFraction,
+                    actions = if (onOpenSearch != null) {
+                        { HeaderSearchIconButton(onClick = onOpenSearch) }
+                    } else {
+                        null
+                    },
                 )
                 if (showTabs) {
                     ConnectionsSegmentBar(
@@ -105,6 +112,7 @@ private fun ConnectionsCompactHeaderRow(
     activeCount: Int,
     groupCount: Int,
     archivedCount: Int,
+    onOpenSearch: (() -> Unit)? = null,
 ) {
     LiquidGlassPill(
         modifier = Modifier.fillMaxWidth(),
@@ -136,6 +144,9 @@ private fun ConnectionsCompactHeaderRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            if (onOpenSearch != null) {
+                HeaderSearchIconButton(onClick = onOpenSearch)
             }
             ConnectionsTabFilterMenuChip(
                 selectedTabIndex = selectedTabIndex,
