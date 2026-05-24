@@ -138,12 +138,16 @@ import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pr
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
-import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionsHeaderTabControls // pragma: allowlist secret
+import compose.project.click.click.ui.components.LiquidGlassPageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
@@ -258,7 +262,8 @@ fun ConnectionsListView(
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val activeHubs by AppDataManager.activeHubs.collectAsState()
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bottomChrome = rememberBottomChromePadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Groups, 2 = Archived
@@ -299,7 +304,6 @@ fun ConnectionsListView(
 
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
-    val cliqueSheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val listScope = rememberCoroutineScope()
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
@@ -333,30 +337,17 @@ fun ConnectionsListView(
         onVerifiedCliqueProximityAutofillConsumed()
     }
 
-    LaunchedEffect(cliqueSheetVisible) {
-        if (cliqueSheetVisible) {
-            try {
-                cliqueSheetState.show()
-            } catch (_: Exception) {
-            }
-        }
-    }
-
     fun dismissVerifiedCliqueSheet(onAfterHide: () -> Unit = {}) {
-        listScope.launch {
-            try {
-                cliqueSheetState.hide()
-            } catch (_: Exception) {
-            }
-        }.invokeOnCompletion {
-            cliqueSheetVisible = false
-            proximityCliqueHintUsers = emptyList()
-            onAfterHide()
-        }
+        cliqueSheetVisible = false
+        proximityCliqueHintUsers = emptyList()
+        onAfterHide()
     }
 
     val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState(0, 0)
+    }
+    val collapseFraction by remember(connectionsLazyListState) {
+        derivedStateOf { connectionsLazyListState.headerCollapseFraction() }
     }
 
     // Render only the unified inbox payload emitted by ChatViewModel.
@@ -463,160 +454,86 @@ fun ConnectionsListView(
         }
     }
 
+    val activeCount = effectiveChats.count {
+        it.groupClique == null &&
+            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+    }
+    val groupCount = effectiveChats.count {
+        it.groupClique != null &&
+            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+    } + activeHubs.size
+    val archivedCount = effectiveChats.count {
+        it.groupClique == null &&
+            it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+    }
+    val headerSubtitle = remember(
+        effectiveChats,
+        selectedTabIndex,
+        searchQuery,
+        chatListState,
+        activeCount,
+        groupCount,
+        archivedCount,
+    ) {
+        if (effectiveChats.isEmpty()) {
+            if (chatListState is ChatListState.Loading) "Loading…" else ""
+        } else {
+            val activeChats = effectiveChats.filter {
+                it.groupClique == null &&
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+            }
+            val groupChats = effectiveChats.filter {
+                it.groupClique != null &&
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+            }
+            val archivedChats = effectiveChats.filter {
+                it.groupClique == null &&
+                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+            }
+            val tabChats = when (selectedTabIndex) {
+                0 -> activeChats
+                1 -> groupChats
+                else -> archivedChats
+            }
+            val filteredCount = if (searchQuery.isBlank()) {
+                tabChats.size
+            } else {
+                tabChats.count { chat ->
+                    val groupHit =
+                        chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
+                    val userHit =
+                        chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
+                    groupHit || userHit
+                }
+            }
+            val tabLabel = when (selectedTabIndex) {
+                0 -> "active"
+                1 -> "group"
+                else -> "archived"
+            }
+            if (searchQuery.isNotBlank()) {
+                "$filteredCount result${if (filteredCount == 1) "" else "s"} for \"$searchQuery\""
+            } else {
+                "$filteredCount $tabLabel ${if (filteredCount == 1) "connection" else "connections"}"
+            }
+        }
+    }
+    val listTopPadding = remember(collapseFraction, statusBarTop, effectiveChats.isNotEmpty()) {
+        val collapsed = AppScreenDefaults.FloatingHeaderCompactHeight
+        val expanded = AppScreenDefaults.FloatingHeaderLargeHeight
+        val headerH = statusBarTop + collapsed + (expanded - collapsed) * (1f - collapseFraction)
+        val tabH = if (effectiveChats.isNotEmpty()) {
+            if (collapseFraction > 0.42f) 52.dp else 68.dp
+        } else {
+            0.dp
+        }
+        headerH + tabH + 10.dp
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                if (effectiveChats.isNotEmpty()) {
-                    val activeChats = effectiveChats.filter {
-                        it.groupClique == null &&
-                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                    }
-                    val groupChats = effectiveChats.filter {
-                        it.groupClique != null &&
-                            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                    }
-                    val archivedChats = effectiveChats.filter {
-                        it.groupClique == null &&
-                        it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-                    }
-                    val tabChats = when (selectedTabIndex) {
-                        0 -> activeChats
-                        1 -> groupChats
-                        else -> archivedChats
-                    }
-                    val filteredCount = if (searchQuery.isBlank()) {
-                        tabChats.size
-                    } else {
-                        tabChats.count { chat ->
-                            val groupHit =
-                                chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
-                            val userHit =
-                                chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
-                            groupHit || userHit
-                        }
-                    }
-                    val tabLabel = when (selectedTabIndex) {
-                        0 -> "active"
-                        1 -> "group"
-                        else -> "archived"
-                    }
-                    PageHeader(
-                        title = "Clicks",
-                        subtitle = if (searchQuery.isNotBlank()) {
-                            "$filteredCount result${if (filteredCount == 1) "" else "s"} for \"$searchQuery\""
-                        } else {
-                            "$filteredCount $tabLabel ${if (filteredCount == 1) "connection" else "connections"}"
-                        }
-                    )
-                } else {
-                    val subtitle = if (chatListState is ChatListState.Loading) "Loading…" else ""
-                    PageHeader(title = "Clicks", subtitle = subtitle)
-                }
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-
-            if (effectiveChats.isNotEmpty()) {
-                val activeCount = effectiveChats.count {
-                    it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val groupCount = effectiveChats.count {
-                    it.groupClique != null &&
-                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                } + activeHubs.size
-                val archivedCount = effectiveChats.count {
-                    it.groupClique == null &&
-                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-
-                val segStyle = LocalPlatformStyle.current
-                val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
-                val segCorner = if (segStyle.isIOS) 10.dp else 12.dp
-                val segInnerCorner = if (segStyle.isIOS) 7.dp else 8.dp
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .border(
-                            width = segBorderWidth,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                            shape = RoundedCornerShape(segCorner)
-                        )
-                        .clip(RoundedCornerShape(segCorner))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(segInnerCorner))
-                            .then(
-                                if (selectedTabIndex == 0) Modifier
-                                    .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
-                                    .border(segBorderWidth, PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f), RoundedCornerShape(segInnerCorner))
-                                else Modifier
-                            )
-                            .clickable { selectedTabIndex = 0 }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Active ($activeCount)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selectedTabIndex == 0) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selectedTabIndex == 0) LightBlue
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(segInnerCorner))
-                            .then(
-                                if (selectedTabIndex == 1) Modifier
-                                    .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
-                                    .border(segBorderWidth, PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f), RoundedCornerShape(segInnerCorner))
-                                else Modifier
-                            )
-                            .clickable { selectedTabIndex = 1 }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Groups ($groupCount)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selectedTabIndex == 1) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selectedTabIndex == 1) LightBlue
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(segInnerCorner))
-                            .then(
-                                if (selectedTabIndex == 2) Modifier
-                                    .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
-                                    .border(segBorderWidth, PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f), RoundedCornerShape(segInnerCorner))
-                                else Modifier
-                            )
-                            .clickable { selectedTabIndex = 2 }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Archived ($archivedCount)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selectedTabIndex == 2) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selectedTabIndex == 2) LightBlue
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
             if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -706,6 +623,7 @@ fun ConnectionsListView(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(emptyScroll)
+                                .padding(top = listTopPadding),
                         ) {
                             Box(
                                 modifier = Modifier
@@ -749,8 +667,8 @@ fun ConnectionsListView(
                             contentPadding = PaddingValues(
                                 start = 20.dp,
                                 end = 20.dp,
-                                top = 18.dp,
-                                bottom = 20.dp,
+                                top = listTopPadding,
+                                bottom = bottomChrome,
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -817,13 +735,39 @@ fun ConnectionsListView(
                 }
             }
         }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(1f)
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = statusBarTop),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LiquidGlassPageHeader(
+                    title = "Clicks",
+                    subtitle = headerSubtitle.takeIf { it.isNotBlank() },
+                    collapseFraction = collapseFraction,
+                )
+                ConnectionsHeaderTabControls(
+                    collapseFraction = collapseFraction,
+                    selectedTabIndex = selectedTabIndex,
+                    onTabSelected = { selectedTabIndex = it },
+                    activeCount = activeCount,
+                    groupCount = groupCount,
+                    archivedCount = archivedCount,
+                    showTabs = effectiveChats.isNotEmpty(),
+                )
+            }
+        }
+    }
     }
 
     SnackbarHost(
         hostState = snackbarHostState,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .padding(bottom = 16.dp)
+            .padding(bottom = bottomChrome)
     )
 
     if (selectedTabIndex == 0 && currentUserId != null) {
@@ -834,7 +778,7 @@ fun ConnectionsListView(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 12.dp),
+                .padding(end = 20.dp, bottom = 24.dp + bottomChrome),
             containerColor = PrimaryBlue,
             contentColor = Color.White,
         ) {
@@ -844,9 +788,8 @@ fun ConnectionsListView(
 
     val uidForClique = currentUserId
     if (cliqueSheetVisible && uidForClique != null) {
-        GlassAdaptiveBottomSheet(
+        ClickFormBottomSheet(
             onDismissRequest = { dismissVerifiedCliqueSheet() },
-            adaptiveSheetState = cliqueSheetState,
         ) {
             Box(
                 modifier = Modifier
@@ -1150,7 +1093,6 @@ private fun HubActionSheet(
     viewModel: ChatViewModel,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     var details by remember(hub.hubId) {
         mutableStateOf<ChatApiClient.HubDetailsDto?>(null)
@@ -1189,10 +1131,8 @@ private fun HubActionSheet(
         showConfirm = true
     }
 
-    GlassModalBottomSheet(
+    ClickActionBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
     ) {
         Column(
             modifier = Modifier

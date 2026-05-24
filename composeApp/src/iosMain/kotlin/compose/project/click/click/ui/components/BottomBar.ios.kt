@@ -115,6 +115,10 @@ actual fun PlatformBottomBar(
         }
     }
 
+    LaunchedEffect(tabBarHeight) {
+        AppScreenChromeState.updateBottomChromeHeight(tabBarHeight)
+    }
+
     Box(
         modifier = Modifier
             .onPlaced {

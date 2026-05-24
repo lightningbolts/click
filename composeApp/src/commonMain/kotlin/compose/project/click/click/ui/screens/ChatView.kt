@@ -29,6 +29,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -123,6 +124,8 @@ import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allo
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.composerBottomPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -288,6 +291,7 @@ fun ChatView(
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
+    val bottomChrome = rememberBottomChromePadding()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -546,10 +550,6 @@ fun ChatView(
                             coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
                         },
                     )
-                    val chatChromeStyle = LocalPlatformStyle.current
-                    val composerImeLiftModifier =
-                        if (chatChromeStyle.isIOS) Modifier.imePadding() else Modifier
-
                     /**
                      * Full-screen ambient mesh behind header + thread. Top padding uses
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
@@ -571,7 +571,16 @@ fun ChatView(
                             isHubNeutral = false,
                             modifier = Modifier.fillMaxSize(),
                         )
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .animateContentSize(
+                                animationSpec = spring(
+                                    dampingRatio = 0.82f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                            ),
+                    ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1282,9 +1291,7 @@ fun ChatView(
                         }
 
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(composerImeLiftModifier),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                             ConnectionChatMessageComposer(
@@ -1312,7 +1319,7 @@ fun ChatView(
         hostState = snackbarHostState,
         modifier = Modifier
             .align(Alignment.BottomCenter)
-            .padding(bottom = 80.dp) // above input bar
+            .padding(bottom = bottomChrome + 56.dp)
     )
 
     // Message long-press context sheet

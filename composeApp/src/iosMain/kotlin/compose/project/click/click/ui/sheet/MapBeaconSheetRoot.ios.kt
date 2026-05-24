@@ -56,6 +56,7 @@ private class MapIosHalfSheetManager(
     private val parentUIViewController: UIViewController,
     private var isChromeDark: Boolean,
     private var containerColor: Color,
+    private val expandable: Boolean,
     private val onDismissFromSwipe: () -> Unit,
     private val schemeState: MutableState<ColorScheme>,
     private val typographyState: MutableState<Typography>,
@@ -115,7 +116,14 @@ private class MapIosHalfSheetManager(
             modalTransitionStyle = UIModalTransitionStyleCoverVertical
             presentationController?.delegate = delegate
             sheetPresentationController?.setDetents(
-                listOf(UISheetPresentationControllerDetent.mediumDetent()),
+                if (expandable) {
+                    listOf(
+                        UISheetPresentationControllerDetent.mediumDetent(),
+                        UISheetPresentationControllerDetent.largeDetent(),
+                    )
+                } else {
+                    listOf(UISheetPresentationControllerDetent.mediumDetent())
+                },
             )
             sheetPresentationController?.prefersGrabberVisible = false
             isInitialized = true
@@ -183,6 +191,7 @@ actual fun MapBeaconSheetRoot(
     appColorScheme: ColorScheme,
     appTypography: Typography,
     modifier: Modifier,
+    expandable: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (!visible) return
@@ -200,6 +209,7 @@ actual fun MapBeaconSheetRoot(
             parentUIViewController = parent,
             isChromeDark = appColorScheme.background.luminance() < 0.5f,
             containerColor = containerColorState.value,
+            expandable = expandable,
             onDismissFromSwipe = { onDismissState.value.invoke() },
             schemeState = schemeState,
             typographyState = typographyState,

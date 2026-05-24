@@ -228,7 +228,6 @@ fun ConnectionContextSheet(
     var selectedTagId by remember { mutableStateOf<String?>(suggestions.firstOrNull()?.id) }
     var customTagText by remember { mutableStateOf("") }
     var ambientNoiseOptIn by remember(initialNoiseOptIn) { mutableStateOf(initialNoiseOptIn) }
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val isCustomSelectionInvalid = selectedTagId == "custom" && customTagText.isBlank()
     val dismissSheet = onSkip ?: onDismiss
 
@@ -280,9 +279,8 @@ fun ConnectionContextSheet(
         }
     }
 
-    GlassAdaptiveBottomSheet(
+    ClickFormBottomSheet(
         onDismissRequest = dismissSheet,
-        adaptiveSheetState = sheetState,
     ) {
         Column(
             modifier = Modifier

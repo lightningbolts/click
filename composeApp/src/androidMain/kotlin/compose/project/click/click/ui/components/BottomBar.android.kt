@@ -1,10 +1,14 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.ui.theme.*
@@ -16,6 +20,12 @@ actual fun PlatformBottomBar(
     currentRoute: String,
     onItemSelected: (NavigationItem) -> Unit
 ) {
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val chromeHeight = 80.dp + navBarBottom
+    LaunchedEffect(chromeHeight) {
+        AppScreenChromeState.updateBottomChromeHeight(chromeHeight)
+    }
+
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         tonalElevation = 8.dp

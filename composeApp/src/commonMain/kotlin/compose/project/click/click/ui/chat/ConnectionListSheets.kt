@@ -50,7 +50,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCardCompact // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
@@ -160,19 +160,15 @@ internal fun GroupMembersPickerSheet(
     onDismiss: () -> Unit,
     onMemberClick: (String) -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
     fun dismissSheet() {
-        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+        onDismiss()
     }
     val scroll = rememberScrollState()
     val surface = GlassSheetTokens.OledBlack
     val onSurface = GlassSheetTokens.OnOled
     val onVariant = GlassSheetTokens.OnOledMuted
-    GlassModalBottomSheet(
+    ClickActionBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
     ) {
         Column(
             modifier = Modifier

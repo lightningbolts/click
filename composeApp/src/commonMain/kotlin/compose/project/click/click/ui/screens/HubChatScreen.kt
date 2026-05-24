@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -92,6 +93,8 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.components.composerBottomPadding
+import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
@@ -198,7 +201,7 @@ fun HubChatScreen(
 
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val hubNavBottomDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomChrome = rememberBottomChromePadding()
 
     val channelReady by viewModel.channelReady.collectAsState()
 
@@ -221,7 +224,16 @@ fun HubChatScreen(
             enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
             exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)),
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = 0.82f,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    ),
+            ) {
                 // ── Glass header with translucent backdrop ───────────────────
                 Box(
                     modifier = Modifier
@@ -453,7 +465,7 @@ fun HubChatScreen(
                             start = 6.dp,
                             end = 6.dp,
                             top = 12.dp,
-                            bottom = hubNavBottomDp + 72.dp,
+                            bottom = bottomChrome + 72.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
@@ -530,14 +542,10 @@ fun HubChatScreen(
                 }
 
                 // ── Composer (matches ConnectionChatMessageComposer layout) ─
-                // iOS: imePadding on the composer only so the field lifts above the keyboard
-                // without pushing the header off-screen. Android adjustResize handles it.
-                val composerStyle = LocalPlatformStyle.current
-                val composerImeLift = if (composerStyle.isIOS) Modifier.imePadding() else Modifier
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(composerImeLift),
+                        .composerBottomPadding(),
                 ) {
                     ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                     HubChatInputBar(
@@ -554,7 +562,7 @@ fun HubChatScreen(
             hostState = hubSnackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp),
+                .padding(bottom = bottomChrome + 56.dp),
         )
     }
 

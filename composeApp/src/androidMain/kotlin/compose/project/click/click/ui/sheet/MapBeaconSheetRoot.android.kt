@@ -2,9 +2,8 @@ package compose.project.click.click.ui.sheet // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import compose.project.click.click.ui.components.GlassSheetGrabber // pragma: allowlist secret
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -13,7 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
+import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,12 +27,13 @@ actual fun MapBeaconSheetRoot(
     appColorScheme: ColorScheme,
     appTypography: Typography,
     modifier: Modifier,
+    expandable: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (!visible) return
 
     val sheetState = rememberAdaptiveSheetState(
-        skipPartiallyExpanded = true,
+        skipPartiallyExpanded = !expandable,
         confirmValueChange = { true },
     )
 
@@ -48,16 +48,12 @@ actual fun MapBeaconSheetRoot(
         colorScheme = appColorScheme,
         typography = appTypography,
     ) {
-        AdaptiveBottomSheet(
+        GlassAdaptiveBottomSheet(
             onDismissRequest = onDismissRequest,
-            modifier = modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.5f),
+            modifier = modifier.fillMaxWidth(),
             adaptiveSheetState = sheetState,
-            containerColor = containerColor,
-            contentColor = contentColor,
+            sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
             scrimColor = scrimColor,
-            dragHandle = { GlassSheetGrabber() },
             contentWindowInsets = contentWindowInsets,
             content = content,
         )

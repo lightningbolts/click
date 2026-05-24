@@ -33,7 +33,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
@@ -58,30 +58,8 @@ fun AvailabilitySheet(
 
     val canSubmit = tag.trim().isNotEmpty() && !submitting
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-
-    fun dismissWithSheetAnimation() {
-        scope.launch {
-            try {
-                sheetState.hide()
-            } catch (_: Exception) {
-            }
-        }.invokeOnCompletion {
-            onDismiss()
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        try {
-            sheetState.show()
-        } catch (_: Exception) {
-        }
-    }
-
-    GlassAdaptiveBottomSheet(
-        onDismissRequest = { dismissWithSheetAnimation() },
-        adaptiveSheetState = sheetState,
+    ClickFormBottomSheet(
+        onDismissRequest = onDismiss,
     ) {
         Box(
             modifier = Modifier
@@ -168,7 +146,7 @@ fun AvailabilitySheet(
                     TextButton(
                         onClick = {
                             viewModel.clearIntentSubmitError()
-                            dismissWithSheetAnimation()
+                            onDismiss()
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !submitting,
@@ -177,7 +155,7 @@ fun AvailabilitySheet(
                     }
                     Button(
                         onClick = {
-                            viewModel.submitAvailabilityIntent(onSuccess = { dismissWithSheetAnimation() })
+                            viewModel.submitAvailabilityIntent(onSuccess = { onDismiss() })
                         },
                         modifier = Modifier.weight(1f),
                         enabled = canSubmit,

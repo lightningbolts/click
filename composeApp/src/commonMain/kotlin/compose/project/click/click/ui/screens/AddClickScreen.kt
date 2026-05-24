@@ -23,7 +23,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
@@ -46,28 +46,14 @@ fun AddClickScreen(
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
 
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-        ) {
-            Box(modifier = Modifier.padding(top = topInset)) {
-                PageHeader(
-                    title = "Add Click",
-                    subtitle = "Connect with QR or Tap to Connect, or join a venue community hub",
-                )
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-
+        AppScreenWithFloatingHeader(
+            title = "Add Click",
+            subtitle = "Connect with QR or Tap to Connect, or join a venue community hub",
+        ) { contentModifier ->
             if (!isClicked) {
                 AddClickContent(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp),
+                    modifier = contentModifier.fillMaxWidth(),
                     onClickSuccess = { userName ->
                         isClicked = true
                         clickedUserName = userName
@@ -82,9 +68,7 @@ fun AddClickScreen(
                 )
             } else {
                 ClickedSuccessContent(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
+                    modifier = contentModifier.fillMaxWidth(),
                     userName = clickedUserName,
                     onStartChatting = onStartChatting
                 )

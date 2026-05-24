@@ -70,7 +70,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.AppScreenScaffold
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.AvailabilityViewModel
@@ -189,20 +189,11 @@ fun SettingsScreen(
     var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var showPermissionsHub by remember { mutableStateOf(false) }
 
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
     Box(modifier = Modifier.fillMaxSize()) {
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                PageHeader(title = "Settings")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            AppScreenScaffold(
+                title = "Settings",
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item {
                     SettingsSectionHeader("Availability")
@@ -746,7 +737,6 @@ fun SettingsScreen(
                     }
                 }
             )
-        }
         }
 
         SnackbarHost(

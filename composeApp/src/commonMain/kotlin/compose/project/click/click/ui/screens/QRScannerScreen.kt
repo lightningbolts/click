@@ -40,6 +40,7 @@ import compose.project.click.click.qr.QrParseResult
 import compose.project.click.click.qr.parseQrCode
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.bottomChromePadding
 import compose.project.click.click.ui.components.QRScanner
 import compose.project.click.click.ui.components.QrScannerDetection
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -179,7 +180,7 @@ fun QRScannerScreen(
     }
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().bottomChromePadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                     PageHeader(
@@ -198,10 +199,10 @@ fun QRScannerScreen(
                                     tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                        }
+                        },
                     )
                 }
-                
+
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -215,8 +216,8 @@ fun QRScannerScreen(
                             } else {
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                             },
-                            shape = RoundedCornerShape(24.dp)
-                        )
+                            shape = RoundedCornerShape(24.dp),
+                        ),
                 ) {
                     QRScanner(
                         modifier = Modifier.fillMaxSize(),
@@ -310,20 +311,19 @@ fun QRScannerScreen(
 
             AnimatedVisibility(
                 visible = showError,
-                enter = fadeIn(animationSpec = tween(200)) + 
-                        slideInVertically(
-                            animationSpec = tween(300),
-                            initialOffsetY = { it }
-                        ),
-                exit = fadeOut(animationSpec = tween(200)) + 
-                       slideOutVertically(
-                           animationSpec = tween(300),
-                           targetOffsetY = { it }
-                       ),
+                enter = fadeIn(animationSpec = tween(200)) +
+                    slideInVertically(
+                        animationSpec = tween(300),
+                        initialOffsetY = { it },
+                    ),
+                exit = fadeOut(animationSpec = tween(200)) +
+                    slideOutVertically(
+                        animationSpec = tween(300),
+                        targetOffsetY = { it },
+                    ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(24.dp)
-                    .padding(bottom = 48.dp)
+                    .padding(24.dp),
             ) {
                 Surface(
                     modifier = Modifier

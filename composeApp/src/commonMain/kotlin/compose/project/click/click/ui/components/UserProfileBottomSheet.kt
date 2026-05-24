@@ -68,7 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
@@ -727,7 +727,6 @@ fun UserProfileBottomSheet(
 ) {
     if (userId.isNullOrBlank()) return
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     val repository = remember { SupabaseRepository() }
     var profile by remember(userId) { mutableStateOf(repository.getCachedUserPublicProfile(userId)) }
@@ -750,17 +749,11 @@ fun UserProfileBottomSheet(
     }
 
     fun dismiss() {
-        scope.launch {
-            sheetState.hide()
-        }.invokeOnCompletion {
-            onDismiss()
-        }
+        onDismiss()
     }
 
-    GlassAdaptiveBottomSheet(
+    ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        adaptiveSheetState = sheetState,
-        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
     ) {
         Box(
             modifier = Modifier

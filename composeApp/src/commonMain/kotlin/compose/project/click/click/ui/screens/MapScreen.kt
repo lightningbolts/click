@@ -9,8 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,6 +72,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.ui.utils.displayTypeTitle
+import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 
 /**
@@ -99,6 +100,7 @@ fun MapScreen(
     val renderData by viewModel.renderData.collectAsState()
     val selection by viewModel.selection.collectAsState()
     val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
+    val mapBottomChrome = rememberBottomChromePadding()
     val cameraTarget by viewModel.cameraTarget.collectAsState()
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
@@ -143,7 +145,6 @@ fun MapScreen(
         }
     }
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
     // Pin taps update this directly (in addition to the view-model selection state) so
     // sheet visibility is decoupled from any race in the selection StateFlow.
@@ -252,7 +253,12 @@ fun MapScreen(
                             .zIndex(4f)
                             .fillMaxWidth()
                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                            .padding(horizontal = 16.dp, vertical = 24.dp),
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 24.dp,
+                                bottom = 24.dp + mapBottomChrome,
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -293,7 +299,7 @@ fun MapScreen(
             appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
-            MapDialogChrome(
+            ClickSheetDialogChrome(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(),
@@ -344,7 +350,7 @@ fun MapScreen(
             appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
-            MapDialogChrome(
+            ClickSheetDialogChrome(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(),
@@ -385,7 +391,7 @@ fun MapScreen(
             appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
-            MapDialogChrome(
+            ClickSheetDialogChrome(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(),
@@ -414,20 +420,23 @@ fun MapScreen(
         }
         val profileSheetColor = GlassSheetTokens.OledBlack
         val onProfileSheet = GlassSheetTokens.OnOled
-        GlassAdaptiveBottomSheet(
+        MapBeaconSheetRoot(
+            visible = true,
             onDismissRequest = {
                 selectedProfileId = null
                 viewModel.clearSelection()
             },
-            adaptiveSheetState = sheetState,
-            scrimColor = Color.Black.copy(alpha = 0.55f),
+            containerColor = profileSheetColor,
+            contentColor = onProfileSheet,
+            scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            dragHandle = { },
+            appColorScheme = MaterialTheme.colorScheme,
+            appTypography = MaterialTheme.typography,
         ) {
-            MapDialogChrome(
+            ClickSheetDialogChrome(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = true),
+                    .fillMaxHeight(),
                 sheetColor = profileSheetColor,
                 onSurface = onProfileSheet,
                 alignSemanticColorsToSheet = true,
@@ -466,98 +475,6 @@ fun MapScreen(
             }
         },
     )
-}
-
-@Composable
-private fun MapDialogChrome(
-    modifier: Modifier = Modifier,
-    sheetColor: Color,
-    onSurface: Color,
-    useGrabber: Boolean = true,
-    /**
-     * When true, wraps [content] in a [MaterialTheme] whose surface / on-surface tokens are
-     * derived from [sheetColor] via [contentColorFor], so body text, chips, and text fields
-     * stay legible on `surfaceContainerHigh`-style sheet backgrounds. Profile sheets pass
-     * false and keep the previous behavior.
-     */
-    alignSemanticColorsToSheet: Boolean = false,
-    content: @Composable () -> Unit,
-) {
-    val grabberTint = if (alignSemanticColorsToSheet) {
-        val darkSheet = sheetColor.luminance() < 0.05f
-        if (darkSheet) GlassSheetTokens.OnOledMuted.copy(alpha = 0.42f)
-        else contentColorFor(sheetColor).copy(alpha = 0.38f)
-    } else {
-        onSurface.copy(alpha = 0.3f)
-    }
-
-    @Composable
-    fun themedContent() {
-        if (alignSemanticColorsToSheet) {
-            val darkSheet = sheetColor.luminance() < 0.05f
-            val primaryOn =
-                if (darkSheet) GlassSheetTokens.OnOled else contentColorFor(sheetColor)
-            val mutedOn =
-                if (darkSheet) GlassSheetTokens.OnOledMuted
-                else lerp(sheetColor, primaryOn, 0.88f)
-            val elevatedSurface =
-                if (darkSheet) GlassSheetTokens.GlassSurface
-                else lerp(sheetColor, primaryOn, 0.12f)
-            val scheme = MaterialTheme.colorScheme
-            MaterialTheme(
-                colorScheme = scheme.copy(
-                    surface = sheetColor,
-                    surfaceContainerLow = sheetColor,
-                    surfaceContainer = sheetColor,
-                    surfaceContainerHigh = sheetColor,
-                    surfaceContainerHighest = elevatedSurface,
-                    onSurface = primaryOn,
-                    onSurfaceVariant = mutedOn,
-                    outline = primaryOn.copy(alpha = 0.34f),
-                    outlineVariant = primaryOn.copy(alpha = 0.26f),
-                    primary = scheme.primary,
-                    onPrimary = scheme.onPrimary,
-                    error = scheme.error,
-                    onError = scheme.onError,
-                ),
-            ) {
-                content()
-            }
-        } else {
-            content()
-        }
-    }
-
-    Column(
-        modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
-            .background(sheetColor),
-    ) {
-        if (useGrabber) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(grabberTint),
-                )
-            }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = true),
-        ) {
-            themedContent()
-        }
-    }
 }
 
 /**

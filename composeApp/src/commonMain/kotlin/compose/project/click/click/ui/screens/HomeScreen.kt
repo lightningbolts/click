@@ -38,7 +38,7 @@ import compose.project.click.click.ui.components.AdaptiveBackground // pragma: a
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCardCompact // pragma: allowlist secret
-import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.OnlineFriendItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.RecentClickCard // pragma: allowlist secret
@@ -149,8 +149,6 @@ fun HomeScreen(
         }
     }
 
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
     LaunchedEffect(showAvailabilityIntentSheet) {
         if (!showAvailabilityIntentSheet) {
             viewModel.refreshHomeAvailabilityIntents()
@@ -206,33 +204,11 @@ fun HomeScreen(
                 }
             }
             is HomeState.Success -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
+                AppScreenScaffold(
+                    title = "Home",
+                    subtitle = "Welcome back, ${state.user.name ?: "User"}!",
+                    verticalArrangement = Arrangement.spacedBy(CardSpacing),
                 ) {
-                    Box(
-                        modifier = Modifier.padding(
-                            start = ScreenPaddingHorizontal,
-                            top = topInset,
-                            end = ScreenPaddingHorizontal
-                        )
-                    ) {
-                        PageHeader(
-                            title = "Home",
-                            subtitle = "Welcome back, ${state.user.name ?: "User"}!"
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(CardSpacing))
-
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            start = ScreenPaddingHorizontal,
-                            end = ScreenPaddingHorizontal,
-                            bottom = ScreenPaddingHorizontal
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(CardSpacing)
-                    ) {
                         archiveBannerNotice?.let { notice ->
                             item(key = "archive_banner") {
                                 ConnectionArchiveWarningBanner(
@@ -396,7 +372,6 @@ fun HomeScreen(
                                 )
                             }
                         }
-                    }
                 }
             }
         }

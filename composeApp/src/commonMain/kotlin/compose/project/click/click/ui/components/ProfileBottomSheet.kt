@@ -1806,7 +1806,6 @@ fun TabbedUserProfileSheet(
 ) {
     if (userId.isNullOrBlank()) return
 
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = true)
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val connections by AppDataManager.connections.collectAsState()
     val cached: User? = connectedUsers[userId]
@@ -1854,9 +1853,8 @@ fun TabbedUserProfileSheet(
         )
     }
 
-    GlassAdaptiveBottomSheet(
+    ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        adaptiveSheetState = sheetState,
     ) {
         OledSheetTheme {
             ProfileBottomSheet(

@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.User
 import androidx.compose.ui.text.style.TextAlign
 import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
 import compose.project.click.click.ui.components.UserQrCode
 import compose.project.click.click.utils.LocationService
 
@@ -23,29 +23,22 @@ fun MyQRCodeScreen(
     locationService: LocationService? = null,
     onNavigateBack: () -> Unit
 ) {
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                PageHeader(
-                    title = "My QR Code",
-                    subtitle = "Share to connect",
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                )
-            }
-            
+        AppScreenWithFloatingHeader(
+            title = "My QR Code",
+            subtitle = "Share to connect",
+            navigationIcon = {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+        ) { contentModifier ->
             Column(
-                modifier = Modifier
-                    .weight(1f)
+                modifier = contentModifier
                     .fillMaxWidth()
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

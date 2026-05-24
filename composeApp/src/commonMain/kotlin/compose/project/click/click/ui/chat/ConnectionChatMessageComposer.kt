@@ -78,6 +78,7 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.components.composerBottomPadding
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
@@ -131,7 +132,7 @@ internal fun ConnectionChatMessageComposer(
     val composerStripInteraction = remember { MutableInteractionSource() }
     val composerStripBg = Color.Transparent
     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = Modifier.fillMaxWidth().composerBottomPadding()) {
         Box(
             modifier = Modifier
                 .matchParentSize()

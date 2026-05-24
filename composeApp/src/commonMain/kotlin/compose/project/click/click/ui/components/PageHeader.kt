@@ -2,6 +2,7 @@ package compose.project.click.click.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -22,19 +23,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-
 enum class HeaderDisplayMode {
     Large,
     Inline
@@ -75,67 +74,88 @@ private fun PresenceSubtitleRow(online: Boolean) {
     }
 }
 
+/**
+ * Floating liquid-glass header island. [collapseFraction] is 0 (large) → 1 (compact) driven by
+ * [AppScreenScaffold] scroll position.
+ */
 @Composable
-fun PageHeader(
+fun LiquidGlassPageHeader(
     title: String,
     subtitle: String? = null,
-    /** When non-null, shows a small presence line (e.g. Online / Offline) under [subtitle]. */
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
-    displayMode: HeaderDisplayMode = if (navigationIcon != null) HeaderDisplayMode.Inline else HeaderDisplayMode.Large
+    collapseFraction: Float = 0f,
 ) {
-    val style = LocalPlatformStyle.current
-    val radius = getAdaptiveCornerRadius()
+    val collapsed = collapseFraction.coerceIn(0f, 1f)
+    val animatedCollapse by animateFloatAsState(
+        targetValue = collapsed,
+        animationSpec = tween(180),
+        label = "header_collapse",
+    )
+    val titleSize = (34f - 14f * animatedCollapse).sp
+    val verticalPad = (12f - 4f * animatedCollapse).dp
 
-    if (style.isIOS) {
-        when (displayMode) {
-            HeaderDisplayMode.Inline -> {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (navigationIcon != null) {
-                        navigationIcon()
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (subtitle != null) {
+    val displayMode = when {
+        navigationIcon != null -> HeaderDisplayMode.Inline
+        animatedCollapse > 0.55f -> HeaderDisplayMode.Inline
+        else -> HeaderDisplayMode.Large
+    }
+
+    LiquidGlassPill(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadiusDp = (28 - (10 * animatedCollapse).toInt()).coerceAtLeast(18),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = 1f - 0.02f * animatedCollapse
+                    scaleY = 1f - 0.02f * animatedCollapse
+                }
+                .padding(vertical = verticalPad),
+        ) {
+            when (displayMode) {
+                HeaderDisplayMode.Inline -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (navigationIcon != null) {
+                            navigationIcon()
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = titleSize,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
+                            if (subtitle != null && animatedCollapse < 0.85f) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (presenceOnline != null && animatedCollapse < 0.85f) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                PresenceSubtitleRow(online = presenceOnline)
+                            }
                         }
-                        if (presenceOnline != null) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            PresenceSubtitleRow(online = presenceOnline)
+                        if (actions != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            actions()
                         }
-                    }
-                    if (actions != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        actions()
                     }
                 }
-            }
-            HeaderDisplayMode.Large -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp)
-                ) {
+                HeaderDisplayMode.Large -> {
                     if (actions != null) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Spacer(modifier = Modifier.weight(1f))
                             actions()
@@ -146,64 +166,45 @@ fun PageHeader(
                         text = title,
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 34.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontSize = titleSize,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     if (subtitle != null) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = subtitle,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (presenceOnline != null) {
                         Spacer(modifier = Modifier.height(2.dp))
                         PresenceSubtitleRow(online = presenceOnline)
                     }
-                }
-            }
-        }
-    } else {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(radius),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = getAdaptivePadding(), vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (navigationIcon != null) {
-                    navigationIcon()
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (subtitle != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (presenceOnline != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        PresenceSubtitleRow(online = presenceOnline)
-                    }
-                }
-                if (actions != null) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    actions()
                 }
             }
         }
     }
+}
+
+@Composable
+fun PageHeader(
+    title: String,
+    subtitle: String? = null,
+    /** When non-null, shows a small presence line (e.g. Online / Offline) under [subtitle]. */
+    presenceOnline: Boolean? = null,
+    navigationIcon: @Composable (() -> Unit)? = null,
+    actions: @Composable (RowScope.() -> Unit)? = null,
+    @Suppress("UNUSED_PARAMETER") displayMode: HeaderDisplayMode =
+        if (navigationIcon != null) HeaderDisplayMode.Inline else HeaderDisplayMode.Large,
+    collapseFraction: Float = 0f,
+) {
+    LiquidGlassPageHeader(
+        title = title,
+        subtitle = subtitle,
+        presenceOnline = presenceOnline,
+        navigationIcon = navigationIcon,
+        actions = actions,
+        collapseFraction = collapseFraction,
+    )
 }

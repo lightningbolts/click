@@ -1097,8 +1097,7 @@ fun App() {
                 }
             ) { paddingValues ->
                 Box(modifier = Modifier
-                    .padding(paddingValues)
-                    .consumeWindowInsets(paddingValues)
+                    .padding(top = paddingValues.calculateTopPadding())
                     .fillMaxSize()
                     .graphicsLayer { alpha = homeSurfaceAlpha }
                 ) {
@@ -1461,10 +1460,24 @@ fun App() {
                                 val targetIndex = routeOrder.indexOf(targetState).let { if (it >= 0) it else 0 }
                                 val movingForward = targetIndex >= initialIndex
 
-                                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-                                val fadeSpec  = tween<Float>(220, easing = LinearOutSlowInEasing)
+                                val primaryTabs = setOf(
+                                    NavigationItem.Home.route,
+                                    NavigationItem.AddClick.route,
+                                    NavigationItem.Connections.route,
+                                    NavigationItem.Map.route,
+                                    NavigationItem.Settings.route,
+                                )
+                                val isPrimaryTabCrossfade =
+                                    initialState in primaryTabs && targetState in primaryTabs
 
-                                if (movingForward) {
+                                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                                val fadeSpec = tween<Float>(320, easing = LinearOutSlowInEasing)
+                                val crossfadeSpec = tween<Float>(280, easing = FastOutSlowInEasing)
+
+                                if (isPrimaryTabCrossfade) {
+                                    fadeIn(animationSpec = crossfadeSpec)
+                                        .togetherWith(fadeOut(animationSpec = crossfadeSpec))
+                                } else if (movingForward) {
                                     (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
                                         fadeIn(animationSpec = fadeSpec))
                                         .togetherWith(

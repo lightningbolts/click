@@ -55,7 +55,7 @@ import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowli
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import kotlinx.coroutines.launch
@@ -77,7 +77,6 @@ internal fun MessageActionSheet(
     val isSent = messageWithUser.isSent
     val message = messageWithUser.message
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
@@ -85,13 +84,11 @@ internal fun MessageActionSheet(
     var emojiPickMode by remember { mutableStateOf(false) }
 
     fun dismiss() {
-        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+        onDismiss()
     }
 
-    GlassModalBottomSheet(
+    ClickActionBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
     ) {
         LaunchedEffect(Unit) {
             PlatformHapticsPolicy.lightImpact()

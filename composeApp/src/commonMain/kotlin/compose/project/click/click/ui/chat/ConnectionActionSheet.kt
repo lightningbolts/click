@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PersonRemove
@@ -26,7 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassModalBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,7 +74,6 @@ internal fun ConnectionActionSheet(
     onDeleteGroup: () -> Unit = {},
 ) {
     @Suppress("UNUSED_PARAMETER") val unusedOpenChat = onOpenChat
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val scope = rememberCoroutineScope()
     val isGroup = chatDetails?.groupClique != null
     val uid = currentUserId.orEmpty()
@@ -92,7 +92,7 @@ internal fun ConnectionActionSheet(
     var finalConfirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     fun dismiss() {
-        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+        onDismiss()
     }
 
     fun openFinalConfirm(
@@ -110,10 +110,8 @@ internal fun ConnectionActionSheet(
         showFinalConfirm = true
     }
 
-    GlassModalBottomSheet(
+    ClickActionBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
     ) {
         Column(
             modifier = Modifier
@@ -142,11 +140,19 @@ internal fun ConnectionActionSheet(
             if (!isGroup) {
                 BentoGlassOptionRow(
                     showBorder = false,
-                    title = "Nudge 👋",
+                    title = "Nudge",
                     subtitle = "Send a quick ping",
+                    cornerRadius = GlassSheetTokens.BentoExteriorCorner,
                     onClick = {
                         onNudge()
                         dismiss()
+                    },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.NotificationsActive,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted,
+                        )
                     },
                 )
 

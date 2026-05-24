@@ -49,6 +49,7 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.proximity.MockProximityManager
 import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.bottomChromePadding
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
@@ -145,8 +146,10 @@ fun NfcScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .bottomChromePadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Header - consistent with MyQRCodeScreen and QRScannerScreen
                 Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
