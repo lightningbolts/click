@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import com.mohamedrejeb.calf.ui.utils.toUIColor
-import compose.project.click.click.ui.theme.PlatformThemeProvider
+import compose.project.click.click.ui.theme.PlatformStyleProvider
 import platform.UIKit.UIAdaptivePresentationControllerDelegateProtocol
 import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIModalPresentationPageSheet
@@ -100,7 +100,7 @@ private class MapIosHalfSheetManager(
                 colorScheme = scheme,
                 typography = typography,
             ) {
-                PlatformThemeProvider {
+                PlatformStyleProvider {
                     Column(
                         modifierState.value
                             .fillMaxWidth()

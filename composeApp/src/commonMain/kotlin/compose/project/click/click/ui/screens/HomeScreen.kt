@@ -44,7 +44,6 @@ import compose.project.click.click.ui.components.PollPairCard // pragma: allowli
 import compose.project.click.click.ui.components.RecentClickCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppShimmerVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.StatCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.getAdaptiveCornerRadius // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
@@ -168,9 +167,6 @@ fun HomeScreen(
             is HomeState.Loading -> {
                 AppShimmerScreen(
                     isDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f,
-                    variant = AppShimmerVariant.HomeReveal,
-                    titleOverride = "Loading your home",
-                    subtitleOverride = "Bringing in your latest updates...",
                 )
             }
             is HomeState.Error -> {

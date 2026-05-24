@@ -1,5 +1,8 @@
 package compose.project.click.click.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -65,10 +68,49 @@ private val androidPlatformStyle = PlatformStyle(
 )
 
 @Composable
-fun PlatformThemeProvider(content: @Composable () -> Unit) {
+fun PlatformStyleProvider(content: @Composable () -> Unit) {
     val isIOS = getPlatform().name.contains("iOS", ignoreCase = true)
     val style = if (isIOS) iOSPlatformStyle else androidPlatformStyle
     CompositionLocalProvider(LocalPlatformStyle provides style) {
         content()
+    }
+}
+
+@Composable
+fun clickColorScheme(isDarkMode: Boolean) =
+    if (isDarkMode) {
+        darkColorScheme(
+            primary = PrimaryBlue,
+            secondary = AccentBlue,
+            background = BackgroundDark,
+            surface = SurfaceDark,
+            onSurface = OnSurfaceDark,
+            primaryContainer = DeepBlue,
+            onPrimaryContainer = NeonPurple,
+            surfaceVariant = Color(0xFF2C2C2C),
+        )
+    } else {
+        lightColorScheme(
+            primary = PrimaryBlue,
+            secondary = AccentBlue,
+            background = BackgroundLight,
+            surface = SurfaceLight,
+            onSurface = OnSurfaceLight,
+            primaryContainer = SoftBlue,
+            onPrimaryContainer = DeepBlue,
+            surfaceVariant = Color(0xFFE0E0E0),
+        )
+    }
+
+@Composable
+fun PlatformThemeProvider(
+    isDarkMode: Boolean,
+    content: @Composable () -> Unit,
+) {
+    MaterialTheme(
+        colorScheme = clickColorScheme(isDarkMode),
+        typography = clickTypography(),
+    ) {
+        PlatformStyleProvider(content)
     }
 }

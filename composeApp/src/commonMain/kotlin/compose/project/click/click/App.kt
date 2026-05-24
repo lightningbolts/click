@@ -76,7 +76,6 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.AppShimmerScreen
-import compose.project.click.click.ui.components.AppShimmerVariant
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
@@ -217,14 +216,16 @@ fun App() {
             return@LaunchedEffect
         }
 
-        interestsRemoteResolved = false
-
         val persistedHasCompletedOnboarding = tokenStorage.getHasCompletedOnboarding()
 
         val savedState = tokenStorage.getOnboardingState()
             ?.let { serialized ->
                 runCatching { onboardingJson.decodeFromString<OnboardingState>(serialized) }.getOrNull()
             }
+
+        val canFastTrackOnboardingGate =
+            persistedHasCompletedOnboarding == true || savedState?.isComplete == true
+        interestsRemoteResolved = canFastTrackOnboardingGate
 
         val effectiveHasCompletedOnboarding =
             persistedHasCompletedOnboarding ?: savedState?.permissionsCompleted ?: false
@@ -390,16 +391,10 @@ fun App() {
 
     var showSignUp by remember { mutableStateOf(false) }
     var authShimmerVisible by remember { mutableStateOf(false) }
-    var authShimmerVariant by remember { mutableStateOf(AppShimmerVariant.AuthSignIn) }
     var authSurfaceVisible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(authViewModel.authState, authViewModel.isAuthenticated, showSignUp) {
+    LaunchedEffect(authViewModel.authState) {
         if (authViewModel.authState is AuthState.Loading) {
-            authShimmerVariant = when {
-                authViewModel.isAuthenticated -> AppShimmerVariant.AuthSignOut
-                showSignUp -> AppShimmerVariant.AuthSignUp
-                else -> AppShimmerVariant.AuthSignIn
-            }
             authShimmerVisible = true
         } else if (authShimmerVisible) {
             delay(340)
@@ -417,33 +412,8 @@ fun App() {
         }
     }
 
-    val scheme = if (isDarkMode) {
-        darkColorScheme(
-            primary = PrimaryBlue,
-            secondary = AccentBlue,
-            background = BackgroundDark,
-            surface = SurfaceDark,
-            onSurface = OnSurfaceDark,
-            primaryContainer = DeepBlue,
-            onPrimaryContainer = NeonPurple,
-            surfaceVariant = Color(0xFF2C2C2C)
-        )
-    } else {
-        lightColorScheme(
-            primary = PrimaryBlue,
-            secondary = AccentBlue,
-            background = BackgroundLight,
-            surface = SurfaceLight,
-            onSurface = OnSurfaceLight,
-            primaryContainer = SoftBlue,
-            onPrimaryContainer = DeepBlue,
-            surfaceVariant = Color(0xFFE0E0E0)
-        )
-    }
-
-    MaterialTheme(colorScheme = scheme) {
+    PlatformThemeProvider(isDarkMode = isDarkMode) {
         BindPlatformHapticsToViewHierarchy()
-        compose.project.click.click.ui.theme.PlatformThemeProvider {
         ConnectionSensorMonitorsProvider(
             ambientNoiseMonitor = ambientNoiseMonitor,
             barometricHeightMonitor = barometricHeightMonitor,
@@ -469,10 +439,7 @@ fun App() {
         ) {
         // Show login/signup screens when not authenticated
         if (authViewModel.authState is AuthState.Loading || authShimmerVisible) {
-            AppShimmerScreen(
-                isDarkMode = isDarkMode,
-                variant = authShimmerVariant,
-            )
+            AppShimmerScreen(isDarkMode = isDarkMode)
         } else if (!authViewModel.isAuthenticated) {
             val authSurfaceAlpha by animateFloatAsState(
                 targetValue = if (authSurfaceVisible) 1f else 0f,
@@ -696,14 +663,14 @@ fun App() {
                 if (shouldStartOnboardingHandoff) {
                     onboardingHandoffActive = true
                     try {
-                        delay(1300)
+                        delay(600)
                     } finally {
                         // Ensure we never get stuck on shimmer if the coroutine is cancelled
                         // during recomposition/key changes.
                         onboardingHandoffActive = false
                     }
                     showHomeRevealOverlay = true
-                    delay(850)
+                    delay(380)
                     showHomeRevealOverlay = false
                     hasPlayedHomeEntrance = true
                 }
@@ -712,7 +679,7 @@ fun App() {
             LaunchedEffect(shouldStartInitialHomeReveal) {
                 if (shouldStartInitialHomeReveal) {
                     showHomeRevealOverlay = true
-                    delay(420)
+                    delay(180)
                     showHomeRevealOverlay = false
                     hasPlayedHomeEntrance = true
                 }
@@ -723,12 +690,7 @@ fun App() {
             }
 
             if (profileGatePending) {
-                AppShimmerScreen(
-                    isDarkMode = isDarkMode,
-                    variant = AppShimmerVariant.Generic,
-                    titleOverride = "Checking your profile",
-                    subtitleOverride = "Verifying your saved details...",
-                )
+                AppShimmerScreen(isDarkMode = isDarkMode)
             } else if (profileGateActive) {
                 ProfileBasicsGateScreen(
                     userId = currentUser.id,
@@ -744,10 +706,7 @@ fun App() {
                     },
                 )
             } else if (onboardingStep == "loading") {
-                AppShimmerScreen(
-                    isDarkMode = isDarkMode,
-                    variant = AppShimmerVariant.OnboardingLoading,
-                )
+                AppShimmerScreen(isDarkMode = isDarkMode)
             } else if (onboardingStep != "complete") {
                 val onboardingSnackbarHostState = remember { SnackbarHostState() }
                 LaunchedEffect(Unit) {
@@ -833,14 +792,11 @@ fun App() {
                 )
                 }
             } else if (onboardingHandoffActive || shouldStartOnboardingHandoff) {
-                AppShimmerScreen(
-                    isDarkMode = isDarkMode,
-                    variant = AppShimmerVariant.OnboardingWelcome,
-                )
+                AppShimmerScreen(isDarkMode = isDarkMode)
             } else {
             val homeRevealAlpha by animateFloatAsState(
                 targetValue = if (showHomeRevealOverlay) 1f else 0f,
-                animationSpec = tween(durationMillis = 760, easing = LinearOutSlowInEasing),
+                animationSpec = tween(durationMillis = 360, easing = LinearOutSlowInEasing),
                 label = "home_reveal_overlay_alpha",
             )
             var homeSurfaceVisible by remember(hasPlayedHomeEntrance) { mutableStateOf(hasPlayedHomeEntrance) }
@@ -2005,10 +1961,7 @@ fun App() {
                                     .fillMaxSize()
                                     .graphicsLayer { alpha = homeRevealAlpha },
                             ) {
-                                AppShimmerScreen(
-                                    isDarkMode = isDarkMode,
-                                    variant = AppShimmerVariant.HomeReveal,
-                                )
+                                AppShimmerScreen(isDarkMode = isDarkMode)
                             }
                         }
                     }
@@ -2020,8 +1973,7 @@ fun App() {
         }
         } // End of Global Background Box
         } // End of ConnectionSensorMonitorsProvider
-        } // End of PlatformThemeProvider
-    }
+    } // End of PlatformThemeProvider
 }
 
 private enum class NavigationTransitionMode {
