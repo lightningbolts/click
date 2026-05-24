@@ -105,6 +105,7 @@ fun LiquidGlassPageHeader(
     LiquidGlassPill(
         modifier = Modifier.fillMaxWidth(),
         cornerRadiusDp = (28 - (10 * animatedCollapse).toInt()).coerceAtLeast(18),
+        backgroundStrength = animatedCollapse,
     ) {
         Column(
             modifier = Modifier

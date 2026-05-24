@@ -97,26 +97,37 @@ actual fun PlatformBottomBar(
     var topLeft by remember { mutableStateOf(DpOffset.Zero) }
     var positionInRoot by remember { mutableStateOf(DpOffset.Zero) }
     var tabBarWidth by remember { mutableStateOf(0.dp) }
-    var tabBarHeight by remember { mutableStateOf(safeAreaBottom + 49.dp) }
+    var tabBarHeight by remember { mutableStateOf(safeAreaBottom + AppScreenDefaults.IosTabBarContentHeight) }
 
     LaunchedEffect(Unit) {
         var stable = 0
         while (true) {
+            val viewHeightPx = viewController.view.bounds.useContents { size.height }
             tabBar.frame.useContents {
                 topLeft = DpOffset(origin.x.dp, origin.y.dp)
                 tabBarWidth = size.width.dp
                 val bottom = if (isLiquidGlass) 0.dp
                     else viewController.view.safeAreaInsets.useContents { bottom.dp }
                 val h = size.height.dp + bottom
-                if (tabBarHeight != h) { tabBarHeight = h; stable = 0 } else stable++
+                if (tabBarHeight != h) {
+                    tabBarHeight = h
+                    stable = 0
+                } else {
+                    stable++
+                }
+                val clearanceFromTopPx = viewHeightPx - origin.y
+                if (clearanceFromTopPx > 0.0) {
+                    val clearanceFromTop = with(density) {
+                        clearanceFromTopPx.toFloat().toDp()
+                    }
+                    // Distance from screen bottom to tab-bar top — do not max with tab height
+                    // (that double-counts and pushes map controls too high).
+                    AppScreenChromeState.updateBottomChromeHeight(clearanceFromTop)
+                }
             }
             if (tabBarHeight.value > 0f && stable > 6) break
             withFrameMillis { }
         }
-    }
-
-    LaunchedEffect(tabBarHeight) {
-        AppScreenChromeState.updateBottomChromeHeight(tabBarHeight)
     }
 
     Box(

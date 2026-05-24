@@ -804,12 +804,13 @@ fun ConnectionsListView(
                     text = "Create verified click",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
+                    color = GlassSheetTokens.OnOled,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Pick friends who are pairwise connected (pending, active, kept, or archived 1:1). Friend–friend edges are checked on the server.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = GlassSheetTokens.OnOledMuted,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 if (cliqueProximityAutofillLoading) {
@@ -825,7 +826,7 @@ fun ConnectionsListView(
                         Text(
                             text = "Loading your tap group in Clicks…",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = GlassSheetTokens.OnOledMuted,
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -853,12 +854,13 @@ fun ConnectionsListView(
                         supplementalHintUsers.forEach { u ->
                             Surface(
                                 shape = RoundedCornerShape(20.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                color = GlassSheetTokens.GlassSurface,
                             ) {
                                 Text(
                                     u.name?.trim()?.ifBlank { null } ?: "Friend",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.labelLarge,
+                                    color = GlassSheetTokens.OnOled,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -895,6 +897,7 @@ fun ConnectionsListView(
                     Text(
                         text = "No eligible 1:1 connections yet.",
                         style = MaterialTheme.typography.bodyMedium,
+                        color = GlassSheetTokens.OnOledMuted,
                     )
                 } else {
                     LazyColumn(
@@ -940,6 +943,13 @@ fun ConnectionsListView(
                                         }
                                     },
                                     enabled = canSelect,
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = PrimaryBlue,
+                                        uncheckedColor = GlassSheetTokens.OnOledMuted,
+                                        checkmarkColor = Color.White,
+                                        disabledUncheckedColor = GlassSheetTokens.OnOledMuted.copy(alpha = 0.35f),
+                                        disabledCheckedColor = PrimaryBlue.copy(alpha = 0.45f),
+                                    ),
                                 )
                                 AvatarWithOnlineIndicator(
                                     isOnline = chatDetails.otherUser.id in onlineUsers,
@@ -957,6 +967,11 @@ fun ConnectionsListView(
                                 Text(
                                     text = chatDetails.otherUser.name?.trim()?.ifBlank { null } ?: "Friend",
                                     style = MaterialTheme.typography.bodyLarge,
+                                    color = if (canSelect) {
+                                        GlassSheetTokens.OnOled
+                                    } else {
+                                        GlassSheetTokens.OnOledMuted
+                                    },
                                     modifier = Modifier.weight(1f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -980,7 +995,7 @@ fun ConnectionsListView(
                     TextButton(
                         onClick = { dismissVerifiedCliqueSheet() },
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(

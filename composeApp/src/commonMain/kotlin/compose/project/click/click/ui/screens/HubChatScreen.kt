@@ -1,7 +1,6 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -93,7 +92,9 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.components.composerBottomPadding
+import compose.project.click.click.ui.components.chatComposerDock
+import compose.project.click.click.ui.components.chatHeaderImeIsolation
+import compose.project.click.click.ui.components.chatScreenImeIsolation
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -205,7 +206,11 @@ fun HubChatScreen(
 
     val channelReady by viewModel.channelReady.collectAsState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .chatScreenImeIsolation(),
+    ) {
         ChatAmbientMeshBackground(
             connection = null,
             isHubNeutral = true,
@@ -229,6 +234,7 @@ fun HubChatScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .chatHeaderImeIsolation()
                         .padding(top = topInset)
                         .height(56.dp),
                 ) {
@@ -536,13 +542,7 @@ fun HubChatScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateContentSize(
-                            animationSpec = spring(
-                                dampingRatio = 0.92f,
-                                stiffness = Spring.StiffnessHigh,
-                            ),
-                        )
-                        .composerBottomPadding(),
+                        .chatComposerDock(),
                 ) {
                     ChatComposerChromeFadeUnderlay(modifier = Modifier.matchParentSize())
                     HubChatInputBar(

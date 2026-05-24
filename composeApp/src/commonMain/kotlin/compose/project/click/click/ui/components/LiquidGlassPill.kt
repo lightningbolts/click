@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import kotlin.random.Random
 
 /**
@@ -42,26 +43,43 @@ fun LiquidGlassPill(
     modifier: Modifier = Modifier,
     cornerRadiusDp: Int = 24,
     noiseDensity: Float = 0.04f,
+    /**
+     * 0 = default translucent glass; 1 = denser fill for collapsed floating headers so titles
+     * stay readable over scrolling content.
+     */
+    backgroundStrength: Float = 0f,
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(cornerRadiusDp.dp)
     val scheme = MaterialTheme.colorScheme
+    val strength = backgroundStrength.coerceIn(0f, 1f)
 
-    val baseGradient = remember(scheme) {
+    val baseGradient = remember(scheme, strength) {
+        val topAlpha = lerp(0.58f, 0.90f, strength)
+        val bottomAlpha = lerp(0.34f, 0.78f, strength)
         Brush.verticalGradient(
             colors = listOf(
-                scheme.surface.copy(alpha = 0.58f),
-                scheme.surface.copy(alpha = 0.34f),
+                scheme.surface.copy(alpha = topAlpha),
+                scheme.surface.copy(alpha = bottomAlpha),
             ),
         )
     }
+    val borderAlpha = lerp(0.08f, 0.18f, strength)
+    val backingAlpha = lerp(0f, 0.42f, strength)
 
     Box(
         modifier = modifier
             .clip(shape)
             .background(baseGradient)
-            .border(1.dp, scheme.onSurface.copy(alpha = 0.08f), shape),
+            .border(1.dp, scheme.onSurface.copy(alpha = borderAlpha), shape),
     ) {
+        if (backingAlpha > 0f) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(scheme.background.copy(alpha = backingAlpha)),
+            )
+        }
         // Procedural noise overlay — keeps the surface reading as glass on every platform.
         Canvas(modifier = Modifier.matchParentSize()) {
             val density = noiseDensity.coerceIn(0.0f, 0.2f)

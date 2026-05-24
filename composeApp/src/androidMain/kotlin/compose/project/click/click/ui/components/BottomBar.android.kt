@@ -21,7 +21,7 @@ actual fun PlatformBottomBar(
     onItemSelected: (NavigationItem) -> Unit
 ) {
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val chromeHeight = 80.dp + navBarBottom
+    val chromeHeight = AppScreenDefaults.AndroidNavBarContentHeight + navBarBottom
     LaunchedEffect(chromeHeight) {
         AppScreenChromeState.updateBottomChromeHeight(chromeHeight)
     }

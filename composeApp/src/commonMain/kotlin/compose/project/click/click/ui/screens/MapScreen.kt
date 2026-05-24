@@ -101,7 +101,6 @@ fun MapScreen(
     val renderData by viewModel.renderData.collectAsState()
     val selection by viewModel.selection.collectAsState()
     val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
-    val mapBottomChrome = rememberBottomChromePadding()
     val mapFabAboveNav = rememberFabAboveNavPadding()
     val cameraTarget by viewModel.cameraTarget.collectAsState()
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
@@ -185,15 +184,16 @@ fun MapScreen(
         label = "profile_sheet_map_parallax",
     )
 
+    // Match App.kt: content is full-bleed under the tab bar; bottom inset is applied only on controls.
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { paddingValues ->
+    ) {
         val grayscaleModifier = if (ghostModeEnabled) Modifier.alpha(0.7f) else Modifier
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .then(grayscaleModifier)
                 .graphicsLayer { translationY = parallaxOffset }
                 .background(
@@ -258,7 +258,6 @@ fun MapScreen(
                             .padding(
                                 start = 16.dp,
                                 end = 16.dp,
-                                top = 24.dp,
                                 bottom = mapFabAboveNav,
                             ),
                         verticalAlignment = Alignment.CenterVertically,

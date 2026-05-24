@@ -29,7 +29,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -124,7 +123,9 @@ import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allo
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.composerBottomPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatComposerDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatHeaderImeIsolation // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatScreenImeIsolation // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -565,7 +566,11 @@ fun ChatView(
                         .weight(1f)
                         .fillMaxWidth()
 
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .chatScreenImeIsolation(),
+                    ) {
                         ChatAmbientMeshBackground(
                             connection = chatDetails.connection,
                             isHubNeutral = false,
@@ -575,6 +580,7 @@ fun ChatView(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .chatHeaderImeIsolation()
                                 .padding(top = topInset)
                                 .height(56.dp)
                                 .padding(horizontal = 20.dp)
@@ -1183,12 +1189,7 @@ fun ChatView(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateContentSize(
-                                animationSpec = spring(
-                                    dampingRatio = 0.92f,
-                                    stiffness = Spring.StiffnessHigh,
-                                ),
-                            ),
+                            .chatComposerDock(),
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(

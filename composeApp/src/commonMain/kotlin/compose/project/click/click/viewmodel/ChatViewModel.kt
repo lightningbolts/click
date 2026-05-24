@@ -1023,6 +1023,8 @@ class ChatViewModel(
         if (switchingConnection) {
             currentApiChatId = null
             _stagedChatImages.value = emptyList()
+            _replyingTo.value = null
+            _editingMessageId.value = null
         }
         currentConnectionId = connectionId
 

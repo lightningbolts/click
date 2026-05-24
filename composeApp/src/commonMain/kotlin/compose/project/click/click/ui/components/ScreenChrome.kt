@@ -1,11 +1,10 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -26,15 +25,18 @@ object AppScreenDefaults {
     val FloatingHeaderLargeHeight = 112.dp
     val FloatingHeaderCompactHeight = 52.dp
     val ExtraScrollBottomPadding = 16.dp
+    val IosTabBarContentHeight = 49.dp
+    val AndroidNavBarContentHeight = 80.dp
+    val FabGapAboveTabBar = 6.dp
 }
 
 /**
- * Reports the height of the bottom tab bar / navigation chrome so scrollable content
- * can extend behind it while keeping the last items reachable.
+ * Distance from the bottom of the root content to the top of the floating tab bar.
+ * Updated from [PlatformBottomBar] (iOS measures UITabBar frame; Android uses nav + bar height).
  */
 @Stable
 object AppScreenChromeState {
-    var bottomChromeHeight by mutableStateOf(80.dp)
+    var bottomChromeHeight by mutableStateOf(0.dp)
         private set
 
     fun updateBottomChromeHeight(height: Dp) {
@@ -42,31 +44,75 @@ object AppScreenChromeState {
     }
 }
 
+/** Home-indicator / gesture inset + tab bar content — never less than this on iOS. */
 @Composable
-fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Dp {
-    return AppScreenChromeState.bottomChromeHeight + extra
+fun rememberIosTabBarStackHeight(): Dp {
+    val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return navigationBar + AppScreenDefaults.IosTabBarContentHeight
 }
 
-/** FABs and map controls sit 6dp above the floating tab bar. */
 @Composable
-fun rememberFabAboveNavPadding(): Dp = AppScreenChromeState.bottomChromeHeight + 6.dp
+fun rememberTabBarOverlayHeight(): Dp {
+    val style = LocalPlatformStyle.current
+    if (style.isIOS) {
+        val minimum = rememberIosTabBarStackHeight()
+        val measured = AppScreenChromeState.bottomChromeHeight
+        return if (measured >= minimum) measured else minimum
+    }
+    val measured = AppScreenChromeState.bottomChromeHeight
+    if (measured > 0.dp) return measured
+    val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return navigationBar + AppScreenDefaults.AndroidNavBarContentHeight
+}
 
-/** Bottom inset for composers and FABs sitting above the floating tab bar. */
+@Composable
+fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Dp {
+    return rememberTabBarOverlayHeight() + extra
+}
+
+/** FABs / map controls sit [AppScreenDefaults.FabGapAboveTabBar] above the tab bar top edge. */
+@Composable
+fun rememberFabAboveNavPadding(): Dp =
+    rememberTabBarOverlayHeight() + AppScreenDefaults.FabGapAboveTabBar
+
+/** Bottom inset for composers sitting above the floating tab bar. */
 @Composable
 fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
-    val bottomChrome = rememberBottomChromePadding(extra)
+    return rememberTabBarOverlayHeight() + extra
+}
+
+/**
+ * Pins the chat composer above the tab bar. On iOS, [maxOf] tab stack height and IME inset so the
+ * strip stays above the nav bar while the keyboard animates (never swaps to IME-only padding).
+ */
+fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
     val style = LocalPlatformStyle.current
-    if (!style.isIOS) return bottomChrome
-    val imeTarget = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val animatedIme by animateDpAsState(
-        targetValue = imeTarget,
-        animationSpec = spring(
-            dampingRatio = 0.92f,
-            stiffness = Spring.StiffnessHigh,
-        ),
-        label = "composer_ime_pad",
-    )
-    return maxOf(bottomChrome, animatedIme)
+    val tabStack = rememberTabBarOverlayHeight() + extraBottom
+    if (!style.isIOS) {
+        return@composed Modifier.padding(bottom = tabStack)
+    }
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    Modifier.padding(bottom = maxOf(tabStack, imeBottom))
+}
+
+/** Keeps the chat header fixed when the IME opens (iOS). */
+fun Modifier.chatHeaderImeIsolation(): Modifier = composed {
+    val style = LocalPlatformStyle.current
+    if (style.isIOS) {
+        Modifier.consumeWindowInsets(WindowInsets.ime)
+    } else {
+        Modifier
+    }
+}
+
+/** Prevent the chat body from shrinking with the IME so the header stays pinned (iOS). */
+fun Modifier.chatScreenImeIsolation(): Modifier = composed {
+    val style = LocalPlatformStyle.current
+    if (style.isIOS) {
+        Modifier.consumeWindowInsets(WindowInsets.ime)
+    } else {
+        Modifier
+    }
 }
 
 fun Modifier.bottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Modifier = composed {
@@ -74,5 +120,5 @@ fun Modifier.bottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottom
 }
 
 fun Modifier.composerBottomPadding(extra: Dp = 0.dp): Modifier = composed {
-    Modifier.padding(bottom = rememberComposerBottomPadding(extra))
+    Modifier.chatComposerDock(extra)
 }

@@ -109,6 +109,7 @@ private fun ConnectionsCompactHeaderRow(
     LiquidGlassPill(
         modifier = Modifier.fillMaxWidth(),
         cornerRadiusDp = GlassSheetTokens.BentoExteriorCorner.value.toInt(),
+        backgroundStrength = 1f,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
