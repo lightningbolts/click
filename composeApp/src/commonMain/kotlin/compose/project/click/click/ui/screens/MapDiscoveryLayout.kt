@@ -49,7 +49,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -232,9 +231,9 @@ internal fun MapDiscoveryScreen(
 
     val listState = remember { LazyListState(0, 0) }
 
-    // Force list to start at top on first composition — the LazyListState constructor args
-    // are only hints; Compose can still restore a non-zero offset during the first layout pass.
-    LaunchedEffect(Unit) {
+    // Reset scroll to top whenever feedItems changes (handles both navigation entry AND the
+    // location-settle reorder that previously caused the feed to appear "in the middle").
+    LaunchedEffect(feedItems) {
         listState.scrollToItem(0, 0)
     }
 
@@ -320,18 +319,8 @@ internal fun MapDiscoveryScreen(
                 selectedSortIndex = sortMode,
                 onSortSelected = { index ->
                     if (index == sortMode) return@DiscoveryFloatingHeader
-                    val nextMode = if (index == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
-                    val nextFeed = sortDiscoveryFeedItems(feedItems, nextMode)
-                    val anchorKey = listState.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.key != null && it.key != "discovery_empty" }
-                        ?.key as? String
-                    val anchorIndex = anchorKey?.let { key -> nextFeed.indexOfFirst { it.key == key } }
-                        ?.takeIf { it >= 0 } ?: 0
-                    listState.requestScrollToItem(
-                        anchorIndex,
-                        listState.firstVisibleItemScrollOffset,
-                    )
                     sortMode = index
+                    listState.requestScrollToItem(0, 0)
                 },
                 onOpenSearch = onOpenSearch,
             )
@@ -402,16 +391,16 @@ internal fun MapDiscoveryScreen(
 
         AnimatedVisibility(
             visible = mapPipExpanded,
-            enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) +
+            enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
                 scaleIn(
-                    animationSpec = tween(260, easing = FastOutSlowInEasing),
-                    initialScale = 0.92f,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                    initialScale = 0.88f,
                     transformOrigin = TransformOrigin(0.92f, 0.92f),
                 ),
-            exit = fadeOut(tween(140, easing = FastOutSlowInEasing)) +
+            exit = fadeOut(tween(280, easing = FastOutSlowInEasing)) +
                 scaleOut(
-                    animationSpec = tween(190, easing = FastOutSlowInEasing),
-                    targetScale = 0.92f,
+                    animationSpec = tween(320, easing = FastOutSlowInEasing),
+                    targetScale = 0.72f,
                     transformOrigin = TransformOrigin(0.92f, 0.92f),
                 ),
             modifier = Modifier

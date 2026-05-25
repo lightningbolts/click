@@ -43,7 +43,6 @@ import compose.project.click.click.ui.components.toClusterPin // pragma: allowli
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
-import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -195,15 +194,7 @@ fun MapScreen(
         }
     }
 
-    // C14: Parallax — when the ProfileBottomSheet is revealed, drift the map surface
-    // upward a few dozen dp so the tapped pin remains visible above the sheet and the
-    // whole view gains a subtle depth effect. Kept intentionally small (-56.dp) to
-    // avoid fighting the map's own gesture handling.
-    val parallaxOffset by animateFloatAsState(
-        targetValue = if (showBottomSheet || showBeaconDetailSheet || showCommunityHubSheet) -56f else 0f,
-        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-        label = "profile_sheet_map_parallax",
-    )
+    // Parallax removed — the upward shift was perceived as a layout bug when sheets opened.
 
     // Match App.kt: content is full-bleed under the tab bar; bottom inset is applied only on controls.
     Scaffold(
@@ -217,7 +208,6 @@ fun MapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .then(grayscaleModifier)
-                .graphicsLayer { translationY = parallaxOffset }
                 .background(
                     if (ghostModeEnabled) Color.DarkGray.copy(alpha = 0.3f)
                     else GlassSheetTokens.OledBlack,
@@ -247,15 +237,7 @@ fun MapScreen(
                         onDropBeacon = { showBeaconDropSheet = true },
                         mapContent = { mapModifier, mapGesturesEnabled ->
                             MapContent(
-                                modifier = mapModifier.graphicsLayer {
-                                    translationY = if (
-                                        showBottomSheet || showBeaconDetailSheet || showCommunityHubSheet
-                                    ) {
-                                        parallaxOffset
-                                    } else {
-                                        0f
-                                    }
-                                },
+                                modifier = mapModifier,
                                 renderData = renderData,
                                 communityHubs = communityHubs,
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
