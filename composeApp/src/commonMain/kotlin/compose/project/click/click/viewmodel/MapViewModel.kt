@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
@@ -192,6 +193,10 @@ class MapViewModel : ViewModel() {
     private var pendingProgrammaticZoomSetAtMs: Long = 0L
 
     private var renderDataJob: Job? = null
+    // Job for incremental population of markers when initial cap is applied
+    private var incrementalPopulationJob: Job? = null
+    // Initial number of pins to render immediately. The rest will be added incrementally.
+    private val INITIAL_PIN_CAP = 200
 
     private val beaconSubmitMutex = Mutex()
 
@@ -288,6 +293,7 @@ class MapViewModel : ViewModel() {
      */
     private fun updateRenderData(connections: List<Connection>, zoom: Double) {
         renderDataJob?.cancel()
+        incrementalPopulationJob?.cancel()
         val layers = _selectedLayerFilters.value
         val beaconsRaw = _mapBeacons.value
         renderDataJob = viewModelScope.launch {
@@ -308,7 +314,51 @@ class MapViewModel : ViewModel() {
                     },
                 )
             }
-            _renderData.value = rendered
+
+            // If we're in IndividualPins mode and there are many points, publish only the nearest
+            // INITIAL_PIN_CAP immediately and incrementally add the rest in batches. This reduces
+            // initial marker creation work and improves perceived map performance.
+            if (rendered is MapRenderData.IndividualPins && rendered.points.size > INITIAL_PIN_CAP) {
+                val allPoints = rendered.points
+
+                // Choose an anchor (camera center) to sort by proximity.
+                val anchor = _cameraTarget.value ?: _defaultCameraTarget.value
+                val (anchorLat, anchorLon) = when {
+                    anchor != null -> anchor.latitude to anchor.longitude
+                    allPoints.isNotEmpty() -> allPoints.first().latitude to allPoints.first().longitude
+                    else -> null to null
+                }
+
+                val initialPoints = if (anchorLat != null && anchorLon != null) {
+                    allPoints.sortedBy { haversineDistance(anchorLat, anchorLon, it.latitude, it.longitude) }
+                        .take(INITIAL_PIN_CAP)
+                } else {
+                    allPoints.take(INITIAL_PIN_CAP)
+                }
+
+                _renderData.value = MapRenderData.IndividualPins(points = initialPoints, beacons = rendered.beacons)
+
+                // Incrementally add remaining points in batches to avoid CPU/GC spikes
+                incrementalPopulationJob = viewModelScope.launch {
+                    withContext(Dispatchers.Default) {
+                        val remaining = allPoints - initialPoints
+                        val batchSize = 100
+                        var current = initialPoints.toMutableList()
+                        var i = 0
+                        while (i < remaining.size) {
+                            val end = min(i + batchSize, remaining.size)
+                            val batch = remaining.subList(i, end)
+                            // Small delay yields frame time back to the UI thread
+                            delay(50)
+                            current.addAll(batch)
+                            _renderData.value = MapRenderData.IndividualPins(points = current.toList(), beacons = rendered.beacons)
+                            i = end
+                        }
+                    }
+                }
+            } else {
+                _renderData.value = rendered
+            }
         }
     }
 
