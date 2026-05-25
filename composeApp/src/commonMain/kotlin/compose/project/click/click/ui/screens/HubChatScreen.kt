@@ -79,6 +79,8 @@ import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact
 import compose.project.click.click.ui.chat.chatHubMessageRowTopPadding
 import compose.project.click.click.ui.chat.chatHubReceiptRowTopPadding
+import compose.project.click.click.ui.chat.chatInterMessageGapDp
+import compose.project.click.click.ui.chat.chatInterMessageSpacingBetweenNeighbors
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle
@@ -454,24 +456,52 @@ fun HubChatScreen(
                 ) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
+                        reverseLayout = true,
                         contentPadding = PaddingValues(
                             start = 6.dp,
                             end = 6.dp,
-                            top = 12.dp,
-                            bottom = 24.dp,
+                            top = 24.dp,
+                            bottom = 12.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
+                        if (newestSentMessage != null) {
+                            val receiptM = newestSentMessage
+                            items(
+                                listOf(receiptM),
+                                key = { _ -> "hub-outbound-delivery-receipt" },
+                            ) { mwu ->
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            top = chatHubReceiptRowTopPadding(ChatInterMessageHubBaseCompact),
+                                            end = 10.dp,
+                                        ),
+                                    contentAlignment = Alignment.CenterEnd,
+                                ) {
+                                    ChatDeliveryReceiptIcon(
+                                        messageWithUser = mwu,
+                                        baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        readTint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                        val newestFirst = messages.asReversed()
                         items(
-                            count = messages.size,
-                            key = { messages[it].message.id },
+                            count = newestFirst.size,
+                            key = { newestFirst[it].message.id },
                         ) { index ->
-                            val mwu = messages[index]
+                            val mwu = newestFirst[index]
                             val isCallLog = mwu.message.messageType == "call_log"
+                            val topGap = if (index >= newestFirst.lastIndex) 0.dp
+                                else chatInterMessageGapDp(
+                                    chatInterMessageSpacingBetweenNeighbors(mwu, newestFirst[index + 1]),
+                                    ChatInterMessageHubBaseCompact,
+                                )
                             Column(
-                                Modifier.animateItem().padding(
-                                    top = chatHubMessageRowTopPadding(index, messages, ChatInterMessageHubBaseCompact),
-                                ),
+                                Modifier.animateItem().padding(top = topGap),
                             ) {
                                 ChatMessageRowWithTimestampGutter(
                                     isCallLog = isCallLog,
@@ -495,29 +525,6 @@ fun HubChatScreen(
                                         secureMediaState = secureMediaLoadMap[mwu.message.id],
                                         activeChatId = hubIdForSecureMedia,
                                         enableMessageContextMenu = false,
-                                    )
-                                }
-                            }
-                        }
-                        if (newestSentMessage != null) {
-                            val receiptM = newestSentMessage
-                            items(
-                                listOf(receiptM),
-                                key = { _ -> "hub-outbound-delivery-receipt" },
-                            ) { mwu ->
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            top = chatHubReceiptRowTopPadding(ChatInterMessageHubBaseCompact),
-                                            end = 10.dp,
-                                        ),
-                                    contentAlignment = Alignment.CenterEnd,
-                                ) {
-                                    ChatDeliveryReceiptIcon(
-                                        messageWithUser = mwu,
-                                        baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                        readTint = MaterialTheme.colorScheme.primary,
                                     )
                                 }
                             }

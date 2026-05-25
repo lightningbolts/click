@@ -65,6 +65,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -132,7 +133,7 @@ internal fun ConnectionChatMessageComposer(
     val composerStripInteraction = remember { MutableInteractionSource() }
     val composerStripBg = Color.Transparent
     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = Modifier.fillMaxWidth().graphicsLayer { }) {
         Box(
             modifier = Modifier
                 .matchParentSize()

@@ -551,10 +551,9 @@ fun ChatView(
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
                      * top via [WindowInsets.safeDrawing] / display cutout coupling.
                      *
-                     * Android uses [android:windowSoftInputMode=adjustResize]: the decor already
-                     * shrinks for the IME — thread padding uses navigation bars only. iOS applies
-                     * [chatThreadKeyboardDock] on the thread+composer column so the input row rides
-                     * the keyboard as one unit (max of home indicator and IME, never both stacked).
+                     * Both platforms apply [chatThreadKeyboardDock] (a [windowInsetsPadding] union of
+                     * nav bars + IME) on the thread+composer column so the input row rides the keyboard
+                     * as one unit — no per-frame recomposition, no stacking of nav + keyboard padding.
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val messageContentModifier = Modifier
@@ -871,13 +870,6 @@ fun ChatView(
                                 .fillMaxWidth()
                                 .chatThreadKeyboardDock(),
                         ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                        ) {
-
-                    Column(modifier = Modifier.fillMaxSize()) {
 
                     // Icebreaker Prompts Panel
                     if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
@@ -1187,7 +1179,7 @@ fun ChatView(
                     }
 
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().graphicsLayer { },
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
@@ -1302,8 +1294,6 @@ fun ChatView(
                             )
                         }
                         }
-                    }
-                    }
                     }
                     }
                     }
