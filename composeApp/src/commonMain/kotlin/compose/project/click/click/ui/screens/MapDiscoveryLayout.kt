@@ -76,6 +76,8 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.utils.CommunityHubPin
 import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.TextStyle
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.utils.haversineDistance
 import kotlinx.datetime.Clock
@@ -180,6 +182,47 @@ internal fun buildDiscoveryFeedItems(
     return hubRows + beaconRows + connRows
 }
 
+internal data class DiscoveryFeedSection(
+    val title: String,
+    val items: List<DiscoveryFeedItem>,
+)
+
+internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): List<DiscoveryFeedSection> {
+    if (items.isEmpty()) return emptyList()
+    val sections = mutableListOf<DiscoveryFeedSection>()
+    val hubs = items.filterIsInstance<DiscoveryFeedItem.Hub>()
+    if (hubs.isNotEmpty()) {
+        sections += DiscoveryFeedSection(title = "Community hubs", items = hubs)
+    }
+    val connections = items.filterIsInstance<DiscoveryFeedItem.Connection>()
+    if (connections.isNotEmpty()) {
+        sections += DiscoveryFeedSection(title = "Connections", items = connections)
+    }
+    val beacons = items.filterIsInstance<DiscoveryFeedItem.Beacon>()
+    if (beacons.isNotEmpty()) {
+        beacons
+            .groupBy { it.beacon.kind }
+            .entries
+            .sortedBy { (kind, _) -> kind.ordinal }
+            .forEach { (kind, rows) ->
+                val pluralTitle = when (kind) {
+                    MapBeaconKind.SOUNDTRACK -> "Soundtracks"
+                    MapBeaconKind.SOS -> "SOS beacons"
+                    MapBeaconKind.HAZARD -> "Hazards"
+                    MapBeaconKind.UTILITY -> "Utilities"
+                    MapBeaconKind.STUDY -> "Study spots"
+                    MapBeaconKind.SOCIAL_VIBE -> "Social vibes"
+                    MapBeaconKind.OTHER -> "Beacons"
+                }
+                sections += DiscoveryFeedSection(
+                    title = pluralTitle,
+                    items = rows,
+                )
+            }
+    }
+    return sections
+}
+
 internal fun sortDiscoveryFeedItems(
     items: List<DiscoveryFeedItem>,
     mode: DiscoverySortMode,
@@ -227,6 +270,9 @@ internal fun MapDiscoveryScreen(
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
     val sortedFeed = remember(feedItems, discoverySortMode) {
         sortDiscoveryFeedItems(feedItems, discoverySortMode)
+    }
+    val feedSections = remember(sortedFeed) {
+        groupDiscoveryFeedIntoSections(sortedFeed)
     }
 
     val listState = remember { LazyListState(0, 0) }
@@ -282,21 +328,32 @@ internal fun MapDiscoveryScreen(
                     )
                 }
             } else {
-                items(
-                    items = sortedFeed,
-                    key = { it.key },
-                    contentType = { "discovery_row" },
-                ) { item ->
-                    DiscoveryFeedRow(
-                        item = item,
-                        onClick = {
-                            when (item) {
-                                is DiscoveryFeedItem.Hub -> onHubClick(item.hub)
-                                is DiscoveryFeedItem.Beacon -> onBeaconClick(item.beacon)
-                                is DiscoveryFeedItem.Connection -> onConnectionClick(item.point)
-                            }
-                        },
-                    )
+                feedSections.forEachIndexed { sectionIndex, section ->
+                    item(key = "discovery_section_${section.title}") {
+                        DiscoverySectionHeader(
+                            text = section.title,
+                            modifier = Modifier.padding(
+                                top = if (sectionIndex == 0) 0.dp else 8.dp,
+                                bottom = 4.dp,
+                            ),
+                        )
+                    }
+                    items(
+                        items = section.items,
+                        key = { it.key },
+                        contentType = { "discovery_row" },
+                    ) { item ->
+                        DiscoveryFeedRow(
+                            item = item,
+                            onClick = {
+                                when (item) {
+                                    is DiscoveryFeedItem.Hub -> onHubClick(item.hub)
+                                    is DiscoveryFeedItem.Beacon -> onBeaconClick(item.beacon)
+                                    is DiscoveryFeedItem.Connection -> onConnectionClick(item.point)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -418,6 +475,28 @@ internal fun MapDiscoveryScreen(
             }
         }
     }
+}
+
+@Composable
+private fun DiscoverySectionHeader(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val brush = Brush.horizontalGradient(
+        colors = listOf(
+            MaterialTheme.colorScheme.onSurface,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    )
+    Text(
+        text = text,
+        modifier = modifier,
+        style = MaterialTheme.typography.titleLarge.merge(
+            TextStyle(brush = brush),
+        ),
+        fontWeight = FontWeight.Bold,
+        color = GlassSheetTokens.OnOled,
+    )
 }
 
 @Composable

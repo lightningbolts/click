@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.PrimaryBlue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 enum class ConnectionRevealPhase {
     Connecting,
@@ -55,9 +57,19 @@ fun ConnectionRevealOverlay(
     state: ConnectionRevealUiState,
     modifier: Modifier = Modifier
 ) {
-    LaunchedEffect(Unit) {
-        if (state.phase == ConnectionRevealPhase.Connecting) {
-            PlatformHapticsPolicy.successNotification()
+    LaunchedEffect(state.phase) {
+        when (state.phase) {
+            ConnectionRevealPhase.Connecting -> {
+                PlatformHapticsPolicy.heavyImpact()
+                while (isActive) {
+                    delay(680)
+                    PlatformHapticsPolicy.heavyImpact()
+                }
+            }
+            ConnectionRevealPhase.Success -> {
+                PlatformHapticsPolicy.successNotification()
+                PlatformHapticsPolicy.heavyImpact()
+            }
         }
     }
     var entered by remember { mutableStateOf(false) }

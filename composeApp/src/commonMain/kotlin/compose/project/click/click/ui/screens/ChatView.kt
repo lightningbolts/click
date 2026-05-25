@@ -122,9 +122,7 @@ import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allo
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatComposerDockEdgeToEdge // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatHeaderImeIsolation // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatScreenImeIsolation // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -144,7 +142,6 @@ import compose.project.click.click.data.models.replyRef // pragma: allowlist sec
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.geometry.Offset
@@ -554,9 +551,9 @@ fun ChatView(
                      * top via [WindowInsets.safeDrawing] / display cutout coupling.
                      *
                      * Android uses [android:windowSoftInputMode=adjustResize]: the decor already
-                     * shrinks for the IME, so [imePadding] on the composer would **double-count** the
-                     * keyboard height and leave a large gap. iOS keeps [imePadding] on the composer strip
-                     * only so the field stays above the keyboard without pushing the header off-screen.
+                     * shrinks for the IME — thread padding uses navigation bars only. iOS applies
+                     * [chatThreadKeyboardDock] on the thread+composer column so the input row rides
+                     * the keyboard as one unit (max of home indicator and IME, never both stacked).
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val messageContentModifier = Modifier
@@ -564,15 +561,12 @@ fun ChatView(
                         .fillMaxWidth()
 
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .chatScreenImeIsolation(),
+                        modifier = Modifier.fillMaxSize(),
                     ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .chatHeaderImeIsolation()
                                 .padding(top = topInset)
                                 .height(56.dp)
                                 .padding(horizontal = 20.dp)
@@ -873,7 +867,8 @@ fun ChatView(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxWidth(),
+                                .fillMaxWidth()
+                                .chatThreadKeyboardDock(),
                         ) {
                         Box(
                             modifier = Modifier
@@ -1179,9 +1174,7 @@ fun ChatView(
                     }
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .chatComposerDockEdgeToEdge(),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(

@@ -95,6 +95,9 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle
 fun MapScreen(
     viewModel: MapViewModel = viewModel { MapViewModel() },
     onNavigateToChat: ((String) -> Unit)? = null,
+    /** When set, focuses the matching beacon pin once map beacons have loaded. */
+    initialBeaconId: String? = null,
+    onBeaconFocusConsumed: () -> Unit = {},
     /** Proximity verify + hop into hub chat (matches Add Click hub join). */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
     mapPipExpanded: Boolean = false,
@@ -122,6 +125,13 @@ fun MapScreen(
         val loc = locationService.getCurrentLocation()
         userLat = loc?.latitude
         userLon = loc?.longitude
+    }
+
+    LaunchedEffect(initialBeaconId, mapBeacons) {
+        val beaconId = initialBeaconId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+        if (mapBeacons.none { it.id == beaconId }) return@LaunchedEffect
+        viewModel.onBeaconPinTapped(beaconId)
+        onBeaconFocusConsumed()
     }
 
     DisposableEffect(Unit) {

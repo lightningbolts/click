@@ -29,7 +29,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +75,8 @@ import compose.project.click.click.ui.theme.SurfaceDark
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
+import compose.project.click.click.viewmodel.beaconDisplaySubtitle
+import compose.project.click.click.viewmodel.beaconDisplayTitle
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -248,7 +252,9 @@ internal fun categoryLabel(cat: SearchResultCategory): String =
         SearchResultCategory.Active -> "Active"
         SearchResultCategory.Archived -> "Archived"
         SearchResultCategory.Cliques -> "Cliques"
-        SearchResultCategory.Nearby -> "Beacons"
+        SearchResultCategory.Nearby -> "Nearby"
+        SearchResultCategory.Beacons -> "Beacons"
+        SearchResultCategory.Intents -> "Intents"
     }
 
 @Composable
@@ -284,6 +290,8 @@ internal fun UnifiedSearchResultsList(
     bottomPadding: Dp,
     onNavigateToChat: (String) -> Unit,
     onNavigateToMap: () -> Unit,
+    onNavigateToBeacon: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
 ) {
     val gradientBrush = Brush.horizontalGradient(
         colors = listOf(GradientTextStart, GradientTextEnd),
@@ -305,6 +313,8 @@ internal fun UnifiedSearchResultsList(
                     result = row,
                     onNavigateToChat = onNavigateToChat,
                     onNavigateToMap = onNavigateToMap,
+                    onNavigateToBeacon = onNavigateToBeacon,
+                    onNavigateToSettings = onNavigateToSettings,
                 )
             }
         }
@@ -321,6 +331,8 @@ internal fun searchResultStableKey(r: SearchResult): String =
         is SearchResult.MemoryContextMatch -> "m:${r.details.connection.id}"
         is SearchResult.MessageHit -> "msg:${r.result.message.id}"
         is SearchResult.LocationBucket -> "loc:${r.result.location}"
+        is SearchResult.BeaconMatch -> "beacon:${r.beacon.id}"
+        is SearchResult.OwnAvailabilityIntentMatch -> "own-intent:${r.intent.intentTag}:${r.intent.timeframe}"
     }
 
 @Composable
@@ -345,6 +357,8 @@ internal fun SearchResultRow(
     result: SearchResult,
     onNavigateToChat: (String) -> Unit,
     onNavigateToMap: () -> Unit,
+    onNavigateToBeacon: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
 ) {
     val archivedLook = when (result) {
         is SearchResult.ArchivedConnection -> true
@@ -361,6 +375,8 @@ internal fun SearchResultRow(
                 .clickable {
                     when (result) {
                         is SearchResult.LocationBucket -> onNavigateToMap()
+                        is SearchResult.BeaconMatch -> onNavigateToBeacon(result.beacon.id)
+                        is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
                         is SearchResult.MessageHit -> onNavigateToChat(result.result.connectionId)
                         is SearchResult.ActiveConnection -> onNavigateToChat(result.details.connection.id)
                         is SearchResult.ArchivedConnection -> onNavigateToChat(result.details.connection.id)
@@ -376,6 +392,8 @@ internal fun SearchResultRow(
             when (result) {
                 is SearchResult.MessageHit -> MessageLeadingIcon()
                 is SearchResult.LocationBucket -> LocationLeadingIcon()
+                is SearchResult.BeaconMatch -> BeaconLeadingIcon()
+                is SearchResult.OwnAvailabilityIntentMatch -> IntentLeadingIcon()
                 is SearchResult.ActiveConnection -> PersonLeadingAvatar(result.details)
                 is SearchResult.ArchivedConnection -> PersonLeadingAvatar(result.details)
                 is SearchResult.Clique -> PersonLeadingAvatar(result.details)
@@ -410,6 +428,8 @@ internal fun BadgeRow(result: SearchResult) {
             is SearchResult.MemoryContextMatch -> TinyBadge("Context")
             is SearchResult.MessageHit -> TinyBadge("Message")
             is SearchResult.LocationBucket -> TinyBadge("Place")
+            is SearchResult.BeaconMatch -> TinyBadge("Beacon")
+            is SearchResult.OwnAvailabilityIntentMatch -> TinyBadge("Your intent")
             is SearchResult.ActiveConnection -> {}
         }
     }
@@ -492,6 +512,22 @@ internal fun TitleAndSubtitle(result: SearchResult) {
             }
             Text(countLabel, style = subtitleStyle)
         }
+        is SearchResult.BeaconMatch -> {
+            Text(beaconDisplayTitle(result.beacon), style = titleStyle)
+            Text(
+                beaconDisplaySubtitle(result.beacon, result.distanceMeters),
+                style = subtitleStyle,
+            )
+        }
+        is SearchResult.OwnAvailabilityIntentMatch -> {
+            val label = result.intent.intentTag?.trim().orEmpty().ifEmpty { "Availability" }
+            Text(label, style = titleStyle)
+            Text(
+                text = "Your availability" +
+                    (result.intent.timeframe?.trim()?.takeIf { it.isNotEmpty() }?.let { " · $it" } ?: ""),
+                style = subtitleStyle,
+            )
+        }
     }
 }
 
@@ -547,6 +583,42 @@ internal fun LocationLeadingIcon() {
     ) {
         Icon(
             imageVector = Icons.Default.LocationOn,
+            contentDescription = null,
+            tint = LightBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+internal fun BeaconLeadingIcon() {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PrimaryBlue.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Place,
+            contentDescription = null,
+            tint = LightBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+internal fun IntentLeadingIcon() {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PrimaryBlue.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.EventAvailable,
             contentDescription = null,
             tint = LightBlue,
             modifier = Modifier.size(22.dp),

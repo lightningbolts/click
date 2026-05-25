@@ -1,11 +1,14 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -82,8 +85,29 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
 }
 
 /**
- * Pins the chat composer above the tab bar. On iOS, [maxOf] tab stack height and IME inset so the
- * strip stays above the nav bar while the keyboard animates (never swaps to IME-only padding).
+ * Animated bottom inset = max(home indicator / tab stack, IME). Uses the platform inset union so
+ * keyboard motion tracks the system curve without stacking nav + keyboard padding (which leaves a gap).
+ */
+private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = composed {
+    val style = LocalPlatformStyle.current
+    val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    if (!style.isIOS) {
+        val ime = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        // adjustResize already lifts content; extra bottom pad while IME is open double-counts.
+        val bottom = if (ime > 0.dp) 0.dp else nav + extraBottom
+        return@composed Modifier.padding(bottom = bottom)
+    }
+    Modifier
+        .windowInsetsPadding(
+            WindowInsets.navigationBars
+                .only(WindowInsetsSides.Bottom)
+                .union(WindowInsets.ime.only(WindowInsetsSides.Bottom)),
+        )
+        .then(if (extraBottom > 0.dp) Modifier.padding(bottom = extraBottom) else Modifier)
+}
+
+/**
+ * Pins the chat composer above the tab bar. On iOS uses [maxOf] tab stack height and IME inset.
  */
 fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
     val style = LocalPlatformStyle.current
@@ -96,45 +120,25 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
 }
 
 /**
- * Pins the chat composer to the physical bottom edge when the main tab bar is hidden.
- * Uses home-indicator inset only on Android ([adjustResize] handles the IME). On iOS, keeps the
- * composer above the keyboard via [maxOf] navigation-bar and IME padding.
+ * Wrap the chat thread + composer column (below the fixed header). The whole block shrinks with the
+ * keyboard so the input row stays flush on top of the IME — same model as iMessage / WhatsApp.
+ *
+ * Android [adjustResize] already lifts the window; only home-indicator padding is applied.
  */
-fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier = composed {
-    val style = LocalPlatformStyle.current
-    val homeIndicator =
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + extraBottom
-    if (!style.isIOS) {
-        return@composed Modifier.padding(bottom = homeIndicator)
-    }
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    Modifier.padding(bottom = maxOf(homeIndicator, imeBottom))
-}
+fun Modifier.chatThreadKeyboardDock(extraBottom: Dp = 0.dp): Modifier =
+    chatBottomInsetUnion(extraBottom)
+
+/**
+ * Legacy alias — prefer applying [chatThreadKeyboardDock] on the thread+composer container and
+ * leaving the composer strip itself unpadded.
+ */
+fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =
+    chatBottomInsetUnion(extraBottom)
 
 @Composable
 fun rememberEdgeToEdgeBottomPadding(extra: Dp = 0.dp): Dp {
     val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     return navigationBar + extra
-}
-
-/** Keeps the chat header fixed when the IME opens (iOS). */
-fun Modifier.chatHeaderImeIsolation(): Modifier = composed {
-    val style = LocalPlatformStyle.current
-    if (style.isIOS) {
-        Modifier.consumeWindowInsets(WindowInsets.ime)
-    } else {
-        Modifier
-    }
-}
-
-/** Prevent the chat body from shrinking with the IME so the header stays pinned (iOS). */
-fun Modifier.chatScreenImeIsolation(): Modifier = composed {
-    val style = LocalPlatformStyle.current
-    if (style.isIOS) {
-        Modifier.consumeWindowInsets(WindowInsets.ime)
-    } else {
-        Modifier
-    }
 }
 
 fun Modifier.bottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Modifier = composed {

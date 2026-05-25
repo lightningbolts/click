@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.HubCreateLocationBody
 import compose.project.click.click.data.api.HubCreatePostBody
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationService
 import io.ktor.client.plugins.ClientRequestException
@@ -364,6 +365,8 @@ private fun CreateHubSheetBody(
                                 onSuccess = { dto ->
                                     val hid = dto.hubId.trim()
                                     if (hid.isNotEmpty()) {
+                                        PlatformHapticsPolicy.heavyImpact()
+                                        PlatformHapticsPolicy.successNotification()
                                         onDismiss()
                                         onHubCreated(hid)
                                     } else {

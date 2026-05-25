@@ -42,11 +42,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -125,7 +123,6 @@ fun ChatMessageBubble(
 
     val secureSt = secureMediaState
         ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
-    val hapticFeedback = LocalHapticFeedback.current
     val onRequestSecureAudio = remember(message.id) { {} }
 
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
@@ -169,7 +166,7 @@ fun ChatMessageBubble(
         val directed = if (isSent) (-rawSwipeTravelPx).coerceAtLeast(0f) else rawSwipeTravelPx.coerceAtLeast(0f)
         if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
             replyThresholdHapticFired = true
-            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            PlatformHapticsPolicy.heavyImpact()
         }
     }
 
@@ -197,6 +194,7 @@ fun ChatMessageBubble(
             val raw = rawSwipeTravelPx
             val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
             if (shouldReply) {
+                PlatformHapticsPolicy.heavyImpact()
                 onSwipeReplyState.value(messageWithUserState.value)
             }
             rawSwipeTravelPx = 0f

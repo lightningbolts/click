@@ -64,6 +64,8 @@ fun UnifiedSearchSheet(
     userId: String,
     onNavigateToChat: (connectionId: String) -> Unit,
     onNavigateToMap: () -> Unit,
+    onNavigateToBeacon: (beaconId: String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
 ) {
     val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
@@ -82,6 +84,8 @@ fun UnifiedSearchSheet(
             viewModel = viewModel,
             onNavigateToChat = onNavigateToChat,
             onNavigateToMap = onNavigateToMap,
+            onNavigateToBeacon = onNavigateToBeacon,
+            onNavigateToSettings = onNavigateToSettings,
         )
     }
 }
@@ -93,6 +97,8 @@ private fun UnifiedSearchSheetContent(
     viewModel: GlobalSearchViewModel,
     onNavigateToChat: (String) -> Unit,
     onNavigateToMap: () -> Unit,
+    onNavigateToBeacon: (String) -> Unit,
+    onNavigateToSettings: () -> Unit,
 ) {
     val query by viewModel.searchQuery.collectAsState()
     val results by viewModel.results.collectAsState()
@@ -138,7 +144,7 @@ private fun UnifiedSearchSheetContent(
                 singleLine = true,
                 placeholder = {
                     Text(
-                        "Search people, places, interests, intents…",
+                        "Search people, places, beacons, intents…",
                         color = GlassSheetTokens.OnOledMuted,
                     )
                 },
@@ -199,7 +205,7 @@ private fun UnifiedSearchSheetContent(
                     EmptySearchHint(
                         modifier = Modifier.align(Alignment.Center),
                         icon = Icons.Default.Search,
-                        body = "Search for people, cliques, interests,\nintents, messages, or places you've visited",
+                        body = "Search for people, cliques, beacons,\navailability intents, messages, or places",
                     )
                 }
 
@@ -227,6 +233,8 @@ private fun UnifiedSearchSheetContent(
                         bottomPadding = listBottomPad,
                         onNavigateToChat = onNavigateToChat,
                         onNavigateToMap = onNavigateToMap,
+                        onNavigateToBeacon = onNavigateToBeacon,
+                        onNavigateToSettings = onNavigateToSettings,
                     )
                 }
             }

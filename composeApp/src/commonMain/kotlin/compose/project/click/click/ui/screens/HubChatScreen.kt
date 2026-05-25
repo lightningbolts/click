@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -89,9 +88,7 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.components.chatComposerDockEdgeToEdge
-import compose.project.click.click.ui.components.chatHeaderImeIsolation
-import compose.project.click.click.ui.components.chatScreenImeIsolation
+import compose.project.click.click.ui.components.chatThreadKeyboardDock
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
@@ -189,9 +186,7 @@ fun HubChatScreen(
     val channelReady by viewModel.channelReady.collectAsState()
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .chatScreenImeIsolation(),
+        modifier = Modifier.fillMaxSize(),
     ) {
         ChatAmbientMeshBackground(
             connection = null,
@@ -217,7 +212,6 @@ fun HubChatScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .chatHeaderImeIsolation()
                         .padding(top = topInset)
                         .height(56.dp),
                 ) {
@@ -419,6 +413,12 @@ fun HubChatScreen(
                     messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
                 }
 
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .chatThreadKeyboardDock(),
+                ) {
                 // ── Message list ────────────────────────────────────────────
                 Box(
                     modifier = Modifier
@@ -445,7 +445,7 @@ fun HubChatScreen(
                             start = 6.dp,
                             end = 6.dp,
                             top = 12.dp,
-                            bottom = 96.dp,
+                            bottom = 24.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
@@ -511,22 +511,16 @@ fun HubChatScreen(
                         }
                     }
                 }
-                }
 
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .chatComposerDockEdgeToEdge(),
-                ) {
-                    HubChatInputBar(
-                        viewModel = viewModel,
-                        inLobby = inLobby,
-                        isOutOfBounds = outOfBounds,
-                        onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
-                    )
+                HubChatInputBar(
+                    viewModel = viewModel,
+                    inLobby = inLobby,
+                    isOutOfBounds = outOfBounds,
+                    onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
+                )
                 }
             }
+        }
         }
 
     }

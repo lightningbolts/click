@@ -8,6 +8,9 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.GroupCliqueDetails
+import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.models.MapBeaconKind
+import compose.project.click.click.data.models.MapBeaconMetadata
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.syntheticConnectionForGroupClique
@@ -159,6 +162,93 @@ class GlobalSearchViewModelTest {
     }
 
     @Test
+    fun ownIntentSearch_findsOwnAvailabilityIntentMatch() = runVmTest {
+        val ownIntent = AvailabilityIntentRow(
+            userId = VIEWER,
+            intentTag = "Study session",
+            timeframe = "Tonight",
+            expiresAt = "2099-01-01T00:00:00Z",
+        )
+        val fake = FakeChatRepository(
+            onFetchDirectUserChatsWithDetails = { emptyList() },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
+            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+        )
+        val vm = newVm(
+            repo = fake,
+            fetchOwnAvailabilityIntents = { listOf(ownIntent) },
+            fetchBeaconsForSearch = { _, _ -> emptyList() },
+            resolveSearchLocation = { null },
+        )
+        vm.search("study", VIEWER)
+        drainSearchWork()
+        assertTrue(vm.results.value.items.any { it is SearchResult.OwnAvailabilityIntentMatch })
+    }
+
+    @Test
+    fun beaconSearch_findsBeaconMatch() = runVmTest {
+        val beacon = MapBeacon(
+            id = "beacon-1",
+            kind = MapBeaconKind.SOUNDTRACK,
+            latitude = 37.0,
+            longitude = -122.0,
+            metadata = MapBeaconMetadata(
+                trackName = "Midnight City",
+                artistName = "M83",
+            ),
+            expiresAtEpochMs = Long.MAX_VALUE,
+            sourceBeaconType = "soundtrack",
+        )
+        val fake = FakeChatRepository(
+            onFetchDirectUserChatsWithDetails = { emptyList() },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
+            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+        )
+        val vm = newVm(
+            repo = fake,
+            fetchOwnAvailabilityIntents = { emptyList() },
+            fetchBeaconsForSearch = { _, _ -> listOf(beacon) },
+            resolveSearchLocation = { 37.0 to -122.0 },
+        )
+        vm.search("midnight", VIEWER)
+        drainSearchWork()
+        assertTrue(vm.results.value.items.any { it is SearchResult.BeaconMatch })
+    }
+
+    @Test
+    fun toggleCategory_filtersBeaconResults() = runVmTest {
+        val beacon = MapBeacon(
+            id = "beacon-2",
+            kind = MapBeaconKind.SOS,
+            latitude = 37.0,
+            longitude = -122.0,
+            metadata = MapBeaconMetadata(description = "Need help"),
+            expiresAtEpochMs = Long.MAX_VALUE,
+        )
+        val fake = FakeChatRepository(
+            onFetchDirectUserChatsWithDetails = { emptyList() },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
+            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+        )
+        val vm = newVm(
+            repo = fake,
+            fetchOwnAvailabilityIntents = { emptyList() },
+            fetchBeaconsForSearch = { _, _ -> listOf(beacon) },
+            resolveSearchLocation = { 37.0 to -122.0 },
+        )
+        vm.search("help", VIEWER)
+        drainSearchWork()
+        assertTrue(vm.results.value.visible(vm.visibleCategories.value).any { it is SearchResult.BeaconMatch })
+        vm.toggleCategory(SearchResultCategory.Beacons)
+        vm.toggleCategory(SearchResultCategory.Nearby)
+        val filtered = vm.results.value.visible(vm.visibleCategories.value)
+        assertTrue(filtered.none { it is SearchResult.BeaconMatch })
+    }
+
+    @Test
     fun semanticLocationSearch_findsLocationBucket() = runVmTest {
         val active = listOf(
             directChat(VIEWER, PEER_A, "c1", "Ann", semanticLocation = "Terry Hall"),
@@ -221,9 +311,10 @@ class GlobalSearchViewModelTest {
     @Test
     fun toggleCategory_cannotDeselectLastChip() = runVmTest {
         val vm = newVm(FakeChatRepository())
-        vm.toggleCategory(SearchResultCategory.Archived)
-        vm.toggleCategory(SearchResultCategory.Cliques)
-        vm.toggleCategory(SearchResultCategory.Nearby)
+        for (cat in SearchResultCategory.entries) {
+            if (cat == SearchResultCategory.Active) continue
+            vm.toggleCategory(cat)
+        }
         assertEquals(setOf(SearchResultCategory.Active), vm.visibleCategories.value)
         vm.toggleCategory(SearchResultCategory.Active)
         assertEquals(setOf(SearchResultCategory.Active), vm.visibleCategories.value)
@@ -241,12 +332,20 @@ class GlobalSearchViewModelTest {
         const val VIEWER = "viewer-test"
         const val PEER_A = "peer-a"
 
-        fun newVm(repo: FakeChatRepository): GlobalSearchViewModel = GlobalSearchViewModel(
+        fun newVm(
+            repo: FakeChatRepository,
+            fetchOwnAvailabilityIntents: suspend (String) -> List<AvailabilityIntentRow> = { emptyList() },
+            fetchBeaconsForSearch: suspend (Double, Double) -> List<MapBeacon> = { _, _ -> emptyList() },
+            resolveSearchLocation: suspend () -> Pair<Double, Double>? = { null },
+        ): GlobalSearchViewModel = GlobalSearchViewModel(
             tokenStorage = FakeTokenStorage(),
             chatRepository = repo,
             junctionArchivedConnectionIds = { emptySet() },
             junctionHiddenConnectionIds = { emptySet() },
             searchDebounceMs = 0L,
+            fetchOwnAvailabilityIntents = fetchOwnAvailabilityIntents,
+            fetchBeaconsForSearch = fetchBeaconsForSearch,
+            resolveSearchLocation = resolveSearchLocation,
         )
 
         fun directChat(

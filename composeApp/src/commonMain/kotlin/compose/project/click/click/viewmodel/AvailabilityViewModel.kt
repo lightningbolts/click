@@ -13,6 +13,7 @@ import compose.project.click.click.data.models.MutualAvailability // pragma: all
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +85,11 @@ class AvailabilityViewModel(
     val loadingActiveAvailabilityIntents: StateFlow<Boolean> =
         _loadingActiveAvailabilityIntents.asStateFlow()
 
+    /** True after the first successful active-intents fetch (suppresses repeat loading flashes). */
+    private val _hasResolvedActiveAvailabilityIntents = MutableStateFlow(false)
+    val hasResolvedActiveAvailabilityIntents: StateFlow<Boolean> =
+        _hasResolvedActiveAvailabilityIntents.asStateFlow()
+
     /** Non-null while the sheet is editing an existing row (insert when null). */
     private val _editingAvailabilityIntentId = MutableStateFlow<String?>(null)
     val editingAvailabilityIntentId: StateFlow<String?> = _editingAvailabilityIntentId.asStateFlow()
@@ -108,14 +114,21 @@ class AvailabilityViewModel(
         val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
         if (uid == null) {
             _activeAvailabilityIntents.value = emptyList()
+            _hasResolvedActiveAvailabilityIntents.value = false
             return
         }
         _intentListFeedback.value = null
-        _loadingActiveAvailabilityIntents.value = true
+        val showLoadingSpinner = !_hasResolvedActiveAvailabilityIntents.value
+        if (showLoadingSpinner) {
+            _loadingActiveAvailabilityIntents.value = true
+        }
         try {
             _activeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+            _hasResolvedActiveAvailabilityIntents.value = true
         } finally {
-            _loadingActiveAvailabilityIntents.value = false
+            if (showLoadingSpinner) {
+                _loadingActiveAvailabilityIntents.value = false
+            }
         }
     }
 
@@ -381,6 +394,8 @@ class AvailabilityViewModel(
             }
             _intentSubmitting.value = false
             if (result.success) {
+                PlatformHapticsPolicy.heavyImpact()
+                PlatformHapticsPolicy.successNotification()
                 resetAvailabilityIntentSheet()
                 refreshActiveAvailabilityIntentsInternal()
                 supabaseRepository.syncUserAvailabilityProfileMirror(userId)

@@ -2,7 +2,8 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
@@ -572,6 +573,8 @@ class MapViewModel : ViewModel() {
                 sourceBeaconType = insert.kind,
             )
             _mapBeacons.value = _mapBeacons.value + optimisticBeacon
+            PlatformHapticsPolicy.heavyImpact()
+            PlatformHapticsPolicy.successNotification()
             onAcceptedLocally()
 
             mapBeaconRepository.insertBeacon(insert).fold(

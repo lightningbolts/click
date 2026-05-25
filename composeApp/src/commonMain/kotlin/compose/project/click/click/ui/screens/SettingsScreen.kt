@@ -107,6 +107,7 @@ fun SettingsScreen(
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
     val activeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
     val loadingActiveAvailabilityIntents by availabilityViewModel.loadingActiveAvailabilityIntents.collectAsState()
+    val hasResolvedActiveAvailabilityIntents by availabilityViewModel.hasResolvedActiveAvailabilityIntents.collectAsState()
     val intentListFeedback by availabilityViewModel.intentListFeedback.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
@@ -228,6 +229,7 @@ fun SettingsScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = 72.dp)
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
@@ -245,7 +247,9 @@ fun SettingsScreen(
                                     )
                                 }
                                 when {
-                                    loadingActiveAvailabilityIntents && activeAvailabilityIntents.isEmpty() -> {
+                                    loadingActiveAvailabilityIntents &&
+                                        activeAvailabilityIntents.isEmpty() &&
+                                        !hasResolvedActiveAvailabilityIntents -> {
                                         Text(
                                             text = "Loading…",
                                             style = MaterialTheme.typography.bodySmall,

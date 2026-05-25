@@ -1,9 +1,13 @@
 package compose.project.click.click.viewmodel
 
+import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.GroupCliqueDetails
+import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.models.MapBeaconKind
+import compose.project.click.click.data.models.MapBeaconMetadata
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.syntheticConnectionForGroupClique
 import kotlin.test.Test
@@ -55,6 +59,44 @@ class GlobalSearchResultsTest {
         assertEquals(2, visible.size)
         assertTrue(visible.any { it is SearchResult.LocationBucket })
         assertTrue(visible.any { it is SearchResult.MemoryContextMatch })
+    }
+
+    @Test
+    fun visible_onlyBeacons_includesBeaconMatch() {
+        val beacon = SearchResult.BeaconMatch(
+            beacon = MapBeacon(
+                id = "b1",
+                kind = MapBeaconKind.STUDY,
+                latitude = 0.0,
+                longitude = 0.0,
+                metadata = MapBeaconMetadata(title = "Quiet zone"),
+            ),
+            distanceMeters = 120.0,
+        )
+        val name = SearchResult.ActiveConnection(details = stubDetails("c2", "Pat"))
+        val results = GlobalSearchResults(items = listOf(name, beacon))
+        val visible = results.visible(setOf(SearchResultCategory.Beacons))
+        assertEquals(1, visible.size)
+        assertTrue(visible.single() is SearchResult.BeaconMatch)
+    }
+
+    @Test
+    fun visible_onlyIntents_includesPeerAndOwnIntentMatches() {
+        val peerIntent = SearchResult.IntentMatch(
+            details = stubDetails("c1", "Sam"),
+            intentLabel = "Coffee",
+            intentTimeframe = "30 min",
+            isArchivedChannel = false,
+        )
+        val ownIntent = SearchResult.OwnAvailabilityIntentMatch(
+            intent = AvailabilityIntentRow(intentTag = "Walk", timeframe = "Now"),
+        )
+        val name = SearchResult.ActiveConnection(details = stubDetails("c2", "Pat"))
+        val results = GlobalSearchResults(items = listOf(name, peerIntent, ownIntent))
+        val visible = results.visible(setOf(SearchResultCategory.Intents))
+        assertEquals(2, visible.size)
+        assertTrue(visible.any { it is SearchResult.IntentMatch })
+        assertTrue(visible.any { it is SearchResult.OwnAvailabilityIntentMatch })
     }
 }
 

@@ -821,6 +821,7 @@ fun App() {
             val routeHistory = remember { mutableStateListOf("home") }
             var showNfcScreen by remember { mutableStateOf(false) }
             var pendingChatId by remember { mutableStateOf<String?>(null) }
+            var pendingBeaconId by remember { mutableStateOf<String?>(null) }
             var isConnectionsChatOpen by remember { mutableStateOf(false) }
             var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
             fun navigateTo(route: String) {
@@ -860,6 +861,7 @@ fun App() {
                 routeHistory.add(NavigationItem.Home.route)
                 isConnectionsChatOpen = false
                 pendingChatId = null
+                pendingBeaconId = null
                 return true
             }
 
@@ -1219,6 +1221,8 @@ fun App() {
                                             pendingChatId = connectionId
                                             navigateTo(NavigationItem.Connections.route)
                                         },
+                                        initialBeaconId = pendingBeaconId,
+                                        onBeaconFocusConsumed = { pendingBeaconId = null },
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },
@@ -1983,6 +1987,15 @@ fun App() {
                         onNavigateToMap = {
                             showUnifiedSearchSheet = false
                             navigateTo(NavigationItem.Map.route)
+                        },
+                        onNavigateToBeacon = { beaconId ->
+                            showUnifiedSearchSheet = false
+                            pendingBeaconId = beaconId
+                            navigateTo(NavigationItem.Map.route)
+                        },
+                        onNavigateToSettings = {
+                            showUnifiedSearchSheet = false
+                            navigateTo(NavigationItem.Settings.route)
                         },
                     )
                 }

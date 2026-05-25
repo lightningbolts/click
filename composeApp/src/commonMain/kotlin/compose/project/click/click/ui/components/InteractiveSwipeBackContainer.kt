@@ -71,7 +71,7 @@ private val SwipeBackCommitThreshold = 45.dp
 /** Settle duration when releasing without committing (snap-back to origin). */
 private const val SwipeBackCancelSettleMillis = 340
 /** Settle duration when committing to back (slide-through to full width). */
-private const val SwipeBackCompleteSettleMillis = 380
+private const val SwipeBackCompleteSettleMillis = 290
 
 /**
  * iOS-style interactive back container:

@@ -3,16 +3,22 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.isArchivedChannelForUser
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.data.repository.SupabaseChatRepository
+import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.repository.UnifiedSearchSupplement
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.connectionMatchesMemoryOrTimeQuery
 import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.utils.LocationService
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -31,6 +37,8 @@ enum class SearchResultCategory {
     Archived,
     Cliques,
     Nearby,
+    Beacons,
+    Intents,
 }
 
 // ── Unified row model ─────────────────────────────────────────────────────────
@@ -69,10 +77,26 @@ sealed class SearchResult {
         val isArchivedChannel: Boolean,
     ) : SearchResult() {
         override val categories = buildSet {
+            add(SearchResultCategory.Intents)
             add(SearchResultCategory.Active)
             if (isArchivedChannel) add(SearchResultCategory.Archived)
         }
         override val sortKey: Long = sortKeyForDetails(details)
+    }
+
+    data class OwnAvailabilityIntentMatch(
+        val intent: AvailabilityIntentRow,
+    ) : SearchResult() {
+        override val categories = setOf(SearchResultCategory.Intents, SearchResultCategory.Active)
+        override val sortKey: Long = 0L
+    }
+
+    data class BeaconMatch(
+        val beacon: MapBeacon,
+        val distanceMeters: Double?,
+    ) : SearchResult() {
+        override val categories = setOf(SearchResultCategory.Beacons, SearchResultCategory.Nearby)
+        override val sortKey: Long = distanceMeters?.toLong()?.let { -it } ?: Long.MIN_VALUE
     }
 
     data class InterestMatch(
@@ -157,14 +181,16 @@ private val searchResultComparator =
 
 private fun typeRank(r: SearchResult): Int =
     when (r) {
-        is SearchResult.IntentMatch -> 0
-        is SearchResult.InterestMatch -> 1
-        is SearchResult.MemoryContextMatch -> 2
-        is SearchResult.ActiveConnection -> 3
-        is SearchResult.ArchivedConnection -> 4
-        is SearchResult.MessageHit -> 5
-        is SearchResult.LocationBucket -> 6
-        is SearchResult.Clique -> 7
+        is SearchResult.OwnAvailabilityIntentMatch -> 0
+        is SearchResult.IntentMatch -> 1
+        is SearchResult.BeaconMatch -> 2
+        is SearchResult.InterestMatch -> 3
+        is SearchResult.MemoryContextMatch -> 4
+        is SearchResult.ActiveConnection -> 5
+        is SearchResult.ArchivedConnection -> 6
+        is SearchResult.MessageHit -> 7
+        is SearchResult.LocationBucket -> 8
+        is SearchResult.Clique -> 9
     }
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
@@ -172,6 +198,9 @@ private fun typeRank(r: SearchResult): Int =
 class GlobalSearchViewModel(
     tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
+    private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
+    private val mapBeaconRepository: MapBeaconRepository = MapBeaconRepository(),
+    private val locationService: LocationService = LocationService(),
     /**
      * Junction + lifecycle ids for archive/hidden semantics (defaults to [AppDataManager]).
      * Overridden in unit tests to avoid the app singleton.
@@ -180,6 +209,21 @@ class GlobalSearchViewModel(
     private val junctionHiddenConnectionIds: () -> Set<String> = { AppDataManager.hiddenConnectionIds.value },
     /** Keystroke debounce; set to `0` in unit tests to avoid virtual-time coupling with [viewModelScope]. */
     private val searchDebounceMs: Long = 300L,
+    private val fetchOwnAvailabilityIntents: suspend (String) -> List<AvailabilityIntentRow> = { userId ->
+        supabaseRepository.fetchActiveAvailabilityIntentsForUser(userId)
+    },
+    private val fetchBeaconsForSearch: suspend (Double, Double) -> List<MapBeacon> = { lat, lon ->
+        val bbox = searchBboxFromCenter(lat, lon, SEARCH_BEACON_RADIUS_METERS)
+        mapBeaconRepository.fetchLocalBeacons(
+            minLat = bbox.minLat,
+            maxLat = bbox.maxLat,
+            minLon = bbox.minLon,
+            maxLon = bbox.maxLon,
+        ).getOrElse { emptyList() }
+    },
+    private val resolveSearchLocation: suspend () -> Pair<Double, Double>? = {
+        locationService.getCurrentLocation()?.let { it.latitude to it.longitude }
+    },
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -229,12 +273,27 @@ class GlobalSearchViewModel(
                     return@launch
                 }
 
-                val (activeRows, archivedRows, cliqueRows) = coroutineScope {
-                    val activeD = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
-                    val archivedD = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
-                    val groupsD = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
-                    Triple(activeD.await(), archivedD.await(), groupsD.await())
-                }
+                val (activeRows, archivedRows, cliqueRows, ownIntents, searchBeacons, searchLocation) =
+                    coroutineScope {
+                        val activeD = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
+                        val archivedD = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
+                        val groupsD = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                        val ownIntentsD = async { fetchOwnAvailabilityIntents(userId) }
+                        val locationD = async { resolveSearchLocation() }
+                        val location = locationD.await()
+                        val beaconsD = async {
+                            val loc = location ?: return@async emptyList()
+                            fetchBeaconsForSearch(loc.first, loc.second)
+                        }
+                        SearchContext(
+                            activeRows = activeD.await(),
+                            archivedRows = archivedD.await(),
+                            cliqueRows = groupsD.await(),
+                            ownIntents = ownIntentsD.await(),
+                            searchBeacons = beaconsD.await(),
+                            searchLocation = location,
+                        )
+                    }
 
                 val archivedIds = junctionArchivedConnectionIds()
                 val hiddenIds = junctionHiddenConnectionIds()
@@ -252,6 +311,14 @@ class GlobalSearchViewModel(
                 val out = ArrayList<SearchResult>(64)
 
                 emitIntentMatches(lowerQuery, supplement, byPeerActive, byPeerArchived, intentConnectionKeys, out)
+                emitOwnAvailabilityIntentMatches(lowerQuery, ownIntents, out)
+                emitBeaconMatches(
+                    lowerQuery,
+                    searchBeacons,
+                    searchLocation?.first,
+                    searchLocation?.second,
+                    out,
+                )
                 emitInterestMatches(
                     lowerQuery,
                     supplement,
@@ -426,6 +493,15 @@ private fun indexDirectByPeer(rows: List<ChatWithDetails>, viewerId: String): Ma
     return map
 }
 
+private data class SearchContext(
+    val activeRows: List<ChatWithDetails>,
+    val archivedRows: List<ChatWithDetails>,
+    val cliqueRows: List<ChatWithDetails>,
+    val ownIntents: List<AvailabilityIntentRow>,
+    val searchBeacons: List<MapBeacon>,
+    val searchLocation: Pair<Double, Double>?,
+)
+
 private fun emitIntentMatches(
     lowerQuery: String,
     supplement: UnifiedSearchSupplement,
@@ -440,12 +516,7 @@ private fun emitIntentMatches(
         val row = activeRow ?: archivedRow ?: continue
         val isArchived = activeRow == null
         for (intent in intents) {
-            val tag = intent.intentTag?.lowercase().orEmpty()
-            val tf = intent.timeframe?.lowercase().orEmpty()
-            val hit = tag.contains(lowerQuery) ||
-                tf.contains(lowerQuery) ||
-                (tag.isNotEmpty() && lowerQuery.contains(tag))
-            if (!hit) continue
+            if (!availabilityIntentMatchesQuery(intent, lowerQuery)) continue
             val label = intent.intentTag?.trim().orEmpty().ifEmpty { "Intent" }
             out.add(
                 SearchResult.IntentMatch(
@@ -457,6 +528,35 @@ private fun emitIntentMatches(
             )
             intentConnectionKeys.add(row.connection.id)
         }
+    }
+}
+
+private fun emitOwnAvailabilityIntentMatches(
+    lowerQuery: String,
+    ownIntents: List<AvailabilityIntentRow>,
+    out: MutableList<SearchResult>,
+) {
+    for (intent in ownIntents) {
+        if (!availabilityIntentMatchesQuery(intent, lowerQuery)) continue
+        out.add(SearchResult.OwnAvailabilityIntentMatch(intent = intent))
+    }
+}
+
+private fun emitBeaconMatches(
+    lowerQuery: String,
+    beacons: List<MapBeacon>,
+    userLat: Double?,
+    userLon: Double?,
+    out: MutableList<SearchResult>,
+) {
+    val now = Clock.System.now().toEpochMilliseconds()
+    val seen = HashSet<String>()
+    for (beacon in beacons) {
+        if (!isBeaconStillActive(beacon, now)) continue
+        if (!mapBeaconMatchesQuery(beacon, lowerQuery)) continue
+        if (!seen.add(beacon.id)) continue
+        val distance = beaconDistanceMeters(beacon, userLat, userLon)
+        out.add(SearchResult.BeaconMatch(beacon = beacon, distanceMeters = distance))
     }
 }
 
