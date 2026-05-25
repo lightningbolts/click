@@ -102,6 +102,7 @@ internal fun ConnectionChatMessageComposer(
     mediaPickers: ChatMediaPickerHandles,
 ) {
     val messageInput by viewModel.messageInput.collectAsState()
+    val messageSendError by viewModel.messageSendError.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
@@ -291,6 +292,16 @@ internal fun ConnectionChatMessageComposer(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                     modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            messageSendError?.let { err ->
+                Text(
+                    text = err,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
                 )
             }
             val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp

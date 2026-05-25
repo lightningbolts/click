@@ -295,7 +295,6 @@ fun ChatView(
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
-    val messageSendError by viewModel.messageSendError.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
@@ -371,14 +370,6 @@ fun ChatView(
         if (r != null) {
             coroutineScope.launch { snackbarHostState.showSnackbar(r) }
             viewModel.clearNudgeResult()
-        }
-    }
-
-    LaunchedEffect(messageSendError) {
-        val err = messageSendError
-        if (err != null) {
-            coroutineScope.launch { snackbarHostState.showSnackbar(err) }
-            viewModel.clearMessageSendError()
         }
     }
 

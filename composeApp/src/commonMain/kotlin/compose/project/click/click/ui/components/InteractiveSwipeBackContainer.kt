@@ -1,8 +1,8 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -66,8 +66,12 @@ data class InteractiveSwipeBackRightToLeftPeek(
 internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
-private const val SwipeBackDragFriction = 0.45f
-private val SwipeBackCommitThreshold = 60.dp
+private const val SwipeBackDragFriction = 0.65f
+private val SwipeBackCommitThreshold = 45.dp
+/** Settle duration when releasing without committing (snap-back to origin). */
+private const val SwipeBackCancelSettleMillis = 340
+/** Settle duration when committing to back (slide-through to full width). */
+private const val SwipeBackCompleteSettleMillis = 380
 
 /**
  * iOS-style interactive back container:
@@ -180,18 +184,20 @@ fun InteractiveSwipeBackContainer(
             isSettling = true
 
             settleJob = settleScope.launch {
+                val settleMillis = if (shouldComplete) {
+                    SwipeBackCompleteSettleMillis
+                } else {
+                    SwipeBackCancelSettleMillis
+                }
+                // Eased tween with zero release velocity caps peak speed for both cancel and commit.
                 animate(
                     initialValue = currentOffset,
                     targetValue = target,
-                    initialVelocity = velocityX,
-                    animationSpec = spring(
-                        dampingRatio = if (shouldComplete) {
-                            0.86f
-                        } else {
-                            Spring.DampingRatioNoBouncy
-                        },
-                        stiffness = Spring.StiffnessMedium
-                    )
+                    initialVelocity = 0f,
+                    animationSpec = tween(
+                        durationMillis = settleMillis,
+                        easing = FastOutSlowInEasing,
+                    ),
                 ) { value, _ ->
                     offsetPx.floatValue = value
                     notifySwipeOffset()

@@ -34,9 +34,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -95,7 +92,6 @@ import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.components.chatComposerDockEdgeToEdge
 import compose.project.click.click.ui.components.chatHeaderImeIsolation
 import compose.project.click.click.ui.components.chatScreenImeIsolation
-import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationResult
@@ -153,7 +149,6 @@ fun HubChatScreen(
 
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
-    val sendError by viewModel.sendError.collectAsState()
     val outOfBounds by viewModel.outOfBounds.collectAsState()
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
 
@@ -174,17 +169,6 @@ fun HubChatScreen(
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
 
-    val hubSnackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(outOfBounds) {
-        if (outOfBounds) {
-            hubSnackbarHostState.showSnackbar(
-                message = "You are no longer at this location.",
-                duration = SnackbarDuration.Long,
-            )
-        }
-    }
-
     LaunchedEffect(viewModel) {
         viewModel.navigationEvents.collect { event ->
             when (event) {
@@ -202,8 +186,6 @@ fun HubChatScreen(
 
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val edgeBottomInset = rememberEdgeToEdgeBottomPadding()
-
     val channelReady by viewModel.channelReady.collectAsState()
 
     Box(
@@ -529,15 +511,6 @@ fun HubChatScreen(
                         }
                     }
                 }
-
-                sendError?.let { err ->
-                    Text(
-                        text = err,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                }
                 }
 
                 Box(
@@ -556,12 +529,6 @@ fun HubChatScreen(
             }
         }
 
-        SnackbarHost(
-            hostState = hubSnackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = edgeBottomInset + 56.dp),
-        )
     }
 
     if (showEditDialog && isCreator) {
@@ -655,6 +622,7 @@ private fun HubChatInputBar(
     }
 
     val isSending by viewModel.isSending.collectAsState()
+    val sendError by viewModel.sendError.collectAsState()
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
 
@@ -739,6 +707,16 @@ private fun HubChatInputBar(
                 .fillMaxWidth()
                 .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
+            sendError?.let { err ->
+                Text(
+                    text = err,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

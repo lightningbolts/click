@@ -21,8 +21,7 @@ import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AdaptiveButton
 import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -91,8 +90,7 @@ fun AddClickContent(
     onCommunityHubCreated: (hubId: String) -> Unit = {},
     onHubCreateError: (String) -> Unit = {},
 ) {
-    var showHubCodeDialog by remember { mutableStateOf(false) }
-    var hubCodeDraft by remember { mutableStateOf("") }
+    var showJoinHubSheet by remember { mutableStateOf(false) }
     var showCreateHubModal by remember { mutableStateOf(false) }
 
     CreateHubModal(
@@ -106,66 +104,11 @@ fun AddClickContent(
         onError = { msg -> onHubCreateError(msg) },
     )
 
-    if (showHubCodeDialog) {
-        GlassAlertDialog(
-            onDismissRequest = {
-                showHubCodeDialog = false
-                hubCodeDraft = ""
-            },
-            title = { Text("Join community hub") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Enter the hub code shown at the venue. You must be within range for location check.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GlassSheetTokens.OnOledMuted,
-                    )
-                    OutlinedTextField(
-                        value = hubCodeDraft,
-                        onValueChange = { hubCodeDraft = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("e.g. local_point", color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f)) },
-                        label = { Text("Hub code", color = GlassSheetTokens.OnOledMuted) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
-                            cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
-                        ),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val id = hubCodeDraft.trim()
-                        if (id.isNotEmpty()) {
-                            onJoinCommunityHub(id)
-                            showHubCodeDialog = false
-                            hubCodeDraft = ""
-                        }
-                    },
-                    enabled = hubCodeDraft.trim().isNotEmpty(),
-                ) {
-                    Text("Join hub", color = GlassSheetTokens.OnOled)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showHubCodeDialog = false
-                        hubCodeDraft = ""
-                    },
-                ) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
-    }
+    JoinCommunityHubSheet(
+        visible = showJoinHubSheet,
+        onDismiss = { showJoinHubSheet = false },
+        onJoinHub = onJoinCommunityHub,
+    )
 
     Column(
         modifier = modifier,
@@ -285,7 +228,7 @@ fun AddClickContent(
             TextButton(onClick = { showCreateHubModal = true }) {
                 Text("Create ephemeral hub")
             }
-            TextButton(onClick = { showHubCodeDialog = true }) {
+            TextButton(onClick = { showJoinHubSheet = true }) {
                 Text("Join community hub")
             }
         }

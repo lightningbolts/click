@@ -121,6 +121,7 @@ private fun UnifiedSearchSheetContent(
         modifier = Modifier
             .fillMaxSize()
             .background(GlassSheetTokens.OledBlack)
+            .imePadding()
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Surface(
