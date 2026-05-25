@@ -77,7 +77,6 @@ import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
-import androidx.compose.ui.draw.blur
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /**
@@ -549,7 +548,7 @@ private fun MapExpandedMapChrome(
     onZoomOut: () -> Unit,
 ) {
     val style = LocalPlatformStyle.current
-    val glassStrength = if (style.isIOS) 0.78f else 0.4f
+    val glassStrength = if (style.isIOS) 0.64f else 0.4f
     val topSafe = WindowInsets.safeDrawing.only(
         WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
     )
@@ -615,12 +614,9 @@ private fun MapLiquidGlassIconButton(
     glassStrength: Float,
     size: Dp,
 ) {
-    val style = LocalPlatformStyle.current
-    val shape = RoundedCornerShape(percent = 50)
     LiquidGlassPill(
         modifier = Modifier
             .size(size)
-            .then(if (style.isIOS) Modifier.blur(14.dp) else Modifier)
             .clickable(onClick = onClick),
         cornerRadiusDp = (size.value / 2f).toInt().coerceAtLeast(22),
         backgroundStrength = glassStrength,
@@ -710,7 +706,7 @@ private fun MapLayerFilterDropdown(
     }
     val menuWidth = 240.dp
     val triggerWidth = 132.dp
-    val glassStrength = if (style.isIOS) 0.78f else 0.4f
+    val glassStrength = if (style.isIOS) 0.64f else 0.4f
 
     Box(
         modifier = modifier
@@ -721,7 +717,6 @@ private fun MapLayerFilterDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 40.dp, max = 48.dp)
-                .then(if (style.isIOS) Modifier.blur(14.dp) else Modifier)
                 .clickable { expanded = true },
             cornerRadiusDp = 20,
             backgroundStrength = glassStrength,

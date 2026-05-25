@@ -1,10 +1,18 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,18 +22,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Person
@@ -40,13 +48,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +74,7 @@ import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.headerCollapseFraction
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.utils.CommunityHubPin
 import compose.project.click.click.ui.utils.ConnectionMapPoint
@@ -184,6 +197,21 @@ private val PipPreviewHeight = 160.dp
 private val PipDockExtraGap = AppScreenDefaults.FabGapAboveTabBar
 
 @Composable
+private fun MapPipPreviewPlaceholder(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.background(GlassSheetTokens.OledBlack),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Map,
+            contentDescription = null,
+            tint = GlassSheetTokens.OnOledMuted.copy(alpha = 0.45f),
+            modifier = Modifier.size(40.dp),
+        )
+    }
+}
+
+@Composable
 internal fun MapDiscoveryScreen(
     feedItems: List<DiscoveryFeedItem>,
     mapPipExpanded: Boolean,
@@ -197,26 +225,25 @@ internal fun MapDiscoveryScreen(
     onBeaconClick: (MapBeacon) -> Unit,
     onConnectionClick: (ConnectionMapPoint) -> Unit,
 ) {
+    val platformStyle = LocalPlatformStyle.current
     var sortMode by remember { mutableIntStateOf(0) }
-    var sortScrollAnchorKey by remember { mutableStateOf<String?>(null) }
-    var sortScrollAnchorOffset by remember { mutableIntStateOf(0) }
+    var frozenCollapseFraction by remember { mutableFloatStateOf(Float.NaN) }
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
     val sortedFeed = remember(feedItems, discoverySortMode) {
         sortDiscoveryFeedItems(feedItems, discoverySortMode)
     }
 
-    val listState = rememberLazyListState()
-
-    LaunchedEffect(sortMode, sortedFeed) {
-        val anchorKey = sortScrollAnchorKey ?: return@LaunchedEffect
-        val idx = sortedFeed.indexOfFirst { it.key == anchorKey }
-        if (idx >= 0) {
-            listState.scrollToItem(idx, sortScrollAnchorOffset.coerceAtLeast(0))
+    // Do not use rememberLazyListState(): it is saveable and can restore a previous scroll offset
+    // before first paint when the tab route is reattached.
+    val listState = remember { LazyListState(0, 0) }
+    val collapseFraction by remember(listState, frozenCollapseFraction) {
+        derivedStateOf {
+            if (!frozenCollapseFraction.isNaN()) {
+                frozenCollapseFraction
+            } else {
+                listState.headerCollapseFraction()
+            }
         }
-        sortScrollAnchorKey = null
-    }
-    val collapseFraction by remember(listState) {
-        derivedStateOf { listState.headerCollapseFraction() }
     }
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomChrome = rememberBottomChromePadding()
@@ -234,8 +261,15 @@ internal fun MapDiscoveryScreen(
         }
     }
 
+    LaunchedEffect(frozenCollapseFraction, sortMode) {
+        if (frozenCollapseFraction.isNaN()) return@LaunchedEffect
+        withFrameNanos { }
+        frozenCollapseFraction = Float.NaN
+    }
+
     val pipShape = RoundedCornerShape(16.dp)
     val pipInteraction = remember { MutableInteractionSource() }
+    val expandMap: () -> Unit = { onMapPipExpandedChange(true) }
 
     Box(
         modifier = Modifier
@@ -299,10 +333,23 @@ internal fun MapDiscoveryScreen(
                 subtitle = statsLine,
                 selectedSortIndex = sortMode,
                 onSortSelected = { index ->
-                    val anchorItem = listState.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.key != null && it.key != "discovery_empty" }
-                    sortScrollAnchorKey = anchorItem?.key as? String
-                    sortScrollAnchorOffset = anchorItem?.offset?.coerceAtLeast(0) ?: 0
+                    if (index == sortMode) return@DiscoveryFloatingHeader
+                    val keepExpandedHeader = collapseFraction <= 0.42f
+                    frozenCollapseFraction = collapseFraction
+                    val nextMode = if (index == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
+                    val nextFeed = sortDiscoveryFeedItems(feedItems, nextMode)
+                    if (keepExpandedHeader) {
+                        listState.requestScrollToItem(0, 0)
+                    } else {
+                        val anchorKey = listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.key != null && it.key != "discovery_empty" }
+                            ?.key as? String
+                            ?: sortedFeed.getOrNull(listState.firstVisibleItemIndex)?.key
+                        val anchorIndex = anchorKey?.let { key -> nextFeed.indexOfFirst { it.key == key } }
+                            ?.takeIf { it >= 0 }
+                            ?: listState.firstVisibleItemIndex.coerceAtMost(nextFeed.lastIndex.coerceAtLeast(0))
+                        listState.requestScrollToItem(anchorIndex, listState.firstVisibleItemScrollOffset)
+                    }
                     sortMode = index
                 },
                 onOpenSearch = onOpenSearch,
@@ -330,41 +377,31 @@ internal fun MapDiscoveryScreen(
                     Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
                 }
             }
-        }
 
-        val mapHostModifier = if (mapPipExpanded) {
-            Modifier
-                .fillMaxSize()
-                .zIndex(20f)
-                .background(GlassSheetTokens.OledBlack)
-        } else {
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = dockBottom)
-                .size(width = PipPreviewWidth, height = PipPreviewHeight)
-                .zIndex(11f)
-                .clip(pipShape)
-                .border(1.dp, GlassSheetTokens.GlassBorder, pipShape)
-                .background(GlassSheetTokens.OledBlack)
-        }
-
-        Box(modifier = mapHostModifier) {
-            mapContent(Modifier.fillMaxSize(), mapPipExpanded)
-            if (mapPipExpanded) {
-                expandedMapChrome()
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(3f)
-                        .clickable(
-                            interactionSource = pipInteraction,
-                            indication = ripple(bounded = true),
-                            onClick = { onMapPipExpandedChange(true) },
-                        ),
-                )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = dockBottom)
+                    .size(width = PipPreviewWidth, height = PipPreviewHeight)
+                    .zIndex(11f)
+                    .clip(pipShape)
+                    .border(1.dp, GlassSheetTokens.GlassBorder, pipShape)
+                    .clickable(
+                        interactionSource = pipInteraction,
+                        indication = ripple(bounded = true),
+                        onClick = expandMap,
+                    )
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { expandMap() })
+                    },
+            ) {
+                if (platformStyle.isIOS) {
+                    mapContent(Modifier.fillMaxSize(), false)
+                } else {
+                    MapPipPreviewPlaceholder(Modifier.fillMaxSize())
+                }
                 IconButton(
-                    onClick = { onMapPipExpandedChange(true) },
+                    onClick = expandMap,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
@@ -379,6 +416,35 @@ internal fun MapDiscoveryScreen(
                         tint = GlassSheetTokens.OnOled,
                     )
                 }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = mapPipExpanded,
+            enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) +
+                scaleIn(
+                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    initialScale = 0.92f,
+                    transformOrigin = TransformOrigin(0.92f, 0.92f),
+                ),
+            exit = fadeOut(tween(140, easing = FastOutSlowInEasing)) +
+                scaleOut(
+                    animationSpec = tween(190, easing = FastOutSlowInEasing),
+                    targetScale = 0.92f,
+                    transformOrigin = TransformOrigin(0.92f, 0.92f),
+                ),
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(30f),
+            label = "map_fullscreen_overlay",
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(GlassSheetTokens.OledBlack),
+            ) {
+                mapContent(Modifier.fillMaxSize(), true)
+                expandedMapChrome()
             }
         }
     }

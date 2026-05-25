@@ -1,7 +1,10 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -115,6 +118,14 @@ actual fun PlatformMap(
     val density = LocalDensity.current
     val clusterIconCache = remember { mutableMapOf<String, BitmapDescriptor>() }
     val labeledPinCache = remember { mutableMapOf<String, BitmapDescriptor>() }
+
+    // Collapsed PiP must not host a live GoogleMap — the AndroidView layer steals taps from Compose.
+    if (!mapGesturesEnabled) {
+        Box(
+            modifier = modifier.background(Color(0xFF121212)),
+        )
+        return
+    }
 
     GoogleMap(
         modifier = modifier,

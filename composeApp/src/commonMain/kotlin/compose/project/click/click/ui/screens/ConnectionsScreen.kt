@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
@@ -31,6 +32,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.User
@@ -225,53 +228,65 @@ fun ConnectionsScreen(
             // still insert an extra layout pass. Tap-close keeps a horizontal slide + fade out.
             val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
             val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-            AnimatedVisibility(
-                visible = selectedChatId != null,
-                modifier = Modifier.fillMaxSize(),
-                enter = slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
-                    fadeIn(animationSpec = fadeSpec),
-                exit = if (chatTransitionMode == ChatTransitionMode.Tap) {
-                    slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
-                        fadeOut(animationSpec = fadeSpec)
-                } else {
-                    ExitTransition.None
-                },
-                label = "ios_chat_overlay",
-            ) {
-                val activeChatId = lastOpenChatIdForIosOverlay
-                if (activeChatId != null) {
-                    val keyboardController = LocalSoftwareKeyboardController.current
-                    val focusManager = LocalFocusManager.current
-                    InteractiveSwipeBackContainer(
-                        enabled = true,
-                        onBack = {
-                            // After the swipe commits: resign focus first so UIKit owns the keyboard
-                            // dismiss curve. On iOS, `SoftwareKeyboardController.hide()` tends to fight
-                            // that animation on later presentations; Android still needs an explicit hide.
-                            focusManager.clearFocus()
-                            if (!isIOS) {
-                                keyboardController?.hide()
-                            }
-                            closeActiveChat(ChatTransitionMode.Gesture)
+            if (selectedChatId != null || isTapCloseInFlight) {
+                Popup(
+                    alignment = Alignment.TopStart,
+                    onDismissRequest = { closeActiveChat(ChatTransitionMode.Tap) },
+                    properties = PopupProperties(
+                        focusable = true,
+                        dismissOnBackPress = false,
+                        dismissOnClickOutside = false,
+                    ),
+                ) {
+                    AnimatedVisibility(
+                        visible = selectedChatId != null,
+                        modifier = Modifier.fillMaxSize(),
+                        enter = slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                            fadeIn(animationSpec = fadeSpec),
+                        exit = if (chatTransitionMode == ChatTransitionMode.Tap) {
+                            slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                                fadeOut(animationSpec = fadeSpec)
+                        } else {
+                            ExitTransition.None
                         },
-                        opaquePreviousBackground = false,
-                        externalDragOffsetPx = iosChatSwipeDragPx,
-                        onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },
-                        rightToLeftPeek = iosChatRightToLeftPeek,
-                        previousContent = {},
-                        currentContent = {
-                            ChatView(
-                                viewModel = viewModel,
-                                chatId = activeChatId,
-                                onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
-                                onOpenUserProfile = { profileUserId = it },
-                                onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
-                                integrateTimestampPeekWithSwipeBackContainer = true,
-                                onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
-                                parentInteractiveBackSwipePx = iosChatSwipeDragPx,
+                        label = "ios_chat_overlay",
+                    ) {
+                        val activeChatId = lastOpenChatIdForIosOverlay
+                        if (activeChatId != null) {
+                            val keyboardController = LocalSoftwareKeyboardController.current
+                            val focusManager = LocalFocusManager.current
+                            InteractiveSwipeBackContainer(
+                                enabled = true,
+                                onBack = {
+                                    // After the swipe commits: resign focus first so UIKit owns the keyboard
+                                    // dismiss curve. On iOS, `SoftwareKeyboardController.hide()` tends to fight
+                                    // that animation on later presentations; Android still needs an explicit hide.
+                                    focusManager.clearFocus()
+                                    if (!isIOS) {
+                                        keyboardController?.hide()
+                                    }
+                                    closeActiveChat(ChatTransitionMode.Gesture)
+                                },
+                                opaquePreviousBackground = false,
+                                externalDragOffsetPx = iosChatSwipeDragPx,
+                                onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },
+                                rightToLeftPeek = iosChatRightToLeftPeek,
+                                previousContent = {},
+                                currentContent = {
+                                    ChatView(
+                                        viewModel = viewModel,
+                                        chatId = activeChatId,
+                                        onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
+                                        onOpenUserProfile = { profileUserId = it },
+                                        onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
+                                        integrateTimestampPeekWithSwipeBackContainer = true,
+                                        onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
+                                        parentInteractiveBackSwipePx = iosChatSwipeDragPx,
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                 }
             }
         }

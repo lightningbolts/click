@@ -1090,7 +1090,7 @@ fun App() {
             }
 
             val hideMainBottomBar =
-                isConnectionsChatOpen || hubChatArgs != null
+                hubChatArgs != null
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
@@ -1396,8 +1396,7 @@ fun App() {
                                         isPrimaryNavRoute(animatedScreen) &&
                                         animatedScreen != NavigationItem.Connections.route &&
                                         previousKey != animatedScreen &&
-                                        !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen) &&
-                                        !(animatedScreen == NavigationItem.Map.route && mapPipExpanded)
+                                        !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
 
                                     if (interactivePrimary) {
                                         InteractiveSwipeBackContainer(

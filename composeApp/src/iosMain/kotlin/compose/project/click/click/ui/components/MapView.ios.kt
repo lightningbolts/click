@@ -2,7 +2,8 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.interop.UIKitView
+import androidx.compose.ui.viewinterop.UIKitInteropProperties
+import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import kotlinx.datetime.Clock
@@ -68,6 +69,10 @@ actual fun PlatformMap(
 
     UIKitView(
         modifier = modifier,
+        properties = UIKitInteropProperties(
+            isInteractive = mapGesturesEnabled,
+            isNativeAccessibilityEnabled = true,
+        ),
         factory = {
             MKMapView().apply {
                 delegate = pinTapDelegate
