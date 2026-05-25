@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
@@ -72,9 +73,12 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.ui.utils.displayTypeTitle
-import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
+import androidx.compose.ui.draw.blur
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -95,7 +99,9 @@ fun MapScreen(
     onNavigateToChat: ((String) -> Unit)? = null,
     /** Proximity verify + hop into hub chat (matches Add Click hub join). */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
+    mapPipExpanded: Boolean = false,
     onMapPipExpandedChanged: (Boolean) -> Unit = {},
+    onOpenSearch: (() -> Unit)? = null,
 ) {
     val mapState by viewModel.mapState.collectAsState()
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
@@ -109,8 +115,6 @@ fun MapScreen(
     val beaconDropFailureToast by viewModel.beaconDropFailureToast.collectAsState()
     val communityHubs by viewModel.communityHubs.collectAsState()
     val mapBeacons by viewModel.mapBeacons.collectAsState()
-    val bottomChrome = rememberBottomChromePadding()
-    var mapPipExpanded by remember { mutableStateOf(false) }
     val locationService = remember { LocationService() }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
@@ -120,6 +124,14 @@ fun MapScreen(
         val loc = locationService.getCurrentLocation()
         userLat = loc?.latitude
         userLon = loc?.longitude
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { onMapPipExpandedChanged(false) }
+    }
+
+    PlatformBackHandler(enabled = mapPipExpanded) {
+        onMapPipExpandedChanged(false)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -201,6 +213,7 @@ fun MapScreen(
     ) {
         val grayscaleModifier = if (ghostModeEnabled) Modifier.alpha(0.7f) else Modifier
 
+        AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -208,7 +221,7 @@ fun MapScreen(
                 .graphicsLayer { translationY = parallaxOffset }
                 .background(
                     if (ghostModeEnabled) Color.DarkGray.copy(alpha = 0.3f)
-                    else MaterialTheme.colorScheme.surface,
+                    else GlassSheetTokens.OledBlack,
                 ),
         ) {
             when (val state = mapState) {
@@ -228,23 +241,27 @@ fun MapScreen(
                     }
                     MapDiscoveryScreen(
                         feedItems = feedItems,
-                        bottomListPadding = bottomChrome,
                         mapPipExpanded = mapPipExpanded,
-                        onMapPipExpandedChange = {
-                            mapPipExpanded = it
-                            onMapPipExpandedChanged(it)
-                        },
+                        onMapPipExpandedChange = onMapPipExpandedChanged,
                         statsLine = statsLine,
-                        ghostMode = ghostModeEnabled,
-                        mapContent = { mapModifier ->
+                        onOpenSearch = onOpenSearch,
+                        onDropBeacon = { showBeaconDropSheet = true },
+                        mapContent = { mapModifier, mapGesturesEnabled ->
                             MapContent(
                                 modifier = mapModifier.graphicsLayer {
-                                    translationY = if (mapPipExpanded) parallaxOffset else 0f
+                                    translationY = if (
+                                        showBottomSheet || showBeaconDetailSheet || showCommunityHubSheet
+                                    ) {
+                                        parallaxOffset
+                                    } else {
+                                        0f
+                                    }
                                 },
                                 renderData = renderData,
                                 communityHubs = communityHubs,
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
                                 ghostMode = ghostModeEnabled,
+                                mapGesturesEnabled = mapGesturesEnabled,
                                 cameraTarget = cameraTarget,
                                 onPinTapped = { pin ->
                                     if (pin.kind == MapPinKind.CONNECTION) {
@@ -274,55 +291,21 @@ fun MapScreen(
                             selectedProfileId = point.connection.id
                             viewModel.onMapPinTapped(MapPin.fromConnectionPoint(point))
                         },
-                    )
-                    if (mapPipExpanded) {
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .zIndex(10f)
-                                .fillMaxWidth()
-                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                                .padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    bottom = mapFabAboveNav,
-                                ),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            FloatingActionButton(
-                                onClick = { showBeaconDropSheet = true },
-                                modifier = Modifier.size(56.dp),
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            ) {
-                                Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
-                            }
-                            MapLayerFilterDropdown(
-                                selected = layerFilters,
-                                onToggle = { viewModel.toggleLayerFilter(it) },
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            ZoomControls(
+                        expandedMapChrome = {
+                            MapExpandedMapChrome(
+                                dockBottomPadding = mapFabAboveNav,
+                                layerFilters = layerFilters,
+                                onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                onDropBeacon = { showBeaconDropSheet = true },
+                                onCollapseMap = { onMapPipExpandedChanged(false) },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
                             )
-                        }
-                    } else {
-                        FloatingActionButton(
-                            onClick = { showBeaconDropSheet = true },
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .zIndex(5f)
-                                .padding(start = 16.dp, bottom = bottomChrome + 180.dp),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ) {
-                            Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
-                        }
-                    }
+                        },
+                    )
                 }
             }
+        }
         }
     }
 
@@ -555,6 +538,134 @@ private fun buildProfileSheetState(
     )
 }
 
+@Composable
+private fun MapExpandedMapChrome(
+    dockBottomPadding: Dp,
+    layerFilters: Set<MapLayerFilter>,
+    onToggleLayerFilter: (MapLayerFilter) -> Unit,
+    onDropBeacon: () -> Unit,
+    onCollapseMap: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+) {
+    val style = LocalPlatformStyle.current
+    val glassStrength = if (style.isIOS) 0.78f else 0.4f
+    val topSafe = WindowInsets.safeDrawing.only(
+        WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .zIndex(10f)
+                .windowInsetsPadding(topSafe)
+                .padding(top = 8.dp, start = 16.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MapLiquidGlassIconButton(
+                icon = Icons.Filled.Close,
+                contentDescription = "Minimize map",
+                onClick = onCollapseMap,
+                glassStrength = glassStrength,
+                size = 44.dp,
+            )
+            MapLayerFilterDropdown(
+                selected = layerFilters,
+                onToggle = onToggleLayerFilter,
+                opensDownward = true,
+                modifier = Modifier.widthIn(max = 132.dp),
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .zIndex(10f)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .padding(start = 16.dp, end = 16.dp, bottom = dockBottomPadding),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MapLiquidGlassIconButton(
+                icon = Icons.Filled.AddLocationAlt,
+                contentDescription = "Drop beacon",
+                onClick = onDropBeacon,
+                glassStrength = glassStrength,
+                size = 56.dp,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            MapZoomGlassControls(
+                onZoomIn = onZoomIn,
+                onZoomOut = onZoomOut,
+                glassStrength = glassStrength,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MapLiquidGlassIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    glassStrength: Float,
+    size: Dp,
+) {
+    val style = LocalPlatformStyle.current
+    val shape = RoundedCornerShape(percent = 50)
+    LiquidGlassPill(
+        modifier = Modifier
+            .size(size)
+            .then(if (style.isIOS) Modifier.blur(14.dp) else Modifier)
+            .clickable(onClick = onClick),
+        cornerRadiusDp = (size.value / 2f).toInt().coerceAtLeast(22),
+        backgroundStrength = glassStrength,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MapZoomGlassControls(
+    modifier: Modifier = Modifier,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    glassStrength: Float,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        MapLiquidGlassIconButton(
+            icon = Icons.Filled.Add,
+            contentDescription = "Zoom in",
+            onClick = onZoomIn,
+            glassStrength = glassStrength,
+            size = 48.dp,
+        )
+        MapLiquidGlassIconButton(
+            icon = Icons.Filled.Remove,
+            contentDescription = "Zoom out",
+            onClick = onZoomOut,
+            glassStrength = glassStrength,
+            size = 48.dp,
+        )
+    }
+}
+
 /** One-line label for the compact map layer control. */
 private fun mapLayerFilterShortLabel(selected: Set<MapLayerFilter>): String {
     if (MapLayerFilter.ALL in selected) return "All"
@@ -582,29 +693,38 @@ private fun mapLayerFilterShortLabel(selected: Set<MapLayerFilter>): String {
 private fun MapLayerFilterDropdown(
     selected: Set<MapLayerFilter>,
     onToggle: (MapLayerFilter) -> Unit,
+    modifier: Modifier = Modifier,
+    opensDownward: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    val style = LocalPlatformStyle.current
     val menuSurface = MaterialTheme.colorScheme.surface
     val onMenuSurface = MaterialTheme.colorScheme.onSurface
     val menuOutline = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
     val itemCount = MapLayerFilter.entries.size
-    // ~48dp per row + padding — negative Y pulls the popup above the anchor.
-    val menuUpOffset = (itemCount * 48 + 24).dp
+    val menuUpOffset = if (opensDownward) {
+        8.dp
+    } else {
+        -(itemCount * 48 + 24).dp
+    }
     val menuWidth = 240.dp
-    val triggerWidth = 120.dp
+    val triggerWidth = 132.dp
+    val glassStrength = if (style.isIOS) 0.78f else 0.4f
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .widthIn(max = triggerWidth)
-            .wrapContentWidth(Alignment.Start),
+            .wrapContentWidth(Alignment.End),
     ) {
         LiquidGlassPill(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 40.dp, max = 48.dp)
+                .then(if (style.isIOS) Modifier.blur(14.dp) else Modifier)
                 .clickable { expanded = true },
             cornerRadiusDp = 20,
+            backgroundStrength = glassStrength,
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1081,6 +1201,7 @@ private fun MapContent(
     communityHubs: List<CommunityHubPin>,
     zoom: Double,
     ghostMode: Boolean,
+    mapGesturesEnabled: Boolean = true,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
@@ -1114,6 +1235,7 @@ private fun MapContent(
         centerLat = cameraTarget?.latitude,
         centerLon = cameraTarget?.longitude,
         ghostMode = ghostMode,
+        mapGesturesEnabled = mapGesturesEnabled,
         onPinTapped = onPinTapped,
         onClusterTapped = onClusterTapped,
         onZoomChanged = onZoomChanged,
@@ -1128,17 +1250,12 @@ private fun ZoomControls(
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
 ) {
-    Column(
+    MapZoomGlassControls(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        AdaptiveButton(onClick = onZoomIn, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.Add, contentDescription = "Zoom in")
-        }
-        AdaptiveButton(onClick = onZoomOut, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.Remove, contentDescription = "Zoom out")
-        }
-    }
+        onZoomIn = onZoomIn,
+        onZoomOut = onZoomOut,
+        glassStrength = if (LocalPlatformStyle.current.isIOS) 0.78f else 0.4f,
+    )
 }
 
 @Composable

@@ -33,6 +33,7 @@ actual fun PlatformMap(
     centerLat: Double?,
     centerLon: Double?,
     ghostMode: Boolean,
+    mapGesturesEnabled: Boolean,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -121,7 +122,11 @@ actual fun PlatformMap(
         properties = mapProperties,
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
-            myLocationButtonEnabled = !ghostMode
+            myLocationButtonEnabled = !ghostMode,
+            scrollGesturesEnabled = mapGesturesEnabled,
+            zoomGesturesEnabled = mapGesturesEnabled,
+            rotationGesturesEnabled = mapGesturesEnabled,
+            tiltGesturesEnabled = mapGesturesEnabled,
         )
     ) {
         // Render individual pins

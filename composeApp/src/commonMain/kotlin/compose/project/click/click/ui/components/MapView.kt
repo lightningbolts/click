@@ -195,6 +195,7 @@ expect fun PlatformMap(
     centerLat: Double? = null,
     centerLon: Double? = null,
     ghostMode: Boolean = false,
+    mapGesturesEnabled: Boolean = true,
     onPinTapped: (MapPin) -> Unit = {},
     onClusterTapped: (MapClusterPin) -> Unit = {},
     onZoomChanged: (Double) -> Unit = {},

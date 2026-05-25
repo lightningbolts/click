@@ -101,6 +101,7 @@ fun SettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: () -> Unit,
     onSignOut: () -> Unit = {},
+    onOpenSearch: (() -> Unit)? = null,
     availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
@@ -193,6 +194,7 @@ fun SettingsScreen(
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
             AppScreenScaffold(
                 title = "Settings",
+                onOpenSearch = onOpenSearch,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item {

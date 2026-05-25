@@ -871,6 +871,11 @@ fun App() {
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var showUnifiedSearchSheet by remember { mutableStateOf(false) }
             var mapPipExpanded by remember { mutableStateOf(false) }
+            LaunchedEffect(currentRoute) {
+                if (currentRoute != NavigationItem.Map.route && mapPipExpanded) {
+                    mapPipExpanded = false
+                }
+            }
 
             LaunchedEffect(connectionViewModel, currentUser.id) {
                 if (currentUser.id.isBlank()) return@LaunchedEffect
@@ -1057,7 +1062,8 @@ fun App() {
             // Platform back handler — intercepts Android back gesture/button
             compose.project.click.click.ui.components.PlatformBackHandler(
                 enabled = (
-                    showUnifiedSearchSheet ||
+                    mapPipExpanded ||
+                        showUnifiedSearchSheet ||
                         hubChatArgs != null ||
                         showMyQRCode ||
                         showQRScanner ||
@@ -1068,6 +1074,7 @@ fun App() {
                     ) && !iOSSwipeOwnsBack
             ) {
                 when {
+                    mapPipExpanded -> mapPipExpanded = false
                     showUnifiedSearchSheet -> showUnifiedSearchSheet = false
                     hubChatArgs != null -> hubChatArgs = null
                     showMyQRCode -> showMyQRCode = false
@@ -1083,7 +1090,7 @@ fun App() {
             }
 
             val hideMainBottomBar =
-                isConnectionsChatOpen || hubChatArgs != null || showUnifiedSearchSheet || mapPipExpanded
+                isConnectionsChatOpen || hubChatArgs != null
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
@@ -1104,12 +1111,13 @@ fun App() {
                             focusManager.clearFocus()
                         },
                     )
-                }
+                },
             ) { paddingValues ->
-                Box(modifier = Modifier
-                    .padding(top = paddingValues.calculateTopPadding())
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = homeSurfaceAlpha }
+                Box(
+                    modifier = Modifier
+                        .padding(top = paddingValues.calculateTopPadding())
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = homeSurfaceAlpha },
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -1214,11 +1222,14 @@ fun App() {
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },
+                                        mapPipExpanded = mapPipExpanded,
                                         onMapPipExpandedChanged = { mapPipExpanded = it },
+                                        onOpenSearch = { showUnifiedSearchSheet = true },
                                     )
 
                                     NavigationItem.Settings.route -> SettingsScreen(
                                         isDarkMode = isDarkMode,
+                                        onOpenSearch = { showUnifiedSearchSheet = true },
                                         onToggleDarkMode = {
                                             val next = !isDarkMode
                                             isDarkMode = next
@@ -1385,7 +1396,8 @@ fun App() {
                                         isPrimaryNavRoute(animatedScreen) &&
                                         animatedScreen != NavigationItem.Connections.route &&
                                         previousKey != animatedScreen &&
-                                        !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
+                                        !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen) &&
+                                        !(animatedScreen == NavigationItem.Map.route && mapPipExpanded)
 
                                     if (interactivePrimary) {
                                         InteractiveSwipeBackContainer(

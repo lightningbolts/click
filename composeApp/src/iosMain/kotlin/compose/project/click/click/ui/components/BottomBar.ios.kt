@@ -98,6 +98,7 @@ actual fun PlatformBottomBar(
     LaunchedEffect(visible, tabBar, safeAreaBottom) {
         tabBar.hidden = !visible
         tabBar.alpha = if (visible) 1.0 else 0.0
+        tabBar.userInteractionEnabled = visible
         if (!visible) {
             AppScreenChromeState.updateBottomChromeHeight(
                 safeAreaBottom + AppScreenDefaults.ExtraScrollBottomPadding,

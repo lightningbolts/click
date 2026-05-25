@@ -139,8 +139,8 @@ fun ConnectionsScreen(
         }
     }
 
-    LaunchedEffect(selectedChatId, isTapCloseInFlight) {
-        onChatOpenStateChanged(selectedChatId != null || isTapCloseInFlight)
+    LaunchedEffect(selectedChatId) {
+        onChatOpenStateChanged(selectedChatId != null)
     }
 
     // Runs after recomposition when the overlay is gone — never clear swipe offset while the

@@ -40,6 +40,7 @@ actual fun PlatformMap(
     centerLat: Double?,
     centerLon: Double?,
     ghostMode: Boolean,
+    mapGesturesEnabled: Boolean,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -72,8 +73,9 @@ actual fun PlatformMap(
                 delegate = pinTapDelegate
                 showsCompass = true
                 showsScale = false
-                zoomEnabled = true
-                scrollEnabled = true
+                zoomEnabled = mapGesturesEnabled
+                scrollEnabled = mapGesturesEnabled
+                userInteractionEnabled = mapGesturesEnabled
                 showsUserLocation = !ghostMode
                 userTrackingMode = MKUserTrackingModeNone
                 
@@ -87,6 +89,9 @@ actual fun PlatformMap(
             }
         },
         update = { map ->
+            map.zoomEnabled = mapGesturesEnabled
+            map.scrollEnabled = mapGesturesEnabled
+            map.userInteractionEnabled = mapGesturesEnabled
             // Update user location visibility based on ghost mode
             map.showsUserLocation = !ghostMode
             if (map.delegate !== pinTapDelegate) {
