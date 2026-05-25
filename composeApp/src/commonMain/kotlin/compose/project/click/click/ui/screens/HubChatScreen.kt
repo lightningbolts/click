@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -48,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -94,6 +97,7 @@ import compose.project.click.click.ui.chat.isTimestampPeekRevealed
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.chat.ChatComposerStripReserve
 import compose.project.click.click.ui.components.chatThreadKeyboardDock
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -171,6 +175,7 @@ fun HubChatScreen(
 
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
+    val hubListState = rememberLazyListState()
 
     LaunchedEffect(viewModel) {
         viewModel.navigationEvents.collect { event ->
@@ -431,17 +436,26 @@ fun HubChatScreen(
                     messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
                 }
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .chatThreadKeyboardDock(),
-                ) {
-                // ── Message list ────────────────────────────────────────────
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .clipToBounds(),
+                ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .chatThreadKeyboardDock(),
+                ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                ) {
+                // ── Message list ────────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
                         .then(
                             if (!integrateTimestampPeekWithSwipeBackContainer) {
                                 Modifier.chatTimestampPeekOnSwipeLeft(
@@ -458,13 +472,14 @@ fun HubChatScreen(
                         ),
                 ) {
                     LazyColumn(
+                        state = hubListState,
                         modifier = Modifier.fillMaxSize(),
                         reverseLayout = true,
                         contentPadding = PaddingValues(
                             start = 6.dp,
                             end = 6.dp,
                             top = 24.dp,
-                            bottom = 12.dp,
+                            bottom = 8.dp + ChatComposerStripReserve,
                         ),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
@@ -539,6 +554,7 @@ fun HubChatScreen(
                         }
                     }
                 }
+                }
 
                 HubChatInputBar(
                     viewModel = viewModel,
@@ -546,6 +562,7 @@ fun HubChatScreen(
                     isOutOfBounds = outOfBounds,
                     onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
                 )
+                }
                 }
             }
         }

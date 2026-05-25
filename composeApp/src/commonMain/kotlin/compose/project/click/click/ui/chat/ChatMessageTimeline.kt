@@ -16,7 +16,6 @@ import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
@@ -61,9 +60,7 @@ internal fun ChatMessageTimeline(
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .graphicsLayer { clip = true },
+        modifier = modifier.fillMaxSize(),
     ) {
         LazyColumn(
             state = listState,

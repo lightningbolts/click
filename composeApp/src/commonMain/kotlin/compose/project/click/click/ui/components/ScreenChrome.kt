@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -13,9 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
@@ -91,8 +92,9 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
  *   1. Applies **static** bottom padding for the nav bar (constant, no animation).
  *   2. Uses [clipToBounds] so content shifted above the container top is hidden (prevents
  *      overlapping the header during the slide).
- *   3. Uses [graphicsLayer] [translationY] (draw-phase) for `(IME - navBar)` px. Pair with an
- *      isolated message-list composable so visible bubbles are not recomposed each keyboard frame.
+ *   3. Places the already-measured content at `(IME - navBar)` px above its normal position.
+ *      This avoids creating a huge graphics layer around the message list while still keeping
+ *      keyboard frames out of composition.
  */
 private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = composed {
     val density = LocalDensity.current
@@ -104,10 +106,11 @@ private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = co
     Modifier
         .padding(bottom = navBottomDp + extraBottom)
         .clipToBounds()
-        .graphicsLayer {
+        .offset {
             val imePx = imeInsets.getBottom(density)
             val navPx = navInsets.getBottom(density)
-            translationY = -(imePx - navPx).coerceAtLeast(0).toFloat()
+            val liftPx = (imePx - navPx).coerceAtLeast(0)
+            IntOffset(0, -liftPx)
         }
 }
 
@@ -126,7 +129,7 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
 
 /**
  * Thread + composer column below the fixed chat header. Slides the **entire** block (messages and
- * input row) above the keyboard via draw-phase [translationY] without [imePadding] layout resize.
+ * input row) above the keyboard with placement-phase movement, without [imePadding] layout resize.
  */
 fun Modifier.chatThreadKeyboardDock(extraBottom: Dp = 0.dp): Modifier =
     chatBottomInsetUnion(extraBottom)

@@ -150,10 +150,7 @@ internal fun ConnectionChatMessageComposer(
         ) {
             Crossfade(
                 targetState = replyBannerVisible,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
+                animationSpec = ChatChromeMotion.Crossfade,
                 modifier = Modifier.fillMaxWidth(),
                 label = "replyComposerBanner",
             ) { showBanner ->

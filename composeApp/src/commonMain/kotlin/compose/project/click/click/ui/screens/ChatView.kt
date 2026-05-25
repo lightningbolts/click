@@ -77,6 +77,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
@@ -122,6 +123,7 @@ import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allo
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -187,6 +189,7 @@ import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: al
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTimelineEntry // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
@@ -552,8 +555,8 @@ fun ChatView(
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
                      * top via [WindowInsets.safeDrawing] / display cutout coupling.
                      *
-                     * [chatThreadKeyboardDock] on the thread+composer column slides messages and the
-                     * input row together above the keyboard (GPU translation, not [imePadding]).
+                     * [chatThreadKeyboardDock] moves the measured thread + composer together without
+                     * animated padding, keeping IME frames out of composition.
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val messageContentModifier = Modifier
@@ -864,29 +867,42 @@ fun ChatView(
                             }
                         }
 
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .chatThreadKeyboardDock(),
+                                .clipToBounds(),
                         ) {
-
-                    // Icebreaker Prompts Panel
-                    if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
-                        IcebreakerPanel(
-                            prompts = icebreakerPrompts,
-                            onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
-                            onRefresh = { viewModel.refreshIcebreakerPrompts() },
-                            onDismiss = { viewModel.dismissIcebreakerPanel() },
-                            cooldownRemainingSec = icebreakerCooldownRemainingSec,
-                        )
-                    }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .chatThreadKeyboardDock(),
+                            ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .fillMaxWidth(),
+                                    ) {
+                                        IcebreakerPanel(
+                                            prompts = icebreakerPrompts,
+                                            onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
+                                            onRefresh = { viewModel.refreshIcebreakerPrompts() },
+                                            onDismiss = { viewModel.dismissIcebreakerPanel() },
+                                            cooldownRemainingSec = icebreakerCooldownRemainingSec,
+                                        )
+                                    }
+                                }
 
                     // Messages
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                     ) {
                     if (state.isLoadingMessages && messages.isEmpty()) {
                         Box(
@@ -1039,7 +1055,7 @@ fun ChatView(
                                 start = 12.dp,
                                 end = 12.dp,
                                 top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 28.dp,
+                                bottom = 8.dp + ChatComposerStripReserve,
                             ),
                             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                             displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -1080,42 +1096,22 @@ fun ChatView(
                         )
                     }
                     }
+                            }
+                            }
 
-                    // Forward dialog
-                    if (forwardMessageId != null) {
-                        ForwardDialog(
-                            chatListState = chatListState,
-                            currentChatId = chatId,
-                            archivedConnectionIds = archivedConnectionIds,
-                            hiddenConnectionIds = hiddenConnectionIds,
-                            onSelect = { targetChatId ->
-                                val msgId = forwardMessageId
-                                if (msgId != null) {
-                                    viewModel.forwardMessage(msgId, targetChatId)
-                                }
-                                forwardMessageId = null
-                            },
-                            onDismiss = { forwardMessageId = null }
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer { clip = true },
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
                             visible = isPeerTyping,
-                            enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                            enter = fadeIn(ChatChromeMotion.ShortFade) +
                                 slideInVertically(
-                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                    initialOffsetY = { it / 2 },
+                                    animationSpec = ChatChromeMotion.ShortSlide,
+                                    initialOffsetY = { it / 4 },
                                 ),
-                            exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                            exit = fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
                                 slideOutVertically(
-                                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                                    targetOffsetY = { it / 2 },
+                                    animationSpec = ChatChromeMotion.ShortSlide,
+                                    targetOffsetY = { it / 4 },
                                 ),
                         ) {
                             Row(
@@ -1216,9 +1212,27 @@ fun ChatView(
                                 mediaPickers = mediaPickers,
                             )
                         }
-                        }
                     }
+                            }
                     }
+
+                    if (forwardMessageId != null) {
+                        ForwardDialog(
+                            chatListState = chatListState,
+                            currentChatId = chatId,
+                            archivedConnectionIds = archivedConnectionIds,
+                            hiddenConnectionIds = hiddenConnectionIds,
+                            onSelect = { targetChatId ->
+                                val msgId = forwardMessageId
+                                if (msgId != null) {
+                                    viewModel.forwardMessage(msgId, targetChatId)
+                                }
+                                forwardMessageId = null
+                            },
+                            onDismiss = { forwardMessageId = null },
+                        )
+                    }
+                }
                     }
                 }
             }

@@ -58,6 +58,13 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.ui.theme.LightBlue
 
+/** Shared short tweens for chat chrome — avoids spring solvers stacking with IME translation. */
+internal object ChatChromeMotion {
+    val ShortFade = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
+    val ShortSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
+    val Crossfade = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
+}
+
 /**
  * Leaf composables used inside the chat timeline. Extracted from
  * ConnectionsScreen.kt; no arguments, no state, no side effects —
@@ -163,17 +170,14 @@ internal fun AnimatedVisibilityChatBubble(
     LaunchedEffect(bubbleStabilityKey) {
         visible = true
     }
-    val enterFade = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
-    val enterSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
-    val exitSlide = tween<IntOffset>(durationMillis = 200, easing = FastOutSlowInEasing)
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(enterFade) +
-            slideInVertically(animationSpec = enterSlide, initialOffsetY = { it / 10 }) +
-            scaleIn(enterFade, initialScale = 0.97f),
-        exit = fadeOut(animationSpec = tween(140)) +
-            slideOutVertically(animationSpec = exitSlide, targetOffsetY = { it / 12 }) +
-            scaleOut(animationSpec = tween(200), targetScale = 0.96f),
+        enter = fadeIn(ChatChromeMotion.ShortFade) +
+            slideInVertically(animationSpec = ChatChromeMotion.ShortSlide, initialOffsetY = { it / 10 }) +
+            scaleIn(ChatChromeMotion.ShortFade, initialScale = 0.97f),
+        exit = fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing)) +
+            slideOutVertically(animationSpec = ChatChromeMotion.ShortSlide, targetOffsetY = { it / 12 }) +
+            scaleOut(animationSpec = ChatChromeMotion.ShortFade, targetScale = 0.96f),
     ) {
         content()
     }
