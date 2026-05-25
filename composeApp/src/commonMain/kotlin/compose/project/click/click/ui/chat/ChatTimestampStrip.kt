@@ -52,6 +52,10 @@ internal fun rememberTimestampPeekRevealPx(): Float {
     return remember(density) { with(density) { 56.dp.toPx() } }
 }
 
+/** Sub-pixel threshold so a settled peek of ~0 does not block interactive back. */
+internal fun isTimestampPeekRevealed(visualPx: Float, epsilonPx: Float = 0.5f): Boolean =
+    visualPx > epsilonPx
+
 /** Soft knee in px — matches reply swipe [ChatMessageBubble] `swipeSoftKneePx`. */
 @Composable
 internal fun rememberTimestampPeekSoftKneePx(): Float {
@@ -154,13 +158,17 @@ internal fun Modifier.chatTimestampPeekOnSwipeLeft(
                 restoreTimestampPeekRawFromDisplay(rawLeftPx, displayVisualPx, maxRevealPx, softKneePx)
             },
             onDrag = { change, dragAmount ->
-                if (dragAmount.x < 0f) {
+                val dLeftPx = -dragAmount.x
+                val adjustingPeek =
+                    dLeftPx != 0f &&
+                        (dLeftPx > 0f || isTimestampPeekRevealed(displayVisualPx.floatValue))
+                if (adjustingPeek) {
                     applyTimestampPeekDragStep(
                         rawLeftPx = rawLeftPx,
                         displayVisualPx = displayVisualPx,
                         maxRevealPx = maxRevealPx,
                         softKneePx = softKneePx,
-                        dLeftPx = -dragAmount.x,
+                        dLeftPx = dLeftPx,
                     )
                     change.consume()
                 }

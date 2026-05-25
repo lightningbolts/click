@@ -85,6 +85,7 @@ import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
+import compose.project.click.click.ui.chat.isTimestampPeekRevealed
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
@@ -389,6 +390,18 @@ fun HubChatScreen(
                                     rawLeftPx = rawTimestampPeekTravelPx,
                                     displayVisualPx = displayTimestampPeekVisualPx,
                                     settleJobHolder = timestampPeekSettleJob,
+                                )
+                            },
+                            isPeekRevealed = {
+                                isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
+                            },
+                            onRightDragDelta = { dRight ->
+                                applyTimestampPeekDragStep(
+                                    rawLeftPx = rawTimestampPeekTravelPx,
+                                    displayVisualPx = displayTimestampPeekVisualPx,
+                                    maxRevealPx = peekRevealPx,
+                                    softKneePx = timestampPeekSoftKneePx,
+                                    dLeftPx = -dRight,
                                 )
                             },
                             onRightDragFromRest = {

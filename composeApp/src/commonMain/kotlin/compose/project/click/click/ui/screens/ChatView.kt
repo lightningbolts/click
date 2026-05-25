@@ -183,6 +183,7 @@ import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragm
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTimelineEntry // pragma: allowlist secret
@@ -1004,6 +1005,18 @@ fun ChatView(
                                             rawLeftPx = rawTimestampPeekTravelPx,
                                             displayVisualPx = displayTimestampPeekVisualPx,
                                             settleJobHolder = timestampPeekSettleJob,
+                                        )
+                                    },
+                                    isPeekRevealed = {
+                                        isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
+                                    },
+                                    onRightDragDelta = { dRight ->
+                                        applyTimestampPeekDragStep(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                            dLeftPx = -dRight,
                                         )
                                     },
                                     onRightDragFromRest = {

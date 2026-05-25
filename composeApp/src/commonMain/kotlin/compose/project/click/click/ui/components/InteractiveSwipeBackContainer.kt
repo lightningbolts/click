@@ -53,8 +53,16 @@ data class InteractiveSwipeBackRightToLeftPeek(
      */
     val onLeftDragEnd: (velocityXPxPerSec: Float) -> Unit = { _ -> },
     /**
-     * Rightward drag while the back offset is still ~0 (e.g. user begins interactive back after
-     * timestamp peek); collapse peek so it does not stay visible under the sliding route.
+     * True while timestamp gutters are visibly peeked (blocks interactive back on rightward drag).
+     */
+    val isPeekRevealed: () -> Boolean = { false },
+    /**
+     * Rightward drag while [isPeekRevealed] — finger-driven collapse of the timestamp peek.
+     */
+    val onRightDragDelta: (deltaPxRightward: Float) -> Unit = {},
+    /**
+     * Rightward drag while the back offset is still ~0 and the peek is hidden (interactive back
+     * begins); collapse any in-flight peek settle so timestamps do not linger under the route.
      */
     val onRightDragFromRest: (deltaPxRightward: Float) -> Unit = {},
 )
@@ -225,19 +233,29 @@ fun InteractiveSwipeBackContainer(
     val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
     val onHorizontalDragStartedState = rememberUpdatedState(onHorizontalDragStarted)
     val dragState = rememberDraggableState { delta ->
-            if (!isGestureActive || isSettling) return@rememberDraggableState
+            if (isSettling) return@rememberDraggableState
             val offset = offsetPx.floatValue
             val frictionDelta = delta * SwipeBackDragFriction
+            val peek = rightToLeftPeekState.value
             when {
-                delta > 0f -> {
-                    if (offset <= 0f) {
-                        rightToLeftPeekState.value?.onRightDragFromRest?.invoke(delta)
-                    }
+                delta > 0f && offset > 0f -> {
+                    isGestureActive = true
                     snapDragOffset(offset + frictionDelta)
                 }
-                delta < 0f && offset > 0f -> snapDragOffset(offset + frictionDelta)
+                delta > 0f && offset <= 0f && peek?.isPeekRevealed?.invoke() == true -> {
+                    peek.onRightDragDelta(frictionDelta)
+                }
+                delta > 0f && offset <= 0f -> {
+                    isGestureActive = true
+                    peek?.onRightDragFromRest?.invoke(delta)
+                    snapDragOffset(offset + frictionDelta)
+                }
+                delta < 0f && offset > 0f -> {
+                    isGestureActive = true
+                    snapDragOffset(offset + frictionDelta)
+                }
                 delta < 0f && offset <= 0f ->
-                    rightToLeftPeekState.value?.onLeftDragDelta?.invoke(-delta)
+                    peek?.onLeftDragDelta?.invoke(-delta)
                 else -> Unit
             }
         }
@@ -252,13 +270,17 @@ fun InteractiveSwipeBackContainer(
                     settleJob?.cancel()
                     settleJob = null
                     isSettling = false
-                    isGestureActive = true
+                    isGestureActive = false
                     onHorizontalDragStartedState.value.invoke()
                     rightToLeftPeekState.value?.onGestureStart?.invoke()
                 },
                 onDragStopped = { velocity ->
                     rightToLeftPeekState.value?.onLeftDragEnd?.invoke(velocity)
-                    finishGesture(velocity)
+                    if (isGestureActive) {
+                        finishGesture(velocity)
+                    } else {
+                        isGestureActive = false
+                    }
                 }
             )
         } else {
