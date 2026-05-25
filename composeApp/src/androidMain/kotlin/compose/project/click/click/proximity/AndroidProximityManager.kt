@@ -47,7 +47,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
-private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
 
 @SuppressLint("MissingPermission")
 class AndroidProximityManager(

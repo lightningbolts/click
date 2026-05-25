@@ -405,6 +405,34 @@ class ConnectionRepository(
     }
 
     /**
+     * Cold-start prewarm: POST an intentionally invalid body so JWT/auth paths execute but no
+     * handshake row is inserted (`my_token` fails validation). Errors are ignored.
+     */
+    suspend fun prewarmBindProximityConnection(
+        httpClient: HttpClient? = null,
+        bearerJwt: String,
+    ) {
+        if (bearerJwt.isBlank()) return
+        runCatching {
+            val client = httpClient ?: supabaseFunctionsHttpClient
+            client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
+                contentType(ContentType.Application.Json)
+                headers {
+                    append("apikey", SupabaseConfig.supabaseAnonApiKey)
+                    append(HttpHeaders.Authorization, "Bearer $bearerJwt")
+                }
+                setBody(
+                    BindProximityRequest(
+                        myToken = "",
+                        tokens = emptyList(),
+                        heardTokens = emptyList(),
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
      * Server-side tri-factor clustering: posts ephemeral token + heard tokens + GPS to the
      * Supabase Edge Function [bind-proximity-connection] and returns matched user profiles.
      */

@@ -1,13 +1,7 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,25 +80,8 @@ fun ConnectionRevealOverlay(
         ),
         label = "reveal_card_alpha",
     )
-    val infiniteTransition = rememberInfiniteTransition(label = "connection_reveal")
-    val ringScale = infiniteTransition.animateFloat(
-        initialValue = 0.72f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ring_scale"
-    )
-    val ringAlpha = infiniteTransition.animateFloat(
-        initialValue = 0.18f,
-        targetValue = 0.52f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ring_alpha"
-    )
+    val pulseActive = state.phase == ConnectionRevealPhase.Connecting
+    val (handshakeScale, handshakeAlpha) = rememberConnectionHandshakePulse(pulseActive)
 
     Box(
         modifier = modifier
@@ -123,8 +100,8 @@ fun ConnectionRevealOverlay(
         Box(
             modifier = Modifier
                 .size(260.dp)
-                .scale(ringScale.value)
-                .alpha(ringAlpha.value)
+                .scale(if (pulseActive) handshakeScale else 1f)
+                .alpha(if (pulseActive) handshakeAlpha * 0.45f else 0.28f)
                 .background(PrimaryBlue.copy(alpha = 0.22f), CircleShape)
         )
 
@@ -155,7 +132,10 @@ fun ConnectionRevealOverlay(
                     .padding(horizontal = 28.dp, vertical = 34.dp)
             ) {
                 Surface(
-                    modifier = Modifier.size(72.dp),
+                    modifier = Modifier
+                        .size(72.dp)
+                        .scale(if (pulseActive) handshakeScale else 1f)
+                        .alpha(if (pulseActive) handshakeAlpha else 1f),
                     shape = CircleShape,
                     color = PrimaryBlue.copy(alpha = 0.14f)
                 ) {

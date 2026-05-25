@@ -187,6 +187,14 @@ class ConnectionViewModel : ViewModel() {
         _connectionState.value = ConnectionState.Loading
     }
 
+    /** Wake `bind-proximity-connection` when the connect screen appears (edge cold-start prewarm). */
+    fun prewarmBindProximityEdgeFunction(httpClient: HttpClient, jwt: String) {
+        if (jwt.isBlank()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            repository.prewarmBindProximityConnection(httpClient = httpClient, bearerJwt = jwt)
+        }
+    }
+
     fun showHardwarePermissionsMissing() {
         _connectionState.value = ConnectionState.Error(HARDWARE_PERMISSIONS_MISSING_MESSAGE)
     }

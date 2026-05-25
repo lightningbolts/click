@@ -72,7 +72,7 @@ import kotlin.coroutines.resume
 
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
-private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun NSData.toByteArray(): ByteArray {

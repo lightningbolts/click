@@ -3,6 +3,8 @@ package compose.project.click.click.crypto
 import compose.project.click.click.util.redactedRestMessage
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * High-level message encryption utilities for Click E2EE.
@@ -73,6 +75,47 @@ object MessageCrypto {
     }
 
     fun generateGroupMasterKey(): ByteArray = PlatformCrypto.secureRandomBytes(GROUP_MASTER_KEY_BYTES)
+
+    /** Offloads AES/HMAC key derivation for new-connection handshakes off the main thread. */
+    suspend fun deriveKeysForConnectionAsync(connectionId: String, userIds: List<String>): DerivedKeys =
+        withContext(Dispatchers.Default) {
+            deriveKeysForConnection(connectionId, userIds)
+        }
+
+    /** Offloads group master key generation off the main thread during connection securing. */
+    suspend fun generateGroupMasterKeyAsync(): ByteArray =
+        withContext(Dispatchers.Default) {
+            generateGroupMasterKey()
+        }
+
+    /** Wraps group master key material for each member using pairwise channel keys (background thread). */
+    suspend fun wrapGroupMasterKeyForMembers(
+        masterKey32: ByteArray,
+        members: List<String>,
+        creator: String,
+        anchor: String,
+        groupConnectionId: String?,
+        groupMemberIds: List<String>,
+        resolveEdge: (memberId: String, wrapPeerId: String) -> Pair<String, List<String>>?,
+    ): Map<String, String> = withContext(Dispatchers.Default) {
+        val b64 = encodeGroupMasterKeyBase64(masterKey32)
+        val encrypted = mutableMapOf<String, String>()
+        if (groupConnectionId != null) {
+            val keys = deriveKeysForConnection(groupConnectionId, groupMemberIds)
+            for (member in members) {
+                encrypted[member] = encryptContent(b64, keys)
+            }
+        } else {
+            for (member in members) {
+                val wrapPeer = if (member == creator) anchor else creator
+                val edge = resolveEdge(member, wrapPeer)
+                    ?: error("Missing verified connection for a member")
+                val keys = deriveKeysForConnection(edge.first, edge.second)
+                encrypted[member] = encryptContent(b64, keys)
+            }
+        }
+        encrypted
+    }
 
     @OptIn(ExperimentalEncodingApi::class)
     fun encodeGroupMasterKeyBase64(key: ByteArray): String {

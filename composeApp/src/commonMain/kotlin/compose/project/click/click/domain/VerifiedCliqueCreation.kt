@@ -50,30 +50,25 @@ object VerifiedCliqueCreation {
         }
         val creator = currentUserId
         val anchor = members.first { it != creator }
-        val master = MessageCrypto.generateGroupMasterKey()
-        val b64 = MessageCrypto.encodeGroupMasterKeyBase64(master)
-        val encrypted = mutableMapOf<String, String>()
         val groupConnection = findActiveGroup(members, connections)
-        if (groupConnection != null) {
-            val keys = MessageCrypto.deriveKeysForConnection(
-                groupConnection.id,
-                members,
+        val master = MessageCrypto.generateGroupMasterKeyAsync()
+        val encrypted = runCatching {
+            MessageCrypto.wrapGroupMasterKeyForMembers(
+                masterKey32 = master,
+                members = members,
+                creator = creator,
+                anchor = anchor,
+                groupConnectionId = groupConnection?.id,
+                groupMemberIds = members,
+                resolveEdge = { member, wrapPeer ->
+                    val conn = findActiveEdge(member, wrapPeer, connections) ?: return@wrapGroupMasterKeyForMembers null
+                    conn.id to listOf(member, wrapPeer).sorted()
+                },
             )
-            for (m in members) {
-                encrypted[m] = MessageCrypto.encryptContent(b64, keys)
-            }
-        } else {
-            for (m in members) {
-                val wrapPeer = if (m == creator) anchor else creator
-                val conn = findActiveEdge(m, wrapPeer, connections) ?: run {
-                    return Result.failure(IllegalStateException("Missing verified connection for a member"))
-                }
-                val keys = MessageCrypto.deriveKeysForConnection(
-                    conn.id,
-                    listOf(m, wrapPeer).sorted(),
-                )
-                encrypted[m] = MessageCrypto.encryptContent(b64, keys)
-            }
+        }.getOrElse {
+            return Result.failure(
+                it as? Exception ?: IllegalStateException(it.message ?: "Missing verified connection for a member"),
+            )
         }
         val label = initialGroupName.trim().ifBlank { "Clique" }
         return chatRepository.createVerifiedClique(members, encrypted, label).map { groupId ->

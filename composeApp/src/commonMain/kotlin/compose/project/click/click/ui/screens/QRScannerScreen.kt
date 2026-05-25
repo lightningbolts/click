@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -43,6 +44,7 @@ import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.bottomChromePadding
 import compose.project.click.click.ui.components.QRScanner
 import compose.project.click.click.ui.components.QrScannerDetection
+import compose.project.click.click.ui.components.rememberConnectionHandshakePulse
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.delay
@@ -116,6 +118,9 @@ fun QRScannerScreen(
         liveDetection != null -> QrScannerPresentationState.TargetAcquired
         else -> QrScannerPresentationState.Searching
     }
+    val pulseHandshake = presentationState == QrScannerPresentationState.Searching ||
+        presentationState == QrScannerPresentationState.Connecting
+    val (handshakeScale, handshakeAlpha) = rememberConnectionHandshakePulse(pulseHandshake)
 
     fun lockAndContinue(onContinue: () -> Unit) {
         if (isProcessingResult) return
@@ -233,7 +238,9 @@ fun QRScannerScreen(
                     ScannerLensOverlay(
                         modifier = Modifier.fillMaxSize(),
                         state = presentationState,
-                        detection = liveDetection
+                        detection = liveDetection,
+                        handshakeScale = handshakeScale,
+                        handshakeAlpha = handshakeAlpha,
                     )
                 }
 
@@ -272,6 +279,9 @@ fun QRScannerScreen(
                                         QrScannerPresentationState.Searching -> Icons.Filled.QrCodeScanner
                                     },
                                     contentDescription = null,
+                                    modifier = Modifier
+                                        .scale(if (pulseHandshake) handshakeScale else 1f)
+                                        .alpha(if (pulseHandshake) handshakeAlpha else 1f),
                                     tint = when (presentationState) {
                                         QrScannerPresentationState.Error -> MaterialTheme.colorScheme.error
                                         else -> MaterialTheme.colorScheme.primary
@@ -396,7 +406,9 @@ fun QRScannerScreen(
 private fun ScannerLensOverlay(
     modifier: Modifier,
     state: QrScannerPresentationState,
-    detection: QrScannerDetection?
+    detection: QrScannerDetection?,
+    handshakeScale: Float,
+    handshakeAlpha: Float,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "qr_scanner_overlay")
     val scanLineProgress by infiniteTransition.animateFloat(
@@ -511,6 +523,21 @@ private fun ScannerLensOverlay(
                         color = PrimaryBlue.copy(alpha = pulseAlpha),
                         shape = CircleShape
                     )
+            )
+        }
+
+        if (state != QrScannerPresentationState.Error &&
+            (state == QrScannerPresentationState.Searching || state == QrScannerPresentationState.Connecting)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.QrCodeScanner,
+                contentDescription = null,
+                tint = PrimaryBlue,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(72.dp)
+                    .scale(handshakeScale)
+                    .alpha(handshakeAlpha),
             )
         }
 

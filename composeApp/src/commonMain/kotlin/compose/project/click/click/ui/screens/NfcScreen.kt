@@ -53,6 +53,7 @@ import compose.project.click.click.ui.components.bottomChromePadding
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.ui.components.PageHeader
+import compose.project.click.click.ui.components.rememberConnectionHandshakePulse
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import compose.project.click.click.ui.theme.*
@@ -93,6 +94,10 @@ fun NfcScreen(
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+    }
+
+    LaunchedEffect(authToken) {
+        connectionViewModel.prewarmBindProximityEdgeFunction(httpClient, authToken)
     }
 
     // GPS warm-up when the NFC sheet is visible (non-blocking).
@@ -204,6 +209,11 @@ fun NfcScreen(
                         },
                         label = "tap_connect_state",
                     ) { state ->
+                        val pulseHandshake = state is ConnectionState.ProximityFetchingLocation ||
+                            state is ConnectionState.ProximityHandshaking ||
+                            state is ConnectionState.ProximityResolving ||
+                            state is ConnectionState.Loading ||
+                            state is ConnectionState.SecuringConnection
                         when (state) {
                             is ConnectionState.Idle -> {
                                 NfcIdleContent(
@@ -217,13 +227,13 @@ fun NfcScreen(
                                 )
                             }
                             is ConnectionState.ProximityFetchingLocation -> {
-                                NfcFetchingLocationContent()
+                                NfcFetchingLocationContent(pulseActive = pulseHandshake)
                             }
                             is ConnectionState.ProximityHandshaking -> {
-                                NfcScanningContent()
+                                NfcScanningContent(pulseActive = pulseHandshake)
                             }
                             is ConnectionState.ProximityResolving -> {
-                                NfcMatchingPeersContent()
+                                NfcMatchingPeersContent(pulseActive = pulseHandshake)
                             }
                             is ConnectionState.PendingConfirmation -> {
                                 ProximityConfirmConnectionsContent(
@@ -270,10 +280,13 @@ fun NfcScreen(
                                 ProximityAwaitingContextContent(targetUsers = state.targetUsers)
                             }
                             is ConnectionState.Loading -> {
-                                NfcCreatingConnectionContent()
+                                NfcCreatingConnectionContent(pulseActive = pulseHandshake)
                             }
                             is ConnectionState.SecuringConnection -> {
-                                NfcCreatingConnectionContent(title = "Securing Connection...")
+                                NfcCreatingConnectionContent(
+                                    title = "Securing Connection...",
+                                    pulseActive = pulseHandshake,
+                                )
                             }
                             is ConnectionState.ProximityCapturedOfflineSyncing -> {
                                 ProximityOfflineCapturedContent(
@@ -798,28 +811,19 @@ private fun NfcIdleContent(
 }
 
 @Composable
-private fun NfcFetchingLocationContent() {
+private fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
+    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Animated GPS icon
-        val infiniteTransition = rememberInfiniteTransition()
-        val alpha by infiniteTransition.animateFloat(
-            initialValue = 0.3f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
-
         Icon(
             Icons.Default.LocationOn,
             contentDescription = null,
             modifier = Modifier
                 .size(100.dp)
-                .alpha(alpha),
+                .scale(pulseScale)
+                .alpha(pulseAlpha),
             tint = PrimaryBlue
         )
 
@@ -852,30 +856,13 @@ private fun NfcFetchingLocationContent() {
 }
 
 @Composable
-private fun NfcScanningContent() {
+private fun NfcScanningContent(pulseActive: Boolean = false) {
+    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Animated NFC icon
-        val infiniteTransition = rememberInfiniteTransition()
-        val scale by infiniteTransition.animateFloat(
-            initialValue = 0.8f,
-            targetValue = 1.2f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
-
-        val alpha by infiniteTransition.animateFloat(
-            initialValue = 0.3f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
+        val infiniteTransition = rememberInfiniteTransition(label = "tap_scan_rings")
 
         Box(
             modifier = Modifier.size(200.dp),
@@ -890,7 +877,8 @@ private fun NfcScanningContent() {
                     animationSpec = infiniteRepeatable(
                         animation = tween(2000, easing = LinearEasing, delayMillis = delay),
                         repeatMode = RepeatMode.Restart
-                    )
+                    ),
+                    label = "scan_ring_scale_$index",
                 )
 
                 val circleAlpha by infiniteTransition.animateFloat(
@@ -899,7 +887,8 @@ private fun NfcScanningContent() {
                     animationSpec = infiniteRepeatable(
                         animation = tween(2000, easing = LinearEasing, delayMillis = delay),
                         repeatMode = RepeatMode.Restart
-                    )
+                    ),
+                    label = "scan_ring_alpha_$index",
                 )
 
                 Box(
@@ -919,8 +908,8 @@ private fun NfcScanningContent() {
                 contentDescription = null,
                 modifier = Modifier
                     .size(80.dp)
-                    .scale(scale)
-                    .alpha(alpha),
+                    .scale(pulseScale)
+                    .alpha(pulseAlpha),
                 tint = PrimaryBlue
             )
         }
@@ -1053,16 +1042,26 @@ private fun NfcUserDetectedContent(
 }
 
 @Composable
-private fun NfcCreatingConnectionContent(title: String = "Creating Connection...") {
+private fun NfcCreatingConnectionContent(
+    title: String = "Creating Connection...",
+    pulseActive: Boolean = false,
+) {
+    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        AdaptiveCircularProgressIndicator(
-            modifier = Modifier.size(80.dp),
-            color = PrimaryBlue,
-            strokeWidth = 6.dp
-        )
+        Box(
+            modifier = Modifier
+                .scale(pulseScale)
+                .alpha(pulseAlpha),
+        ) {
+            AdaptiveCircularProgressIndicator(
+                modifier = Modifier.size(80.dp),
+                color = PrimaryBlue,
+                strokeWidth = 6.dp
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -1075,16 +1074,23 @@ private fun NfcCreatingConnectionContent(title: String = "Creating Connection...
 }
 
 @Composable
-private fun NfcMatchingPeersContent() {
+private fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
+    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        AdaptiveCircularProgressIndicator(
-            modifier = Modifier.size(80.dp),
-            color = PrimaryBlue,
-            strokeWidth = 6.dp
-        )
+        Box(
+            modifier = Modifier
+                .scale(pulseScale)
+                .alpha(pulseAlpha),
+        ) {
+            AdaptiveCircularProgressIndicator(
+                modifier = Modifier.size(80.dp),
+                color = PrimaryBlue,
+                strokeWidth = 6.dp
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 

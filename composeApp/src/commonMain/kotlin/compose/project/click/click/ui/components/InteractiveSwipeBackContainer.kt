@@ -66,6 +66,8 @@ data class InteractiveSwipeBackRightToLeftPeek(
 internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
+private const val SwipeBackDragFriction = 0.45f
+private val SwipeBackCommitThreshold = 60.dp
 
 /**
  * iOS-style interactive back container:
@@ -133,6 +135,7 @@ fun InteractiveSwipeBackContainer(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+        val commitThresholdPx = with(density) { SwipeBackCommitThreshold.toPx() }
         val showPreviousLayer = isGestureActive || isSettling
 
         SideEffect {
@@ -172,9 +175,7 @@ fun InteractiveSwipeBackContainer(
                 return
             }
 
-            val progress = currentOffset / widthPx
-            val projected = progress + (velocityX / 3200f)
-            val shouldComplete = projected > 0.35f || velocityX > 650f
+            val shouldComplete = currentOffset > commitThresholdPx
             val target = if (shouldComplete) widthPx else 0f
             isSettling = true
 
@@ -184,7 +185,11 @@ fun InteractiveSwipeBackContainer(
                     targetValue = target,
                     initialVelocity = velocityX,
                     animationSpec = spring(
-                        dampingRatio = 0.86f,
+                        dampingRatio = if (shouldComplete) {
+                            0.86f
+                        } else {
+                            Spring.DampingRatioNoBouncy
+                        },
                         stiffness = Spring.StiffnessMedium
                     )
                 ) { value, _ ->
@@ -216,14 +221,15 @@ fun InteractiveSwipeBackContainer(
     val dragState = rememberDraggableState { delta ->
             if (!isGestureActive || isSettling) return@rememberDraggableState
             val offset = offsetPx.floatValue
+            val frictionDelta = delta * SwipeBackDragFriction
             when {
                 delta > 0f -> {
                     if (offset <= 0f) {
                         rightToLeftPeekState.value?.onRightDragFromRest?.invoke(delta)
                     }
-                    snapDragOffset(offset + delta)
+                    snapDragOffset(offset + frictionDelta)
                 }
-                delta < 0f && offset > 0f -> snapDragOffset(offset + delta)
+                delta < 0f && offset > 0f -> snapDragOffset(offset + frictionDelta)
                 delta < 0f && offset <= 0f ->
                     rightToLeftPeekState.value?.onLeftDragDelta?.invoke(-delta)
                 else -> Unit
