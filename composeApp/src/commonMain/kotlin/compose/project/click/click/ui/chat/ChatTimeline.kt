@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.chat
 
+import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.MessageWithUser
 
 /**
@@ -34,6 +35,13 @@ internal sealed interface ChatTimelineEntry {
         override val key: String,
         val messageWithUser: MessageWithUser,
     ) : ChatTimelineEntry
+}
+
+/** LazyColumn [contentType] so keyboard resize reuses row nodes instead of remounting bubbles. */
+internal fun ChatTimelineEntry.timelineContentType(): Any = when (this) {
+    is ChatTimelineEntry.DaySeparator -> "day_separator"
+    is ChatTimelineEntry.MessageEntry ->
+        messageWithUser.message.messageType?.takeIf { it.isNotBlank() } ?: ChatMessageType.TEXT
 }
 
 /**

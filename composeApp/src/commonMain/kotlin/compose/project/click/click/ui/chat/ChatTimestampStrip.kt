@@ -222,7 +222,7 @@ internal fun ChatMessageRowWithTimestampGutter(
             contentAlignment = if (isSent) Alignment.CenterEnd else Alignment.CenterStart,
         ) {
             if (isSent && !isCallLog) {
-                ChatAmbientMeshBackground(
+                ChatBubbleSentMeshTint(
                     connection = meshConnection,
                     isHubNeutral = useHubNeutralMesh,
                     modifier = Modifier

@@ -1591,6 +1591,7 @@ fun App() {
                                 ChatAmbientMeshBackground(
                                     connection = null,
                                     isHubNeutral = true,
+                                    animateMesh = true,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                                 Box(

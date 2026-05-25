@@ -35,6 +35,7 @@ internal fun ChatLiquidGlassPlate(
 ) {
     Box(
         modifier = modifier
+            .graphicsLayer { clip = true }
             .background(tint)
             .blur(blurRadius)
             .testTag(testTag),

@@ -912,6 +912,7 @@ fun UserProfileBottomSheet(
                                     ChatAmbientMeshBackground(
                                         connection = conn,
                                         isHubNeutral = false,
+                                        animateMesh = true,
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                     Column(

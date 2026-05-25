@@ -133,7 +133,7 @@ internal fun ConnectionChatMessageComposer(
     val composerStripInteraction = remember { MutableInteractionSource() }
     val composerStripBg = Color.Transparent
     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
-    Box(modifier = Modifier.fillMaxWidth().graphicsLayer { }) {
+    Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
             modifier = Modifier
                 .matchParentSize()

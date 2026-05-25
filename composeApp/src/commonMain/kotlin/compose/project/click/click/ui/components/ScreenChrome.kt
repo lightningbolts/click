@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -14,9 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
@@ -92,11 +91,8 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
  *   1. Applies **static** bottom padding for the nav bar (constant, no animation).
  *   2. Uses [clipToBounds] so content shifted above the container top is hidden (prevents
  *      overlapping the header during the slide).
- *   3. Uses [offset] with a lambda (placement-phase only) to shift the entire container upward by
- *      `(IME - navBar)` pixels. This placement-only shift means children are **never remeasured**
- *      during the keyboard animation — the GPU just translates the RenderNode.
- *
- * Result: the composer + messages glide up in total sync at 60/120fps with zero layout passes.
+ *   3. Uses [graphicsLayer] [translationY] (draw-phase) for `(IME - navBar)` px. Pair with an
+ *      isolated message-list composable so visible bubbles are not recomposed each keyboard frame.
  */
 private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = composed {
     val density = LocalDensity.current
@@ -108,11 +104,10 @@ private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = co
     Modifier
         .padding(bottom = navBottomDp + extraBottom)
         .clipToBounds()
-        .offset {
-            val imePx = imeInsets.getBottom(this)
-            val navPx = navInsets.getBottom(this)
-            val shift = (imePx - navPx).coerceAtLeast(0)
-            IntOffset(0, -shift)
+        .graphicsLayer {
+            val imePx = imeInsets.getBottom(density)
+            val navPx = navInsets.getBottom(density)
+            translationY = -(imePx - navPx).coerceAtLeast(0).toFloat()
         }
 }
 
@@ -130,17 +125,13 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
 }
 
 /**
- * Wrap the chat thread + composer column (below the fixed header). The whole block translates
- * upward via placement-phase [offset] when the keyboard opens — zero per-frame remeasures.
- * Children keep their measured height constant; the GPU composites the visual shift.
+ * Thread + composer column below the fixed chat header. Slides the **entire** block (messages and
+ * input row) above the keyboard via draw-phase [translationY] without [imePadding] layout resize.
  */
 fun Modifier.chatThreadKeyboardDock(extraBottom: Dp = 0.dp): Modifier =
     chatBottomInsetUnion(extraBottom)
 
-/**
- * Legacy alias — prefer applying [chatThreadKeyboardDock] on the thread+composer container and
- * leaving the composer strip itself unpadded.
- */
+/** @see chatThreadKeyboardDock */
 fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =
     chatBottomInsetUnion(extraBottom)
 

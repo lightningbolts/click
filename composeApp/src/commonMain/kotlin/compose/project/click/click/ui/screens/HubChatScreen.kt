@@ -55,6 +55,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -74,7 +75,9 @@ import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
 import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
 import compose.project.click.click.ui.chat.chatSpringPressScale
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
+import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.ui.chat.ChatMessageBubble
+import compose.project.click.click.ui.chat.chatBubbleStableRowKey
 import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact
 import compose.project.click.click.ui.chat.chatHubMessageRowTopPadding
@@ -470,6 +473,7 @@ fun HubChatScreen(
                             items(
                                 listOf(receiptM),
                                 key = { _ -> "hub-outbound-delivery-receipt" },
+                                contentType = { "delivery_receipt" },
                             ) { mwu ->
                                 Box(
                                     Modifier
@@ -491,7 +495,11 @@ fun HubChatScreen(
                         val newestFirst = messages.asReversed()
                         items(
                             count = newestFirst.size,
-                            key = { newestFirst[it].message.id },
+                            key = { chatBubbleStableRowKey(newestFirst[it]) },
+                            contentType = {
+                                newestFirst[it].message.messageType?.takeIf { it.isNotBlank() }
+                                    ?: ChatMessageType.TEXT
+                            },
                         ) { index ->
                             val mwu = newestFirst[index]
                             val isCallLog = mwu.message.messageType == "call_log"
@@ -501,7 +509,7 @@ fun HubChatScreen(
                                     ChatInterMessageHubBaseCompact,
                                 )
                             Column(
-                                Modifier.animateItem().padding(top = topGap),
+                                Modifier.padding(top = topGap),
                             ) {
                                 ChatMessageRowWithTimestampGutter(
                                     isCallLog = isCallLog,
@@ -706,7 +714,7 @@ private fun HubChatInputBar(
         bottom = innerVerticalPad,
     )
 
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
             modifier = Modifier
                 .matchParentSize()

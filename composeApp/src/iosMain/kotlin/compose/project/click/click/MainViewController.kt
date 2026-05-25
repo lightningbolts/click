@@ -5,6 +5,7 @@ package compose.project.click.click
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.ui.utils.AppSystemSettings
@@ -35,7 +36,12 @@ fun handleSupabaseAuthDeepLink(url: NSURL) {
         }
 }
 
-fun MainViewController() = ComposeUIViewController {
+fun MainViewController() = ComposeUIViewController(
+    configure = {
+        // Compose handles IME via WindowInsets + chatThreadKeyboardDock; avoid UIKit double-pan.
+        onFocusBehavior = OnFocusBehavior.DoNothing
+    },
+) {
     AppSystemSettings.isDebugMode = Platform.isDebugBinary
     CompositionLocalProvider(
         LocalHapticFeedback provides remember { IosUIKitHapticFeedback() },

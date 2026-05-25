@@ -197,6 +197,7 @@ import compose.project.click.click.ui.chat.ConversationDaySeparator // pragma: a
 import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay // pragma: allowlist secret
@@ -551,9 +552,8 @@ fun ChatView(
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
                      * top via [WindowInsets.safeDrawing] / display cutout coupling.
                      *
-                     * Both platforms apply [chatThreadKeyboardDock] (a [windowInsetsPadding] union of
-                     * nav bars + IME) on the thread+composer column so the input row rides the keyboard
-                     * as one unit — no per-frame recomposition, no stacking of nav + keyboard padding.
+                     * [chatThreadKeyboardDock] on the thread+composer column slides messages and the
+                     * input row together above the keyboard (GPU translation, not [imePadding]).
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val messageContentModifier = Modifier
@@ -1031,7 +1031,36 @@ fun ChatView(
                         val newestSentMessage = remember(messages) {
                             messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
                         }
-                        Box(
+                        ChatMessageTimeline(
+                            timelineEntries = timelineEntries,
+                            listState = listState,
+                            newestSentMessage = newestSentMessage,
+                            listBottomPadding = PaddingValues(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = 24.dp + reverseListNewestEdgePad,
+                                bottom = 28.dp,
+                            ),
+                            dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
+                            displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
+                            peekRevealPx = peekRevealPx,
+                            meshConnection = chatDetails.connection,
+                            useHubNeutralMesh = isGroupChat,
+                            isGroupChat = isGroupChat,
+                            currentUserId = currentUserId,
+                            reactionsMap = reactionsMap,
+                            secureMediaLoadMap = secureMediaLoadMap,
+                            secureMediaHost = viewModel,
+                            activeChatId = activeApiChatId,
+                            onToggleReaction = { messageId, reaction ->
+                                viewModel.toggleReaction(messageId, reaction)
+                            },
+                            onForward = { msgId -> forwardMessageId = msgId },
+                            onLongPress = { contextMenuMessage = it },
+                            onSwipeReply = { viewModel.startReplyTo(it) },
+                            onDownloadAttachment = { _, env ->
+                                viewModel.downloadChatAttachment(env)
+                            },
                             modifier = messageContentModifier
                                 .padding(horizontal = 4.dp)
                                 .then(
@@ -1047,116 +1076,8 @@ fun ChatView(
                                     } else {
                                         Modifier
                                     },
-                                )
-                        ) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .nestedScroll(dismissKeyboardOnUserMessageScroll),
-                                reverseLayout = true,
-                                contentPadding = PaddingValues(
-                                    start = 12.dp,
-                                    end = 12.dp,
-                                    top = 24.dp + reverseListNewestEdgePad,
-                                    bottom = 28.dp,
                                 ),
-                                verticalArrangement = Arrangement.spacedBy(0.dp)
-                            ) {
-                                if (newestSentMessage != null) {
-                                    val receiptM = newestSentMessage
-                                    items(
-                                        listOf(receiptM),
-                                        key = { _ -> "outbound-delivery-receipt" },
-                                    ) { mwu ->
-                                        Box(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(
-                                                    top = chatDeliveryReceiptGapBeforeTimeline(ChatInterMessageListBaseCompact),
-                                                    end = 10.dp,
-                                                ),
-                                            contentAlignment = Alignment.CenterEnd,
-                                        ) {
-                                            ChatDeliveryReceiptIcon(
-                                                messageWithUser = mwu,
-                                                baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                readTint = MaterialTheme.colorScheme.primary,
-                                            )
-                                        }
-                                    }
-                                }
-                                items(
-                                    count = timelineEntries.size,
-                                    key = { timelineEntries[it].key },
-                                ) { index ->
-                                    val entry = timelineEntries[index]
-                                    val listGapTop = chatTimelineRowTopPadding(
-                                        index = index,
-                                        timelineEntries = timelineEntries,
-                                        baseCompact = ChatInterMessageListBaseCompact,
-                                    )
-                                    when (entry) {
-                                        is ChatTimelineEntry.DaySeparator -> {
-                                            Column(Modifier.padding(top = listGapTop)) {
-                                                ConversationDaySeparator(entry.label)
-                                            }
-                                        }
-                                        is ChatTimelineEntry.MessageEntry -> {
-                                            val messageWithUser = entry.messageWithUser
-                                            val msgReactions =
-                                                reactionsMap[messageWithUser.message.id] ?: emptyList()
-                                            val isCallLog = messageWithUser.message.messageType == "call_log"
-                                            Column(Modifier.padding(top = listGapTop)) {
-                                                ChatMessageRowWithTimestampGutter(
-                                                    isCallLog = isCallLog,
-                                                    isSent = messageWithUser.isSent,
-                                                    timeCreated = messageWithUser.message.timeCreated,
-                                                    stripVisualPx = displayTimestampPeekVisualPx,
-                                                    maxRevealPx = peekRevealPx,
-                                                    meshConnection = chatDetails.connection,
-                                                    useHubNeutralMesh = isGroupChat,
-                                                ) {
-                                                    val bubble: @Composable () -> Unit = {
-                                                        ChatMessageBubble(
-                                                            messageWithUser = messageWithUser,
-                                                            currentUserId = currentUserId,
-                                                            reactions = msgReactions,
-                                                            onToggleReaction = { reaction ->
-                                                                viewModel.toggleReaction(messageWithUser.message.id, reaction)
-                                                            },
-                                                            onForward = { msgId ->
-                                                                forwardMessageId = msgId
-                                                            },
-                                                            onLongPress = { contextMenuMessage = messageWithUser },
-                                                            onSwipeReply = {
-                                                                viewModel.startReplyTo(it)
-                                                            },
-                                                            showPeerAvatarInGroup = isGroupChat,
-                                                            secureMediaHost = viewModel,
-                                                            secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
-                                                            activeChatId = activeApiChatId,
-                                                            onDownloadAttachment = { _, env ->
-                                                                viewModel.downloadChatAttachment(env)
-                                                            },
-                                                        )
-                                                    }
-                                                    if (isCallLog) {
-                                                        bubble()
-                                                    } else {
-                                                        AnimatedVisibilityChatBubble(
-                                                            bubbleStabilityKey = chatBubbleStableRowKey(messageWithUser),
-                                                            isSent = messageWithUser.isSent,
-                                                            content = bubble
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        )
                     }
                     }
 
@@ -1179,7 +1100,9 @@ fun ChatView(
                     }
 
                     Column(
-                        modifier = Modifier.fillMaxWidth().graphicsLayer { },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { clip = true },
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
