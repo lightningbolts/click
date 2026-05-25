@@ -48,12 +48,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -227,45 +225,33 @@ internal fun MapDiscoveryScreen(
 ) {
     val platformStyle = LocalPlatformStyle.current
     var sortMode by remember { mutableIntStateOf(0) }
-    var frozenCollapseFraction by remember { mutableFloatStateOf(Float.NaN) }
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
     val sortedFeed = remember(feedItems, discoverySortMode) {
         sortDiscoveryFeedItems(feedItems, discoverySortMode)
     }
 
-    // Do not use rememberLazyListState(): it is saveable and can restore a previous scroll offset
-    // before first paint when the tab route is reattached.
     val listState = remember { LazyListState(0, 0) }
-    val collapseFraction by remember(listState, frozenCollapseFraction) {
-        derivedStateOf {
-            if (!frozenCollapseFraction.isNaN()) {
-                frozenCollapseFraction
-            } else {
-                listState.headerCollapseFraction()
-            }
-        }
+
+    // Force list to start at top on first composition — the LazyListState constructor args
+    // are only hints; Compose can still restore a non-zero offset during the first layout pass.
+    LaunchedEffect(Unit) {
+        listState.scrollToItem(0, 0)
+    }
+
+    val collapseFraction by remember(listState) {
+        derivedStateOf { listState.headerCollapseFraction() }
     }
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomChrome = rememberBottomChromePadding()
     val dockBottom = rememberFabAboveNavPadding()
 
-    val listTopPadding = remember(collapseFraction, statusBarTop) {
-        val compactHeader = collapseFraction > 0.42f
-        if (compactHeader) {
-            statusBarTop + 76.dp
-        } else {
-            val collapsed = AppScreenDefaults.FloatingHeaderCompactHeight
-            val expanded = AppScreenDefaults.FloatingHeaderLargeHeight
-            val headerH = statusBarTop + collapsed + (expanded - collapsed) * (1f - collapseFraction)
-            headerH + 76.dp + 8.dp
-        }
-    }
-
-    LaunchedEffect(frozenCollapseFraction, sortMode) {
-        if (frozenCollapseFraction.isNaN()) return@LaunchedEffect
-        withFrameNanos { }
-        frozenCollapseFraction = Float.NaN
-    }
+    // Fixed top padding — always uses the fully-expanded header height.
+    // The header overlay floats above the list; the list itself always has room for the
+    // full expanded header so it starts at the top with items visible below the header.
+    // Scrolling collapses the header visually but the padding never shrinks, preventing
+    // a circular dependency (padding → scroll offset → collapseFraction → padding).
+    val expandedHeaderH = AppScreenDefaults.FloatingHeaderLargeHeight
+    val listTopPadding = statusBarTop + expandedHeaderH + 76.dp + 8.dp
 
     val pipShape = RoundedCornerShape(16.dp)
     val pipInteraction = remember { MutableInteractionSource() }
@@ -334,22 +320,17 @@ internal fun MapDiscoveryScreen(
                 selectedSortIndex = sortMode,
                 onSortSelected = { index ->
                     if (index == sortMode) return@DiscoveryFloatingHeader
-                    val keepExpandedHeader = collapseFraction <= 0.42f
-                    frozenCollapseFraction = collapseFraction
                     val nextMode = if (index == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
                     val nextFeed = sortDiscoveryFeedItems(feedItems, nextMode)
-                    if (keepExpandedHeader) {
-                        listState.requestScrollToItem(0, 0)
-                    } else {
-                        val anchorKey = listState.layoutInfo.visibleItemsInfo
-                            .firstOrNull { it.key != null && it.key != "discovery_empty" }
-                            ?.key as? String
-                            ?: sortedFeed.getOrNull(listState.firstVisibleItemIndex)?.key
-                        val anchorIndex = anchorKey?.let { key -> nextFeed.indexOfFirst { it.key == key } }
-                            ?.takeIf { it >= 0 }
-                            ?: listState.firstVisibleItemIndex.coerceAtMost(nextFeed.lastIndex.coerceAtLeast(0))
-                        listState.requestScrollToItem(anchorIndex, listState.firstVisibleItemScrollOffset)
-                    }
+                    val anchorKey = listState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.key != null && it.key != "discovery_empty" }
+                        ?.key as? String
+                    val anchorIndex = anchorKey?.let { key -> nextFeed.indexOfFirst { it.key == key } }
+                        ?.takeIf { it >= 0 } ?: 0
+                    listState.requestScrollToItem(
+                        anchorIndex,
+                        listState.firstVisibleItemScrollOffset,
+                    )
                     sortMode = index
                 },
                 onOpenSearch = onOpenSearch,

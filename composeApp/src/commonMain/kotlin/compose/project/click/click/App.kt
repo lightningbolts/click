@@ -1090,7 +1090,7 @@ fun App() {
             }
 
             val hideMainBottomBar =
-                hubChatArgs != null
+                isConnectionsChatOpen || hubChatArgs != null
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
