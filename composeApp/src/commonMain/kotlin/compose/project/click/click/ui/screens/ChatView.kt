@@ -78,6 +78,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.zIndex
@@ -346,7 +347,12 @@ fun ChatView(
         ),
         label = "native_keyboard_lift",
     )
-    val nativeKeyboardDockLiftPx = if (platformStyle.isIOS) animatedNativeKeyboardLiftPx else null
+    val nativeKeyboardDockLiftPx = if (platformStyle.isIOS) animatedNativeKeyboardLiftPx else 0f
+    val nativeKeyboardTimelineBottomPadding = if (platformStyle.isIOS) {
+        with(density) { animatedNativeKeyboardLiftPx.toDp() }
+    } else {
+        0.dp
+    }
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -591,10 +597,18 @@ fun ChatView(
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
                      * top via [WindowInsets.safeDrawing] / display cutout coupling.
                      *
-                     * [chatThreadKeyboardDock] moves the measured thread + composer together without
-                     * animated padding, keeping IME frames out of composition.
+                     * iOS keeps the timeline scrollable by padding its bottom edge while the composer
+                     * follows the native keyboard on a graphics layer.
                      */
                     val reverseListNewestEdgePad = 6.dp
+                    val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
+                    var icebreakerPanelHeightPx by remember { mutableIntStateOf(0) }
+                    val icebreakerTimelineTopReserve = if (showIcebreaker) {
+                        val measured = with(density) { icebreakerPanelHeightPx.toDp() }
+                        if (measured > 0.dp) measured + 8.dp else 228.dp
+                    } else {
+                        0.dp
+                    }
                     val messageContentModifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -913,7 +927,7 @@ fun ChatView(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPx = nativeKeyboardDockLiftPx,
+                                        nativeKeyboardLiftPx = if (platformStyle.isIOS) 0f else null,
                                     ),
                             ) {
                             Box(
@@ -922,11 +936,13 @@ fun ChatView(
                                     .fillMaxWidth(),
                             ) {
                             Box(modifier = Modifier.fillMaxSize()) {
-                                if (showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5) {
+                                if (showIcebreaker) {
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopCenter)
-                                            .fillMaxWidth(),
+                                            .fillMaxWidth()
+                                            .onSizeChanged { icebreakerPanelHeightPx = it.height }
+                                            .zIndex(2f),
                                     ) {
                                         IcebreakerPanel(
                                             prompts = icebreakerPrompts,
@@ -940,7 +956,11 @@ fun ChatView(
 
                     // Messages
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = icebreakerTimelineTopReserve)
+                            .clipToBounds()
+                            .zIndex(1f),
                     ) {
                     if (state.isLoadingMessages && messages.isEmpty()) {
                         Box(
@@ -1093,7 +1113,7 @@ fun ChatView(
                                 start = 12.dp,
                                 end = 12.dp,
                                 top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 8.dp + ChatComposerStripReserve,
+                                bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardTimelineBottomPadding,
                             ),
                             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                             displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -1137,7 +1157,13 @@ fun ChatView(
                             }
                             }
 
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                translationY = -nativeKeyboardDockLiftPx.coerceAtLeast(0f)
+                            },
+                    ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
                             visible = isPeerTyping,

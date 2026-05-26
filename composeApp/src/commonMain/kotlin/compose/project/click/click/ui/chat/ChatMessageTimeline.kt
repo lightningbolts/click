@@ -69,7 +69,7 @@ internal fun ChatMessageTimeline(
                 .nestedScroll(dismissKeyboardOnUserMessageScroll),
             reverseLayout = true,
             contentPadding = listBottomPadding,
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Bottom),
         ) {
             if (newestSentMessage != null) {
                 val receiptM = newestSentMessage
