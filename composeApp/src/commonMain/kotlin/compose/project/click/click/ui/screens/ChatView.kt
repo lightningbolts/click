@@ -32,6 +32,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -269,6 +270,16 @@ import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: a
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 
+private fun Int.toUIKitKeyboardEasing() = when (this) {
+    0 -> CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
+    1 -> CubicBezierEasing(0.42f, 0f, 1f, 1f)
+    2 -> CubicBezierEasing(0f, 0f, 0.58f, 1f)
+    3 -> LinearEasing
+    // iOS keyboards commonly report the private curve 7; use an early-moving curve so the chat
+    // dock does not visually trail the keyboard during appearance.
+    else -> CubicBezierEasing(0.17f, 0.84f, 0.44f, 1f)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatView(
@@ -319,6 +330,7 @@ fun ChatView(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val nativeKeyboardHeightPoints by keyboardHeightProvider.keyboardHeight.collectAsStateLifecycleAware()
     val nativeKeyboardDurationMillis by keyboardHeightProvider.animationDurationMillis.collectAsStateLifecycleAware()
+    val nativeKeyboardAnimationCurve by keyboardHeightProvider.animationCurve.collectAsStateLifecycleAware()
     val nativeKeyboardLiftTargetPx = if (platformStyle.isIOS) {
         val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
         val keyboardHeightPx = with(density) { nativeKeyboardHeightPoints.dp.toPx() }
@@ -330,7 +342,7 @@ fun ChatView(
         targetValue = nativeKeyboardLiftTargetPx,
         animationSpec = tween(
             durationMillis = nativeKeyboardDurationMillis,
-            easing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f),
+            easing = nativeKeyboardAnimationCurve.toUIKitKeyboardEasing(),
         ),
         label = "native_keyboard_lift",
     )

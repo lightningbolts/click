@@ -11,5 +11,8 @@ actual class KeyboardHeightProvider actual constructor() {
     private val _animationDurationMillis = MutableStateFlow(0)
     actual val animationDurationMillis: StateFlow<Int> = _animationDurationMillis.asStateFlow()
 
+    private val _animationCurve = MutableStateFlow(0)
+    actual val animationCurve: StateFlow<Int> = _animationCurve.asStateFlow()
+
     actual fun dispose() = Unit
 }

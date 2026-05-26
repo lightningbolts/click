@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 expect class KeyboardHeightProvider() {
     val keyboardHeight: StateFlow<Float>
     val animationDurationMillis: StateFlow<Int>
+    val animationCurve: StateFlow<Int>
 
     fun dispose()
 }

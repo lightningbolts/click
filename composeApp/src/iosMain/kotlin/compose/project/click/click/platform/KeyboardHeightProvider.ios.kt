@@ -10,6 +10,7 @@ import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSNumber
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSValue
+import platform.UIKit.UIKeyboardAnimationCurveUserInfoKey
 import platform.UIKit.UIKeyboardAnimationDurationUserInfoKey
 import platform.UIKit.UIKeyboardFrameEndUserInfoKey
 import platform.UIKit.UIKeyboardWillChangeFrameNotification
@@ -27,6 +28,9 @@ actual class KeyboardHeightProvider actual constructor() {
     private val _animationDurationMillis = MutableStateFlow(0)
     actual val animationDurationMillis: StateFlow<Int> = _animationDurationMillis.asStateFlow()
 
+    private val _animationCurve = MutableStateFlow(UIKIT_ANIMATION_CURVE_EASE_IN_OUT)
+    actual val animationCurve: StateFlow<Int> = _animationCurve.asStateFlow()
+
     private var willChangeFrameObserver: Any? = null
     private var willHideObserver: Any? = null
     private var disposed = false
@@ -37,7 +41,7 @@ actual class KeyboardHeightProvider actual constructor() {
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) { notification: NSNotification? ->
-            updateDuration(notification)
+            updateAnimation(notification)
             _keyboardHeight.value = notification.keyboardOverlapHeight()
         }
 
@@ -46,7 +50,7 @@ actual class KeyboardHeightProvider actual constructor() {
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) { notification: NSNotification? ->
-            updateDuration(notification)
+            updateAnimation(notification)
             _keyboardHeight.value = 0f
         }
     }
@@ -60,8 +64,9 @@ actual class KeyboardHeightProvider actual constructor() {
         disposed = true
     }
 
-    private fun updateDuration(notification: NSNotification?) {
+    private fun updateAnimation(notification: NSNotification?) {
         _animationDurationMillis.value = notification.animationDurationMillis()
+        _animationCurve.value = notification.animationCurve()
     }
 }
 
@@ -81,3 +86,13 @@ private fun NSNotification?.animationDurationMillis(): Int {
         ?: 0.0
     return (durationSeconds * 1_000.0).roundToInt().coerceAtLeast(0)
 }
+
+private fun NSNotification?.animationCurve(): Int {
+    return this?.userInfo
+        ?.get(UIKeyboardAnimationCurveUserInfoKey)
+        .let { it as? NSNumber }
+        ?.intValue
+        ?: UIKIT_ANIMATION_CURVE_EASE_IN_OUT
+}
+
+private const val UIKIT_ANIMATION_CURVE_EASE_IN_OUT = 0
