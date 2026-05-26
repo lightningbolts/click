@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -85,23 +86,31 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
 }
 
 /**
- * Smooth keyboard dock via placement-phase offset.
+ * Smooth keyboard dock.
  *
- * Instead of applying animated padding (which changes measured height → triggers full remeasure of
- * every weighted child on every frame), this modifier:
- *   1. Applies **static** bottom padding for the nav bar (constant, no animation).
- *   2. Uses [clipToBounds] so content shifted above the container top is hidden (prevents
- *      overlapping the header during the slide).
- *   3. Places the already-measured content at `(IME - navBar)` px above its normal position.
- *      This avoids creating a huge graphics layer around the message list while still keeping
- *      keyboard frames out of composition.
+ * The bottom chrome padding is static. Android keeps Compose's optimized IME inset placement,
+ * while iOS can pass a native keyboard lift and move the already-measured block on a graphics
+ * layer, avoiding per-frame chat relayout.
  */
-private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = composed {
+private fun Modifier.chatBottomInsetUnion(
+    extraBottom: Dp = 0.dp,
+    nativeKeyboardLiftPx: Float? = null,
+): Modifier = composed {
     val density = LocalDensity.current
+    val style = LocalPlatformStyle.current
     val imeInsets = WindowInsets.ime
     val navInsets = WindowInsets.navigationBars
     val navBottomPx = navInsets.getBottom(density)
     val navBottomDp = with(density) { navBottomPx.toDp() }
+
+    if (style.isIOS && nativeKeyboardLiftPx != null) {
+        return@composed Modifier
+            .padding(bottom = navBottomDp + extraBottom)
+            .clipToBounds()
+            .graphicsLayer {
+                translationY = -nativeKeyboardLiftPx.coerceAtLeast(0f)
+            }
+    }
 
     Modifier
         .padding(bottom = navBottomDp + extraBottom)
@@ -129,10 +138,12 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
 
 /**
  * Thread + composer column below the fixed chat header. Slides the **entire** block (messages and
- * input row) above the keyboard with placement-phase movement, without [imePadding] layout resize.
+ * input row) above the keyboard without [imePadding] layout resize.
  */
-fun Modifier.chatThreadKeyboardDock(extraBottom: Dp = 0.dp): Modifier =
-    chatBottomInsetUnion(extraBottom)
+fun Modifier.chatThreadKeyboardDock(
+    extraBottom: Dp = 0.dp,
+    nativeKeyboardLiftPx: Float? = null,
+): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx)
 
 /** @see chatThreadKeyboardDock */
 fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =

@@ -43,6 +43,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.lazy.LazyColumn
@@ -115,6 +116,8 @@ import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist se
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
+import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
@@ -231,6 +234,7 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allo
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
+import compose.project.click.click.util.collectAsStateLifecycleAware // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.withContext // pragma: allowlist secret
@@ -286,6 +290,7 @@ fun ChatView(
      * horizontal slide — avoid stacking a redundant [Modifier.offset] for the same translation.
      */
     parentInteractiveBackSwipePx: MutableFloatState? = null,
+    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
@@ -310,7 +315,26 @@ fun ChatView(
     val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val platformStyle = LocalPlatformStyle.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val nativeKeyboardHeightPoints by keyboardHeightProvider.keyboardHeight.collectAsStateLifecycleAware()
+    val nativeKeyboardDurationMillis by keyboardHeightProvider.animationDurationMillis.collectAsStateLifecycleAware()
+    val nativeKeyboardLiftTargetPx = if (platformStyle.isIOS) {
+        val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
+        val keyboardHeightPx = with(density) { nativeKeyboardHeightPoints.dp.toPx() }
+        (keyboardHeightPx - navBottomPx).coerceAtLeast(0f)
+    } else {
+        0f
+    }
+    val animatedNativeKeyboardLiftPx by animateFloatAsState(
+        targetValue = nativeKeyboardLiftTargetPx,
+        animationSpec = tween(
+            durationMillis = nativeKeyboardDurationMillis,
+            easing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f),
+        ),
+        label = "native_keyboard_lift",
+    )
+    val nativeKeyboardDockLiftPx = if (platformStyle.isIOS) animatedNativeKeyboardLiftPx else null
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -876,7 +900,9 @@ fun ChatView(
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .chatThreadKeyboardDock(),
+                                    .chatThreadKeyboardDock(
+                                        nativeKeyboardLiftPx = nativeKeyboardDockLiftPx,
+                                    ),
                             ) {
                             Box(
                                 modifier = Modifier

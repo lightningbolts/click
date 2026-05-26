@@ -38,7 +38,7 @@ fun handleSupabaseAuthDeepLink(url: NSURL) {
 
 fun MainViewController() = ComposeUIViewController(
     configure = {
-        // Compose handles IME via WindowInsets + chatThreadKeyboardDock; avoid UIKit double-pan.
+        // Compose handles IME via the native keyboard bridge; avoid UIKit double-pan.
         onFocusBehavior = OnFocusBehavior.DoNothing
     },
 ) {
