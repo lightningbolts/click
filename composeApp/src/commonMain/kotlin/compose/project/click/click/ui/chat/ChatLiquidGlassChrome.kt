@@ -9,6 +9,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -21,6 +23,8 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
  * Translucent plate + blur for chat chrome (samples content behind on supported
@@ -89,6 +93,21 @@ internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteraction
         scaleX = scale
         scaleY = scale
     }
+}
+
+/** Text-field container colors only — composer row background stays transparent. */
+@Composable
+internal fun rememberChatComposerFieldColors(): TextFieldColors {
+    val composerStyle = LocalPlatformStyle.current
+    val fieldFill = MaterialTheme.colorScheme.surfaceVariant
+    return OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.55f else 0.65f),
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(
+            alpha = if (composerStyle.isIOS) 0.10f else 0.14f,
+        ),
+        focusedContainerColor = fieldFill.copy(alpha = if (composerStyle.isIOS) 0.96f else 0.98f),
+        unfocusedContainerColor = fieldFill.copy(alpha = if (composerStyle.isIOS) 0.92f else 0.95f),
+    )
 }
 
 /** Spring bounce + null indication; pair with glass border tweaks at call sites for tactile feedback. */

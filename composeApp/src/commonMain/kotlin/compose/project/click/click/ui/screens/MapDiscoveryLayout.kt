@@ -277,9 +277,9 @@ internal fun MapDiscoveryScreen(
 
     val listState = remember { LazyListState(0, 0) }
 
-    // Reset scroll to top whenever feedItems changes (handles both navigation entry AND the
-    // location-settle reorder that previously caused the feed to appear "in the middle").
-    LaunchedEffect(feedItems) {
+    // Scroll to top only on first composition (tab entry). Do not reset when beacons arrive
+    // or GPS settles — that hid soundtrack rows below the fold after async feed updates.
+    LaunchedEffect(Unit) {
         listState.scrollToItem(0, 0)
     }
 

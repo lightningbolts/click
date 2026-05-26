@@ -42,6 +42,7 @@ actual fun PlatformMap(
     centerLon: Double?,
     ghostMode: Boolean,
     mapGesturesEnabled: Boolean,
+    showCompass: Boolean,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -76,7 +77,7 @@ actual fun PlatformMap(
         factory = {
             MKMapView().apply {
                 delegate = pinTapDelegate
-                showsCompass = true
+                showsCompass = showCompass
                 showsScale = false
                 zoomEnabled = mapGesturesEnabled
                 scrollEnabled = mapGesturesEnabled
@@ -94,6 +95,7 @@ actual fun PlatformMap(
             }
         },
         update = { map ->
+            map.showsCompass = showCompass
             map.zoomEnabled = mapGesturesEnabled
             map.scrollEnabled = mapGesturesEnabled
             map.userInteractionEnabled = mapGesturesEnabled

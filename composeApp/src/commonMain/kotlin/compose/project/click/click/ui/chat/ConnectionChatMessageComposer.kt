@@ -131,13 +131,13 @@ internal fun ConnectionChatMessageComposer(
     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
     val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
     val composerStripInteraction = remember { MutableInteractionSource() }
-    val composerStripBg = Color.Transparent
+    val fieldColors = rememberChatComposerFieldColors()
     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
     Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .background(composerStripBg)
+                .background(Color.Transparent)
                 .clickable(
                     indication = null,
                     interactionSource = composerStripInteraction,
@@ -324,12 +324,6 @@ internal fun ConnectionChatMessageComposer(
                     .heightIn(min = auxButtonSize),
             ) {
                 val composerFieldInteraction = remember { MutableInteractionSource() }
-                val fieldColors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f),
-                )
                 val fieldShape = RoundedCornerShape(fieldCorner)
                 val composerTextStyleCentered = composerInputTextStyle.merge(
                     TextStyle(

@@ -98,6 +98,7 @@ import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.chat.ChatComposerStripReserve
+import compose.project.click.click.ui.chat.rememberChatComposerFieldColors
 import compose.project.click.click.ui.components.chatThreadKeyboardDock
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -714,12 +715,7 @@ private fun HubChatInputBar(
         ),
     )
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.50f else 0.65f),
-        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (composerStyle.isIOS) 0.08f else 0.12f),
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.30f else 0.4f),
-        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (composerStyle.isIOS) 0.18f else 0.25f),
-    )
+    val fieldColors = rememberChatComposerFieldColors()
     val fieldShape = RoundedCornerShape(fieldCorner)
     val approxLineBodyDp = 24.dp
     val innerVerticalPad = ((auxButtonSize - approxLineBodyDp) / 2).coerceIn(6.dp, 12.dp)

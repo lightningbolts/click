@@ -37,6 +37,7 @@ actual fun PlatformMap(
     centerLon: Double?,
     ghostMode: Boolean,
     mapGesturesEnabled: Boolean,
+    showCompass: Boolean,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -133,6 +134,7 @@ actual fun PlatformMap(
         properties = mapProperties,
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
+            compassEnabled = showCompass,
             myLocationButtonEnabled = !ghostMode,
             scrollGesturesEnabled = mapGesturesEnabled,
             zoomGesturesEnabled = mapGesturesEnabled,

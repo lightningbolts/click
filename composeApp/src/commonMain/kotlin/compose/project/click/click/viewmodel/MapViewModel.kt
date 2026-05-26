@@ -671,13 +671,13 @@ class MapViewModel : ViewModel() {
         scheduleBeaconFetchForBounds(bounds)
     }
 
-    private fun scheduleBeaconFetchForBounds(bounds: BoundingBox) {
+    private fun scheduleBeaconFetchForBounds(bounds: BoundingBox, debounceMs: Long = 400L) {
         if (AppDataManager.currentUser.value == null) return
 
         beaconPollJob?.cancel()
         val seq = ++beaconFetchSeq
         beaconPollJob = viewModelScope.launch {
-            delay(400)
+            if (debounceMs > 0L) delay(debounceMs)
             if (seq != beaconFetchSeq) return@launch
             val layers = _selectedLayerFilters.value
             val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
@@ -956,19 +956,33 @@ class MapViewModel : ViewModel() {
      * Called whenever the map screen is entered so we can restore the last viewport.
      */
     fun onMapScreenEntered() {
-        if (_cameraTarget.value != null) return
+        if (_cameraTarget.value == null) {
+            val raw = lastKnownCameraTarget ?: _defaultCameraTarget.value
+            if (raw != null) {
+                val safeZoom = raw.zoom.coerceIn(4.0, 20.0)
+                val target = if (abs(raw.zoom - safeZoom) > 0.01) {
+                    CameraTarget(latitude = raw.latitude, longitude = raw.longitude, zoom = safeZoom)
+                } else {
+                    raw
+                }
+                _cameraTarget.value = target
+                if (abs(_zoomLevel.value - target.zoom) > 0.01) {
+                    _zoomLevel.value = target.zoom
+                }
+            }
+        }
+        prefetchDiscoveryProximityData()
+    }
 
-        val raw = lastKnownCameraTarget ?: _defaultCameraTarget.value ?: return
-        val safeZoom = raw.zoom.coerceIn(4.0, 20.0)
-        val target = if (abs(raw.zoom - safeZoom) > 0.01) {
-            CameraTarget(latitude = raw.latitude, longitude = raw.longitude, zoom = safeZoom)
-        } else {
-            raw
+    /**
+     * Loads hubs/beacons for the discovery feed even when the platform map has not yet
+     * reported bounds (e.g. Android PiP placeholder with no [GoogleMap] instance).
+     */
+    fun prefetchDiscoveryProximityData() {
+        if (_visibleBounds.value == null) {
+            estimateVisibleBounds()
         }
-        _cameraTarget.value = target
-        if (abs(_zoomLevel.value - target.zoom) > 0.01) {
-            _zoomLevel.value = target.zoom
-        }
+        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
     }
 
     /**

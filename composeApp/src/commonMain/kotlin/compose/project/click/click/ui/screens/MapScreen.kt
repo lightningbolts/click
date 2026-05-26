@@ -127,6 +127,12 @@ fun MapScreen(
         userLon = loc?.longitude
     }
 
+    LaunchedEffect(mapState) {
+        if (mapState is MapState.Success) {
+            viewModel.prefetchDiscoveryProximityData()
+        }
+    }
+
     LaunchedEffect(initialBeaconId, mapBeacons) {
         val beaconId = initialBeaconId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         if (mapBeacons.none { it.id == beaconId }) return@LaunchedEffect
@@ -253,6 +259,7 @@ fun MapScreen(
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
                                 ghostMode = ghostModeEnabled,
                                 mapGesturesEnabled = mapGesturesEnabled,
+                                showCompass = !mapPipExpanded,
                                 cameraTarget = cameraTarget,
                                 onPinTapped = { pin ->
                                     if (pin.kind == MapPinKind.CONNECTION) {
@@ -550,7 +557,7 @@ private fun MapExpandedMapChrome(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .zIndex(10f)
+                .zIndex(40f)
                 .windowInsetsPadding(topSafe)
                 .padding(top = 8.dp, start = 16.dp, end = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -741,7 +748,8 @@ private fun MapLayerFilterDropdown(
             onDismissRequest = { expanded = false },
             modifier = Modifier
                 .width(menuWidth)
-                .wrapContentWidth(Alignment.Start),
+                .wrapContentWidth(Alignment.Start)
+                .zIndex(20f),
             offset = DpOffset(0.dp, -menuUpOffset),
             shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
             containerColor = menuSurface,
@@ -1189,6 +1197,7 @@ private fun MapContent(
     zoom: Double,
     ghostMode: Boolean,
     mapGesturesEnabled: Boolean = true,
+    showCompass: Boolean = true,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
@@ -1223,6 +1232,7 @@ private fun MapContent(
         centerLon = cameraTarget?.longitude,
         ghostMode = ghostMode,
         mapGesturesEnabled = mapGesturesEnabled,
+        showCompass = showCompass,
         onPinTapped = onPinTapped,
         onClusterTapped = onClusterTapped,
         onZoomChanged = onZoomChanged,

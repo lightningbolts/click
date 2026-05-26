@@ -76,7 +76,7 @@ internal fun applyTimestampPeekDragStep(
 ) {
     val maxR = maxRevealPx.coerceAtLeast(1f)
     val soft = softKneePx.coerceAtLeast(1f)
-    rawLeftPx.floatValue = (rawLeftPx.floatValue + dLeftPx).coerceIn(0f, 340f)
+    rawLeftPx.floatValue = (rawLeftPx.floatValue + dLeftPx).coerceIn(0f, ChatGestureMotion.RawTravelCapPx)
     displayVisualPx.floatValue =
         swipeVisualFromRawTravel(
             rawTravelPx = rawLeftPx.floatValue,
@@ -107,7 +107,7 @@ internal fun restoreTimestampPeekRawFromDisplay(
             softKneePx = soft,
             trackGain = TimestampPeekTrackGain,
             overflowRubberGain = TimestampPeekOverflowRubberGain,
-        ).coerceIn(0f, 340f)
+        ).coerceIn(0f, ChatGestureMotion.RawTravelCapPx)
 }
 
 /** Same settle curve/duration as swipe-to-reply release in [ChatMessageBubble]. */
@@ -126,7 +126,7 @@ internal fun CoroutineScope.launchTimestampPeekReplyStyleSettle(
                     targetValue = 0f,
                     animationSpec =
                         tween(
-                            durationMillis = 480,
+                            durationMillis = ChatGestureMotion.HorizontalSwipeSettleMillis,
                             easing = TimestampPeekSettleEasing,
                         ),
                 ) { v, _ ->

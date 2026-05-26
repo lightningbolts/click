@@ -154,7 +154,7 @@ fun ChatMessageBubble(
     val draggableState = rememberDraggableState { delta ->
         swipeSettleJob?.cancel()
         swipeSettleJob = null
-        rawSwipeTravelPx = (rawSwipeTravelPx + delta).coerceIn(-340f, 340f)
+        rawSwipeTravelPx = (rawSwipeTravelPx + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
         displayVisualPx = swipeVisualFromRawTravel(
             rawTravelPx = rawSwipeTravelPx,
             isSent = isSent,
@@ -186,7 +186,7 @@ fun ChatMessageBubble(
                     softKneePx = swipeSoftKneePx,
                     trackGain = swipeTrackGain,
                     overflowRubberGain = swipeOverflowRubberGain,
-                ).coerceIn(-340f, 340f)
+                ).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
             }
         },
         onDragStopped = {
@@ -204,7 +204,7 @@ fun ChatMessageBubble(
                         initialValue = displayVisualPx,
                         targetValue = 0f,
                         animationSpec = tween(
-                            durationMillis = 480,
+                            durationMillis = ChatGestureMotion.HorizontalSwipeSettleMillis,
                             easing = CubicBezierEasing(0.17f, 0.88f, 0.24f, 1f),
                         ),
                     ) { v, _ ->

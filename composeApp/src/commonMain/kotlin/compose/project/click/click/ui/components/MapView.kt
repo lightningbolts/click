@@ -196,6 +196,8 @@ expect fun PlatformMap(
     centerLon: Double? = null,
     ghostMode: Boolean = false,
     mapGesturesEnabled: Boolean = true,
+    /** When false, hides the platform compass so map chrome dropdowns are not obscured. */
+    showCompass: Boolean = true,
     onPinTapped: (MapPin) -> Unit = {},
     onClusterTapped: (MapClusterPin) -> Unit = {},
     onZoomChanged: (Double) -> Unit = {},

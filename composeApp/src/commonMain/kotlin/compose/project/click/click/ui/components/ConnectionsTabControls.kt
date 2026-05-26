@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -361,6 +362,7 @@ private fun DiscoverySortFilterMenuChip(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            modifier = Modifier.zIndex(20f),
         ) {
             labels.forEachIndexed { index, label ->
                 DropdownMenuItem(

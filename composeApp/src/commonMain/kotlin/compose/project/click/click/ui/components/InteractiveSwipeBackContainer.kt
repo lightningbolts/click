@@ -77,9 +77,9 @@ private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
 private const val SwipeBackDragFriction = 0.65f
 private val SwipeBackCommitThreshold = 45.dp
 /** Settle duration when releasing without committing (snap-back to origin). */
-private const val SwipeBackCancelSettleMillis = 340
+private const val SwipeBackCancelSettleMillis = 165
 /** Settle duration when committing to back (slide-through to full width). */
-private const val SwipeBackCompleteSettleMillis = 290
+private const val SwipeBackCompleteSettleMillis = 140
 
 /**
  * iOS-style interactive back container:
@@ -197,11 +197,15 @@ fun InteractiveSwipeBackContainer(
                 } else {
                     SwipeBackCancelSettleMillis
                 }
-                // Eased tween with zero release velocity caps peak speed for both cancel and commit.
+                // Shorter settle + release velocity raises peak speed; drag friction/threshold unchanged.
+                val releaseVelocity = when {
+                    shouldComplete -> velocityX.coerceAtLeast(0f)
+                    else -> velocityX.coerceAtMost(0f)
+                }
                 animate(
                     initialValue = currentOffset,
                     targetValue = target,
-                    initialVelocity = 0f,
+                    initialVelocity = releaseVelocity,
                     animationSpec = tween(
                         durationMillis = settleMillis,
                         easing = FastOutSlowInEasing,
