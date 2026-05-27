@@ -282,7 +282,8 @@ class ChatViewModel(
     private var loadChatMessagesJob: Job? = null
     private var lastTypingSent: Long = 0L
     private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
-    private val prefetchedChatLimit = 3
+    /** Matches AppDataManager silent prefetch depth (recent active + archived + groups). */
+    private val prefetchedChatLimit = 12
 
     /** Serializes outbound chat POSTs so optimistic rows stay ordered; text sends can queue without blocking the composer UI. */
     private val outboundChatMessageMutex = Mutex()
@@ -337,6 +338,15 @@ class ChatViewModel(
 
     init {
         viewModelScope.launch {
+            AppDataManager.cachedChatThreads.collect { threads ->
+                if (threads.isEmpty()) return@collect
+                threads.keys.forEach { connectionId ->
+                    patchChatListRowFromCachedThread(connectionId)
+                }
+            }
+        }
+
+        viewModelScope.launch {
             combine(
                 AppDataManager.connections,
                 AppDataManager.connectedUsers
@@ -367,6 +377,13 @@ class ChatViewModel(
 
                     val mergedChats = currentListState.chats.map { chat ->
                         val cachedChat = cachedChatsByConnectionId[chat.connection.id]
+                            ?: inboxRowFromCachedThread(
+                                connectionId = chat.connection.id,
+                                listRow = chat,
+                                connections = connections,
+                                users = connectedUsers,
+                                userId = currentUserId,
+                            )
                         val freshUser = cachedChat?.otherUser ?: connectedUsers[chat.otherUser.id]
                         mergeChatRowWithCache(chat, cachedChat, freshUser)
                     }
@@ -685,6 +702,13 @@ class ChatViewModel(
                             buildCachedChats(cachedConnections, cachedUsers, userId).associateBy { it.connection.id }
                         val mergedWithLocalPreview = enriched.map { apiChat ->
                             val cachedRow = cachedChatsById[apiChat.connection.id]
+                                ?: inboxRowFromCachedThread(
+                                    connectionId = apiChat.connection.id,
+                                    listRow = apiChat,
+                                    connections = cachedConnections,
+                                    users = cachedUsers,
+                                    userId = userId,
+                                )
                             val freshUser = if (apiChat.groupClique == null) {
                                 cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
                             } else {
@@ -698,7 +722,7 @@ class ChatViewModel(
                         _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
                             AppDataManager.persistInboxFeedChats(finalRows)
-                            prefetchChatPayloads(userId, enriched)
+                            prefetchChatPayloads(userId, finalRows)
                         }
 
                     } else {
@@ -740,6 +764,68 @@ class ChatViewModel(
                 },
             )
         }
+    }
+
+    /**
+     * Builds a list row snapshot from a silently prefetched thread (WhatsApp-style disk cache).
+     */
+    private fun inboxRowFromCachedThread(
+        connectionId: String,
+        listRow: ChatWithDetails,
+        connections: List<Connection>,
+        users: Map<String, User>,
+        userId: String,
+    ): ChatWithDetails? {
+        val thread = AppDataManager.cachedChatThreadFor(connectionId) ?: return null
+        val lastMessage = thread.messages.lastOrNull() ?: return null
+        val connection = connections.find { it.id == connectionId }
+            ?: listRow.connection
+        val otherUser = if (listRow.groupClique == null) {
+            val otherUserId = connection.user_ids.firstOrNull { it != userId } ?: return null
+            users[otherUserId] ?: listRow.otherUser
+        } else {
+            listRow.otherUser
+        }
+        val lastAt = listOfNotNull(connection.last_message_at, lastMessage.timeCreated).maxOrNull()
+        return listRow.copy(
+            chat = listRow.chat.copy(id = thread.chatId),
+            connection = connection.copy(
+                last_message_at = lastAt,
+                chat = connection.chat.copy(messages = listOf(lastMessage)),
+            ),
+            otherUser = otherUser,
+            lastMessage = lastMessage,
+        )
+    }
+
+    private fun patchChatListRowFromCachedThread(connectionId: String) {
+        val state = _chatListState.value as? ChatListState.Success ?: return
+        val thread = AppDataManager.cachedChatThreadFor(connectionId) ?: return
+        val lastMessage = thread.messages.lastOrNull() ?: return
+        val chats = state.chats
+        val index = chats.indexOfFirst { it.connection.id == connectionId }
+        if (index < 0) return
+        val row = chats[index]
+        val rowTs = row.lastMessage?.timeCreated ?: 0L
+        if (rowTs >= lastMessage.timeCreated) return
+        val userId = _currentUserId.value
+        val cachedPatch = userId?.let { uid ->
+            inboxRowFromCachedThread(
+                connectionId = connectionId,
+                listRow = row,
+                connections = AppDataManager.connections.value,
+                users = AppDataManager.connectedUsers.value,
+                userId = uid,
+            )
+        }
+        val merged = mergeChatRowWithCache(
+            listChat = row,
+            cachedChat = cachedPatch,
+            freshUser = AppDataManager.connectedUsers.value[row.otherUser.id],
+        )
+        if (merged == row) return
+        val updated = chats.toMutableList().apply { this[index] = merged }
+        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(updated))
     }
 
     private fun buildCachedChats(
@@ -1245,6 +1331,7 @@ class ChatViewModel(
     private fun prefetchChatPayloads(userId: String, chats: List<ChatWithDetails>) {
         viewModelScope.launch {
             chats
+                .sortedByDescending { chatListActivityTimestamp(it) }
                 .take(prefetchedChatLimit)
                 .forEach { chatDetails ->
                     val connectionId = chatDetails.connection.id
@@ -1273,6 +1360,7 @@ class ChatViewModel(
                             participants = payload.messages.map { it.user }.distinctBy { it.id },
                             reactions = payload.reactionsByMessageId.values.flatten(),
                         )
+                        patchChatListRowFromCachedThread(connectionId)
                     }
                 }
         }

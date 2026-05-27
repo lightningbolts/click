@@ -72,6 +72,7 @@ fun ConnectionItem(
     isCore: Boolean = false,
     showOnlineIndicator: Boolean = false,
     decryptedPreview: String? = null,
+    hasCachedThreadPreview: Boolean = false,
     onAvatarClick: () -> Unit = {},
     onGroupMembersPicker: (List<User>) -> Unit = {},
     onClick: () -> Unit,
@@ -86,14 +87,20 @@ fun ConnectionItem(
     val user = chatDetails.otherUser
     val connection = chatDetails.connection
     val lastMessage = chatDetails.lastMessage
+    val embeddedLastMessage = connection.chat.messages.lastOrNull()
+    val effectiveLastMessage = lastMessage ?: embeddedLastMessage
     val unreadCount = chatDetails.unreadCount
-    val activityTs = lastMessage?.timeCreated ?: connection.last_message_at
+    val activityTs = effectiveLastMessage?.timeCreated ?: connection.last_message_at
     val timeText = activityTs?.let { formatConnectionListTimestamp(it) } ?: "No messages"
-    val showLoadingSubtitle =
-        lastMessage == null && user.name == "Connection" && connection.last_message_at == null
     val previewNeedsRefresh = connection.last_message_at?.let { latestAt ->
-        lastMessage == null || lastMessage.timeCreated < latestAt
+        effectiveLastMessage == null || effectiveLastMessage.timeCreated < latestAt
     } ?: false
+    val hasPreviewText = effectiveLastMessage != null || decryptedPreview != null || hasCachedThreadPreview
+    // Shimmer only while the row is still resolving peer metadata (cold start), not when
+    // we already have cached/decrypted preview text or server activity to show as "New message".
+    val showLoadingSubtitle = !hasPreviewText &&
+        user.name == "Connection" &&
+        connection.last_message_at == null
 
     val peerId = chatDetails.otherUser.id
     var hasIntentOverlap by remember(chatDetails.otherUser.id, viewerUserId, isGroup) {
@@ -269,7 +276,7 @@ fun ConnectionItem(
                 } else {
                     val rawPreview = when {
                         previewNeedsRefresh -> "New message"
-                        lastMessage != null -> lastMessage.previewLabel()
+                        effectiveLastMessage != null -> effectiveLastMessage.previewLabel()
                         connection.last_message_at != null -> "New message"
                         else -> "Start a conversation"
                     }

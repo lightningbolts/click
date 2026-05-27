@@ -266,6 +266,7 @@ fun ConnectionsListView(
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
     val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
+    val cachedChatThreads by AppDataManager.cachedChatThreads.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val activeHubs by AppDataManager.activeHubs.collectAsState()
@@ -710,13 +711,17 @@ fun ConnectionsListView(
                                 filteredChats,
                                 key = { it.connection.id }
                             ) { chatDetails ->
+                                val connectionId = chatDetails.connection.id
+                                val cachedThread = cachedChatThreads[connectionId]
+                                val cachedPreviewLabel = cachedThread?.messages?.lastOrNull()?.previewLabel()
                                 ConnectionItem(
                                     chatDetails = chatDetails,
                                     viewerUserId = currentUserId,
-                                    isCore = chatDetails.connection.id in coreConnectionIds,
+                                    isCore = connectionId in coreConnectionIds,
                                     showOnlineIndicator = chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,
-                                    decryptedPreview = decryptedPreviews[chatDetails.connection.id],
+                                    decryptedPreview = decryptedPreviews[connectionId] ?: cachedPreviewLabel,
+                                    hasCachedThreadPreview = !cachedThread?.messages.isNullOrEmpty(),
                                     onAvatarClick = {
                                         if (chatDetails.groupClique == null) {
                                             onUserProfileClick(chatDetails.otherUser.id)

@@ -385,12 +385,9 @@ object AppDataManager {
         chatPrefetchJob = scope.launch(chatMediaDispatcher) {
             runCatching {
                 val direct = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
+                val archived = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
                 val groups = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
-                val directRows = direct.await()
-                    .filter {
-                        it.connection.isActiveForUser(_archivedConnectionIds.value, _hiddenConnectionIds.value) ||
-                            it.connection.isArchivedChannelForUser(_archivedConnectionIds.value, _hiddenConnectionIds.value)
-                    }
+                val directRows = (direct.await() + archived.await())
                     .distinctBy { it.connection.id }
                     .sortedByDescending { it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created }
                     .take(CHAT_PREFETCH_LIMIT)
