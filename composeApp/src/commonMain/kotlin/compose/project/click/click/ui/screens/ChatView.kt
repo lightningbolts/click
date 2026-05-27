@@ -176,10 +176,10 @@ import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist se
 import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
 import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.LocationGapNudge // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
-import compose.project.click.click.ui.chat.connectionHasNoGeo // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSnackbarHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.showGlassSnackbar // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -416,7 +416,7 @@ fun ChatView(
     LaunchedEffect(nudgeResult) {
         val r = nudgeResult
         if (r != null) {
-            coroutineScope.launch { snackbarHostState.showSnackbar(r) }
+            coroutineScope.launch { snackbarHostState.showGlassSnackbar(r) }
             viewModel.clearNudgeResult()
         }
     }
@@ -593,7 +593,7 @@ fun ChatView(
                             viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
                         },
                         onMediaAccessBlocked = { msg ->
-                            coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                            coroutineScope.launch { snackbarHostState.showGlassSnackbar(msg) }
                         },
                     )
                     /**
@@ -1307,11 +1307,11 @@ fun ChatView(
         }
 
     // Snackbar overlay
-    SnackbarHost(
+    GlassSnackbarHost(
         hostState = snackbarHostState,
         modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = edgeBottomInset + 56.dp)
+            .align(Alignment.BottomEnd)
+            .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
     )
 
     // Message long-press context sheet

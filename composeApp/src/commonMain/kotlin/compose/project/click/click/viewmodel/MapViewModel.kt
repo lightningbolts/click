@@ -168,7 +168,12 @@ class MapViewModel : ViewModel() {
 
     private var beaconPollJob: Job? = null
     private var discoveryPollJob: Job? = null
+    private var discoveryProximityJob: Job? = null
     private var beaconFetchSeq: Long = 0L
+    private var discoveryFetchSeq: Long = 0L
+
+    /** Discovery feed uses a GPS-centered radius so beacons load before the map is zoomed in. */
+    private val discoveryProximityRadiusMeters = 30_000.0
 
     private val locationService = LocationService()
 
@@ -497,6 +502,7 @@ class MapViewModel : ViewModel() {
         }
         _selectedLayerFilters.value = cur.toSet()
         _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
+        prefetchDiscoveryProximityData()
     }
 
     fun clearBeaconInsertError() {
@@ -705,52 +711,7 @@ class MapViewModel : ViewModel() {
     }
 
     private fun scheduleBeaconFetchForBounds(bounds: BoundingBox, debounceMs: Long = 400L) {
-        if (AppDataManager.currentUser.value == null) return
-
-        beaconPollJob?.cancel()
-        val seq = ++beaconFetchSeq
-        beaconPollJob = viewModelScope.launch {
-            if (debounceMs > 0L) delay(debounceMs)
-            if (seq != beaconFetchSeq) return@launch
-            val layers = _selectedLayerFilters.value
-            val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
-            if (wantHubs) {
-                mapBeaconRepository.fetchNearbyCommunityHubs(
-                    minLat = bounds.minLat,
-                    maxLat = bounds.maxLat,
-                    minLon = bounds.minLon,
-                    maxLon = bounds.maxLon,
-                ).onSuccess { rows ->
-                    _communityHubs.value = rows.map { dto ->
-                        CommunityHubPin(
-                            hubId = dto.hubId,
-                            name = dto.name,
-                            latitude = dto.latitude,
-                            longitude = dto.longitude,
-                            radiusMeters = dto.radiusMeters,
-                            activeUserCount = dto.activeUserCount,
-                        )
-                    }
-                }
-            } else {
-                _communityHubs.value = emptyList()
-            }
-            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
-                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
-                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
-                layers.contains(MapLayerFilter.SOCIAL_VIBES)
-            if (!wantBeacons) return@launch
-            val result = mapBeaconRepository.fetchLocalBeacons(
-                minLat = bounds.minLat,
-                maxLat = bounds.maxLat,
-                minLon = bounds.minLon,
-                maxLon = bounds.maxLon,
-                beaconTypeFilters = beaconTypesQueryForLayers(layers),
-            )
-            result.onSuccess { list ->
-                _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
-            }
-        }
+        fetchProximityLayersForBounds(bounds, debounceMs, DiscoveryFetchSlot.MapViewport)
     }
 
     /** Keeps optimistically dropped pins until the server echoes them; unions fetches by id. */
@@ -1027,14 +988,14 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * Loads hubs/beacons for the discovery feed even when the platform map has not yet
-     * reported bounds (e.g. Android PiP placeholder with no [GoogleMap] instance).
+     * Loads hubs/beacons for the discovery feed from the user's location (or map fallback),
+     * independent of map zoom / PiP bounds so feed rows are not empty until zoom-in.
      */
     fun prefetchDiscoveryProximityData() {
-        if (_visibleBounds.value == null) {
-            estimateVisibleBounds()
+        viewModelScope.launch {
+            val bounds = resolveDiscoveryProximityBounds() ?: return@launch
+            fetchProximityLayersForBounds(bounds, debounceMs = 0L, jobSlot = DiscoveryFetchSlot.Discovery)
         }
-        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
     }
 
     /** Re-fetch hubs/beacons on an interval so the discovery feed stays populated without map bounds. */
@@ -1044,6 +1005,102 @@ class MapViewModel : ViewModel() {
             while (true) {
                 prefetchDiscoveryProximityData()
                 delay(45_000L)
+            }
+        }
+    }
+
+    private suspend fun resolveDiscoveryProximityBounds(): BoundingBox? {
+        val gps = locationService.getCurrentLocation()
+            ?: locationService.getHighAccuracyLocation(3_500L)
+        if (gps != null) {
+            return boundsAroundPoint(gps.latitude, gps.longitude, discoveryProximityRadiusMeters)
+        }
+        if (_visibleBounds.value == null) {
+            estimateVisibleBounds()
+        }
+        return _visibleBounds.value
+    }
+
+    private fun boundsAroundPoint(lat: Double, lon: Double, radiusMeters: Double): BoundingBox {
+        val latDelta = radiusMeters / 111_320.0
+        val lonScale = kotlin.math.cos(lat * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
+        val lonDelta = radiusMeters / (111_320.0 * lonScale)
+        return BoundingBox(
+            minLat = (lat - latDelta).coerceIn(-90.0, 90.0),
+            maxLat = (lat + latDelta).coerceIn(-90.0, 90.0),
+            minLon = (lon - lonDelta).coerceIn(-180.0, 180.0),
+            maxLon = (lon + lonDelta).coerceIn(-180.0, 180.0),
+        )
+    }
+
+    private enum class DiscoveryFetchSlot { MapViewport, Discovery }
+
+    private fun fetchProximityLayersForBounds(
+        bounds: BoundingBox,
+        debounceMs: Long,
+        jobSlot: DiscoveryFetchSlot,
+    ) {
+        if (AppDataManager.currentUser.value == null) return
+
+        val seq = when (jobSlot) {
+            DiscoveryFetchSlot.MapViewport -> {
+                beaconPollJob?.cancel()
+                ++beaconFetchSeq
+            }
+            DiscoveryFetchSlot.Discovery -> ++discoveryFetchSeq
+        }
+
+        val job = viewModelScope.launch {
+            if (debounceMs > 0L) delay(debounceMs)
+            when (jobSlot) {
+                DiscoveryFetchSlot.MapViewport -> if (seq != beaconFetchSeq) return@launch
+                DiscoveryFetchSlot.Discovery -> if (seq != discoveryFetchSeq) return@launch
+            }
+            val layers = _selectedLayerFilters.value
+            val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
+            if (wantHubs) {
+                mapBeaconRepository.fetchNearbyCommunityHubs(
+                    minLat = bounds.minLat,
+                    maxLat = bounds.maxLat,
+                    minLon = bounds.minLon,
+                    maxLon = bounds.maxLon,
+                ).onSuccess { rows ->
+                    _communityHubs.value = rows.map { dto ->
+                        CommunityHubPin(
+                            hubId = dto.hubId,
+                            name = dto.name,
+                            latitude = dto.latitude,
+                            longitude = dto.longitude,
+                            radiusMeters = dto.radiusMeters,
+                            activeUserCount = dto.activeUserCount,
+                        )
+                    }
+                }
+            } else if (jobSlot != DiscoveryFetchSlot.Discovery) {
+                _communityHubs.value = emptyList()
+            }
+            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
+                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
+                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
+                layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            if (!wantBeacons) return@launch
+            val result = mapBeaconRepository.fetchLocalBeacons(
+                minLat = bounds.minLat,
+                maxLat = bounds.maxLat,
+                minLon = bounds.minLon,
+                maxLon = bounds.maxLon,
+                beaconTypeFilters = beaconTypesQueryForLayers(layers),
+            )
+            result.onSuccess { list ->
+                _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
+            }
+        }
+
+        when (jobSlot) {
+            DiscoveryFetchSlot.MapViewport -> beaconPollJob = job
+            DiscoveryFetchSlot.Discovery -> {
+                discoveryProximityJob?.cancel()
+                discoveryProximityJob = job
             }
         }
     }

@@ -145,6 +145,10 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSnackbarHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.dismissGlassSnackbar // pragma: allowlist secret
+import compose.project.click.click.ui.components.showGlassSnackbar // pragma: allowlist secret
+import androidx.compose.runtime.DisposableEffect
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
@@ -173,10 +177,8 @@ import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist s
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.LocationGapNudge // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
-import compose.project.click.click.ui.chat.connectionHasNoGeo // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -258,6 +260,7 @@ fun ConnectionsListView(
     onGroupMembersPicker: (List<User>) -> Unit = {},
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
+    isListObscured: Boolean = false,
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val decryptedPreviews by viewModel.decryptedPreviews.collectAsState()
@@ -451,13 +454,18 @@ fun ConnectionsListView(
         }
     }
 
-    // Show nudge feedback
+    DisposableEffect(Unit) {
+        onDispose { snackbarHostState.dismissGlassSnackbar() }
+    }
+    LaunchedEffect(isListObscured) {
+        if (isListObscured) snackbarHostState.dismissGlassSnackbar()
+    }
+
+    // Show nudge feedback (clear before show so returning to this tab does not replay).
     LaunchedEffect(nudgeResult) {
-        val result = nudgeResult
-        if (result != null) {
-            snackbarHostState.showSnackbar(result)
-            viewModel.clearNudgeResult()
-        }
+        val result = nudgeResult ?: return@LaunchedEffect
+        viewModel.clearNudgeResult()
+        snackbarHostState.showGlassSnackbar(result)
     }
 
     val activeCount = effectiveChats.count {
@@ -703,44 +711,26 @@ fun ConnectionsListView(
                                 filteredChats,
                                 key = { it.connection.id }
                             ) { chatDetails ->
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    ConnectionItem(
-                                        chatDetails = chatDetails,
-                                        viewerUserId = currentUserId,
-                                        isCore = chatDetails.connection.id in coreConnectionIds,
-                                        showOnlineIndicator = chatDetails.groupClique == null &&
-                                            chatDetails.otherUser.id in onlineUsers,
-                                        decryptedPreview = decryptedPreviews[chatDetails.connection.id],
-                                        onAvatarClick = {
-                                            if (chatDetails.groupClique == null) {
-                                                onUserProfileClick(chatDetails.otherUser.id)
-                                            }
-                                        },
-                                        onGroupMembersPicker = onGroupMembersPicker,
-                                        onClick = {
-                                            onChatSelected(
-                                                chatDetails.chat.id ?: chatDetails.connection.id,
-                                            )
-                                        },
-                                        onNudge = {
-                                            val chatId = chatDetails.chat.id
-                                            if (chatId != null) {
-                                                viewModel.sendNudgeToChat(chatId, chatDetails.otherUser.name ?: "them")
-                                            }
-                                        },
-                                        onOpenMenu = { pendingMenuChat = chatDetails },
-                                        onLongPress = { pendingMenuChat = chatDetails }
-                                    )
-                                    if (chatDetails.groupClique == null &&
-                                        connectionHasNoGeo(chatDetails.connection) &&
-                                        onNavigateToLocationSettings != null
-                                    ) {
-                                        LocationGapNudge(
-                                            otherName = chatDetails.otherUser.name ?: "them",
-                                            onClick = onNavigateToLocationSettings
+                                ConnectionItem(
+                                    chatDetails = chatDetails,
+                                    viewerUserId = currentUserId,
+                                    isCore = chatDetails.connection.id in coreConnectionIds,
+                                    showOnlineIndicator = chatDetails.groupClique == null &&
+                                        chatDetails.otherUser.id in onlineUsers,
+                                    decryptedPreview = decryptedPreviews[chatDetails.connection.id],
+                                    onAvatarClick = {
+                                        if (chatDetails.groupClique == null) {
+                                            onUserProfileClick(chatDetails.otherUser.id)
+                                        }
+                                    },
+                                    onGroupMembersPicker = onGroupMembersPicker,
+                                    onClick = {
+                                        onChatSelected(
+                                            chatDetails.chat.id ?: chatDetails.connection.id,
                                         )
-                                    }
-                                }
+                                    },
+                                    onLongPress = { pendingMenuChat = chatDetails },
+                                )
                             }
                         }
                     }
@@ -771,26 +761,38 @@ fun ConnectionsListView(
     }
     }
 
-    SnackbarHost(
-        hostState = snackbarHostState,
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = bottomChrome)
-    )
+    val showCreateClickFab = selectedTabIndex == 0 && currentUserId != null
 
-    if (selectedTabIndex == 0 && currentUserId != null) {
-        FloatingActionButton(
-            onClick = {
-                selectedCliqueFriendIds = emptySet()
-                cliqueSheetVisible = true
-            },
+    Row(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 20.dp, bottom = fabAboveNav),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = fabAboveNav),
-            containerColor = PrimaryBlue,
-            contentColor = Color.White,
+                .weight(1f)
+                .padding(end = if (showCreateClickFab) 12.dp else 0.dp),
         ) {
-            Icon(Icons.Filled.Groups, contentDescription = "Create verified click")
+            GlassSnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+        if (showCreateClickFab) {
+            FloatingActionButton(
+                onClick = {
+                    selectedCliqueFriendIds = emptySet()
+                    cliqueSheetVisible = true
+                },
+                modifier = Modifier.size(56.dp),
+                containerColor = PrimaryBlue,
+                contentColor = Color.White,
+            ) {
+                Icon(Icons.Filled.Groups, contentDescription = "Create verified click")
+            }
         }
     }
 
@@ -947,7 +949,7 @@ fun ConnectionsListView(
                                             selectedCliqueFriendIds = selectedCliqueFriendIds + friendId
                                         } else {
                                             listScope.launch {
-                                                snackbarHostState.showSnackbar(
+                                                snackbarHostState.showGlassSnackbar(
                                                     "That friend isn’t connected to everyone already selected.",
                                                 )
                                             }
@@ -1015,7 +1017,7 @@ fun ConnectionsListView(
                                 result.onSuccess {
                                     dismissVerifiedCliqueSheet {
                                         listScope.launch {
-                                            snackbarHostState.showSnackbar("Click created")
+                                            snackbarHostState.showGlassSnackbar("Click created")
                                         }
                                     }
                                 }
@@ -1027,7 +1029,7 @@ fun ConnectionsListView(
                                                 "You already have a verified click with this group."
                                             else -> raw.ifBlank { "Couldn’t create click" }
                                         }
-                                        snackbarHostState.showSnackbar(msg)
+                                        snackbarHostState.showGlassSnackbar(msg)
                                     }
                                 }
                             }

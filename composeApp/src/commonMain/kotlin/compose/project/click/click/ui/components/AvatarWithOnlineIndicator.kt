@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -156,6 +159,53 @@ fun ConnectionListUserAvatarFace(
                 onSuccess = { imageReady = true },
                 onError = { imageReady = false },
             )
+        }
+    }
+}
+
+private val CoreHaloPurple = Color(0xFF9D4EDD)
+private val CoreHaloGold = Color(0xFFE8B923)
+private val CoreHaloRingWidth = 2.5.dp
+
+/**
+ * Purple/gold ring for core connections (wraps a circular avatar).
+ */
+@Composable
+fun CoreConnectionAvatarFrame(
+    isCore: Boolean,
+    avatarSize: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val ringPad = if (isCore) CoreHaloRingWidth else 0.dp
+    val outerSize = avatarSize + ringPad * 2
+    Box(
+        modifier = modifier.size(outerSize),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isCore) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(CoreHaloPurple, CoreHaloGold, CoreHaloPurple),
+                            start = Offset(0f, 0f),
+                            end = Offset(outerSize.value * 4f, outerSize.value * 4f),
+                        ),
+                    ),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(avatarSize)
+                .clip(CircleShape)
+                .background(if (isCore) GlassSheetTokens.OledBlack else Color.Transparent)
+                .padding(if (isCore) 2.dp else 0.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
         }
     }
 }

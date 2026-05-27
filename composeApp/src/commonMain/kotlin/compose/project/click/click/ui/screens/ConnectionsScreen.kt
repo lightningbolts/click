@@ -201,6 +201,7 @@ fun ConnectionsScreen(
                     onGroupMembersPicker = { groupMemberPickerUsers = it },
                     verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
                     onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
+                    isListObscured = selectedChatId != null,
                 )
             }
 
@@ -303,6 +304,7 @@ fun ConnectionsScreen(
                     onGroupMembersPicker = { groupMemberPickerUsers = it },
                     verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
                     onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
+                    isListObscured = false,
                 )
             } else {
                 ChatView(

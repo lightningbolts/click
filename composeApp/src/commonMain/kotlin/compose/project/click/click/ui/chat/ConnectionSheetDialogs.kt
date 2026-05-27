@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 /**
@@ -54,12 +55,14 @@ internal fun ConnectionSheetDialogs(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onConfirmRemove(); onDismiss() }) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = { onConfirmRemove(); dismissAnimated() }) {
                         Text("Remove", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = dismissAnimated) {
                         Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 },
@@ -75,12 +78,14 @@ internal fun ConnectionSheetDialogs(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onConfirmBlock(); onDismiss() }) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = { onConfirmBlock(); dismissAnimated() }) {
                         Text("Block", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = dismissAnimated) {
                         Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 },
@@ -119,12 +124,13 @@ internal fun ConnectionSheetDialogs(
                     }
                 },
                 confirmButton = {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(
                         onClick = {
                             val trimmed = reportReason.trim()
                             if (trimmed.isNotBlank()) {
                                 onConfirmReport(trimmed)
-                                onDismiss()
+                                dismissAnimated()
                             }
                         },
                         enabled = reportReason.isNotBlank(),
@@ -133,7 +139,8 @@ internal fun ConnectionSheetDialogs(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = dismissAnimated) {
                         Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 },
@@ -145,12 +152,14 @@ internal fun ConnectionSheetDialogs(
                 title = { Text("Leave group?") },
                 text = { Text("You will lose access to this verified click and its messages.") },
                 confirmButton = {
-                    TextButton(onClick = { onConfirmLeaveGroup(); onDismiss() }) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = { onConfirmLeaveGroup(); dismissAnimated() }) {
                         Text("Leave", color = Color(0xFFFF4444))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = dismissAnimated) {
                         Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 },
@@ -164,12 +173,14 @@ internal fun ConnectionSheetDialogs(
                     Text("Permanently deletes this verified click for everyone. This cannot be undone.")
                 },
                 confirmButton = {
-                    TextButton(onClick = { onConfirmDeleteGroup(); onDismiss() }) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = { onConfirmDeleteGroup(); dismissAnimated() }) {
                         Text("Delete", color = Color(0xFFFF4444))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = dismissAnimated) {
                         Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                     }
                 },
