@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MessageReaction
@@ -51,6 +52,8 @@ internal fun ChatMessageTimeline(
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
     onDownloadAttachment: suspend (MessageWithUser, compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
+    interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
+    enableMessageContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val onToggleReactionState = rememberUpdatedState(onToggleReaction)
@@ -82,7 +85,7 @@ internal fun ChatMessageTimeline(
                         Modifier
                             .fillMaxWidth()
                             .padding(
-                                top = chatDeliveryReceiptGapBeforeTimeline(ChatInterMessageListBaseCompact),
+                                top = chatDeliveryReceiptGapBeforeTimeline(interMessageBaseCompact),
                                 end = 10.dp,
                             ),
                         contentAlignment = Alignment.CenterEnd,
@@ -104,7 +107,7 @@ internal fun ChatMessageTimeline(
                 val listGapTop = chatTimelineRowTopPadding(
                     index = index,
                     timelineEntries = timelineEntries,
-                    baseCompact = ChatInterMessageListBaseCompact,
+                    baseCompact = interMessageBaseCompact,
                 )
                 when (entry) {
                     is ChatTimelineEntry.DaySeparator -> {
@@ -144,6 +147,7 @@ internal fun ChatMessageTimeline(
                                         secureMediaHost = secureMediaHost,
                                         secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
                                         activeChatId = activeChatId,
+                                        enableMessageContextMenu = enableMessageContextMenu,
                                         onDownloadAttachment = { mwu, env ->
                                             onDownloadAttachmentState.value(mwu, env)
                                         },
