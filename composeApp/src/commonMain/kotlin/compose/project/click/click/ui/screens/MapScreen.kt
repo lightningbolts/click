@@ -114,17 +114,29 @@ fun MapScreen(
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
     val beaconDropFailureToast by viewModel.beaconDropFailureToast.collectAsState()
-    val communityHubs by viewModel.communityHubs.collectAsState()
-    val mapBeacons by viewModel.mapBeacons.collectAsState()
+    val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
+    val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val locationService = remember { LocationService() }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
+        viewModel.startDiscoveryProximityPolling()
         val loc = locationService.getCurrentLocation()
         userLat = loc?.latitude
         userLon = loc?.longitude
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(8_000L)
+            val loc = locationService.getCurrentLocation()
+            if (loc != null) {
+                userLat = loc.latitude
+                userLon = loc.longitude
+            }
+        }
     }
 
     LaunchedEffect(mapState) {
@@ -133,9 +145,10 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(initialBeaconId, mapBeacons) {
+    val rawMapBeacons by viewModel.mapBeacons.collectAsState()
+    LaunchedEffect(initialBeaconId, rawMapBeacons) {
         val beaconId = initialBeaconId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
-        if (mapBeacons.none { it.id == beaconId }) return@LaunchedEffect
+        if (rawMapBeacons.none { it.id == beaconId }) return@LaunchedEffect
         viewModel.onBeaconPinTapped(beaconId)
         onBeaconFocusConsumed()
     }

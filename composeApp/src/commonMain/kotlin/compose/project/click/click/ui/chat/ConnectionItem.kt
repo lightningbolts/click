@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
@@ -81,6 +82,7 @@ import kotlinx.coroutines.withContext
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
     viewerUserId: String? = null,
+    isCore: Boolean = false,
     showOnlineIndicator: Boolean = false,
     decryptedPreview: String? = null,
     onAvatarClick: () -> Unit = {},
@@ -265,6 +267,15 @@ fun ConnectionItem(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (isCore) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            Icons.Filled.Star,
+                            contentDescription = "Core connection",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                     if (!isGroup && hasIntentOverlap) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(

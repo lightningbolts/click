@@ -18,6 +18,7 @@ import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -651,6 +652,43 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                 contentType(ContentType.Application.Json)
                 setBody(ConnectionLifecyclePostBody(connectionId = id))
             }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/core` — per-user core pin (`connection_core`). */
+    suspend fun postConnectionCore(connectionId: String): Result<Unit> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/core") {
+                contentType(ContentType.Application.Json)
+                setBody(ConnectionLifecyclePostBody(connectionId = id))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** DELETE `/api/connections/core?connection_id=` — remove from core list. */
+    suspend fun deleteConnectionCore(connectionId: String): Result<Unit> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
+        return try {
+            val response = clickWebClient.delete(
+                "$clickWebAuthOrigin/api/connections/core?connection_id=$id",
+            )
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {

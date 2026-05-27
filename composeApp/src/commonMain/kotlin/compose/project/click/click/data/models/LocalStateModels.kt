@@ -52,6 +52,7 @@ data class CachedAppSnapshot(
     val locationPreferences: LocationPreferences = LocationPreferences(),
     val archivedConnectionIds: Set<String> = emptySet(),
     val hiddenConnectionIds: Set<String> = emptySet(),
+    val coreConnectionIds: Set<String> = emptySet(),
     val cachedChatThreads: List<CachedChatThread> = emptyList(),
     /** Hydrated user profiles restored on cold start so profile sheets can open without a network wait. */
     val cachedUserPublicProfiles: List<UserPublicProfile> = emptyList(),

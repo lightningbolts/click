@@ -183,6 +183,9 @@ import compose.project.click.click.ui.chat.connectionHasNoGeo // pragma: allowli
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
@@ -309,6 +312,7 @@ fun ChatView(
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
+    val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
     val edgeBottomInset = rememberEdgeToEdgeBottomPadding()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
@@ -1319,6 +1323,9 @@ fun ChatView(
         )
     }
 
+    var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
+    var dialogGroupId by remember { mutableStateOf<String?>(null) }
+
     // Connection action sheet
     if (showConnectionSheet) {
         val successState = chatMessagesState as? ChatMessagesState.Success
@@ -1328,43 +1335,79 @@ fun ChatView(
             currentUserId = currentUserId,
             isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
             isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
+            isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
             onDismiss = { showConnectionSheet = false },
-            onNudge = {
-                viewModel.sendNudge()
-            },
-            onOpenChat = { },
-            onArchive = {
-                viewModel.archiveConnection { success ->
-                    if (success) onBackPressed()
+            onMenuAction = { action ->
+                val details = successState?.chatDetails
+                val connId = sheetConn?.id
+                when (action) {
+                    ConnectionMenuAction.Nudge -> viewModel.sendNudge()
+                    ConnectionMenuAction.Archive -> {
+                        viewModel.archiveConnection { success ->
+                            if (success) onBackPressed()
+                        }
+                    }
+                    ConnectionMenuAction.Unarchive -> {
+                        if (connId != null) viewModel.unarchiveConnection(connId)
+                    }
+                    ConnectionMenuAction.AddToCore -> {
+                        if (connId != null) viewModel.addConnectionToCore(connId)
+                    }
+                    ConnectionMenuAction.RemoveFromCore -> {
+                        if (connId != null) viewModel.removeConnectionFromCore(connId)
+                    }
+                    ConnectionMenuAction.RequestRemove -> {
+                        pendingConnectionDialog = ConnectionSheetDialog.Remove
+                    }
+                    ConnectionMenuAction.RequestReport -> {
+                        pendingConnectionDialog = ConnectionSheetDialog.Report()
+                    }
+                    ConnectionMenuAction.RequestBlock -> {
+                        pendingConnectionDialog = ConnectionSheetDialog.Block
+                    }
+                    ConnectionMenuAction.RequestLeaveGroup -> {
+                        dialogGroupId = details?.groupClique?.groupId
+                        pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
+                    }
+                    ConnectionMenuAction.RequestDeleteGroup -> {
+                        dialogGroupId = details?.groupClique?.groupId
+                        pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
+                    }
                 }
-            },
-            onUnarchive = {
-                val connId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.connection?.id
-                if (connId != null) viewModel.unarchiveConnection(connId)
-            },
-            onDelete = {
-                viewModel.deleteConnectionPermanently { success ->
-                    if (success) onBackPressed()
-                }
-            },
-            onReport = { reason ->
-                viewModel.reportConnection(reason) { }
-            },
-            onBlock = {
-                viewModel.blockUser { success ->
-                    if (success) onBackPressed()
-                }
-            },
-            onLeaveGroup = {
-                val gid = successState?.chatDetails?.groupClique?.groupId ?: return@ConnectionActionSheet
-                viewModel.leaveVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
-            },
-            onDeleteGroup = {
-                val gid = successState?.chatDetails?.groupClique?.groupId ?: return@ConnectionActionSheet
-                viewModel.deleteVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
             },
         )
     }
+
+    ConnectionSheetDialogs(
+        dialog = pendingConnectionDialog,
+        onDismiss = {
+            pendingConnectionDialog = null
+            dialogGroupId = null
+        },
+        onConfirmRemove = {
+            viewModel.deleteConnectionPermanently { success ->
+                if (success) onBackPressed()
+            }
+        },
+        onConfirmBlock = {
+            viewModel.blockUser { success ->
+                if (success) onBackPressed()
+            }
+        },
+        onConfirmReport = { reason ->
+            viewModel.reportConnection(reason) { }
+        },
+        onConfirmLeaveGroup = {
+            dialogGroupId?.let { gid ->
+                viewModel.leaveVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
+            }
+        },
+        onConfirmDeleteGroup = {
+            dialogGroupId?.let { gid ->
+                viewModel.deleteVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
+            }
+        },
+    )
 
     if (showRenameGroupDialog) {
         val gid = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId

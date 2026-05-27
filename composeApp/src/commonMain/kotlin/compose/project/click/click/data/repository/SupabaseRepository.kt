@@ -57,6 +57,7 @@ data class UserConnectionsSnapshot(
     val connections: List<Connection>,
     val archivedConnectionIds: Set<String>,
     val hiddenConnectionIds: Set<String>,
+    val coreConnectionIds: Set<String> = emptySet(),
 )
 
 /**
@@ -404,11 +405,12 @@ class SupabaseRepository {
      */
     suspend fun fetchUserConnectionsSnapshot(userId: String): UserConnectionsSnapshot {
         if (userId.isBlank()) {
-            return UserConnectionsSnapshot(emptyList(), emptySet(), emptySet())
+            return UserConnectionsSnapshot(emptyList(), emptySet(), emptySet(), emptySet())
         }
         sweepStaleConnectionsForUser(userId)
         val archivedIds = getArchivedConnectionIds(userId)
         val hiddenIds = getHiddenConnectionIds(userId)
+        val coreIds = getCoreConnectionIds(userId)
         val blockedByUserIds = getBlockedByUserIds(userId)
         val excludedForActive = archivedIds + hiddenIds
         val activeRows = fetchActiveChannelConnections(userId, excludedForActive)
@@ -424,7 +426,7 @@ class SupabaseRepository {
                 else conn.user_ids.none { it != userId && it in blockedByUserIds }
             }
             .sortedByDescending { it.created }
-        return UserConnectionsSnapshot(merged, archivedIds, hiddenIds)
+        return UserConnectionsSnapshot(merged, archivedIds, hiddenIds, coreIds)
     }
 
     private suspend fun sweepStaleConnectionsForUser(userId: String) {
@@ -1450,6 +1452,60 @@ class SupabaseRepository {
             }
             emptySet()
         }
+    }
+
+    /**
+     * Connection IDs the user has marked as core ([connection_core]).
+     */
+    suspend fun getCoreConnectionIds(userId: String): Set<String> {
+        if (userId.isBlank()) return emptySet()
+        return try {
+            @Serializable
+            data class CoreRow(
+                @SerialName("connection_id") val connectionId: String,
+            )
+            val rows = supabase.from("connection_core")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
+                    filter { eq("user_id", userId) }
+                }
+                .decodeList<CoreRow>()
+            rows.map { it.connectionId }.toSet()
+        } catch (e: Exception) {
+            if (!isConnectionCoreUnavailableError(e)) {
+                println("getCoreConnectionIds (non-fatal, redacted): ${e.redactedRestMessage()}")
+            }
+            emptySet()
+        }
+    }
+
+    suspend fun addConnectionToCore(userId: String, connectionId: String): Boolean {
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) return false
+        return try {
+            val result = clickWebApi.postConnectionCore(connectionId.trim())
+            result.isSuccess
+        } catch (e: Exception) {
+            println("addConnectionToCore (non-fatal, redacted): ${e.redactedRestMessage()}")
+            false
+        }
+    }
+
+    suspend fun removeConnectionFromCore(userId: String, connectionId: String): Boolean {
+        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        if (sessionUid == null || sessionUid != userId.trim()) return false
+        return try {
+            val result = clickWebApi.deleteConnectionCore(connectionId.trim())
+            result.isSuccess
+        } catch (e: Exception) {
+            println("removeConnectionFromCore (non-fatal, redacted): ${e.redactedRestMessage()}")
+            false
+        }
+    }
+
+    private fun isConnectionCoreUnavailableError(e: Throwable): Boolean {
+        val msg = e.message.orEmpty()
+        return msg.contains("connection_core", ignoreCase = true) &&
+            (msg.contains("schema cache", ignoreCase = true) || msg.contains("does not exist", ignoreCase = true))
     }
 
     /**

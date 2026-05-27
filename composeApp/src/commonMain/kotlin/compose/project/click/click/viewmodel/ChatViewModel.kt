@@ -3081,6 +3081,26 @@ class ChatViewModel(
         }
     }
 
+    fun addConnectionToCore(connectionId: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            AppDataManager.markConnectionCoreLocally(connectionId)
+            supabaseRepository.addConnectionToCore(userId, connectionId)
+            loadChats(isForced = true)
+            _nudgeResult.value = "Added to Core"
+        }
+    }
+
+    fun removeConnectionFromCore(connectionId: String) {
+        val userId = _currentUserId.value ?: return
+        viewModelScope.launch {
+            AppDataManager.markConnectionNotCoreLocally(connectionId)
+            supabaseRepository.removeConnectionFromCore(userId, connectionId)
+            loadChats(isForced = true)
+            _nudgeResult.value = "Removed from Core"
+        }
+    }
+
     /**
      * Soft-remove the current connection (server `status = removed`; row retained).
      */

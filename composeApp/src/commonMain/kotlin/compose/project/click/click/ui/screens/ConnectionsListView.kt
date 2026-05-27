@@ -180,6 +180,9 @@ import compose.project.click.click.ui.chat.connectionHasNoGeo // pragma: allowli
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTimelineEntry // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
@@ -260,6 +263,7 @@ fun ConnectionsListView(
     val decryptedPreviews by viewModel.decryptedPreviews.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val hiddenConnectionIds by viewModel.hiddenConnectionIds.collectAsState()
+    val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val activeHubs by AppDataManager.activeHubs.collectAsState()
@@ -587,7 +591,11 @@ fun ConnectionsListView(
                     else -> archivedChats
                 }
 
-                val sortedTabChats = tabChats.sortedByDescending { connectionListActivityTs(it) }
+                val sortedTabChats = tabChats
+                    .sortedWith(
+                        compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
+                            .thenByDescending { connectionListActivityTs(it) },
+                    )
                 val filteredChats = if (searchQuery.isBlank()) {
                     sortedTabChats
                 } else {
@@ -699,6 +707,7 @@ fun ConnectionsListView(
                                     ConnectionItem(
                                         chatDetails = chatDetails,
                                         viewerUserId = currentUserId,
+                                        isCore = chatDetails.connection.id in coreConnectionIds,
                                         showOnlineIndicator = chatDetails.groupClique == null &&
                                             chatDetails.otherUser.id in onlineUsers,
                                         decryptedPreview = decryptedPreviews[chatDetails.connection.id],
@@ -1033,6 +1042,10 @@ fun ConnectionsListView(
         }
     }
 
+    var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
+    var dialogConnectionId by remember { mutableStateOf<String?>(null) }
+    var dialogGroupId by remember { mutableStateOf<String?>(null) }
+
     // Connection action sheet
     if (pendingMenuChat != null) {
         val selected = pendingMenuChat!!
@@ -1043,50 +1056,84 @@ fun ConnectionsListView(
             currentUserId = currentUserId,
             isArchived = isUserArchived,
             isServerLifecycleArchived = isServerArchived,
+            isCore = selected.connection.id in coreConnectionIds,
             onDismiss = { pendingMenuChat = null },
-            onNudge = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                val chatId = sel.chat.id
-                if (chatId != null) {
-                    viewModel.sendNudgeToChat(chatId, sel.otherUser.name ?: "them")
+            onMenuAction = { action ->
+                val connId = selected.connection.id
+                when (action) {
+                    ConnectionMenuAction.Nudge -> {
+                        val chatId = selected.chat.id
+                        if (chatId != null) {
+                            viewModel.sendNudgeToChat(chatId, selected.otherUser.name ?: "them")
+                        }
+                    }
+                    ConnectionMenuAction.Archive -> {
+                        viewModel.archiveConnectionById(connId) { }
+                    }
+                    ConnectionMenuAction.Unarchive -> {
+                        viewModel.unarchiveConnection(connId)
+                    }
+                    ConnectionMenuAction.AddToCore -> {
+                        viewModel.addConnectionToCore(connId)
+                    }
+                    ConnectionMenuAction.RemoveFromCore -> {
+                        viewModel.removeConnectionFromCore(connId)
+                    }
+                    ConnectionMenuAction.RequestRemove -> {
+                        dialogConnectionId = connId
+                        pendingConnectionDialog = ConnectionSheetDialog.Remove
+                    }
+                    ConnectionMenuAction.RequestReport -> {
+                        dialogConnectionId = connId
+                        pendingConnectionDialog = ConnectionSheetDialog.Report()
+                    }
+                    ConnectionMenuAction.RequestBlock -> {
+                        dialogConnectionId = connId
+                        pendingConnectionDialog = ConnectionSheetDialog.Block
+                    }
+                    ConnectionMenuAction.RequestLeaveGroup -> {
+                        dialogGroupId = selected.groupClique?.groupId
+                        pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
+                    }
+                    ConnectionMenuAction.RequestDeleteGroup -> {
+                        dialogGroupId = selected.groupClique?.groupId
+                        pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
+                    }
                 }
-            },
-            onOpenChat = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                onChatSelected(sel.chat.id ?: sel.connection.id)
-            },
-            onArchive = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.archiveConnectionById(sel.connection.id) { }
-            },
-            onUnarchive = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.unarchiveConnection(sel.connection.id)
-            },
-            onDelete = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.deleteConnectionPermanentlyById(sel.connection.id) { }
-            },
-            onReport = { reason ->
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.reportConnectionForConnection(sel.connection.id, reason) { }
-            },
-            onBlock = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                viewModel.blockUserForConnection(sel.connection.id) { }
-            },
-            onLeaveGroup = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                val gid = sel.groupClique?.groupId ?: return@ConnectionActionSheet
-                viewModel.leaveVerifiedClique(gid) { ok -> if (ok) pendingMenuChat = null }
-            },
-            onDeleteGroup = {
-                val sel = pendingMenuChat ?: return@ConnectionActionSheet
-                val gid = sel.groupClique?.groupId ?: return@ConnectionActionSheet
-                viewModel.deleteVerifiedClique(gid) { ok -> if (ok) pendingMenuChat = null }
             },
         )
     }
+
+    val dialogConnId = dialogConnectionId
+    ConnectionSheetDialogs(
+        dialog = pendingConnectionDialog,
+        onDismiss = {
+            pendingConnectionDialog = null
+            dialogConnectionId = null
+            dialogGroupId = null
+        },
+        onConfirmRemove = {
+            if (dialogConnId != null) {
+                viewModel.deleteConnectionPermanentlyById(dialogConnId) { }
+            }
+        },
+        onConfirmBlock = {
+            if (dialogConnId != null) {
+                viewModel.blockUserForConnection(dialogConnId) { }
+            }
+        },
+        onConfirmReport = { reason ->
+            if (dialogConnId != null) {
+                viewModel.reportConnectionForConnection(dialogConnId, reason) { }
+            }
+        },
+        onConfirmLeaveGroup = {
+            dialogGroupId?.let { viewModel.leaveVerifiedClique(it) { } }
+        },
+        onConfirmDeleteGroup = {
+            dialogGroupId?.let { viewModel.deleteVerifiedClique(it) { } }
+        },
+    )
 
     if (pendingHubMenu != null) {
         HubActionSheet(

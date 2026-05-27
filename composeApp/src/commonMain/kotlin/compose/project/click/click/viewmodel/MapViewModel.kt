@@ -136,6 +136,27 @@ class MapViewModel : ViewModel() {
     private val _communityHubs = MutableStateFlow<List<CommunityHubPin>>(emptyList())
     val communityHubs: StateFlow<List<CommunityHubPin>> = _communityHubs.asStateFlow()
 
+    /** Layer-filtered beacons for the discovery feed (matches map chip filters). */
+    val discoveryFeedBeacons: StateFlow<List<MapBeacon>> = combine(_mapBeacons, _selectedLayerFilters) { beacons, layers ->
+        filterBeaconsForLayers(beacons, layers)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList(),
+    )
+
+    val discoveryFeedHubs: StateFlow<List<CommunityHubPin>> = combine(_communityHubs, _selectedLayerFilters) { hubs, layers ->
+        if (layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)) {
+            hubs
+        } else {
+            emptyList()
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList(),
+    )
+
     private val mapBeaconRepository = MapBeaconRepository()
 
     private val _beaconInsertError = MutableStateFlow<String?>(null)
@@ -146,6 +167,7 @@ class MapViewModel : ViewModel() {
     val beaconDropFailureToast: StateFlow<String?> = _beaconDropFailureToast.asStateFlow()
 
     private var beaconPollJob: Job? = null
+    private var discoveryPollJob: Job? = null
     private var beaconFetchSeq: Long = 0L
 
     private val locationService = LocationService()
@@ -213,6 +235,7 @@ class MapViewModel : ViewModel() {
                 AppDataManager.connectedUsers,
                 AppDataManager.archivedConnectionIds,
                 AppDataManager.hiddenConnectionIds,
+                AppDataManager.coreConnectionIds,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
                 AppDataManager.locationPreferences,
@@ -223,29 +246,34 @@ class MapViewModel : ViewModel() {
                 val connectedUsers = values[1] as Map<String, User>
                 val archivedIds = values[2] as Set<String>
                 val hiddenIds = values[3] as Set<String>
-                val isDataLoaded = values[4] as Boolean
-                val isLoading = values[5] as Boolean
-                val locationPrefs = values[6] as LocationPreferences
-                val zoom = values[7] as Double
-                Octuple(
+                val coreIds = values[4] as Set<String>
+                val isDataLoaded = values[5] as Boolean
+                val isLoading = values[6] as Boolean
+                val locationPrefs = values[7] as LocationPreferences
+                val zoom = values[8] as Double
+                Nonuple(
                     connections,
                     connectedUsers,
                     archivedIds,
                     hiddenIds,
+                    coreIds,
                     isDataLoaded,
                     isLoading,
                     locationPrefs,
                     zoom,
                 )
-            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, locationPrefs, zoom) ->
+            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, coreIds, isDataLoaded, isLoading, locationPrefs, zoom) ->
                 when {
                     // `archivedIds` is read so archive/unarchive recomputes the map when the connections list is unchanged.
                     isDataLoaded && (archivedIds.isNotEmpty() || archivedIds.isEmpty()) -> {
                         // Memory map: show full history (incl. per-user archived) but never removed/hidden rows.
                         val mapConnections = connections.filter { it.id !in hiddenIds }
                         _mapState.value = MapState.Success(mapConnections)
-                        val mapVisibleConnections =
-                            if (locationPrefs.showOnMapEnabled) mapConnections else emptyList()
+                        val mapVisibleConnections = if (locationPrefs.showOnMapEnabled) {
+                            mapConnections
+                        } else {
+                            mapConnections.filter { it.id in coreIds }
+                        }
                         ensureDefaultCameraTarget(mapVisibleConnections)
                         updateRenderData(mapVisibleConnections, zoomForClusteringRender(zoom))
                         refreshSelectedConnectionUser(connectedUsers)
@@ -266,18 +294,23 @@ class MapViewModel : ViewModel() {
                     _mapState,
                     AppDataManager.locationPreferences,
                     AppDataManager.hiddenConnectionIds,
+                    AppDataManager.coreConnectionIds,
                     _zoomLevel,
-                ) { state, prefs, hidden, zoom ->
-                    Quadruple(state, prefs, hidden, zoom)
+                ) { state, prefs, hidden, coreIds, zoom ->
+                    Quintuple(state, prefs, hidden, coreIds, zoom)
                 },
                 _mapBeacons,
                 _selectedLayerFilters,
             ) { base, _, _ ->
                 base
-            }.collectLatest { (state, prefs, hidden, zoom) ->
+            }.collectLatest { (state, prefs, hidden, coreIds, zoom) ->
                 if (state !is MapState.Success) return@collectLatest
                 val mapVisible = state.connections.filter { it.id !in hidden }
-                val visible = if (prefs.showOnMapEnabled) mapVisible else emptyList()
+                val visible = if (prefs.showOnMapEnabled) {
+                    mapVisible
+                } else {
+                    mapVisible.filter { it.id in coreIds }
+                }
                 updateRenderData(visible, zoomForClusteringRender(zoom))
             }
         }
@@ -463,7 +496,7 @@ class MapViewModel : ViewModel() {
             }
         }
         _selectedLayerFilters.value = cur.toSet()
-        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it) }
+        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
     }
 
     fun clearBeaconInsertError() {
@@ -714,7 +747,26 @@ class MapViewModel : ViewModel() {
                 maxLon = bounds.maxLon,
                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
             )
-            result.onSuccess { list -> _mapBeacons.value = list }
+            result.onSuccess { list ->
+                _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
+            }
+        }
+    }
+
+    /** Keeps optimistically dropped pins until the server echoes them; unions fetches by id. */
+    private fun mergeBeaconLists(existing: List<MapBeacon>, incoming: List<MapBeacon>): List<MapBeacon> {
+        if (incoming.isEmpty() && existing.isNotEmpty()) return existing
+        val byId = LinkedHashMap<String, MapBeacon>()
+        for (b in existing) {
+            byId[b.id] = b
+        }
+        for (b in incoming) {
+            byId[b.id] = b
+        }
+        val now = Clock.System.now().toEpochMilliseconds()
+        return byId.values.filter { b ->
+            val exp = b.expiresAtEpochMs
+            exp == null || exp > now
         }
     }
 
@@ -983,6 +1035,17 @@ class MapViewModel : ViewModel() {
             estimateVisibleBounds()
         }
         _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
+    }
+
+    /** Re-fetch hubs/beacons on an interval so the discovery feed stays populated without map bounds. */
+    fun startDiscoveryProximityPolling() {
+        discoveryPollJob?.cancel()
+        discoveryPollJob = viewModelScope.launch {
+            while (true) {
+                prefetchDiscoveryProximityData()
+                delay(45_000L)
+            }
+        }
     }
 
     /**

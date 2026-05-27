@@ -10,50 +10,49 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Unarchive
-import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import kotlinx.coroutines.launch
 
 /**
- * Bottom sheet for connection-level actions (nudge, archive, remove,
- * report, block; group-specific: leave, delete). Used both from the
- * Connections-list overflow menu and from within an open chat. All
- * actions are full callbacks so this composable stays
- * ViewModel-agnostic.
- *
- * Every destructive primary option funnels through a second
- * "openFinalConfirm" dialog before invoking its callback.
- *
- * Extracted verbatim from ConnectionsScreen.kt; no behavior change.
+ * Menu actions emitted before [onDismiss] so the parent can show confirm dialogs
+ * after the sheet has animated away.
+ */
+internal sealed class ConnectionMenuAction {
+    data object Nudge : ConnectionMenuAction()
+    data object Archive : ConnectionMenuAction()
+    data object Unarchive : ConnectionMenuAction()
+    data object AddToCore : ConnectionMenuAction()
+    data object RemoveFromCore : ConnectionMenuAction()
+    data object RequestRemove : ConnectionMenuAction()
+    data object RequestReport : ConnectionMenuAction()
+    data object RequestBlock : ConnectionMenuAction()
+    data object RequestLeaveGroup : ConnectionMenuAction()
+    data object RequestDeleteGroup : ConnectionMenuAction()
+}
+
+/**
+ * Bottom sheet for connection-level actions. Confirm dialogs are owned by the parent
+ * ([ConnectionSheetDialogs]) so the sheet scrim never blocks them.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,52 +61,17 @@ internal fun ConnectionActionSheet(
     currentUserId: String?,
     isArchived: Boolean = false,
     isServerLifecycleArchived: Boolean = false,
+    isCore: Boolean = false,
     onDismiss: () -> Unit,
-    onNudge: () -> Unit = {},
-    onOpenChat: () -> Unit = {},
-    onArchive: () -> Unit = {},
-    onUnarchive: () -> Unit = {},
-    onDelete: () -> Unit = {},
-    onReport: (String) -> Unit = {},
-    onBlock: () -> Unit = {},
-    onLeaveGroup: () -> Unit = {},
-    onDeleteGroup: () -> Unit = {},
+    onMenuAction: (ConnectionMenuAction) -> Unit,
 ) {
-    @Suppress("UNUSED_PARAMETER") val unusedOpenChat = onOpenChat
-    val scope = rememberCoroutineScope()
     val isGroup = chatDetails?.groupClique != null
     val uid = currentUserId.orEmpty()
     val isGroupCreator = isGroup && uid.isNotBlank() && chatDetails?.groupClique?.createdByUserId == uid
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var showBlockConfirm by remember { mutableStateOf(false) }
-    var showArchiveConfirm by remember { mutableStateOf(false) }
-    var showUnarchiveConfirm by remember { mutableStateOf(false) }
-    var showReportDialog by remember { mutableStateOf(false) }
-    var reportReason by remember { mutableStateOf("") }
-    var showFinalConfirm by remember { mutableStateOf(false) }
-    var finalConfirmTitle by remember { mutableStateOf("") }
-    var finalConfirmBody by remember { mutableStateOf("") }
-    var finalConfirmButtonLabel by remember { mutableStateOf("") }
-    var finalConfirmButtonColor by remember { mutableStateOf(PrimaryBlue) }
-    var finalConfirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    fun dismiss() {
+    fun pick(action: ConnectionMenuAction) {
+        onMenuAction(action)
         onDismiss()
-    }
-
-    fun openFinalConfirm(
-        title: String,
-        body: String,
-        buttonLabel: String,
-        buttonColor: Color,
-        action: () -> Unit,
-    ) {
-        finalConfirmTitle = title
-        finalConfirmBody = body
-        finalConfirmButtonLabel = buttonLabel
-        finalConfirmButtonColor = buttonColor
-        finalConfirmAction = action
-        showFinalConfirm = true
     }
 
     ClickActionBottomSheet(
@@ -143,10 +107,7 @@ internal fun ConnectionActionSheet(
                     title = "Nudge",
                     subtitle = "Send a quick ping",
                     cornerRadius = GlassSheetTokens.BentoExteriorCorner,
-                    onClick = {
-                        onNudge()
-                        dismiss()
-                    },
+                    onClick = { pick(ConnectionMenuAction.Nudge) },
                     leading = {
                         Icon(
                             Icons.Outlined.NotificationsActive,
@@ -156,6 +117,34 @@ internal fun ConnectionActionSheet(
                     },
                 )
 
+                if (isCore) {
+                    BentoGlassOptionRow(
+                        title = "Remove from Core",
+                        subtitle = "Unpin from your core connections",
+                        onClick = { pick(ConnectionMenuAction.RemoveFromCore) },
+                        leading = {
+                            Icon(
+                                Icons.Default.StarBorder,
+                                contentDescription = null,
+                                tint = GlassSheetTokens.OnOledMuted,
+                            )
+                        },
+                    )
+                } else {
+                    BentoGlassOptionRow(
+                        title = "Add to Core",
+                        subtitle = "Pin to the top and unlock core-only features",
+                        onClick = { pick(ConnectionMenuAction.AddToCore) },
+                        leading = {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = null,
+                                tint = PrimaryBlue,
+                            )
+                        },
+                    )
+                }
+
                 if (isArchived) {
                     BentoGlassOptionRow(
                         title = "Unarchive",
@@ -164,7 +153,7 @@ internal fun ConnectionActionSheet(
                         } else {
                             "Move this connection back to Active"
                         },
-                        onClick = { showUnarchiveConfirm = true },
+                        onClick = { pick(ConnectionMenuAction.Unarchive) },
                         leading = {
                             Icon(
                                 Icons.Default.Unarchive,
@@ -177,7 +166,7 @@ internal fun ConnectionActionSheet(
                     BentoGlassOptionRow(
                         title = "Archive",
                         subtitle = "Hide this connection (recoverable)",
-                        onClick = { showArchiveConfirm = true },
+                        onClick = { pick(ConnectionMenuAction.Archive) },
                         leading = {
                             Icon(
                                 Icons.Default.Archive,
@@ -197,7 +186,7 @@ internal fun ConnectionActionSheet(
                     showBorder = false,
                     title = "Remove Connection",
                     subtitle = "Permanently remove this chat",
-                    onClick = { showDeleteConfirm = true },
+                    onClick = { pick(ConnectionMenuAction.RequestRemove) },
                     destructive = true,
                     leading = {
                         Icon(
@@ -212,10 +201,7 @@ internal fun ConnectionActionSheet(
                     showBorder = false,
                     title = "Report",
                     subtitle = "Flag for review",
-                    onClick = {
-                        reportReason = ""
-                        showReportDialog = true
-                    },
+                    onClick = { pick(ConnectionMenuAction.RequestReport) },
                     titleColor = Color(0xFFFF8C00),
                     leading = {
                         Icon(
@@ -230,7 +216,7 @@ internal fun ConnectionActionSheet(
                     showBorder = false,
                     title = "Block",
                     subtitle = "They can no longer reach you",
-                    onClick = { showBlockConfirm = true },
+                    onClick = { pick(ConnectionMenuAction.RequestBlock) },
                     destructive = true,
                     leading = {
                         Icon(
@@ -245,17 +231,7 @@ internal fun ConnectionActionSheet(
                     showBorder = false,
                     title = "Leave Group",
                     subtitle = "Lose access to this verified click",
-                    onClick = {
-                        openFinalConfirm(
-                            title = "Leave group?",
-                            body = "You will lose access to this verified click and its messages.",
-                            buttonLabel = "Leave",
-                            buttonColor = Color(0xFFFF4444),
-                        ) {
-                            onLeaveGroup()
-                            dismiss()
-                        }
-                    },
+                    onClick = { pick(ConnectionMenuAction.RequestLeaveGroup) },
                     leading = {
                         Icon(
                             Icons.AutoMirrored.Filled.Logout,
@@ -269,17 +245,7 @@ internal fun ConnectionActionSheet(
                         showBorder = false,
                         title = "Delete Group",
                         subtitle = "Remove for everyone",
-                        onClick = {
-                            openFinalConfirm(
-                                title = "Delete group?",
-                                body = "Permanently deletes this verified click for everyone. This cannot be undone.",
-                                buttonLabel = "Delete",
-                                buttonColor = Color(0xFFFF4444),
-                            ) {
-                                onDeleteGroup()
-                                dismiss()
-                            }
-                        },
+                        onClick = { pick(ConnectionMenuAction.RequestDeleteGroup) },
                         destructive = true,
                         leading = {
                             Icon(
@@ -298,228 +264,5 @@ internal fun ConnectionActionSheet(
                     .fillMaxWidth(),
             )
         }
-    }
-
-    if (showUnarchiveConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = { showUnarchiveConfirm = false },
-            title = { Text("Unarchive Connection?") },
-            text = { Text("This connection will return to your Active list.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showUnarchiveConfirm = false
-                        openFinalConfirm(
-                            title = "Confirm Unarchive",
-                            body = "Move this connection back to Active now?",
-                            buttonLabel = "Yes, Unarchive",
-                            buttonColor = PrimaryBlue,
-                        ) {
-                            onUnarchive()
-                        }
-                    },
-                ) {
-                    Text("Unarchive", color = GlassSheetTokens.OnOled)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnarchiveConfirm = false }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
-    }
-
-    if (showArchiveConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = { showArchiveConfirm = false },
-            title = { Text("Archive Connection?") },
-            text = { Text("This connection will be hidden from your list. You can recover it later.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showArchiveConfirm = false
-                        openFinalConfirm(
-                            title = "Confirm Archive",
-                            body = "Archive this connection now? You can unarchive it later.",
-                            buttonLabel = "Yes, Archive",
-                            buttonColor = PrimaryBlue,
-                        ) {
-                            onArchive()
-                        }
-                    },
-                ) {
-                    Text("Archive", color = GlassSheetTokens.OnOled)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showArchiveConfirm = false }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
-    }
-
-    if (showBlockConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = { showBlockConfirm = false },
-            title = { Text("Block User?") },
-            text = {
-                Text("They won't be able to contact you and this connection will be removed. This cannot be undone.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showBlockConfirm = false
-                        openFinalConfirm(
-                            title = "Confirm Block",
-                            body = "Block this user and remove this connection? This cannot be undone.",
-                            buttonLabel = "Yes, Block",
-                            buttonColor = Color(0xFFFF4444),
-                        ) {
-                            onBlock()
-                        }
-                    },
-                ) {
-                    Text("Block", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBlockConfirm = false }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
-    }
-
-    if (showDeleteConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Remove Connection?") },
-            text = {
-                Text("This will permanently remove this connection and all messages. This cannot be undone.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        openFinalConfirm(
-                            title = "Confirm Remove",
-                            body = "Permanently remove this connection and all messages? This cannot be undone.",
-                            buttonLabel = "Yes, Remove",
-                            buttonColor = Color(0xFFFF4444),
-                        ) {
-                            onDelete()
-                        }
-                    },
-                ) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
-    }
-
-    if (showReportDialog) {
-        GlassAlertDialog(
-            onDismissRequest = {
-                reportReason = ""
-                showReportDialog = false
-            },
-            title = { Text("Report User") },
-            text = {
-                Column {
-                    Text(
-                        "Please describe the issue:",
-                        color = GlassSheetTokens.OnOledMuted,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                    OutlinedTextField(
-                        value = reportReason,
-                        onValueChange = { reportReason = it },
-                        placeholder = {
-                            Text(
-                                "Reason for report...",
-                                color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
-                            )
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
-                            cursorColor = PrimaryBlue,
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (reportReason.isNotBlank()) {
-                            val reasonToSubmit = reportReason.trim()
-                            reportReason = ""
-                            showReportDialog = false
-                            openFinalConfirm(
-                                title = "Confirm Report",
-                                body = "Submit this report for review?",
-                                buttonLabel = "Yes, Report",
-                                buttonColor = Color(0xFFFF8C00),
-                            ) {
-                                onReport(reasonToSubmit)
-                            }
-                        }
-                    },
-                ) {
-                    Text("Submit", color = Color(0xFFFF8C00))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    reportReason = ""
-                    showReportDialog = false
-                }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
-    }
-
-    if (showFinalConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = {
-                showFinalConfirm = false
-                finalConfirmAction = null
-            },
-            title = { Text(finalConfirmTitle) },
-            text = { Text(finalConfirmBody) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        finalConfirmAction?.invoke()
-                        showFinalConfirm = false
-                        finalConfirmAction = null
-                        dismiss()
-                    },
-                ) {
-                    Text(finalConfirmButtonLabel, color = finalConfirmButtonColor)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showFinalConfirm = false
-                        finalConfirmAction = null
-                    },
-                ) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
     }
 }

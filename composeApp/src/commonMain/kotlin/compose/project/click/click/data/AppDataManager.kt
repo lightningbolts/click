@@ -115,6 +115,10 @@ object AppDataManager {
     private val _hiddenConnectionIds = MutableStateFlow<Set<String>>(emptySet())
     val hiddenConnectionIds: StateFlow<Set<String>> = _hiddenConnectionIds.asStateFlow()
 
+    /** Per-user core pins ([connection_core]); sorted first in lists; map-visible when ghosted off-map. */
+    private val _coreConnectionIds = MutableStateFlow<Set<String>>(emptySet())
+    val coreConnectionIds: StateFlow<Set<String>> = _coreConnectionIds.asStateFlow()
+
     /**
      * Incremented when a verified group ("click") is created elsewhere so [ConnectionsScreen]
      * can force-refresh its [ChatViewModel] chat list (separate repository instance).
@@ -730,6 +734,7 @@ object AppDataManager {
                         _connections.value = snapshot.connections
                         _archivedConnectionIds.value = snapshot.archivedConnectionIds
                         _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+                        _coreConnectionIds.value = snapshot.coreConnectionIds
                     }
 
                     _isDataLoaded.value = true
@@ -824,6 +829,7 @@ object AppDataManager {
         _connections.value = emptyList()
         _archivedConnectionIds.value = emptySet()
         _hiddenConnectionIds.value = emptySet()
+        _coreConnectionIds.value = emptySet()
         _connectedUsers.value = emptyMap()
         _cachedChatThreads.value = emptyMap()
         _inboxFeedChats.value = emptyList()
@@ -928,6 +934,16 @@ object AppDataManager {
 
     fun markConnectionUnarchivedLocally(connectionId: String) {
         _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    fun markConnectionCoreLocally(connectionId: String) {
+        _coreConnectionIds.value = _coreConnectionIds.value + connectionId
+        scope.launch { persistSnapshot() }
+    }
+
+    fun markConnectionNotCoreLocally(connectionId: String) {
+        _coreConnectionIds.value = _coreConnectionIds.value - connectionId
         scope.launch { persistSnapshot() }
     }
 
@@ -1491,6 +1507,7 @@ object AppDataManager {
             _locationPreferences.value = snapshot.locationPreferences
             _archivedConnectionIds.value = snapshot.archivedConnectionIds
             _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+            _coreConnectionIds.value = snapshot.coreConnectionIds
             _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
             _inboxFeedChats.value = snapshot.inboxFeedChats
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
@@ -1512,6 +1529,7 @@ object AppDataManager {
             locationPreferences = _locationPreferences.value,
             archivedConnectionIds = _archivedConnectionIds.value,
             hiddenConnectionIds = _hiddenConnectionIds.value,
+            coreConnectionIds = _coreConnectionIds.value,
             cachedChatThreads = _cachedChatThreads.value.values.toList(),
             cachedUserPublicProfiles = supabaseRepository.snapshotCachedUserPublicProfiles(),
             inboxFeedChats = _inboxFeedChats.value,
