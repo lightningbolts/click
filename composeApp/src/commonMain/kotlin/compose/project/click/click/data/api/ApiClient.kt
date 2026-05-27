@@ -129,6 +129,11 @@ private data class ConnectionLifecyclePostBody(
 )
 
 @Serializable
+private data class ConnectionCoreListResponse(
+    val core: List<String> = emptyList(),
+)
+
+@Serializable
 private data class SafetyReportPostBody(
     @SerialName("connection_id") val connectionId: String,
     val reason: String,
@@ -673,6 +678,26 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** GET `/api/connections/core` — core connection IDs for the signed-in user. */
+    suspend fun fetchConnectionCoreIds(): Result<Set<String>> {
+        return try {
+            val response = clickWebClient.get("$clickWebAuthOrigin/api/connections/core")
+            if (response.status.value in 200..299) {
+                val body = response.body<ConnectionCoreListResponse>()
+                Result.success(
+                    body.core
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .toSet(),
+                )
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }

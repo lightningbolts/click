@@ -138,6 +138,7 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material3.ripple
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
@@ -178,8 +179,8 @@ import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist 
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSnackbarHost // pragma: allowlist secret
-import compose.project.click.click.ui.components.showGlassSnackbar // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -409,16 +410,13 @@ fun ChatView(
     // Message context sheet (reactions, edit, delete, copy)
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberGlassToastState()
     var showCallMenu by remember { mutableStateOf(false) }
 
-    // Show nudge snackbar
     LaunchedEffect(nudgeResult) {
-        val r = nudgeResult
-        if (r != null) {
-            coroutineScope.launch { snackbarHostState.showGlassSnackbar(r) }
-            viewModel.clearNudgeResult()
-        }
+        val r = nudgeResult ?: return@LaunchedEffect
+        viewModel.clearNudgeResult()
+        toastState.show(coroutineScope, r)
     }
 
     LaunchedEffect(chatId, currentUserId) {
@@ -593,7 +591,7 @@ fun ChatView(
                             viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
                         },
                         onMediaAccessBlocked = { msg ->
-                            coroutineScope.launch { snackbarHostState.showGlassSnackbar(msg) }
+                            toastState.show(coroutineScope, msg)
                         },
                     )
                     /**
@@ -668,26 +666,27 @@ fun ChatView(
                                         )
                                     }
                                 } else {
-                                    AvatarWithOnlineIndicator(
-                                        isOnline = chatDetails.otherUser.id in onlineUsers || isPeerOnline,
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = ripple(bounded = false, radius = 22.dp),
-                                                onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
-                                            ),
-                                        indicatorSize = 9.dp,
-                                        indicatorBorder = 1.25.dp
+                                    val isPeerCore = chatDetails.connection.id in coreConnectionIds
+                                    CoreConnectionAvatarFrame(
+                                        isCore = isPeerCore,
+                                        avatarSize = 36.dp,
+                                        onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
                                     ) {
-                                        ConnectionListUserAvatarFace(
-                                            displayName = chatDetails.otherUser.name,
-                                            email = chatDetails.otherUser.email,
-                                            avatarUrl = chatDetails.otherUser.image,
-                                            userId = chatDetails.otherUser.id,
+                                        AvatarWithOnlineIndicator(
+                                            isOnline = chatDetails.otherUser.id in onlineUsers || isPeerOnline,
                                             modifier = Modifier.fillMaxSize(),
-                                            useCompactTypography = true,
-                                        )
+                                            indicatorSize = 9.dp,
+                                            indicatorBorder = 1.25.dp,
+                                        ) {
+                                            ConnectionListUserAvatarFace(
+                                                displayName = chatDetails.otherUser.name,
+                                                email = chatDetails.otherUser.email,
+                                                avatarUrl = chatDetails.otherUser.image,
+                                                userId = chatDetails.otherUser.id,
+                                                modifier = Modifier.fillMaxSize(),
+                                                useCompactTypography = true,
+                                            )
+                                        }
                                     }
                                 }
 
@@ -1306,11 +1305,11 @@ fun ChatView(
             }
         }
 
-    // Snackbar overlay
-    GlassSnackbarHost(
-        hostState = snackbarHostState,
+    GlassToastHost(
+        state = toastState,
         modifier = Modifier
             .align(Alignment.BottomEnd)
+            .zIndex(50f)
             .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
     )
 

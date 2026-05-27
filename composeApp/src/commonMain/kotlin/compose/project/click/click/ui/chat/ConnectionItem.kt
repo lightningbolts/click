@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -142,7 +143,6 @@ fun ConnectionItem(
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
             .background(GlassSheetTokens.GlassSurface)
-            .connectionRowPressGestures(onClick = onClick, onLongPress = onLongPress)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -190,11 +190,7 @@ fun ConnectionItem(
             CoreConnectionAvatarFrame(
                 isCore = isCore,
                 avatarSize = 44.dp,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(bounded = false, radius = 24.dp),
-                    onClick = onAvatarClick,
-                ),
+                onClick = onAvatarClick,
             ) {
                 AvatarWithOnlineIndicator(
                     isOnline = showOnlineIndicator,
@@ -212,9 +208,19 @@ fun ConnectionItem(
             }
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .connectionRowPressGestures(onClick = onClick, onLongPress = onLongPress),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(modifier = Modifier.width(12.dp))
 
-        Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -311,6 +317,8 @@ fun ConnectionItem(
                             fontWeight = FontWeight.Bold,
                         )
                     }
+                }
+            }
                 }
             }
         }

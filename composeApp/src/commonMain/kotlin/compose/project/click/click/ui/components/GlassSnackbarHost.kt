@@ -13,36 +13,68 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SnackbarVisuals
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val CompactSnackbarShape = RoundedCornerShape(14.dp)
 
+@Stable
+class GlassToastState {
+    var message by mutableStateOf<String?>(null)
+        private set
+
+    private var hideJob: Job? = null
+
+    fun show(scope: CoroutineScope, text: String, durationMs: Long = 2_400L) {
+        hideJob?.cancel()
+        message = text
+        hideJob = scope.launch {
+            delay(durationMs)
+            if (message == text) {
+                message = null
+            }
+        }
+    }
+
+    fun dismiss() {
+        hideJob?.cancel()
+        hideJob = null
+        message = null
+    }
+}
+
+@Composable
+fun rememberGlassToastState(): GlassToastState = remember { GlassToastState() }
+
 /**
- * Compact glass toast aligned on the bottom bar row (e.g. beside the create-group FAB).
- * Does not use full-width Material snackbar chrome.
+ * Compact glass toast (e.g. on the bottom row beside the create-group FAB).
  */
 @Composable
-fun GlassSnackbarHost(
-    hostState: SnackbarHostState,
+fun GlassToastHost(
+    state: GlassToastState,
     modifier: Modifier = Modifier,
 ) {
     val platformStyle = LocalPlatformStyle.current
     val enterMs = if (platformStyle.isIOS) 280 else 200
-    val message = hostState.currentSnackbarData?.visuals?.message
+    val text = state.message
 
     Box(modifier = modifier, contentAlignment = Alignment.CenterEnd) {
         AnimatedVisibility(
-            visible = message != null,
+            visible = text != null,
             enter = slideInVertically(
                 animationSpec = tween(enterMs, easing = FastOutSlowInEasing),
                 initialOffsetY = { it / 3 },
@@ -52,9 +84,9 @@ fun GlassSnackbarHost(
                 targetOffsetY = { it / 3 },
             ) + fadeOut(tween(180)),
         ) {
-            if (message != null) {
+            if (text != null) {
                 Text(
-                    text = message,
+                    text = text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = GlassSheetTokens.OnOled,
                     modifier = Modifier
@@ -68,23 +100,8 @@ fun GlassSnackbarHost(
     }
 }
 
-/** Dismiss any visible toast immediately (e.g. when leaving the screen or opening chat). */
-fun SnackbarHostState.dismissGlassSnackbar() {
-    currentSnackbarData?.dismiss()
-}
-
-/** Brief feedback; pairs with [GlassSnackbarHost] reading [SnackbarHostState.currentSnackbarData]. */
-suspend fun SnackbarHostState.showGlassSnackbar(
-    message: String,
-    duration: SnackbarDuration = SnackbarDuration.Short,
-): SnackbarResult {
-    currentSnackbarData?.dismiss()
-    return showSnackbar(
-        visuals = object : SnackbarVisuals {
-            override val message: String = message
-            override val actionLabel: String? = null
-            override val withDismissAction: Boolean = false
-            override val duration: SnackbarDuration = duration
-        },
-    )
-}
+@Composable
+fun GlassSnackbarHost(
+    state: GlassToastState,
+    modifier: Modifier = Modifier,
+) = GlassToastHost(state = state, modifier = modifier)

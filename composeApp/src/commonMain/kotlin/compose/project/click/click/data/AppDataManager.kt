@@ -24,6 +24,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
 import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.data.repository.UserConnectionsSnapshot
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -731,10 +732,7 @@ object AppDataManager {
                     // screens are ready before slower auxiliary startup work completes.
                     val snapshot = snapshotDeferred.await()
                     if (snapshot != null) {
-                        _connections.value = snapshot.connections
-                        _archivedConnectionIds.value = snapshot.archivedConnectionIds
-                        _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
-                        _coreConnectionIds.value = snapshot.coreConnectionIds
+                        applyFetchedConnectionSnapshot(snapshot)
                     }
 
                     _isDataLoaded.value = true
@@ -1492,6 +1490,22 @@ object AppDataManager {
                     groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
                 ),
             )
+        }
+    }
+
+    /**
+     * Apply server connection snapshot. Preserves locally cached core pins when the server
+     * returns none but cold-start restore already had IDs (avoids wiping pins on failed reads).
+     */
+    private fun applyFetchedConnectionSnapshot(snapshot: UserConnectionsSnapshot) {
+        _connections.value = snapshot.connections
+        _archivedConnectionIds.value = snapshot.archivedConnectionIds
+        _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+        val serverCore = snapshot.coreConnectionIds
+        _coreConnectionIds.value = when {
+            snapshot.coreConnectionIdsAuthoritative -> serverCore
+            serverCore.isNotEmpty() -> serverCore
+            else -> _coreConnectionIds.value
         }
     }
 

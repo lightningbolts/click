@@ -3085,7 +3085,12 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
             AppDataManager.markConnectionCoreLocally(connectionId)
-            supabaseRepository.addConnectionToCore(userId, connectionId)
+            val ok = supabaseRepository.addConnectionToCore(userId, connectionId)
+            if (!ok) {
+                AppDataManager.markConnectionNotCoreLocally(connectionId)
+                _nudgeResult.value = "Couldn't add to Core"
+                return@launch
+            }
             loadChats(isForced = true)
             _nudgeResult.value = "Added to Core"
         }
@@ -3095,7 +3100,12 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
             AppDataManager.markConnectionNotCoreLocally(connectionId)
-            supabaseRepository.removeConnectionFromCore(userId, connectionId)
+            val ok = supabaseRepository.removeConnectionFromCore(userId, connectionId)
+            if (!ok) {
+                AppDataManager.markConnectionCoreLocally(connectionId)
+                _nudgeResult.value = "Couldn't remove from Core"
+                return@launch
+            }
             loadChats(isForced = true)
             _nudgeResult.value = "Removed from Core"
         }

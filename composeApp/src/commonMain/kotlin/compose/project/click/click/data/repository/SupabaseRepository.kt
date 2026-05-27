@@ -58,6 +58,8 @@ data class UserConnectionsSnapshot(
     val archivedConnectionIds: Set<String>,
     val hiddenConnectionIds: Set<String>,
     val coreConnectionIds: Set<String> = emptySet(),
+    /** When false, an empty [coreConnectionIds] must not wipe cold-start / optimistic local pins. */
+    val coreConnectionIdsAuthoritative: Boolean = true,
 )
 
 /**
@@ -410,7 +412,7 @@ class SupabaseRepository {
         sweepStaleConnectionsForUser(userId)
         val archivedIds = getArchivedConnectionIds(userId)
         val hiddenIds = getHiddenConnectionIds(userId)
-        val coreIds = getCoreConnectionIds(userId)
+        val coreFetch = fetchCoreConnectionIds(userId)
         val blockedByUserIds = getBlockedByUserIds(userId)
         val excludedForActive = archivedIds + hiddenIds
         val activeRows = fetchActiveChannelConnections(userId, excludedForActive)
@@ -426,7 +428,13 @@ class SupabaseRepository {
                 else conn.user_ids.none { it != userId && it in blockedByUserIds }
             }
             .sortedByDescending { it.created }
-        return UserConnectionsSnapshot(merged, archivedIds, hiddenIds, coreIds)
+        return UserConnectionsSnapshot(
+            connections = merged,
+            archivedConnectionIds = archivedIds,
+            hiddenConnectionIds = hiddenIds,
+            coreConnectionIds = coreFetch.ids,
+            coreConnectionIdsAuthoritative = coreFetch.authoritative,
+        )
     }
 
     private suspend fun sweepStaleConnectionsForUser(userId: String) {
@@ -1457,8 +1465,26 @@ class SupabaseRepository {
     /**
      * Connection IDs the user has marked as core ([connection_core]).
      */
-    suspend fun getCoreConnectionIds(userId: String): Set<String> {
-        if (userId.isBlank()) return emptySet()
+    private data class CoreConnectionIdsFetch(
+        val ids: Set<String>,
+        val authoritative: Boolean,
+    )
+
+    suspend fun getCoreConnectionIds(userId: String): Set<String> = fetchCoreConnectionIds(userId).ids
+
+    private suspend fun fetchCoreConnectionIds(userId: String): CoreConnectionIdsFetch {
+        if (userId.isBlank()) return CoreConnectionIdsFetch(emptySet(), authoritative = true)
+        val api = clickWebApi.fetchConnectionCoreIds()
+        if (api.isSuccess) {
+            return CoreConnectionIdsFetch(api.getOrThrow(), authoritative = true)
+        }
+        return CoreConnectionIdsFetch(
+            ids = getCoreConnectionIdsFromSupabase(userId),
+            authoritative = false,
+        )
+    }
+
+    private suspend fun getCoreConnectionIdsFromSupabase(userId: String): Set<String> {
         return try {
             @Serializable
             data class CoreRow(
@@ -1472,7 +1498,7 @@ class SupabaseRepository {
             rows.map { it.connectionId }.toSet()
         } catch (e: Exception) {
             if (!isConnectionCoreUnavailableError(e)) {
-                println("getCoreConnectionIds (non-fatal, redacted): ${e.redactedRestMessage()}")
+                println("getCoreConnectionIdsFromSupabase (non-fatal, redacted): ${e.redactedRestMessage()}")
             }
             emptySet()
         }

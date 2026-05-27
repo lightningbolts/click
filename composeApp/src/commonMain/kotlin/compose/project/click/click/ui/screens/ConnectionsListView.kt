@@ -145,9 +145,8 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSnackbarHost // pragma: allowlist secret
-import compose.project.click.click.ui.components.dismissGlassSnackbar // pragma: allowlist secret
-import compose.project.click.click.ui.components.showGlassSnackbar // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import androidx.compose.runtime.DisposableEffect
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
@@ -274,7 +273,7 @@ fun ConnectionsListView(
     val bottomChrome = rememberBottomChromePadding()
     val fabAboveNav = rememberFabAboveNavPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberGlassToastState()
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Groups, 2 = Archived
     val tabContentOffsetX = remember { Animatable(0f) }
     val tabContentAlpha = remember { Animatable(1f) }
@@ -455,17 +454,17 @@ fun ConnectionsListView(
     }
 
     DisposableEffect(Unit) {
-        onDispose { snackbarHostState.dismissGlassSnackbar() }
+        onDispose { toastState.dismiss() }
     }
     LaunchedEffect(isListObscured) {
-        if (isListObscured) snackbarHostState.dismissGlassSnackbar()
+        if (isListObscured) toastState.dismiss()
     }
 
     // Show nudge feedback (clear before show so returning to this tab does not replay).
     LaunchedEffect(nudgeResult) {
         val result = nudgeResult ?: return@LaunchedEffect
         viewModel.clearNudgeResult()
-        snackbarHostState.showGlassSnackbar(result)
+        toastState.show(listScope, result)
     }
 
     val activeCount = effectiveChats.count {
@@ -766,6 +765,7 @@ fun ConnectionsListView(
     Row(
         modifier = Modifier
             .align(Alignment.BottomEnd)
+            .zIndex(50f)
             .fillMaxWidth()
             .padding(start = 16.dp, end = 20.dp, bottom = fabAboveNav),
         horizontalArrangement = Arrangement.End,
@@ -776,8 +776,8 @@ fun ConnectionsListView(
                 .weight(1f)
                 .padding(end = if (showCreateClickFab) 12.dp else 0.dp),
         ) {
-            GlassSnackbarHost(
-                hostState = snackbarHostState,
+            GlassToastHost(
+                state = toastState,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -948,11 +948,10 @@ fun ConnectionsListView(
                                         } else if (canSelect) {
                                             selectedCliqueFriendIds = selectedCliqueFriendIds + friendId
                                         } else {
-                                            listScope.launch {
-                                                snackbarHostState.showGlassSnackbar(
-                                                    "That friend isn’t connected to everyone already selected.",
-                                                )
-                                            }
+                                            toastState.show(
+                                                listScope,
+                                                "That friend isn’t connected to everyone already selected.",
+                                            )
                                         }
                                     },
                                     enabled = canSelect,
@@ -1016,21 +1015,17 @@ fun ConnectionsListView(
                             viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
                                 result.onSuccess {
                                     dismissVerifiedCliqueSheet {
-                                        listScope.launch {
-                                            snackbarHostState.showGlassSnackbar("Click created")
-                                        }
+                                        toastState.show(listScope, "Click created")
                                     }
                                 }
                                 result.onFailure { e ->
-                                    listScope.launch {
-                                        val raw = e.message?.takeIf { it.isNotBlank() }.orEmpty()
-                                        val msg = when {
-                                            raw.contains("verified click already exists", ignoreCase = true) ->
-                                                "You already have a verified click with this group."
-                                            else -> raw.ifBlank { "Couldn’t create click" }
-                                        }
-                                        snackbarHostState.showGlassSnackbar(msg)
+                                    val raw = e.message?.takeIf { it.isNotBlank() }.orEmpty()
+                                    val msg = when {
+                                        raw.contains("verified click already exists", ignoreCase = true) ->
+                                            "You already have a verified click with this group."
+                                        else -> raw.ifBlank { "Couldn’t create click" }
                                     }
+                                    toastState.show(listScope, msg)
                                 }
                             }
                         },

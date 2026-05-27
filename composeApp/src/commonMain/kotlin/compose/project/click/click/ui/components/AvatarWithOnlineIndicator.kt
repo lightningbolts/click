@@ -2,6 +2,8 @@ package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -167,42 +170,57 @@ private val CoreHaloPurple = Color(0xFF9D4EDD)
 private val CoreHaloGold = Color(0xFFE8B923)
 private val CoreHaloRingWidth = 2.5.dp
 
+private val CoreHaloBrush = Brush.linearGradient(
+    colors = listOf(CoreHaloPurple, CoreHaloGold, CoreHaloPurple),
+    start = Offset(0f, 0f),
+    end = Offset(200f, 200f),
+)
+
 /**
  * Purple/gold ring for core connections (wraps a circular avatar).
+ * Uses [border] for the halo so the ring never steals taps from [onClick].
  */
 @Composable
 fun CoreConnectionAvatarFrame(
     isCore: Boolean,
     avatarSize: Dp,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val ringPad = if (isCore) CoreHaloRingWidth else 0.dp
     val outerSize = avatarSize + ringPad * 2
+    val interactionSource = remember { MutableInteractionSource() }
+    val clickModifier = if (onClick != null) {
+        Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = ripple(bounded = false, radius = outerSize / 2),
+            onClick = onClick,
+        )
+    } else {
+        Modifier
+    }
     Box(
-        modifier = modifier.size(outerSize),
+        modifier = modifier
+            .size(outerSize)
+            .then(clickModifier)
+            .then(
+                if (isCore) {
+                    Modifier.border(
+                        width = CoreHaloRingWidth,
+                        brush = CoreHaloBrush,
+                        shape = CircleShape,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        if (isCore) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(CoreHaloPurple, CoreHaloGold, CoreHaloPurple),
-                            start = Offset(0f, 0f),
-                            end = Offset(outerSize.value * 4f, outerSize.value * 4f),
-                        ),
-                    ),
-            )
-        }
         Box(
             modifier = Modifier
                 .size(avatarSize)
-                .clip(CircleShape)
-                .background(if (isCore) GlassSheetTokens.OledBlack else Color.Transparent)
-                .padding(if (isCore) 2.dp else 0.dp),
+                .clip(CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             content()
