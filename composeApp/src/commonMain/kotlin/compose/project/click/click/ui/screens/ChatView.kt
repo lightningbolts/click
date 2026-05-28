@@ -129,6 +129,7 @@ import compose.project.click.click.ui.components.GlassCard // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -334,30 +335,7 @@ fun ChatView(
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val nativeKeyboardHeightPoints by keyboardHeightProvider.keyboardHeight.collectAsStateLifecycleAware()
-    val nativeKeyboardDurationMillis by keyboardHeightProvider.animationDurationMillis.collectAsStateLifecycleAware()
-    val nativeKeyboardAnimationCurve by keyboardHeightProvider.animationCurve.collectAsStateLifecycleAware()
-    val nativeKeyboardLiftTargetPx = if (platformStyle.isIOS) {
-        val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
-        val keyboardHeightPx = with(density) { nativeKeyboardHeightPoints.dp.toPx() }
-        (keyboardHeightPx - navBottomPx).coerceAtLeast(0f)
-    } else {
-        0f
-    }
-    val animatedNativeKeyboardLiftPx by animateFloatAsState(
-        targetValue = nativeKeyboardLiftTargetPx,
-        animationSpec = tween(
-            durationMillis = nativeKeyboardDurationMillis,
-            easing = nativeKeyboardAnimationCurve.toUIKitKeyboardEasing(),
-        ),
-        label = "native_keyboard_lift",
-    )
-    val nativeKeyboardDockLiftPx = if (platformStyle.isIOS) animatedNativeKeyboardLiftPx else 0f
-    val nativeKeyboardTimelineBottomPadding = if (platformStyle.isIOS) {
-        with(density) { animatedNativeKeyboardLiftPx.toDp() }
-    } else {
-        0.dp
-    }
+    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -930,7 +908,7 @@ fun ChatView(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPx = if (platformStyle.isIOS) 0f else null,
+                                        nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
                                     ),
                             ) {
                             Box(
@@ -1116,7 +1094,7 @@ fun ChatView(
                                 start = 12.dp,
                                 end = 12.dp,
                                 top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardTimelineBottomPadding,
+                                bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
                             ),
                             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                             displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -1164,7 +1142,7 @@ fun ChatView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .graphicsLayer {
-                                translationY = -nativeKeyboardDockLiftPx.coerceAtLeast(0f)
+                                translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
                             },
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)

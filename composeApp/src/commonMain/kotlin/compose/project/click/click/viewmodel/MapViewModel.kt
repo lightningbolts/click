@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -631,7 +632,9 @@ class MapViewModel : ViewModel() {
                             minLon = b.minLon,
                             maxLon = b.maxLon,
                             beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
-                        ).onSuccess { list -> _mapBeacons.value = list }
+                        ).onSuccess { list ->
+                            _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+                        }
                     }
                     onRemoteFinished(true)
                 },
@@ -717,39 +720,6 @@ class MapViewModel : ViewModel() {
 
     private fun scheduleBeaconFetchForBounds(bounds: BoundingBox, debounceMs: Long = 400L) {
         fetchProximityLayersForBounds(bounds, debounceMs, DiscoveryFetchSlot.MapViewport)
-    }
-
-    /** Keeps optimistically dropped pins until the server echoes them; unions fetches by id. */
-    private fun mergeBeaconLists(existing: List<MapBeacon>, incoming: List<MapBeacon>): List<MapBeacon> {
-        if (incoming.isEmpty() && existing.isNotEmpty()) return existing
-        val byId = LinkedHashMap<String, MapBeacon>()
-        for (b in existing) {
-            byId[b.id] = b
-        }
-        for (b in incoming) {
-            byId[b.id] = b
-        }
-        val now = Clock.System.now().toEpochMilliseconds()
-        return byId.values.filter { b ->
-            val exp = b.expiresAtEpochMs
-            exp == null || exp > now
-        }
-    }
-
-    /** Keeps the last hub list visible until a successful fetch returns (matches beacon merge behavior). */
-    private fun mergeCommunityHubLists(
-        existing: List<CommunityHubPin>,
-        incoming: List<CommunityHubPin>,
-    ): List<CommunityHubPin> {
-        if (incoming.isEmpty() && existing.isNotEmpty()) return existing
-        val byId = LinkedHashMap<String, CommunityHubPin>()
-        for (hub in existing) {
-            byId[hub.hubId] = hub
-        }
-        for (hub in incoming) {
-            byId[hub.hubId] = hub
-        }
-        return byId.values.toList()
     }
 
     private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
@@ -1126,10 +1096,10 @@ class MapViewModel : ViewModel() {
                             activeUserCount = dto.activeUserCount,
                         )
                     }
-                    _communityHubs.value = mergeCommunityHubLists(_communityHubs.value, incoming)
+                    _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
                 }
                 beaconsDeferred?.await()?.onSuccess { list ->
-                    _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
+                    _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
                 }
             }
         }

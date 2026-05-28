@@ -11,10 +11,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -47,6 +50,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,41 +75,38 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
-import compose.project.click.click.ui.chat.ChatChannelLoadingView
-import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay
-import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag
-import compose.project.click.click.ui.chat.ChatLiquidGlassPlate
-import compose.project.click.click.ui.chat.chatSpringPressScale
-import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon
-import compose.project.click.click.data.models.ChatMessageType
-import compose.project.click.click.ui.chat.ChatMessageBubble
-import compose.project.click.click.ui.chat.chatBubbleStableRowKey
-import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter
-import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact
-import compose.project.click.click.ui.chat.chatHubMessageRowTopPadding
-import compose.project.click.click.ui.chat.chatHubReceiptRowTopPadding
-import compose.project.click.click.ui.chat.chatInterMessageGapDp
-import compose.project.click.click.ui.chat.chatInterMessageSpacingBetweenNeighbors
-import compose.project.click.click.ui.chat.applyTimestampPeekDragStep
-import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft
-import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx
-import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx
-import compose.project.click.click.ui.chat.isTimestampPeekRevealed
-import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay
-import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.chat.ChatComposerStripReserve
-import compose.project.click.click.ui.chat.rememberChatComposerFieldColors
-import compose.project.click.click.ui.components.chatThreadKeyboardDock
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.utils.LocationResult
-import compose.project.click.click.viewmodel.HubChatNavigationEvent
-import compose.project.click.click.viewmodel.HubChatViewModel
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
+import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
+import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
+import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowlist secret
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -142,6 +143,7 @@ fun HubChatScreen(
      */
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
+    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
         HubChatViewModel(
@@ -176,7 +178,45 @@ fun HubChatScreen(
 
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
-    val hubListState = rememberLazyListState()
+    val hubListState = remember(args.realtimeChannel) { LazyListState() }
+    val density = LocalDensity.current
+    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
+    val focusManager = LocalFocusManager.current
+    val focusManagerState = rememberUpdatedState(focusManager)
+    val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
+    val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
+    val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
+                if (source == NestedScrollSource.UserInput &&
+                    kotlin.math.abs(consumed.y) > keyboardDismissScrollThresholdPx
+                ) {
+                    focusManagerState.value.clearFocus()
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val scrollAnchor = messages.lastOrNull()?.message?.id to messages.size
+    LaunchedEffect(args.realtimeChannel, scrollAnchor) {
+        if (messages.isEmpty()) return@LaunchedEffect
+        repeat(50) {
+            if (hubListState.layoutInfo.totalItemsCount > 0) {
+                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
+                hubListState.scrollToItem(0)
+                delay(120)
+                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
+                return@LaunchedEffect
+            }
+            delay(16L)
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.navigationEvents.collect { event ->
@@ -436,6 +476,10 @@ fun HubChatScreen(
                 val newestSentMessage = remember(messages) {
                     messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
                 }
+                val timelineEntries = remember(messages) {
+                    buildChatTimelineEntriesNewestFirst(messages)
+                }
+                val reverseListNewestEdgePad = 6.dp
 
                 Box(
                     modifier = Modifier
@@ -446,15 +490,45 @@ fun HubChatScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .chatThreadKeyboardDock(),
+                        .chatThreadKeyboardDock(
+                            nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                        ),
                 ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
                 ) {
-                // ── Message list ────────────────────────────────────────────
-                Box(
+                ChatMessageTimeline(
+                    timelineEntries = timelineEntries,
+                    listState = hubListState,
+                    newestSentMessage = newestSentMessage,
+                    listBottomPadding = PaddingValues(
+                        start = 6.dp,
+                        end = 6.dp,
+                        top = 24.dp + reverseListNewestEdgePad,
+                        bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
+                    ),
+                    dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
+                    displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
+                    peekRevealPx = peekRevealPx,
+                    meshConnection = null,
+                    useHubNeutralMesh = true,
+                    isGroupChat = true,
+                    currentUserId = currentUserId,
+                    reactionsMap = emptyMap(),
+                    secureMediaLoadMap = secureMediaLoadMap,
+                    secureMediaHost = viewModel,
+                    activeChatId = hubIdForSecureMedia,
+                    onToggleReaction = { _, _ -> },
+                    onForward = {},
+                    onLongPress = {},
+                    onSwipeReply = {},
+                    onDownloadAttachment = { _, _ ->
+                        ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
+                    },
+                    interMessageBaseCompact = ChatInterMessageHubBaseCompact,
+                    enableMessageContextMenu = false,
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
@@ -471,98 +545,23 @@ fun HubChatScreen(
                                 Modifier
                             },
                         ),
-                ) {
-                    LazyColumn(
-                        state = hubListState,
-                        modifier = Modifier.fillMaxSize(),
-                        reverseLayout = true,
-                        contentPadding = PaddingValues(
-                            start = 6.dp,
-                            end = 6.dp,
-                            top = 24.dp,
-                            bottom = 8.dp + ChatComposerStripReserve,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                    ) {
-                        if (newestSentMessage != null) {
-                            val receiptM = newestSentMessage
-                            items(
-                                listOf(receiptM),
-                                key = { _ -> "hub-outbound-delivery-receipt" },
-                                contentType = { "delivery_receipt" },
-                            ) { mwu ->
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            top = chatHubReceiptRowTopPadding(ChatInterMessageHubBaseCompact),
-                                            end = 10.dp,
-                                        ),
-                                    contentAlignment = Alignment.CenterEnd,
-                                ) {
-                                    ChatDeliveryReceiptIcon(
-                                        messageWithUser = mwu,
-                                        baseTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                        readTint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                        }
-                        val newestFirst = messages.asReversed()
-                        items(
-                            count = newestFirst.size,
-                            key = { chatBubbleStableRowKey(newestFirst[it]) },
-                            contentType = {
-                                newestFirst[it].message.messageType?.takeIf { it.isNotBlank() }
-                                    ?: ChatMessageType.TEXT
-                            },
-                        ) { index ->
-                            val mwu = newestFirst[index]
-                            val isCallLog = mwu.message.messageType == "call_log"
-                            val topGap = if (index >= newestFirst.lastIndex) 0.dp
-                                else chatInterMessageGapDp(
-                                    chatInterMessageSpacingBetweenNeighbors(mwu, newestFirst[index + 1]),
-                                    ChatInterMessageHubBaseCompact,
-                                )
-                            Column(
-                                Modifier.padding(top = topGap),
-                            ) {
-                                ChatMessageRowWithTimestampGutter(
-                                    isCallLog = isCallLog,
-                                    isSent = mwu.isSent,
-                                    timeCreated = mwu.message.timeCreated,
-                                    stripVisualPx = displayTimestampPeekVisualPx,
-                                    maxRevealPx = peekRevealPx,
-                                    meshConnection = null,
-                                    useHubNeutralMesh = true,
-                                ) {
-                                    ChatMessageBubble(
-                                        messageWithUser = mwu,
-                                        currentUserId = currentUserId,
-                                        reactions = emptyList(),
-                                        onToggleReaction = {},
-                                        onForward = {},
-                                        onLongPress = {},
-                                        onSwipeReply = {},
-                                        showPeerAvatarInGroup = true,
-                                        secureMediaHost = viewModel,
-                                        secureMediaState = secureMediaLoadMap[mwu.message.id],
-                                        activeChatId = hubIdForSecureMedia,
-                                        enableMessageContextMenu = false,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                )
                 }
 
-                HubChatInputBar(
-                    viewModel = viewModel,
-                    inLobby = inLobby,
-                    isOutOfBounds = outOfBounds,
-                    onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
+                        },
+                ) {
+                    HubChatInputBar(
+                        viewModel = viewModel,
+                        inLobby = inLobby,
+                        isOutOfBounds = outOfBounds,
+                        onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
+                    )
+                }
                 }
                 }
             }
