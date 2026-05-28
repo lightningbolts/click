@@ -78,6 +78,7 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.AuthRepository
+import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
@@ -123,6 +124,7 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var avatarUploading by remember { mutableStateOf(false) }
     val authRepoForAvatar = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
+    val supabaseRepository = remember { SupabaseRepository() }
     val mediaPickers = rememberChatMediaPickers(
         onImagePicked = { bytes, mime ->
             settingsScope.launch {
@@ -451,6 +453,17 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+
+                item {
+                    SettingsSectionHeader("Interests")
+                }
+                item {
+                    SettingsInterestsCard(
+                        userId = currentUser?.id,
+                        supabaseRepository = supabaseRepository,
+                        onFeedback = { msg -> snackbarHostState.showSnackbar(msg) },
+                    )
                 }
 
                 item {

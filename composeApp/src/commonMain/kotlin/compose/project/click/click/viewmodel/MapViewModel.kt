@@ -46,6 +46,8 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -231,6 +233,9 @@ class MapViewModel : ViewModel() {
     init {
         observeAppData()
         subscribeToConnectionChanges()
+        if (AppDataManager.currentUser.value != null) {
+            prefetchDiscoveryProximityData()
+        }
     }
 
     private fun observeAppData() {
@@ -731,6 +736,22 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    /** Keeps the last hub list visible until a successful fetch returns (matches beacon merge behavior). */
+    private fun mergeCommunityHubLists(
+        existing: List<CommunityHubPin>,
+        incoming: List<CommunityHubPin>,
+    ): List<CommunityHubPin> {
+        if (incoming.isEmpty() && existing.isNotEmpty()) return existing
+        val byId = LinkedHashMap<String, CommunityHubPin>()
+        for (hub in existing) {
+            byId[hub.hubId] = hub
+        }
+        for (hub in incoming) {
+            byId[hub.hubId] = hub
+        }
+        return byId.values.toList()
+    }
+
     private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
         if (!latitude.isFinite() || !longitude.isFinite() || !zoom.isFinite()) return
         val z = zoom.coerceIn(2.0, 20.0)
@@ -1058,14 +1079,44 @@ class MapViewModel : ViewModel() {
             }
             val layers = _selectedLayerFilters.value
             val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
-            if (wantHubs) {
-                mapBeaconRepository.fetchNearbyCommunityHubs(
-                    minLat = bounds.minLat,
-                    maxLat = bounds.maxLat,
-                    minLon = bounds.minLon,
-                    maxLon = bounds.maxLon,
-                ).onSuccess { rows ->
-                    _communityHubs.value = rows.map { dto ->
+            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
+                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
+                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
+                layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            if (!wantHubs && !wantBeacons) return@launch
+
+            coroutineScope {
+                val hubsDeferred = if (wantHubs) {
+                    async {
+                        mapBeaconRepository.fetchNearbyCommunityHubs(
+                            minLat = bounds.minLat,
+                            maxLat = bounds.maxLat,
+                            minLon = bounds.minLon,
+                            maxLon = bounds.maxLon,
+                        )
+                    }
+                } else {
+                    if (jobSlot != DiscoveryFetchSlot.Discovery) {
+                        _communityHubs.value = emptyList()
+                    }
+                    null
+                }
+                val beaconsDeferred = if (wantBeacons) {
+                    async {
+                        mapBeaconRepository.fetchLocalBeacons(
+                            minLat = bounds.minLat,
+                            maxLat = bounds.maxLat,
+                            minLon = bounds.minLon,
+                            maxLon = bounds.maxLon,
+                            beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                        )
+                    }
+                } else {
+                    null
+                }
+
+                hubsDeferred?.await()?.onSuccess { rows ->
+                    val incoming = rows.map { dto ->
                         CommunityHubPin(
                             hubId = dto.hubId,
                             name = dto.name,
@@ -1075,24 +1126,11 @@ class MapViewModel : ViewModel() {
                             activeUserCount = dto.activeUserCount,
                         )
                     }
+                    _communityHubs.value = mergeCommunityHubLists(_communityHubs.value, incoming)
                 }
-            } else if (jobSlot != DiscoveryFetchSlot.Discovery) {
-                _communityHubs.value = emptyList()
-            }
-            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
-                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
-                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
-                layers.contains(MapLayerFilter.SOCIAL_VIBES)
-            if (!wantBeacons) return@launch
-            val result = mapBeaconRepository.fetchLocalBeacons(
-                minLat = bounds.minLat,
-                maxLat = bounds.maxLat,
-                minLon = bounds.minLon,
-                maxLon = bounds.maxLon,
-                beaconTypeFilters = beaconTypesQueryForLayers(layers),
-            )
-            result.onSuccess { list ->
-                _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
+                beaconsDeferred?.await()?.onSuccess { list ->
+                    _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
+                }
             }
         }
 

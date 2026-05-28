@@ -1332,6 +1332,16 @@ object AppDataManager {
         }
     }
 
+    /** Updates in-memory interest tags after settings save (Common Ground / profile). */
+    fun applyInterestTags(tags: List<String>) {
+        val latest = _currentUser.value ?: return
+        _currentUser.value = latest.copy(tags = tags)
+        scope.launch {
+            runCatching { persistSnapshot() }
+                .onFailure { println("applyInterestTags: snapshot failed: ${it.message}") }
+        }
+    }
+
     private fun mapStartupErrorMessage(rawMessage: String): String {
         val trimmed = rawMessage.trim()
         val normalized = trimmed.lowercase()

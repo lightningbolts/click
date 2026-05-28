@@ -185,7 +185,7 @@ internal fun buildDiscoveryFeedItems(
         )
     }
 
-    return hubRows + beaconRows + connRows
+    return connRows + hubRows + beaconRows
 }
 
 internal data class DiscoveryFeedSection(
@@ -196,13 +196,13 @@ internal data class DiscoveryFeedSection(
 internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): List<DiscoveryFeedSection> {
     if (items.isEmpty()) return emptyList()
     val sections = mutableListOf<DiscoveryFeedSection>()
-    val hubs = items.filterIsInstance<DiscoveryFeedItem.Hub>()
-    if (hubs.isNotEmpty()) {
-        sections += DiscoveryFeedSection(title = "Community hubs", items = hubs)
-    }
     val connections = items.filterIsInstance<DiscoveryFeedItem.Connection>()
     if (connections.isNotEmpty()) {
         sections += DiscoveryFeedSection(title = "Connections", items = connections)
+    }
+    val hubs = items.filterIsInstance<DiscoveryFeedItem.Hub>()
+    if (hubs.isNotEmpty()) {
+        sections += DiscoveryFeedSection(title = "Community hubs", items = hubs)
     }
     val beacons = items.filterIsInstance<DiscoveryFeedItem.Beacon>()
     if (beacons.isNotEmpty()) {
