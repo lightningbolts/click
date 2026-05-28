@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -627,7 +628,7 @@ class MapViewModel : ViewModel() {
                             maxLon = b.maxLon,
                             beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
                         ).onSuccess { list ->
-                            _mapBeacons.value = mergeMapBeaconLists(_mapBeacons.value, list)
+                            _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
                         }
                     }
                     onRemoteFinished(true)
@@ -1060,7 +1061,7 @@ class MapViewModel : ViewModel() {
                             activeUserCount = dto.activeUserCount,
                         )
                     }
-                    _communityHubs.value = mergeCommunityHubLists(_communityHubs.value, incoming)
+                    _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
                 }
             } else if (jobSlot != DiscoveryFetchSlot.Discovery) {
                 _communityHubs.value = emptyList()
@@ -1078,7 +1079,7 @@ class MapViewModel : ViewModel() {
                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
             )
             result.onSuccess { list ->
-                _mapBeacons.value = mergeMapBeaconLists(_mapBeacons.value, list)
+                _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
             }
         }
 
