@@ -117,6 +117,48 @@ data class CommunityHubPin(
     val activeUserCount: Int,
 )
 
+/**
+ * Unions proximity hub fetches by id. Empty responses must not wipe a prior discovery
+ * prefetch when a smaller map-viewport fetch completes afterward.
+ */
+internal fun mergeCommunityHubLists(
+    existing: List<CommunityHubPin>,
+    incoming: List<CommunityHubPin>,
+): List<CommunityHubPin> {
+    if (incoming.isEmpty() && existing.isNotEmpty()) return existing
+    val byId = LinkedHashMap<String, CommunityHubPin>()
+    for (hub in existing) {
+        byId[hub.hubId] = hub
+    }
+    for (hub in incoming) {
+        byId[hub.hubId] = hub
+    }
+    return byId.values.toList()
+}
+
+/**
+ * Unions proximity beacon fetches by id and drops expired rows.
+ * Keeps optimistically dropped pins until the server echoes them.
+ */
+internal fun mergeMapBeaconLists(
+    existing: List<MapBeacon>,
+    incoming: List<MapBeacon>,
+): List<MapBeacon> {
+    if (incoming.isEmpty() && existing.isNotEmpty()) return existing
+    val byId = LinkedHashMap<String, MapBeacon>()
+    for (beacon in existing) {
+        byId[beacon.id] = beacon
+    }
+    for (beacon in incoming) {
+        byId[beacon.id] = beacon
+    }
+    val now = Clock.System.now().toEpochMilliseconds()
+    return byId.values.filter { beacon ->
+        val exp = beacon.expiresAtEpochMs
+        exp == null || exp > now
+    }
+}
+
 /** Single map item for unified clustering (connections + beacons). */
 private sealed class MapClusterMember {
     data class Conn(val point: ConnectionMapPoint) : MapClusterMember()
