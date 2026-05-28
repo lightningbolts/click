@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -626,7 +627,9 @@ class MapViewModel : ViewModel() {
                             minLon = b.minLon,
                             maxLon = b.maxLon,
                             beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
-                        ).onSuccess { list -> _mapBeacons.value = list }
+                        ).onSuccess { list ->
+                            _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+                        }
                     }
                     onRemoteFinished(true)
                 },
@@ -712,23 +715,6 @@ class MapViewModel : ViewModel() {
 
     private fun scheduleBeaconFetchForBounds(bounds: BoundingBox, debounceMs: Long = 400L) {
         fetchProximityLayersForBounds(bounds, debounceMs, DiscoveryFetchSlot.MapViewport)
-    }
-
-    /** Keeps optimistically dropped pins until the server echoes them; unions fetches by id. */
-    private fun mergeBeaconLists(existing: List<MapBeacon>, incoming: List<MapBeacon>): List<MapBeacon> {
-        if (incoming.isEmpty() && existing.isNotEmpty()) return existing
-        val byId = LinkedHashMap<String, MapBeacon>()
-        for (b in existing) {
-            byId[b.id] = b
-        }
-        for (b in incoming) {
-            byId[b.id] = b
-        }
-        val now = Clock.System.now().toEpochMilliseconds()
-        return byId.values.filter { b ->
-            val exp = b.expiresAtEpochMs
-            exp == null || exp > now
-        }
     }
 
     private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
@@ -1065,7 +1051,7 @@ class MapViewModel : ViewModel() {
                     minLon = bounds.minLon,
                     maxLon = bounds.maxLon,
                 ).onSuccess { rows ->
-                    _communityHubs.value = rows.map { dto ->
+                    val incoming = rows.map { dto ->
                         CommunityHubPin(
                             hubId = dto.hubId,
                             name = dto.name,
@@ -1075,6 +1061,7 @@ class MapViewModel : ViewModel() {
                             activeUserCount = dto.activeUserCount,
                         )
                     }
+                    _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
                 }
             } else if (jobSlot != DiscoveryFetchSlot.Discovery) {
                 _communityHubs.value = emptyList()
@@ -1092,7 +1079,7 @@ class MapViewModel : ViewModel() {
                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
             )
             result.onSuccess { list ->
-                _mapBeacons.value = mergeBeaconLists(_mapBeacons.value, list)
+                _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
             }
         }
 
