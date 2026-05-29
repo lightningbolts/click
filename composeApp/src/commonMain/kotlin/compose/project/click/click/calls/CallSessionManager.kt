@@ -328,7 +328,6 @@ object CallSessionManager {
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
         PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "Declined")
-        insertCallChatLogAsync(invite.connectionId, "declined", 0)
         scope.launch {
             sendResponse(invite, accepted = false, busy = false)
         }

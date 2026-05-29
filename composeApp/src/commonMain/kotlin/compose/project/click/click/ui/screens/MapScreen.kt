@@ -859,6 +859,10 @@ private fun EventBeaconDetail(
     var rsvpSubmitting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    DisposableEffect(Unit) {
+        onDispose { repository.close() }
+    }
+
     LaunchedEffect(beacon.id) {
         rsvpLoading = true
         repository.fetchBeaconRsvp(beacon.id).fold(

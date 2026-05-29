@@ -79,7 +79,25 @@ final class ClickGoogleSignInBridge: NSObject {
 final class ClickGoogleSignInBridge: NSObject {
     static let shared = ClickGoogleSignInBridge()
 
-    func start() {}
+    private var observer: NSObjectProtocol?
+    private var started = false
+
+    func start() {
+        guard !started else { return }
+        started = true
+
+        observer = NotificationCenter.default.addObserver(
+            forName: ClickGoogleSignInNotifications.start,
+            object: nil,
+            queue: .main
+        ) { _ in
+            NotificationCenter.default.post(
+                name: ClickGoogleSignInNotifications.didComplete,
+                object: nil,
+                userInfo: ["error": "Google Sign-In SDK is not linked. Add GoogleSignIn-iOS via Swift Package Manager in Xcode."]
+            )
+        }
+    }
 
     func handleOpenURL(_ url: URL) -> Bool { false }
 }

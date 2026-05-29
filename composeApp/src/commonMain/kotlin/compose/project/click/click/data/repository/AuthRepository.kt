@@ -160,7 +160,18 @@ class AuthRepository(
                                 idToken = nativePayload.idToken
                             }
                         }.fold(
-                            onSuccess = { Result.success(Unit) },
+                            onSuccess = {
+                                val session = supabase.auth.currentSessionOrNull()
+                                if (session != null) {
+                                    tokenStorage.saveTokens(
+                                        jwt = session.accessToken,
+                                        refreshToken = session.refreshToken,
+                                        expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                                        tokenType = session.tokenType,
+                                    )
+                                }
+                                Result.success(Unit)
+                            },
                             onFailure = { idTokenError ->
                                 Result.failure(
                                     Exception(
