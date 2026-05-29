@@ -2,6 +2,7 @@
 
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -23,6 +24,32 @@ if (hasGoogleServicesConfig) {
     apply(plugin = "com.google.gms.google-services")
 } else {
     logger.lifecycle("composeApp: google-services.json not found; skipping Google Services plugin for local builds")
+}
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+
+fun configuredReleaseSigning(config: com.android.build.api.dsl.ApkSigningConfig) {
+    val envKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    if (!envKeystorePath.isNullOrBlank()) {
+        config.storeFile = file(envKeystorePath)
+        config.storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        config.keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+        config.keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+        return
+    }
+
+    if (!keystorePropertiesFile.exists()) {
+        return
+    }
+
+    config.storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+    config.storePassword = keystoreProperties.getProperty("storePassword")
+    config.keyAlias = keystoreProperties.getProperty("keyAlias")
+    config.keyPassword = keystoreProperties.getProperty("keyPassword")
 }
 
 kotlin {
@@ -148,8 +175,8 @@ android {
         applicationId = "compose.project.click.click"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 3
-        versionName = "hotpot"
+        versionCode = 6
+        versionName = "donut"
         // MapLibre doesn't require an API key
     }
     packaging {
@@ -157,9 +184,17 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    signingConfigs {
+        create("release") {
+            configuredReleaseSigning(this)
+        }
+    }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            signingConfigs.findByName("release")?.storeFile?.let {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

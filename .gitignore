@@ -52,3 +52,9 @@ local.properties
 server/venv/
 .DS_Store
 local.properties
+
+### Android signing (never commit) ###
+keystore.properties
+*.jks
+*.keystore
+composeApp/keystore/
