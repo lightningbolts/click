@@ -215,6 +215,8 @@ import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pr
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
+import compose.project.click.click.util.prefetchAvailabilityOverlapsForPeers // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
@@ -367,29 +369,90 @@ fun ConnectionsListView(
     var viewerAvailabilityBubbles by remember(currentUserId) {
         mutableStateOf<List<ProfileAvailabilityIntentBubble>?>(null)
     }
+    var overlapPrefetchGeneration by remember(currentUserId) { mutableStateOf(0) }
     LaunchedEffect(currentUserId) {
         val userId = currentUserId?.takeIf { it.isNotBlank() } ?: run {
             viewerAvailabilityBubbles = null
+            ViewerAvailabilityBubblesCache.clear()
+            return@LaunchedEffect
+        }
+        val cached = ViewerAvailabilityBubblesCache.get(userId)
+        if (cached != null) {
+            viewerAvailabilityBubbles = cached
             return@LaunchedEffect
         }
         val overlapRepo = SupabaseRepository()
         try {
             viewerAvailabilityBubbles = withContext(Dispatchers.Default) {
                 overlapRepo.fetchPeerProfileAvailabilityBubbles(userId, userId)
-            }
+            }.also { ViewerAvailabilityBubblesCache.put(userId, it) }
         } catch (e: Exception) {
             viewerAvailabilityBubbles = emptyList()
+            ViewerAvailabilityBubblesCache.put(userId, emptyList())
             println("ConnectionsListView: viewer availability bubbles: ${e.redactedRestMessage()}")
         }
     }
 
-    val activeOneToOneChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats
-            .filter {
-                it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+    val activeChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.filter {
+            it.groupClique == null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
+    }
+    val activeOneToOneChats = remember(activeChats) {
+        activeChats.sortedByDescending { connectionListActivityTs(it) }
+    }
+
+    LaunchedEffect(currentUserId, viewerAvailabilityBubbles, activeOneToOneChats) {
+        val userId = currentUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val mine = viewerAvailabilityBubbles ?: return@LaunchedEffect
+        val peerIds = activeOneToOneChats.map { it.otherUser.id }
+        if (peerIds.isEmpty()) return@LaunchedEffect
+        val fetched = prefetchAvailabilityOverlapsForPeers(
+            viewerUserId = userId,
+            peerUserIds = peerIds,
+            viewerBubbles = mine,
+        )
+        if (fetched > 0) {
+            overlapPrefetchGeneration++
+        }
+    }
+
+    val groupChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.filter {
+            it.groupClique != null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
+    }
+    val archivedChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.filter {
+            it.groupClique == null &&
+                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
+    }
+    val sortedTabChats = remember(activeChats, groupChats, archivedChats, selectedTabIndex, coreConnectionIds) {
+        val tabChats = when (selectedTabIndex) {
+            0 -> activeChats
+            1 -> groupChats
+            else -> archivedChats
+        }
+        tabChats.sortedWith(
+            compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
+                .thenByDescending { connectionListActivityTs(it) },
+        )
+    }
+    val filteredChats = remember(sortedTabChats, searchQuery) {
+        if (searchQuery.isBlank()) {
+            sortedTabChats
+        } else {
+            sortedTabChats.filter { chat ->
+                val groupHit =
+                    chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
+                val userHit =
+                    chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
+                groupHit || userHit
             }
-            .sortedByDescending { connectionListActivityTs(it) }
+        }
     }
 
     /** Verified-click picker: every non-group 1:1 edge still in the inbox, including pending and archived-tab rows. */
@@ -486,18 +549,9 @@ fun ConnectionsListView(
         toastState.show(listScope, result)
     }
 
-    val activeCount = effectiveChats.count {
-        it.groupClique == null &&
-            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-    }
-    val groupCount = effectiveChats.count {
-        it.groupClique != null &&
-            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-    } + activeHubs.size
-    val archivedCount = effectiveChats.count {
-        it.groupClique == null &&
-            it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-    }
+    val activeCount = activeChats.size
+    val groupCount = groupChats.size + activeHubs.size
+    val archivedCount = archivedChats.size
     val headerSubtitle = remember(
         effectiveChats,
         selectedTabIndex,
@@ -510,18 +564,6 @@ fun ConnectionsListView(
         if (effectiveChats.isEmpty()) {
             if (chatListState is ChatListState.Loading) "Loading…" else ""
         } else {
-            val activeChats = effectiveChats.filter {
-                it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-            }
-            val groupChats = effectiveChats.filter {
-                it.groupClique != null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-            }
-            val archivedChats = effectiveChats.filter {
-                it.groupClique == null &&
-                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-            }
             val tabChats = when (selectedTabIndex) {
                 0 -> activeChats
                 1 -> groupChats
@@ -530,13 +572,7 @@ fun ConnectionsListView(
             val filteredCount = if (searchQuery.isBlank()) {
                 tabChats.size
             } else {
-                tabChats.count { chat ->
-                    val groupHit =
-                        chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
-                    val userHit =
-                        chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
-                    groupHit || userHit
-                }
+                filteredChats.size
             }
             val tabLabel = when (selectedTabIndex) {
                 0 -> "active"
@@ -599,41 +635,6 @@ fun ConnectionsListView(
                     }
                 }
             } else {
-                val activeChats = effectiveChats.filter {
-                    it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val groupChats = effectiveChats.filter {
-                    it.groupClique != null &&
-                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val archivedChats = effectiveChats.filter {
-                    it.groupClique == null &&
-                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val tabChats = when (selectedTabIndex) {
-                    0 -> activeChats
-                    1 -> groupChats
-                    else -> archivedChats
-                }
-
-                val sortedTabChats = tabChats
-                    .sortedWith(
-                        compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
-                            .thenByDescending { connectionListActivityTs(it) },
-                    )
-                val filteredChats = if (searchQuery.isBlank()) {
-                    sortedTabChats
-                } else {
-                    sortedTabChats.filter { chat ->
-                        val groupHit =
-                            chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
-                        val userHit =
-                            chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
-                        groupHit || userHit
-                    }
-                }
-
                 val clicksListOrderSignature = filteredChats.joinToString("\u0000") {
                     "${it.connection.id}\t${connectionListActivityTs(it)}"
                 }
@@ -735,7 +736,7 @@ fun ConnectionsListView(
                                 ConnectionItem(
                                     chatDetails = chatDetails,
                                     viewerUserId = currentUserId,
-                                    viewerAvailabilityBubbles = viewerAvailabilityBubbles,
+                                    overlapPrefetchGeneration = overlapPrefetchGeneration,
                                     isCore = connectionId in coreConnectionIds,
                                     showOnlineIndicator = chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,

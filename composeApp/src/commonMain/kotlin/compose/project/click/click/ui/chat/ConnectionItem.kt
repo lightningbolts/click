@@ -32,11 +32,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,10 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -59,9 +54,6 @@ import compose.project.click.click.ui.components.groupAvatarClusterWidth // prag
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
-import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Single row in the Clicks list. Tap opens chat; hold opens the unified action sheet.
@@ -70,7 +62,7 @@ import kotlinx.coroutines.withContext
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
     viewerUserId: String? = null,
-    viewerAvailabilityBubbles: List<ProfileAvailabilityIntentBubble>? = null,
+    overlapPrefetchGeneration: Int = 0,
     isCore: Boolean = false,
     showOnlineIndicator: Boolean = false,
     decryptedPreview: String? = null,
@@ -105,29 +97,13 @@ fun ConnectionItem(
         connection.last_message_at == null
 
     val peerId = chatDetails.otherUser.id
-    var hasIntentOverlap by remember(peerId, viewerUserId, isGroup) {
+    val hasIntentOverlap = remember(peerId, viewerUserId, isGroup, overlapPrefetchGeneration) {
         val v = viewerUserId
-        val cached = if (!isGroup && !v.isNullOrBlank()) AvailabilityOverlapCache.get(v, peerId) else null
-        mutableStateOf(cached == true)
-    }
-    val overlapRepo = remember { SupabaseRepository() }
-    LaunchedEffect(peerId, viewerUserId, isGroup, viewerAvailabilityBubbles) {
-        if (isGroup || viewerUserId.isNullOrBlank()) {
-            hasIntentOverlap = false
-            return@LaunchedEffect
+        if (isGroup || v.isNullOrBlank()) {
+            false
+        } else {
+            AvailabilityOverlapCache.get(v, peerId) == true
         }
-        val v = viewerUserId
-        val mine = viewerAvailabilityBubbles ?: return@LaunchedEffect
-        AvailabilityOverlapCache.get(v, peerId)?.let { cached ->
-            hasIntentOverlap = cached
-            return@LaunchedEffect
-        }
-        val result = withContext(Dispatchers.Default) {
-            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peerId)
-            hasActiveAvailabilityIntentOverlap(mine, theirs)
-        }
-        AvailabilityOverlapCache.put(v, peerId, result)
-        hasIntentOverlap = result
     }
 
     val rowInteraction = remember { MutableInteractionSource() }

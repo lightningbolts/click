@@ -386,6 +386,7 @@ class SupabaseRepository {
      */
     suspend fun fetchSharedConnectionBetween(viewerUserId: String, peerUserId: String): Connection? {
         if (viewerUserId.isBlank() || peerUserId.isBlank()) return null
+        findSharedConnectionInMemory(viewerUserId, peerUserId)?.let { return it }
         return try {
             val hidden = getHiddenConnectionIds(viewerUserId)
             val rows = supabase.from("connections")
@@ -406,6 +407,24 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("Error fetchSharedConnectionBetween (redacted): ${e.redactedRestMessage()}")
             null
+        }
+    }
+
+    private fun findSharedConnectionInMemory(viewerUserId: String, peerUserId: String): Connection? {
+        val currentUserId = compose.project.click.click.data.AppDataManager.currentUser.value?.id
+        if (currentUserId != viewerUserId || !compose.project.click.click.data.AppDataManager.isDataLoaded.value) {
+            return null
+        }
+        val hidden = compose.project.click.click.data.AppDataManager.hiddenConnectionIds.value
+        val rows = compose.project.click.click.data.AppDataManager.connections.value
+            .filter { conn ->
+                viewerUserId in conn.user_ids &&
+                    peerUserId in conn.user_ids &&
+                    conn.isVisibleInActiveUi() &&
+                    conn.id !in hidden
+            }
+        return rows.maxByOrNull { conn ->
+            (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
         }
     }
 

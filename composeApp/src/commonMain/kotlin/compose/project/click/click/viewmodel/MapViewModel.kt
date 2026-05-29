@@ -172,6 +172,7 @@ class MapViewModel : ViewModel() {
     private var beaconPollJob: Job? = null
     private var discoveryPollJob: Job? = null
     private var discoveryProximityJob: Job? = null
+    private var discoveryPrefetchDebounceJob: Job? = null
     private var beaconFetchSeq: Long = 0L
     private var discoveryFetchSeq: Long = 0L
 
@@ -982,8 +983,10 @@ class MapViewModel : ViewModel() {
      * Loads hubs/beacons for the discovery feed from the user's location (or map fallback),
      * independent of map zoom / PiP bounds so feed rows are not empty until zoom-in.
      */
-    fun prefetchDiscoveryProximityData() {
-        viewModelScope.launch {
+    fun prefetchDiscoveryProximityData(debounceMs: Long = DISCOVERY_PREFETCH_DEBOUNCE_MS) {
+        discoveryPrefetchDebounceJob?.cancel()
+        discoveryPrefetchDebounceJob = viewModelScope.launch {
+            if (debounceMs > 0L) delay(debounceMs)
             val bounds = resolveDiscoveryProximityBounds() ?: return@launch
             fetchProximityLayersForBounds(bounds, debounceMs = 0L, jobSlot = DiscoveryFetchSlot.Discovery)
         }
@@ -993,9 +996,10 @@ class MapViewModel : ViewModel() {
     fun startDiscoveryProximityPolling() {
         discoveryPollJob?.cancel()
         discoveryPollJob = viewModelScope.launch {
+            prefetchDiscoveryProximityData(debounceMs = 0L)
             while (true) {
-                prefetchDiscoveryProximityData()
                 delay(45_000L)
+                prefetchDiscoveryProximityData(debounceMs = 0L)
             }
         }
     }
@@ -1302,3 +1306,5 @@ private data class Nonuple<A, B, C, D, E, F, G, H, I>(
     val eighth: H,
     val ninth: I,
 )
+
+private const val DISCOVERY_PREFETCH_DEBOUNCE_MS = 400L

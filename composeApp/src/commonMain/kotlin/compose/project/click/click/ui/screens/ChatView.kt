@@ -241,6 +241,7 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allo
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
+import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
 import compose.project.click.click.util.collectAsStateLifecycleAware // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
@@ -531,8 +532,15 @@ fun ChatView(
                             return@LaunchedEffect
                         }
                         val peer = chatDetails.otherUser.id
+                        AvailabilityOverlapCache.get(v, peer)?.let { cached ->
+                            chatHasIntentOverlap = cached
+                            return@LaunchedEffect
+                        }
+                        val mine = ViewerAvailabilityBubblesCache.get(v)
+                            ?: overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v).also {
+                                ViewerAvailabilityBubblesCache.put(v, it)
+                            }
                         val result = withContext(Dispatchers.Default) {
-                            val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
                             val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
                             hasActiveAvailabilityIntentOverlap(mine, theirs)
                         }

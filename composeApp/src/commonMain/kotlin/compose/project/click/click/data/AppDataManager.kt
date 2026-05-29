@@ -26,6 +26,7 @@ import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPay
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.repository.UserConnectionsSnapshot
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.util.ViewerAvailabilityBubblesCache
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.awaitAll
@@ -148,6 +149,14 @@ object AppDataManager {
     fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
         _inboxFeedChats.value = chats
         scope.launch { schedulePersistSnapshot() }
+    }
+
+    /** In-memory inbox row for opening a thread without refetching the full inbox. */
+    fun chatInboxRowForThread(threadId: String, userId: String): ChatWithDetails? {
+        if (_currentUser.value?.id != userId || threadId.isBlank()) return null
+        return _inboxFeedChats.value.firstOrNull {
+            it.connection.id == threadId || it.chat.id == threadId
+        }
     }
 
     // Current user's availability
@@ -793,6 +802,16 @@ object AppDataManager {
     }
     
     /**
+     * True after a recent [loadAllData] when local connection/inbox caches can back the Clicks list
+     * without an immediate [ChatViewModel.loadChats] network round-trip.
+     */
+    fun isInboxFeedFresh(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
+        if (!_isDataLoaded.value || lastRefreshTime <= 0L) return false
+        if (nowMs - lastRefreshTime >= REFRESH_COOLDOWN_MS) return false
+        return _inboxFeedChats.value.isNotEmpty() || _connections.value.isNotEmpty()
+    }
+
+    /**
      * Refresh data - respects cooldown to prevent excessive API calls
      */
     fun refresh(force: Boolean = false) {
@@ -827,6 +846,7 @@ object AppDataManager {
         persistSnapshotJob?.cancel()
         persistSnapshotJob = null
         SupabaseRepository.resetStaleConnectionSweepSchedule()
+        ViewerAvailabilityBubblesCache.clear()
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call
         // replaces the old stopGlobalPresence() + leaks derived keys into the

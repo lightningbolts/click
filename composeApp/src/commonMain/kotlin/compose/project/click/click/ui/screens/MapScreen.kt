@@ -135,20 +135,7 @@ fun MapScreen(
             if (loc != null) {
                 userLat = loc.latitude
                 userLon = loc.longitude
-                viewModel.prefetchDiscoveryProximityData()
             }
-        }
-    }
-
-    LaunchedEffect(userLat, userLon) {
-        if (userLat != null && userLon != null) {
-            viewModel.prefetchDiscoveryProximityData()
-        }
-    }
-
-    LaunchedEffect(mapState) {
-        if (mapState is MapState.Success) {
-            viewModel.prefetchDiscoveryProximityData()
         }
     }
 

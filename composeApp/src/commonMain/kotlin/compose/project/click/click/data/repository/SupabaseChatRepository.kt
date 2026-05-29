@@ -1400,6 +1400,23 @@ class SupabaseChatRepository(
 
     // Fetch chat with details by chat ID via API
     override suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? {
+        compose.project.click.click.data.AppDataManager.chatInboxRowForThread(chatId, currentUserId)
+            ?.let { row -> return normalizeChatDetailsRow(row) }
+
+        val byChatRow = runCatching {
+            loadChatWithDetailsByRawId(chatId, currentUserId)
+        }.onFailure { e ->
+            println("ChatRepository: loadChatWithDetailsByRawId failed: ${e.redactedRestMessage()}")
+        }.getOrNull()
+        if (byChatRow != null) return byChatRow
+
+        val byConnection = runCatching {
+            loadChatWithDetailsByConnectionId(chatId, currentUserId)
+        }.onFailure { e ->
+            println("ChatRepository: loadChatWithDetailsByConnectionId failed: ${e.redactedRestMessage()}")
+        }.getOrNull()
+        if (byConnection != null) return byConnection
+
         val fromList = runCatching {
             fetchUserChatsWithDetails(currentUserId)
                 .firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
@@ -1411,37 +1428,29 @@ class SupabaseChatRepository(
         }.getOrNull()
 
         if (fromList != null) {
-            return runCatching {
-                if (!fromList.chat.id.isNullOrBlank() || fromList.groupClique != null) {
-                    fromList
-                } else {
-                    val ensured = ensureChatForConnection(fromList.connection.id) ?: return@runCatching fromList
-                    fromList.copy(
-                        chat = fromList.chat.copy(
-                            id = ensured.id,
-                            connectionId = fromList.connection.id,
-                        ),
-                    )
-                }
-            }.getOrElse { e ->
-                println("ChatRepository: normalize inbox chat row failed: ${e.redactedRestMessage()}")
-                fromList
-            }
+            return normalizeChatDetailsRow(fromList)
         }
 
-        val byChatRow = runCatching {
-            loadChatWithDetailsByRawId(chatId, currentUserId)
-        }.onFailure { e ->
-            println("ChatRepository: loadChatWithDetailsByRawId failed: ${e.redactedRestMessage()}")
-        }.getOrNull()
+        return null
+    }
 
-        if (byChatRow != null) return byChatRow
-
+    private suspend fun normalizeChatDetailsRow(row: ChatWithDetails): ChatWithDetails {
         return runCatching {
-            loadChatWithDetailsByConnectionId(chatId, currentUserId)
-        }.onFailure { e ->
-            println("ChatRepository: loadChatWithDetailsByConnectionId failed: ${e.redactedRestMessage()}")
-        }.getOrNull()
+            if (!row.chat.id.isNullOrBlank() || row.groupClique != null) {
+                row
+            } else {
+                val ensured = ensureChatForConnection(row.connection.id) ?: return@runCatching row
+                row.copy(
+                    chat = row.chat.copy(
+                        id = ensured.id,
+                        connectionId = row.connection.id,
+                    ),
+                )
+            }
+        }.getOrElse { e ->
+            println("ChatRepository: normalize inbox chat row failed: ${e.redactedRestMessage()}")
+            row
+        }
     }
 
     /**
