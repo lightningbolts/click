@@ -43,9 +43,24 @@ jobs:
       - name: Decode signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "Missing ANDROID_KEYSTORE_BASE64 repository secret."
+          missing=()
+          [ -z "$ANDROID_KEYSTORE_BASE64" ] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [ -z "$ANDROID_KEYSTORE_PASSWORD" ] && missing+=("ANDROID_KEYSTORE_PASSWORD")
+          [ -z "$ANDROID_KEY_ALIAS" ] && missing+=("ANDROID_KEY_ALIAS")
+          [ -z "$ANDROID_KEY_PASSWORD" ] && missing+=("ANDROID_KEY_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing GitHub Actions secrets: ${missing[*]}"
+            echo
+            echo "Add them under Settings → Secrets and variables → Actions, or run locally:"
+            echo "  gh auth login"
+            echo "  ./scripts/setup-github-secrets.sh"
+            echo
+            echo "Manual ANDROID_KEYSTORE_BASE64:"
+            echo "  base64 -w0 composeApp/keystore/release.jks"
             exit 1
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "${RUNNER_TEMP}/release.jks"
