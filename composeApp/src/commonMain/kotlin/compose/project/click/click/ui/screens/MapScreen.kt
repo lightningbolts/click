@@ -61,6 +61,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import compose.project.click.click.data.repository.MapBeaconRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -355,12 +358,13 @@ fun MapScreen(
                         .padding(bottom = 12.dp),
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
-                    onSubmit = { kind, text, ttlMs, onRejectedEarly ->
+                    onSubmit = { kind, text, ttlMs, showCreatorName, onRejectedEarly ->
                         showBeaconDropSheet = false
                         viewModel.submitBeaconDrop(
                             kind = kind,
                             text = text,
                             ttlMs = ttlMs,
+                            showCreatorName = showCreatorName,
                             onAcceptedLocally = { },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -829,11 +833,133 @@ private fun BeaconDetailSheetContent(
             distanceMeters = distanceMeters,
             modifier = modifier,
         )
+        MapBeaconKind.EVENT -> EventBeaconDetail(
+            beacon = beacon,
+            distanceMeters = distanceMeters,
+            modifier = modifier,
+        )
         else -> CommunityBeaconDetail(
             beacon = beacon,
             distanceMeters = distanceMeters,
             modifier = modifier,
         )
+    }
+}
+
+@Composable
+private fun EventBeaconDetail(
+    beacon: MapBeacon,
+    distanceMeters: Double?,
+    modifier: Modifier = Modifier,
+) {
+    val repository = remember { MapBeaconRepository() }
+    var attendees by remember(beacon.id) { mutableStateOf<List<compose.project.click.click.data.api.BeaconAttendeeDto>>(emptyList()) }
+    var currentUserSignedUp by remember(beacon.id) { mutableStateOf(false) }
+    var rsvpLoading by remember(beacon.id) { mutableStateOf(true) }
+    var rsvpSubmitting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(beacon.id) {
+        rsvpLoading = true
+        repository.fetchBeaconRsvp(beacon.id).fold(
+            onSuccess = { payload ->
+                attendees = payload.attendees
+                currentUserSignedUp = payload.currentUserSignedUp
+            },
+            onFailure = { attendees = emptyList() },
+        )
+        rsvpLoading = false
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = beacon.displayTypeTitle(),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (beacon.showCreatorName && !beacon.creatorDisplayName.isNullOrBlank()) {
+            Text(
+                text = "Hosted by ${beacon.creatorDisplayName}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        distanceMeters?.let { d ->
+            Text(
+                text = formatBeaconDistance(d),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Text(
+            text = "Attendees",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (rsvpLoading) {
+            CircularProgressIndicator(strokeWidth = 2.dp)
+        } else if (attendees.isEmpty()) {
+            Text(
+                text = "Be the first to RSVP.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(attendees, key = { it.userId }) { attendee ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        AsyncImage(
+                            model = attendee.avatarUrl,
+                            contentDescription = attendee.name,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape),
+                        )
+                        Text(
+                            text = attendee.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+        Button(
+            onClick = {
+                if (rsvpSubmitting || currentUserSignedUp) return@Button
+                scope.launch {
+                    rsvpSubmitting = true
+                    repository.rsvpBeacon(beacon.id).fold(
+                        onSuccess = { attendee ->
+                            currentUserSignedUp = true
+                            attendees = (attendees.filterNot { it.userId == attendee.userId } + attendee)
+                                .distinctBy { it.userId }
+                        },
+                        onFailure = { },
+                    )
+                    rsvpSubmitting = false
+                }
+            },
+            enabled = !currentUserSignedUp && !rsvpSubmitting,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (rsvpSubmitting) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+            } else {
+                Text(if (currentUserSignedUp) "Signed up" else "RSVP / Sign Up")
+            }
+        }
     }
 }
 
@@ -853,6 +979,13 @@ private fun CommunityBeaconDetail(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        if (beacon.showCreatorName && !beacon.creatorDisplayName.isNullOrBlank()) {
+            Text(
+                text = "Shared by ${beacon.creatorDisplayName}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         Text(
             text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
             style = MaterialTheme.typography.bodyMedium,

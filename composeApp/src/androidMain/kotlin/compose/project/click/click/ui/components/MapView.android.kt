@@ -147,9 +147,16 @@ actual fun PlatformMap(
             key(pin.id) {
                 val markerHue = pin.markerHueDegrees()
                 val caption = pin.caption?.trim().orEmpty()
+                val position = remember(pin.id, pin.latitude, pin.longitude) {
+                    LatLng(pin.latitude, pin.longitude)
+                }
+                val markerState = remember(pin.id) { MarkerState(position = position) }
+                LaunchedEffect(pin.latitude, pin.longitude) {
+                    markerState.position = LatLng(pin.latitude, pin.longitude)
+                }
                 if (caption.isEmpty()) {
                     Marker(
-                        state = MarkerState(position = LatLng(pin.latitude, pin.longitude)),
+                        state = markerState,
                         title = pin.title,
                         alpha = pin.opacity,
                         zIndex = pin.zIndex,
@@ -170,7 +177,7 @@ actual fun PlatformMap(
                         )
                     }
                     Marker(
-                        state = MarkerState(position = LatLng(pin.latitude, pin.longitude)),
+                        state = markerState,
                         title = pin.title,
                         alpha = pin.opacity,
                         zIndex = pin.zIndex,
@@ -187,6 +194,14 @@ actual fun PlatformMap(
 
         // Render cluster pins
         clusters.forEach { cluster ->
+            key("cluster-${cluster.id}") {
+                val clusterPosition = remember(cluster.id, cluster.latitude, cluster.longitude) {
+                    LatLng(cluster.latitude, cluster.longitude)
+                }
+                val clusterState = remember(cluster.id) { MarkerState(position = clusterPosition) }
+                LaunchedEffect(cluster.latitude, cluster.longitude) {
+                    clusterState.position = LatLng(cluster.latitude, cluster.longitude)
+                }
             val cacheKey = buildString {
                 append(cluster.count)
                 append('|')
@@ -206,7 +221,7 @@ actual fun PlatformMap(
                 bitmapDescriptorFromClusterCount(cluster.count, px, fill)
             }
             Marker(
-                state = MarkerState(position = LatLng(cluster.latitude, cluster.longitude)),
+                state = clusterState,
                 title = "${cluster.count}",
                 zIndex = cluster.zIndex,
                 icon = bmp,
@@ -215,6 +230,7 @@ actual fun PlatformMap(
                     true
                 }
             )
+            }
         }
     }
 }

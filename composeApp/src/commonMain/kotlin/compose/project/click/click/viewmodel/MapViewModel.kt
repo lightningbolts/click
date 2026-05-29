@@ -443,8 +443,8 @@ class MapViewModel : ViewModel() {
                 MapBeaconKind.SOUNDTRACK -> layers.contains(MapLayerFilter.SOUNDTRACKS)
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
                     layers.contains(MapLayerFilter.ALERTS_UTILITIES)
-                MapBeaconKind.SOCIAL_VIBE -> layers.contains(MapLayerFilter.SOCIAL_VIBES)
-                MapBeaconKind.OTHER -> layers.contains(MapLayerFilter.SOCIAL_VIBES)
+                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.EVENT, MapBeaconKind.OTHER ->
+                    layers.contains(MapLayerFilter.SOCIAL_VIBES)
             }
             if (include) out.add(b)
         }
@@ -534,6 +534,7 @@ class MapViewModel : ViewModel() {
         kind: MapBeaconKind,
         text: String,
         ttlMs: Long? = null,
+        showCreatorName: Boolean = false,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -563,7 +564,8 @@ class MapViewModel : ViewModel() {
                         put("music_url", trimmed)
                     }
                 }
-                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
+                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY,
+                MapBeaconKind.EVENT -> {
                     if (trimmed.isEmpty()) {
                         _beaconInsertError.value = "Please add a description."
                         onRejectedEarly()
@@ -604,6 +606,7 @@ class MapViewModel : ViewModel() {
                 lon = loc.longitude,
                 metadata = metadata,
                 ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
+                showCreatorName = showCreatorName,
             )
             val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
             val optimisticBeacon = MapBeacon(
@@ -616,6 +619,7 @@ class MapViewModel : ViewModel() {
                 createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
                 expiresAtEpochMs = null,
                 sourceBeaconType = insert.kind,
+                showCreatorName = showCreatorName,
             )
             _mapBeacons.value = _mapBeacons.value + optimisticBeacon
             PlatformHapticsPolicy.heavyImpact()

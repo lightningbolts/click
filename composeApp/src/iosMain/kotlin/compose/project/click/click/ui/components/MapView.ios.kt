@@ -242,6 +242,7 @@ private fun MapPin.markerTintUIColor(): UIColor {
             MapBeaconKind.UTILITY -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
             MapBeaconKind.STUDY -> UIColor.blueColor
             MapBeaconKind.SOCIAL_VIBE -> UIColor.magentaColor
+            MapBeaconKind.EVENT -> UIColor(red = 0.20, green = 0.78, blue = 0.55, alpha = 1.0)
             MapBeaconKind.OTHER -> UIColor.yellowColor
         }
         else -> when (kind) {

@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,6 +53,7 @@ enum class BeaconDropCategory {
     UTILITY,
     SOS,
     STUDY,
+    EVENT,
     COMMUNITY_HUB,
 }
 
@@ -65,7 +67,7 @@ private val hubCategoryOptions = listOf(
 fun BeaconDropSheetContent(
     errorMessage: String?,
     onDismissError: () -> Unit,
-    onSubmit: (MapBeaconKind, String, ttlMs: Long?, onRejectedEarly: () -> Unit) -> Unit,
+    onSubmit: (MapBeaconKind, String, ttlMs: Long?, showCreatorName: Boolean, onRejectedEarly: () -> Unit) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
@@ -77,6 +79,7 @@ fun BeaconDropSheetContent(
 
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
+    var showCreatorName by remember { mutableStateOf(false) }
 
     val isHubMode = category.value == BeaconDropCategory.COMMUNITY_HUB
 
@@ -86,6 +89,7 @@ fun BeaconDropSheetContent(
         BeaconDropCategory.UTILITY -> MapBeaconKind.UTILITY
         BeaconDropCategory.SOS -> MapBeaconKind.SOS
         BeaconDropCategory.STUDY -> MapBeaconKind.STUDY
+        BeaconDropCategory.EVENT -> MapBeaconKind.EVENT
         BeaconDropCategory.COMMUNITY_HUB -> MapBeaconKind.OTHER
     }
     val beaconLabel = when (category.value) {
@@ -94,6 +98,7 @@ fun BeaconDropSheetContent(
         BeaconDropCategory.UTILITY -> "What's here? (max 140)"
         BeaconDropCategory.SOS -> "SOS message (max 140)"
         BeaconDropCategory.STUDY -> "Study spot note (max 140)"
+        BeaconDropCategory.EVENT -> "Event / activity details (max 140)"
         BeaconDropCategory.COMMUNITY_HUB -> ""
     }
     val maxLen = if (category.value == BeaconDropCategory.SOUNDTRACK) 2000 else 140
@@ -137,6 +142,7 @@ fun BeaconDropSheetContent(
                                 BeaconDropCategory.UTILITY -> "Utility"
                                 BeaconDropCategory.SOS -> "SOS"
                                 BeaconDropCategory.STUDY -> "Study"
+                                BeaconDropCategory.EVENT -> "Event"
                                 BeaconDropCategory.COMMUNITY_HUB -> "Hub"
                             },
                         )
@@ -275,6 +281,32 @@ fun BeaconDropSheetContent(
             )
         }
 
+        if (!isHubMode) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Display my name",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Show your name on the map pin for others nearby.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = showCreatorName,
+                    onCheckedChange = { showCreatorName = it },
+                )
+            }
+        }
+
         errorMessage?.takeIf { it.isNotBlank() }?.let { err ->
             Text(
                 text = err,
@@ -295,7 +327,7 @@ fun BeaconDropSheetContent(
                     } else {
                         expiration.value.durationMs
                     }
-                    onSubmit(kind, text.value, ttl) {
+                    onSubmit(kind, text.value, ttl, showCreatorName) {
                         isSubmitting = false
                     }
                 }

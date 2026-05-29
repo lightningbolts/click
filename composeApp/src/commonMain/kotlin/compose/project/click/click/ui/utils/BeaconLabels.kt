@@ -18,6 +18,7 @@ fun beaconTypeDisplayLabel(raw: String?, kind: MapBeaconKind): String =
         "swag" -> "Swag"
         "capacity" -> "Capacity"
         "scavenger" -> "Scavenger"
+        "event" -> "Event / Activity"
         null -> kind.userFacingLabel()
         else -> raw.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
@@ -29,6 +30,7 @@ fun MapBeaconKind.userFacingLabel(): String =
         MapBeaconKind.HAZARD -> "Hazard"
         MapBeaconKind.UTILITY -> "Utility"
         MapBeaconKind.STUDY -> "Study"
+        MapBeaconKind.EVENT -> "Event / Activity"
         MapBeaconKind.SOCIAL_VIBE -> "Social vibe"
         MapBeaconKind.OTHER -> "Beacon"
     }

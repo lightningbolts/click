@@ -15,6 +15,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,31 +47,36 @@ internal fun SettingsInterestsCard(
     if (userId.isNullOrBlank()) return
 
     val scope = rememberCoroutineScope()
-    var interestTags by remember(userId) { mutableStateOf<List<String>?>(null) }
-    var savedTags by remember(userId) { mutableStateOf<List<String>>(emptyList()) }
+    val cachedTags by AppDataManager.userInterestTags.collectAsState()
+    val initialTags = remember(userId, cachedTags) {
+        filterToPredefinedInterestTags(cachedTags)
+    }
+    var interestTags by remember(userId) { mutableStateOf(initialTags) }
+    var savedTags by remember(userId) { mutableStateOf(initialTags) }
     var tagsDirty by remember { mutableStateOf(false) }
-    var tagsLoading by remember { mutableStateOf(false) }
     var tagsSaving by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(userId) {
-        tagsLoading = true
-        loadError = null
+    LaunchedEffect(cachedTags) {
+        val loaded = filterToPredefinedInterestTags(cachedTags)
+        interestTags = loaded
+        savedTags = loaded
         tagsDirty = false
+    }
+
+    // Background refresh only when cache is empty (cold start before AppDataManager finishes).
+    LaunchedEffect(userId, cachedTags) {
+        if (cachedTags.isNotEmpty()) return@LaunchedEffect
         supabaseRepository.fetchUserInterests(userId).fold(
             onSuccess = { row ->
                 val loaded = filterToPredefinedInterestTags(row?.tags.orEmpty())
-                interestTags = loaded
-                savedTags = loaded
+                AppDataManager.applyInterestTags(loaded)
             },
             onFailure = {
-                interestTags = emptyList()
-                savedTags = emptyList()
                 loadError = it.message?.lines()?.firstOrNull()?.take(180)
                     ?: "Could not load interests"
             },
         )
-        tagsLoading = false
     }
 
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
@@ -92,97 +98,93 @@ internal fun SettingsInterestsCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            when {
-                tagsLoading && interestTags == null -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(vertical = 16.dp),
-                        strokeWidth = 2.dp,
+            if (cachedTags.isEmpty() && interestTags.isEmpty() && loadError == null) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                if (interestTags.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        interestTags.forEach { tag ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = PrimaryBlue.copy(alpha = 0.12f),
+                            ) {
+                                Text(
+                                    text = tag,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = PrimaryBlue,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                InterestEditor(
+                    selectedTags = interestTags,
+                    onSelectedTagsChange = { next ->
+                        interestTags = next
+                        tagsDirty = next != savedTags
+                    },
+                    minTags = null,
+                    maxTags = null,
+                    showSelectionCount = true,
+                )
+
+                loadError?.let { err ->
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
-                interestTags != null -> {
-                    val tags = interestTags!!
-                    if (tags.isNotEmpty()) {
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            tags.forEach { tag ->
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = PrimaryBlue.copy(alpha = 0.12f),
-                                ) {
-                                    Text(
-                                        text = tag,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = PrimaryBlue,
-                                    )
-                                }
-                            }
+
+                val platformStyle = LocalPlatformStyle.current
+                Button(
+                    onClick = {
+                        scope.launch {
+                            tagsSaving = true
+                            val toSave = interestTags
+                            supabaseRepository.updateUserInterests(userId, toSave).fold(
+                                onSuccess = {
+                                    savedTags = toSave
+                                    tagsDirty = false
+                                    loadError = null
+                                    AppDataManager.applyInterestTags(toSave)
+                                    onFeedback("Saved ${toSave.size} interests")
+                                },
+                                onFailure = { e ->
+                                    val msg = e.message?.lines()?.firstOrNull()?.take(180)
+                                        ?: "Could not save interests"
+                                    loadError = msg
+                                    onFeedback(msg)
+                                },
+                            )
+                            tagsSaving = false
                         }
-                    }
-
-                    InterestEditor(
-                        selectedTags = tags,
-                        onSelectedTagsChange = { next ->
-                            interestTags = next
-                            tagsDirty = next != savedTags
-                        },
-                        minTags = null,
-                        maxTags = null,
-                        showSelectionCount = true,
-                    )
-
-                    loadError?.let { err ->
-                        Text(
-                            text = err,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                    },
+                    enabled = tagsDirty && !tagsSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(if (platformStyle.isIOS) 12.dp else 28.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                ) {
+                    if (tagsSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
                         )
-                    }
-
-                    val platformStyle = LocalPlatformStyle.current
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                tagsSaving = true
-                                val toSave = interestTags.orEmpty()
-                                supabaseRepository.updateUserInterests(userId, toSave).fold(
-                                    onSuccess = {
-                                        savedTags = toSave
-                                        tagsDirty = false
-                                        loadError = null
-                                        AppDataManager.applyInterestTags(toSave)
-                                        onFeedback("Saved ${toSave.size} interests")
-                                    },
-                                    onFailure = { e ->
-                                        val msg = e.message?.lines()?.firstOrNull()?.take(180)
-                                            ?: "Could not save interests"
-                                        loadError = msg
-                                        onFeedback(msg)
-                                    },
-                                )
-                                tagsSaving = false
-                            }
-                        },
-                        enabled = tagsDirty && !tagsSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(if (platformStyle.isIOS) 12.dp else 28.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                    ) {
-                        if (tagsSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        } else {
-                            Text(
-                                if (tagsDirty) "Save Interests" else "Saved",
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
+                    } else {
+                        Text(
+                            if (tagsDirty) "Save Interests" else "Saved",
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
             }

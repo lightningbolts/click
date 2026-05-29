@@ -145,7 +145,59 @@ class AuthRepository(
         }
     }
 
-    suspend fun signInWithGoogle(): Result<Unit> = signInWithOAuth(Google)
+    suspend fun signInWithGoogle(): Result<Unit> {
+        return try {
+            val nativePayloadResult = withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
+                requestNativeGoogleSignInPayload()
+            }
+
+            nativePayloadResult.fold(
+                onSuccess = { nativePayload ->
+                    if (nativePayload != null) {
+                        runCatching {
+                            supabase.auth.signInWith(IDToken) {
+                                provider = Google
+                                idToken = nativePayload.idToken
+                            }
+                        }.fold(
+                            onSuccess = { Result.success(Unit) },
+                            onFailure = { idTokenError ->
+                                Result.failure(
+                                    Exception(
+                                        mapAuthErrorMessage(
+                                            idTokenError,
+                                            defaultMessage = "Google sign-in couldn't be completed right now.",
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    } else {
+                        Result.failure(Exception("Google sign-in is not available on this device."))
+                    }
+                },
+                onFailure = { nativeError ->
+                    Result.failure(
+                        Exception(
+                            mapAuthErrorMessage(
+                                nativeError,
+                                defaultMessage = "Google sign-in couldn't be completed right now.",
+                            ),
+                        ),
+                    )
+                },
+            )
+        } catch (e: Exception) {
+            Result.failure(
+                Exception(
+                    mapAuthErrorMessage(
+                        e,
+                        defaultMessage = "Google sign-in couldn't be completed right now.",
+                    ),
+                ),
+            )
+        }
+    }
 
     suspend fun signInWithApple(): Result<Unit> {
         return try {

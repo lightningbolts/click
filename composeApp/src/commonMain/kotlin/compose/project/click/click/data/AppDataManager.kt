@@ -153,6 +153,10 @@ object AppDataManager {
     // Current user's availability
     private val _userAvailability = MutableStateFlow<UserAvailability?>(null)
     val userAvailability: StateFlow<UserAvailability?> = _userAvailability.asStateFlow()
+
+    /** Cached interest tags — populated during initial app load for instant Settings render. */
+    private val _userInterestTags = MutableStateFlow<List<String>>(emptyList())
+    val userInterestTags: StateFlow<List<String>> = _userInterestTags.asStateFlow()
     
     // Loading state - start as false, set to true in initializeData
     private val _isLoading = MutableStateFlow(false)
@@ -649,18 +653,17 @@ object AppDataManager {
                 startPresenceHeartbeat(user.id)
                 startAggressiveBackgroundChatSync(user.id)
 
-                // Interest tags are not required for first Home paint.
-                scope.launch {
-                    runCatching { supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty() }
-                        .onSuccess { tags ->
-                            if (_currentUser.value?.id == user.id) {
-                                _currentUser.value = _currentUser.value?.copy(tags = tags)
-                            }
+                // Interest tags: await during startup so Settings renders instantly (no shimmer).
+                runCatching { supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty() }
+                    .onSuccess { tags ->
+                        if (_currentUser.value?.id == user.id) {
+                            _currentUser.value = _currentUser.value?.copy(tags = tags)
+                            _userInterestTags.value = tags
                         }
-                        .onFailure { e ->
-                            println("AppDataManager: Interest tags fetch failed: ${e.redactedRestMessage()}")
-                        }
-                }
+                    }
+                    .onFailure { e ->
+                        println("AppDataManager: Interest tags fetch failed: ${e.redactedRestMessage()}")
+                    }
 
                 // Load location preferences from Supabase
                 runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
@@ -821,6 +824,7 @@ object AppDataManager {
         presenceHeartbeatJob?.cancel()
         presenceHeartbeatJob = null
         _currentUser.value = null
+        _userInterestTags.value = emptyList()
         _connections.value = emptyList()
         _archivedConnectionIds.value = emptySet()
         _hiddenConnectionIds.value = emptySet()
@@ -1336,6 +1340,7 @@ object AppDataManager {
     fun applyInterestTags(tags: List<String>) {
         val latest = _currentUser.value ?: return
         _currentUser.value = latest.copy(tags = tags)
+        _userInterestTags.value = tags
         scope.launch {
             runCatching { persistSnapshot() }
                 .onFailure { println("applyInterestTags: snapshot failed: ${it.message}") }
@@ -1523,6 +1528,7 @@ object AppDataManager {
         return runCatching {
             val snapshot = json.decodeFromString<CachedAppSnapshot>(snapshotJson)
             _currentUser.value = snapshot.currentUser
+            _userInterestTags.value = snapshot.currentUser?.tags.orEmpty()
             _connections.value = snapshot.connections
             _connectedUsers.value = snapshot.connectedUsers.associateBy { it.id }
             _locationPreferences.value = snapshot.locationPreferences

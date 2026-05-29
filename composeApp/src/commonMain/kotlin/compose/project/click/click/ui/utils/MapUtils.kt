@@ -437,6 +437,7 @@ fun beaconZIndex(beacon: MapBeacon): Float =
         MapBeaconKind.SOUNDTRACK -> 11_500f
         MapBeaconKind.UTILITY -> 11_400f
         MapBeaconKind.STUDY -> 11_200f
+        MapBeaconKind.EVENT -> 11_150f
         MapBeaconKind.SOCIAL_VIBE -> 11_100f
         MapBeaconKind.OTHER -> 11_050f
     }

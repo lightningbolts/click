@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         ClickLiveKitBridge.shared.start()
+        ClickGoogleSignInBridge.shared.start()
         ClickCallKitManager.shared.start()
         ClickVoipPushManager.shared.start()
 
@@ -90,6 +91,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         if url.scheme?.lowercased() == "click", url.host?.lowercased() == "login" {
             MainViewControllerKt.handleSupabaseAuthDeepLink(url: url)
+            return true
+        }
+        if ClickGoogleSignInBridge.shared.handleOpenURL(url) {
             return true
         }
         if let hubId = Self.communityHubId(from: url) {

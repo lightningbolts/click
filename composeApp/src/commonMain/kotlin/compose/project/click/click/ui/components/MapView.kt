@@ -82,7 +82,7 @@ data class MapPin(
                 MapBeaconKind.SOUNDTRACK -> MapPinKind.BEACON_SOUNDTRACK
                 MapBeaconKind.HAZARD, MapBeaconKind.SOS, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
                     MapPinKind.BEACON_ALERT
-                MapBeaconKind.SOCIAL_VIBE -> MapPinKind.BEACON_SOCIAL
+                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.EVENT -> MapPinKind.BEACON_SOCIAL
                 MapBeaconKind.OTHER -> MapPinKind.BEACON_OTHER
             }
             val label = beacon.metadata.title
@@ -95,6 +95,7 @@ data class MapPin(
                     MapBeaconKind.UTILITY -> "Utility"
                     MapBeaconKind.STUDY -> "Study"
                     MapBeaconKind.SOCIAL_VIBE -> "Social"
+                    MapBeaconKind.EVENT -> "Event"
                     MapBeaconKind.OTHER -> "Beacon"
                 }
             val caption = when (beacon.kind) {
@@ -105,9 +106,14 @@ data class MapPin(
                         ?: label
                     truncateMapPinCaption(raw, 12).takeIf { it.isNotEmpty() }
                 }
-                MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.SOS, MapBeaconKind.STUDY -> {
-                    beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
-                        ?.takeIf { it.isNotEmpty() }
+                MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.SOS, MapBeaconKind.STUDY,
+                MapBeaconKind.EVENT -> {
+                    val creatorCaption = beacon.creatorDisplayName
+                        ?.takeIf { beacon.showCreatorName && it.isNotBlank() }
+                        ?.let { truncateMapPinCaption(it, 12) }
+                    creatorCaption
+                        ?: beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
+                            ?.takeIf { it.isNotEmpty() }
                 }
                 MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER -> {
                     beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
@@ -265,6 +271,7 @@ private fun hueForMapBeaconKind(kind: MapBeaconKind): Float =
         MapBeaconKind.HAZARD -> 35f
         MapBeaconKind.UTILITY -> 210f
         MapBeaconKind.STUDY -> 240f
+        MapBeaconKind.EVENT -> 160f
         MapBeaconKind.SOCIAL_VIBE -> 310f
         MapBeaconKind.OTHER -> 55f
     }

@@ -994,9 +994,68 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** GET `/api/beacons/{beaconId}/rsvp` — attendee list for event beacons. */
+    suspend fun getBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/rsvp")
+            if (response.status.value in 200..299) {
+                Result.success(response.body<BeaconRsvpGetResponseDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/beacons/{beaconId}/rsvp` — sign up for an event beacon. */
+    suspend fun postBeaconRsvp(beaconId: String): Result<BeaconAttendeeDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp")
+            if (response.status.value in 200..299) {
+                val payload = response.body<BeaconRsvpPostResponseDto>()
+                val attendee = payload.attendee
+                    ?: return Result.failure(Exception("RSVP succeeded but attendee payload was missing"))
+                Result.success(attendee)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun close() {
         client.close()
         clickWebClient.close()
         clickWebPlainClient.close()
     }
 }
+
+@Serializable
+data class BeaconAttendeeDto(
+    @SerialName("user_id") val userId: String,
+    val name: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+)
+
+@Serializable
+data class BeaconRsvpGetResponseDto(
+    @SerialName("beacon_id") val beaconId: String? = null,
+    val attendees: List<BeaconAttendeeDto> = emptyList(),
+    @SerialName("current_user_signed_up") val currentUserSignedUp: Boolean = false,
+)
+
+@Serializable
+data class BeaconRsvpPostResponseDto(
+    val ok: Boolean = false,
+    val attendee: BeaconAttendeeDto? = null,
+)

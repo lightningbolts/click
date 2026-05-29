@@ -693,6 +693,7 @@ enum class MapBeaconKind(val apiValue: String) {
     UTILITY("utility"),
     STUDY("study"),
     SOCIAL_VIBE("social_vibe"),
+    EVENT("event"),
     OTHER("other"),
     ;
 
@@ -710,6 +711,7 @@ enum class MapBeaconKind(val apiValue: String) {
                 v == "utility" || v.contains("util") || v.contains("amenity") -> UTILITY
                 v.contains("study") -> STUDY
                 v.contains("social") || v.contains("vibe") -> SOCIAL_VIBE
+                v == "event" || v.contains("activity") -> EVENT
                 else -> OTHER
             }
         }
@@ -774,6 +776,7 @@ data class MapBeaconInsert(
     val metadata: JsonObject? = null,
     /** For non-soundtrack beacons: TTL from creation; omit for soundtrack (server default 7 days). */
     @SerialName("ttl_ms") val ttlMs: Long? = null,
+    @SerialName("show_creator_name") val showCreatorName: Boolean = false,
 )
 
 /**
@@ -790,6 +793,8 @@ data class MapBeacon(
     val expiresAtEpochMs: Long? = null,
     /** Raw `beacon_type` from PostgREST / API (e.g. `hazard`, `utility`) for tint + labels. */
     val sourceBeaconType: String? = null,
+    val showCreatorName: Boolean = false,
+    val creatorDisplayName: String? = null,
 )
 
 fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
@@ -841,10 +846,18 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     val lon = dbl("lon", "longitude", "lng") ?: return null
     val metaEl = obj["metadata"] ?: obj["meta"]
     val meta = parseMapBeaconMetadata(metaEl as? JsonElement)
-    val createdBy = strKey("created_by", "user_id", "author_id")
+    val createdBy = strKey("created_by", "user_id", "author_id", "creator_id")
     val createdAt = strKey("created_at")?.let { parseEpochMs(it) }
         ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
     val expiresAt = strKey("expires_at", "expiresAt")?.let { parseEpochMs(it) }
+    val showCreatorName = (obj["show_creator_name"] as? JsonPrimitive)?.let { prim ->
+        when (val raw = prim.contentOrNull?.trim()?.lowercase()) {
+            "true", "1" -> true
+            "false", "0" -> false
+            else -> null
+        }
+    } ?: false
+    val creatorDisplayName = strKey("creator_name", "creatorName")
     return MapBeacon(
         id = id,
         kind = kind,
@@ -855,6 +868,8 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         createdAtEpochMs = createdAt,
         expiresAtEpochMs = expiresAt,
         sourceBeaconType = sourceBeaconType,
+        showCreatorName = showCreatorName,
+        creatorDisplayName = creatorDisplayName,
     )
 }
 

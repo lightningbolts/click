@@ -180,7 +180,36 @@ class AuthViewModel(
      * `sessionStatus` changes triggered by the deep-link → PKCE code exchange.
      */
     fun signInWithGoogle() {
-        launchOAuthSignIn(providerLabel = "Google") { authRepository.signInWithGoogle() }
+        viewModelScope.launch {
+            authState = AuthState.Loading
+            try {
+                authRepository.signInWithGoogle().fold(
+                    onSuccess = {
+                        val user = authRepository.getCurrentUser()
+                        if (user != null) {
+                            isAuthenticated = true
+                            authState = AuthState.Success(
+                                userId = user.id,
+                                email = user.email ?: "",
+                                name = user.displayNameFromMetadata(),
+                            )
+                            AppDataManager.resetAndReload()
+                        } else {
+                            authState = AuthState.Error("Google sign-in couldn't restore your session.")
+                        }
+                    },
+                    onFailure = { error ->
+                        authState = AuthState.Error(
+                            error.message ?: "Could not start Google sign-in right now.",
+                        )
+                    },
+                )
+            } catch (e: Exception) {
+                authState = AuthState.Error(
+                    e.message ?: "Could not start Google sign-in right now.",
+                )
+            }
+        }
     }
 
     /**

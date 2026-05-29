@@ -218,6 +218,7 @@ internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): Lis
                     MapBeaconKind.UTILITY -> "Utilities"
                     MapBeaconKind.STUDY -> "Study spots"
                     MapBeaconKind.SOCIAL_VIBE -> "Social vibes"
+                    MapBeaconKind.EVENT -> "Events / Activities"
                     MapBeaconKind.OTHER -> "Beacons"
                 }
                 sections += DiscoveryFeedSection(
