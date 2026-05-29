@@ -1371,7 +1371,13 @@ class ChatViewModel(
         apiChatId: String,
         userId: String
     ): PrefetchedChatPayload = coroutineScope {
-        val messagesDeferred = async { chatRepository.fetchMessagesForChat(apiChatId, userId) }
+        val messagesDeferred = async {
+            chatRepository.fetchMessagesForChat(
+                chatId = apiChatId,
+                viewerUserId = userId,
+                limit = INITIAL_CHAT_MESSAGE_FETCH_LIMIT,
+            )
+        }
         val participantsDeferred = async { chatRepository.fetchChatParticipants(apiChatId) }
         val reactionsDeferred = async { chatRepository.fetchReactionsForChat(apiChatId) }
 
@@ -3581,5 +3587,6 @@ private const val MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS = 3
 private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
 private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 800L
 private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L
+private const val INITIAL_CHAT_MESSAGE_FETCH_LIMIT = 80
 private const val SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES = 160
 private const val SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES = 80

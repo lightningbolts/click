@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
@@ -93,8 +94,18 @@ class FakeChatRepository(
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? =
-        onFetchMessagesForChat(chatId, viewerUserId)
+    override suspend fun fetchMessagesForChat(
+        chatId: String,
+        viewerUserId: String?,
+        limit: Int?,
+    ): List<Message>? = onFetchMessagesForChat(chatId, viewerUserId)
+
+    override fun seedConnectionJunctionCache(
+        userId: String,
+        connections: List<Connection>,
+        archivedConnectionIds: Set<String>,
+        hiddenConnectionIds: Set<String>,
+    ) {}
 
     override suspend fun sendMessage(
         chatId: String,

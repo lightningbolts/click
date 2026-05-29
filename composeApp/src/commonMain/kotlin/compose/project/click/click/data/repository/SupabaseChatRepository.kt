@@ -978,7 +978,23 @@ class SupabaseChatRepository(
     private var cachedJunctionData: Triple<List<Connection>, Set<String>, Set<String>>? = null
     private var cachedJunctionUserId: String? = null
     private var cachedJunctionTimestamp: Long = 0L
-    private val junctionCacheTtlMs = 5_000L // 5 seconds
+    private val junctionCacheTtlMs = 300_000L // 5 minutes
+
+    private fun appDataJunctionSnapshot(userId: String): Triple<List<Connection>, Set<String>, Set<String>>? {
+        if (compose.project.click.click.data.AppDataManager.currentUser.value?.id != userId) return null
+        if (!compose.project.click.click.data.AppDataManager.isDataLoaded.value) return null
+        val connections = compose.project.click.click.data.AppDataManager.connections.value
+        if (connections.isEmpty() &&
+            compose.project.click.click.data.AppDataManager.inboxFeedChats.value.isEmpty()
+        ) {
+            return null
+        }
+        return Triple(
+            connections,
+            compose.project.click.click.data.AppDataManager.archivedConnectionIds.value,
+            compose.project.click.click.data.AppDataManager.hiddenConnectionIds.value,
+        )
+    }
 
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
@@ -1035,6 +1051,12 @@ class SupabaseChatRepository(
         if (cached != null && cachedJunctionUserId == userId && now - cachedJunctionTimestamp < junctionCacheTtlMs) {
             return cached
         }
+        appDataJunctionSnapshot(userId)?.let { snapshot ->
+            cachedJunctionData = snapshot
+            cachedJunctionUserId = userId
+            cachedJunctionTimestamp = now
+            return snapshot
+        }
         val result = fetchConnectionsWithJunctionIds(userId)
         cachedJunctionData = result
         cachedJunctionUserId = userId
@@ -1048,21 +1070,38 @@ class SupabaseChatRepository(
     private suspend fun fetchConnectionsWithJunctionIds(
         userId: String,
     ): Triple<List<Connection>, Set<String>, Set<String>> {
-        val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
+        val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId, runStaleSweep = false)
         return Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
     }
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? {
+    override suspend fun fetchMessagesForChat(
+        chatId: String,
+        viewerUserId: String?,
+        limit: Int?,
+    ): List<Message>? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId)
-            val rows = supabase.from("messages")
-                .select {
-                    filter {
-                        eq("chat_id", chatId)
+            val rows = if (limit != null && limit > 0) {
+                supabase.from("messages")
+                    .select {
+                        filter {
+                            eq("chat_id", chatId)
+                        }
+                        order("time_created", Order.DESCENDING)
+                        limit(limit.toLong())
                     }
-                    order("time_created", Order.ASCENDING)
-                }
-                .decodeList<Message>()
+                    .decodeList<Message>()
+                    .asReversed()
+            } else {
+                supabase.from("messages")
+                    .select {
+                        filter {
+                            eq("chat_id", chatId)
+                        }
+                        order("time_created", Order.ASCENDING)
+                    }
+                    .decodeList<Message>()
+            }
             withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
             }
@@ -1940,6 +1979,18 @@ class SupabaseChatRepository(
         cachedJunctionData = null
         cachedJunctionUserId = null
         cachedJunctionTimestamp = 0L
+    }
+
+    override fun seedConnectionJunctionCache(
+        userId: String,
+        connections: List<Connection>,
+        archivedConnectionIds: Set<String>,
+        hiddenConnectionIds: Set<String>,
+    ) {
+        if (userId.isBlank()) return
+        cachedJunctionData = Triple(connections, archivedConnectionIds, hiddenConnectionIds)
+        cachedJunctionUserId = userId
+        cachedJunctionTimestamp = Clock.System.now().toEpochMilliseconds()
     }
 
     override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean =

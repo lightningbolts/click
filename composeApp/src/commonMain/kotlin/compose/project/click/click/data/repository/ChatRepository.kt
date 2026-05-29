@@ -2,6 +2,7 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
@@ -81,9 +82,14 @@ interface ChatRepository {
 
     /**
      * Loads all messages for [chatId].
+     * When [limit] is set, fetches the newest [limit] rows (ordered ascending for UI).
      * @return `null` if the request failed (network/RLS/decoding); empty list means the chat has no rows.
      */
-    suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String? = null): List<Message>?
+    suspend fun fetchMessagesForChat(
+        chatId: String,
+        viewerUserId: String? = null,
+        limit: Int? = null,
+    ): List<Message>?
 
     suspend fun sendMessage(
         chatId: String,
@@ -141,6 +147,16 @@ interface ChatRepository {
 
     /** Clears short-lived junction caches so the next chat list fetch hits the network. */
     fun clearChatListLocalCaches()
+
+    /**
+     * Seeds junction cache from in-memory app state so chat loads skip a connection snapshot fetch.
+     */
+    fun seedConnectionJunctionCache(
+        userId: String,
+        connections: List<Connection>,
+        archivedConnectionIds: Set<String>,
+        hiddenConnectionIds: Set<String>,
+    )
 
     /**
      * Realtime INSERT on [messages] rows the current session may read. Emits [MessageListInsertEvent]

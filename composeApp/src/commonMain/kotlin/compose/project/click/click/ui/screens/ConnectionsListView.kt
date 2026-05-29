@@ -168,6 +168,7 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CallLogSystemRow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
@@ -214,8 +215,6 @@ import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pr
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
-import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
@@ -363,6 +362,25 @@ fun ConnectionsListView(
     val effectiveChats: List<ChatWithDetails> = when (val state = chatListState) {
         is ChatListState.Success -> state.chats
         else -> emptyList()
+    }
+
+    var viewerAvailabilityBubbles by remember(currentUserId) {
+        mutableStateOf<List<ProfileAvailabilityIntentBubble>?>(null)
+    }
+    LaunchedEffect(currentUserId) {
+        val userId = currentUserId?.takeIf { it.isNotBlank() } ?: run {
+            viewerAvailabilityBubbles = null
+            return@LaunchedEffect
+        }
+        val overlapRepo = SupabaseRepository()
+        try {
+            viewerAvailabilityBubbles = withContext(Dispatchers.Default) {
+                overlapRepo.fetchPeerProfileAvailabilityBubbles(userId, userId)
+            }
+        } catch (e: Exception) {
+            viewerAvailabilityBubbles = emptyList()
+            println("ConnectionsListView: viewer availability bubbles: ${e.redactedRestMessage()}")
+        }
     }
 
     val activeOneToOneChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
@@ -717,6 +735,7 @@ fun ConnectionsListView(
                                 ConnectionItem(
                                     chatDetails = chatDetails,
                                     viewerUserId = currentUserId,
+                                    viewerAvailabilityBubbles = viewerAvailabilityBubbles,
                                     isCore = connectionId in coreConnectionIds,
                                     showOnlineIndicator = chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,

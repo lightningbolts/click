@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -69,6 +70,7 @@ import kotlinx.coroutines.withContext
 fun ConnectionItem(
     chatDetails: ChatWithDetails,
     viewerUserId: String? = null,
+    viewerAvailabilityBubbles: List<ProfileAvailabilityIntentBubble>? = null,
     isCore: Boolean = false,
     showOnlineIndicator: Boolean = false,
     decryptedPreview: String? = null,
@@ -103,25 +105,28 @@ fun ConnectionItem(
         connection.last_message_at == null
 
     val peerId = chatDetails.otherUser.id
-    var hasIntentOverlap by remember(chatDetails.otherUser.id, viewerUserId, isGroup) {
+    var hasIntentOverlap by remember(peerId, viewerUserId, isGroup) {
         val v = viewerUserId
         val cached = if (!isGroup && !v.isNullOrBlank()) AvailabilityOverlapCache.get(v, peerId) else null
         mutableStateOf(cached == true)
     }
     val overlapRepo = remember { SupabaseRepository() }
-    LaunchedEffect(chatDetails.otherUser.id, viewerUserId, isGroup) {
+    LaunchedEffect(peerId, viewerUserId, isGroup, viewerAvailabilityBubbles) {
         if (isGroup || viewerUserId.isNullOrBlank()) {
             hasIntentOverlap = false
             return@LaunchedEffect
         }
         val v = viewerUserId
-        val theirsPeer = chatDetails.otherUser.id
+        val mine = viewerAvailabilityBubbles ?: return@LaunchedEffect
+        AvailabilityOverlapCache.get(v, peerId)?.let { cached ->
+            hasIntentOverlap = cached
+            return@LaunchedEffect
+        }
         val result = withContext(Dispatchers.Default) {
-            val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
-            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, theirsPeer)
+            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peerId)
             hasActiveAvailabilityIntentOverlap(mine, theirs)
         }
-        AvailabilityOverlapCache.put(v, theirsPeer, result)
+        AvailabilityOverlapCache.put(v, peerId, result)
         hasIntentOverlap = result
     }
 
