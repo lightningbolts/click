@@ -69,6 +69,7 @@ fun BeaconDropSheetContent(
     onDismissError: () -> Unit,
     onSubmit: (MapBeaconKind, String, ttlMs: Long?, showCreatorName: Boolean, onRejectedEarly: () -> Unit) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
+    submitLocked: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val clipboardManager = LocalClipboardManager.current
@@ -98,7 +99,7 @@ fun BeaconDropSheetContent(
         BeaconDropCategory.UTILITY -> "What's here? (max 140)"
         BeaconDropCategory.SOS -> "SOS message (max 140)"
         BeaconDropCategory.STUDY -> "Study spot note (max 140)"
-        BeaconDropCategory.EVENT -> "Event / activity details (max 140)"
+        BeaconDropCategory.EVENT -> "Event details (max 140)"
         BeaconDropCategory.COMMUNITY_HUB -> ""
     }
     val maxLen = if (category.value == BeaconDropCategory.SOUNDTRACK) 2000 else 140
@@ -332,7 +333,7 @@ fun BeaconDropSheetContent(
                     }
                 }
             },
-            enabled = !isSubmitting && if (isHubMode) hubNameDraft.isNotBlank() else true,
+            enabled = !isSubmitting && !submitLocked && if (isHubMode) hubNameDraft.isNotBlank() else true,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Row(

@@ -654,16 +654,10 @@ object AppDataManager {
                 startAggressiveBackgroundChatSync(user.id)
 
                 // Interest tags: await during startup so Settings renders instantly (no shimmer).
-                runCatching { supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty() }
-                    .onSuccess { tags ->
-                        if (_currentUser.value?.id == user.id) {
-                            _currentUser.value = _currentUser.value?.copy(tags = tags)
-                            _userInterestTags.value = tags
-                        }
-                    }
-                    .onFailure { e ->
-                        println("AppDataManager: Interest tags fetch failed: ${e.redactedRestMessage()}")
-                    }
+                val interestsDeferred = async {
+                    runCatching { supabaseRepository.fetchUserInterests(user.id).getOrNull()?.tags.orEmpty() }
+                        .getOrDefault(emptyList())
+                }
 
                 // Load location preferences from Supabase
                 runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
@@ -733,6 +727,12 @@ object AppDataManager {
                     val snapshot = snapshotDeferred.await()
                     if (snapshot != null) {
                         applyFetchedConnectionSnapshot(snapshot)
+                    }
+
+                    val interestTags = interestsDeferred.await()
+                    if (_currentUser.value?.id == user.id) {
+                        _currentUser.value = _currentUser.value?.copy(tags = interestTags)
+                        _userInterestTags.value = interestTags
                     }
 
                     _isDataLoaded.value = true

@@ -48,20 +48,18 @@ internal fun SettingsInterestsCard(
 
     val scope = rememberCoroutineScope()
     val cachedTags by AppDataManager.userInterestTags.collectAsState()
-    val initialTags = remember(userId, cachedTags) {
-        filterToPredefinedInterestTags(cachedTags)
-    }
-    var interestTags by remember(userId) { mutableStateOf(initialTags) }
-    var savedTags by remember(userId) { mutableStateOf(initialTags) }
+    val filteredCached = remember(cachedTags) { filterToPredefinedInterestTags(cachedTags) }
+    var interestTags by remember(userId, filteredCached) { mutableStateOf(filteredCached) }
+    var savedTags by remember(userId, filteredCached) { mutableStateOf(filteredCached) }
     var tagsDirty by remember { mutableStateOf(false) }
     var tagsSaving by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(cachedTags) {
-        val loaded = filterToPredefinedInterestTags(cachedTags)
-        interestTags = loaded
-        savedTags = loaded
-        tagsDirty = false
+    LaunchedEffect(filteredCached) {
+        if (!tagsDirty) {
+            interestTags = filteredCached
+            savedTags = filteredCached
+        }
     }
 
     // Background refresh only when cache is empty (cold start before AppDataManager finishes).
@@ -98,7 +96,7 @@ internal fun SettingsInterestsCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (cachedTags.isEmpty() && interestTags.isEmpty() && loadError == null) {
+            if (filteredCached.isEmpty() && interestTags.isEmpty() && loadError == null) {
                 CircularProgressIndicator(
                     modifier = Modifier.padding(vertical = 16.dp),
                     strokeWidth = 2.dp,

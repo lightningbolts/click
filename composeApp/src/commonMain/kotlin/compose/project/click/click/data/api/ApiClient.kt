@@ -6,7 +6,9 @@ import compose.project.click.click.data.models.ErrorResponse
 import compose.project.click.click.data.models.LoginRequest
 import compose.project.click.click.data.models.SignUpRequest
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconInsert
+import compose.project.click.click.data.models.parseMapBeaconRows
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.util.redactedRestMessage
@@ -867,6 +869,50 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** PATCH `/api/beacons/{beaconId}` — update a creator-owned beacon. */
+    suspend fun patchMapBeacon(beaconId: String, patch: MapBeaconPatchBody): Result<MapBeacon> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response = clickWebClient.patch("$clickWebAuthOrigin/api/beacons/$id") {
+                contentType(ContentType.Application.Json)
+                setBody(patch)
+            }
+            if (response.status.value in 200..299) {
+                val payload = response.body<MapBeaconPatchResponseDto>()
+                val beaconObj = payload.beacon
+                    ?: return Result.failure(Exception("Patch succeeded but beacon payload was missing"))
+                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
+                    ?: return Result.failure(Exception("Patch succeeded but beacon payload was malformed"))
+                Result.success(beacon)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** DELETE `/api/beacons/{beaconId}` — remove a creator-owned beacon. */
+    suspend fun deleteMapBeacon(beaconId: String): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response = clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id")
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /** POST `/api/chat/attachments/sign` — mint short-lived URL for a chat attachment path. */
     suspend fun getSignedChatAttachmentUrl(path: String): Result<String> {
         val p = path.trim()
@@ -1039,6 +1085,18 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         clickWebPlainClient.close()
     }
 }
+
+@Serializable
+data class MapBeaconPatchBody(
+    val metadata: JsonObject? = null,
+    @SerialName("show_creator_name") val showCreatorName: Boolean? = null,
+    @SerialName("ttl_ms") val ttlMs: Long? = null,
+)
+
+@Serializable
+data class MapBeaconPatchResponseDto(
+    val beacon: JsonObject? = null,
+)
 
 @Serializable
 data class BeaconAttendeeDto(

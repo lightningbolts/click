@@ -10,6 +10,8 @@ import compose.project.click.click.data.models.LocationPreferences // pragma: al
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.api.BeaconAttendeeDto
+import compose.project.click.click.data.api.MapBeaconPatchBody
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
@@ -80,6 +82,11 @@ sealed class MapSelection {
         val canJoinGeofence: Boolean,
     ) : MapSelection()
 }
+
+data class BeaconRsvpCacheEntry(
+    val attendees: List<BeaconAttendeeDto>,
+    val currentUserSignedUp: Boolean,
+)
 
 /**
  * ViewModel for the Social Memory Map feature
@@ -168,6 +175,14 @@ class MapViewModel : ViewModel() {
     /** One-shot remote failure after an optimistic beacon was shown (sheet already dismissed). */
     private val _beaconDropFailureToast = MutableStateFlow<String?>(null)
     val beaconDropFailureToast: StateFlow<String?> = _beaconDropFailureToast.asStateFlow()
+
+    /** True while a beacon drop POST is in flight (prevents duplicate soundtrack inserts). */
+    private val _beaconSubmitInFlight = MutableStateFlow(false)
+    val beaconSubmitInFlight: StateFlow<Boolean> = _beaconSubmitInFlight.asStateFlow()
+
+    /** Cached RSVP state keyed by beacon id — survives tab navigation and sheet dismiss. */
+    private val _beaconRsvpById = MutableStateFlow<Map<String, BeaconRsvpCacheEntry>>(emptyMap())
+    val beaconRsvpById: StateFlow<Map<String, BeaconRsvpCacheEntry>> = _beaconRsvpById.asStateFlow()
 
     private var beaconPollJob: Job? = null
     private var discoveryPollJob: Job? = null
@@ -429,6 +444,9 @@ class MapViewModel : ViewModel() {
             types.add("transit")
             types.add("scavenger")
         }
+        if (layers.contains(MapLayerFilter.EVENTS)) {
+            types.add("event")
+        }
         return if (types.isEmpty()) null else types.joinToString(",")
     }
 
@@ -443,7 +461,8 @@ class MapViewModel : ViewModel() {
                 MapBeaconKind.SOUNDTRACK -> layers.contains(MapLayerFilter.SOUNDTRACKS)
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
                     layers.contains(MapLayerFilter.ALERTS_UTILITIES)
-                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.EVENT, MapBeaconKind.OTHER ->
+                MapBeaconKind.EVENT -> layers.contains(MapLayerFilter.EVENTS)
+                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER ->
                     layers.contains(MapLayerFilter.SOCIAL_VIBES)
             }
             if (include) out.add(b)
@@ -530,6 +549,105 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun loadBeaconRsvp(beaconId: String) {
+        viewModelScope.launch {
+            mapBeaconRepository.fetchBeaconRsvp(beaconId).fold(
+                onSuccess = { payload ->
+                    _beaconRsvpById.update { current ->
+                        current + (beaconId to BeaconRsvpCacheEntry(
+                            attendees = payload.attendees,
+                            currentUserSignedUp = payload.currentUserSignedUp,
+                        ))
+                    }
+                },
+                onFailure = {
+                    _beaconRsvpById.update { current ->
+                        if (beaconId !in current) {
+                            current + (beaconId to BeaconRsvpCacheEntry(emptyList(), false))
+                        } else {
+                            current
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            mapBeaconRepository.rsvpBeacon(beaconId).fold(
+                onSuccess = { attendee ->
+                    _beaconRsvpById.update { current ->
+                        val prev = current[beaconId]
+                        val mergedAttendees = ((prev?.attendees.orEmpty())
+                            .filterNot { it.userId == attendee.userId } + attendee)
+                            .distinctBy { it.userId }
+                        current + (beaconId to BeaconRsvpCacheEntry(
+                            attendees = mergedAttendees,
+                            currentUserSignedUp = true,
+                        ))
+                    }
+                    PlatformHapticsPolicy.successNotification()
+                    onFinished(true)
+                },
+                onFailure = {
+                    onFinished(false)
+                },
+            )
+        }
+    }
+
+    fun deleteOwnedBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            mapBeaconRepository.deleteBeacon(beaconId).fold(
+                onSuccess = {
+                    _mapBeacons.update { list -> list.filterNot { it.id == beaconId } }
+                    _beaconRsvpById.update { it - beaconId }
+                    if (_selection.value is MapSelection.BeaconSelected &&
+                        (_selection.value as MapSelection.BeaconSelected).beacon.id == beaconId
+                    ) {
+                        _selection.value = MapSelection.None
+                    }
+                    PlatformHapticsPolicy.successNotification()
+                    onFinished(true)
+                },
+                onFailure = {
+                    _beaconDropFailureToast.value = it.message ?: "Could not delete beacon"
+                    onFinished(false)
+                },
+            )
+        }
+    }
+
+    fun updateOwnedBeaconDescription(
+        beaconId: String,
+        description: String,
+        onFinished: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val patch = MapBeaconPatchBody(
+                metadata = buildJsonObject { put("description", description.trim()) },
+            )
+            mapBeaconRepository.updateBeacon(beaconId, patch).fold(
+                onSuccess = { updated ->
+                    _mapBeacons.update { list ->
+                        list.map { if (it.id == beaconId) updated else it }
+                    }
+                    val sel = _selection.value
+                    if (sel is MapSelection.BeaconSelected && sel.beacon.id == beaconId) {
+                        _selection.value = sel.copy(beacon = updated)
+                    }
+                    PlatformHapticsPolicy.successNotification()
+                    onFinished(true)
+                },
+                onFailure = {
+                    _beaconDropFailureToast.value = it.message ?: "Could not update beacon"
+                    onFinished(false)
+                },
+            )
+        }
+    }
+
     fun submitBeaconDrop(
         kind: MapBeaconKind,
         text: String,
@@ -541,6 +659,7 @@ class MapViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             beaconSubmitMutex.lock()
+            _beaconSubmitInFlight.value = true
             try {
             _beaconInsertError.value = null
             _beaconDropFailureToast.value = null
@@ -641,6 +760,8 @@ class MapViewModel : ViewModel() {
                         }
                     }
                     onRemoteFinished(true)
+                    PlatformHapticsPolicy.heavyImpact()
+                    PlatformHapticsPolicy.successNotification()
                 },
                 onFailure = { e ->
                     _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
@@ -649,6 +770,7 @@ class MapViewModel : ViewModel() {
                 },
             )
             } finally {
+                _beaconSubmitInFlight.value = false
                 beaconSubmitMutex.unlock()
             }
         }

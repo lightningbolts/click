@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.BeaconRsvpGetResponseDto
+import compose.project.click.click.data.api.MapBeaconPatchBody
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
@@ -45,6 +46,12 @@ class MapBeaconRepository(
 
     suspend fun insertBeacon(insert: MapBeaconInsert): Result<Unit> =
         apiClient.postMapBeacon(insert)
+
+    suspend fun updateBeacon(beaconId: String, patch: MapBeaconPatchBody): Result<MapBeacon> =
+        apiClient.patchMapBeacon(beaconId, patch)
+
+    suspend fun deleteBeacon(beaconId: String): Result<Unit> =
+        apiClient.deleteMapBeacon(beaconId)
 
     suspend fun fetchBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> =
         apiClient.getBeaconRsvp(beaconId)

@@ -46,6 +46,7 @@ import compose.project.click.click.ui.components.ProfileSheetState // pragma: al
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
@@ -63,7 +64,6 @@ import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import compose.project.click.click.data.repository.MapBeaconRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -117,6 +117,8 @@ fun MapScreen(
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
     val beaconInsertError by viewModel.beaconInsertError.collectAsState()
     val beaconDropFailureToast by viewModel.beaconDropFailureToast.collectAsState()
+    val beaconSubmitInFlight by viewModel.beaconSubmitInFlight.collectAsState()
+    val currentUser by AppDataManager.currentUser.collectAsState()
     val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val locationService = remember { LocationService() }
@@ -358,6 +360,7 @@ fun MapScreen(
                         .padding(bottom = 12.dp),
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
+                    submitLocked = beaconSubmitInFlight,
                     onSubmit = { kind, text, ttlMs, showCreatorName, onRejectedEarly ->
                         showBeaconDropSheet = false
                         viewModel.submitBeaconDrop(
@@ -448,6 +451,8 @@ fun MapScreen(
                 BeaconDetailSheetContent(
                     beacon = beaconSel.beacon,
                     distanceMeters = beaconSel.distanceMeters,
+                    currentUserId = currentUser?.id,
+                    viewModel = viewModel,
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
@@ -825,23 +830,102 @@ private fun MapLayerFilterDropdown(
 private fun BeaconDetailSheetContent(
     beacon: MapBeacon,
     distanceMeters: Double?,
+    currentUserId: String?,
+    viewModel: MapViewModel,
     modifier: Modifier = Modifier,
 ) {
-    when (beacon.kind) {
-        MapBeaconKind.SOUNDTRACK -> MusicPreviewCard(
-            beacon = beacon,
-            distanceMeters = distanceMeters,
-            modifier = modifier,
+    val isCreator = !currentUserId.isNullOrBlank() && beacon.createdByUserId == currentUserId
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editDraft by remember(beacon.id) {
+        mutableStateOf(beacon.metadata.description?.trim().orEmpty())
+    }
+
+    Column(modifier = modifier) {
+        if (isCreator) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = {
+                    editDraft = beacon.metadata.description?.trim().orEmpty()
+                    showEditDialog = true
+                }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit beacon")
+                }
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete beacon")
+                }
+            }
+        }
+        when (beacon.kind) {
+            MapBeaconKind.SOUNDTRACK -> MusicPreviewCard(
+                beacon = beacon,
+                distanceMeters = distanceMeters,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            MapBeaconKind.EVENT -> EventBeaconDetail(
+                beacon = beacon,
+                distanceMeters = distanceMeters,
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            else -> CommunityBeaconDetail(
+                beacon = beacon,
+                distanceMeters = distanceMeters,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete beacon?") },
+            text = { Text("This removes the pin from the map for everyone nearby.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    viewModel.deleteOwnedBeacon(beacon.id)
+                }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
         )
-        MapBeaconKind.EVENT -> EventBeaconDetail(
-            beacon = beacon,
-            distanceMeters = distanceMeters,
-            modifier = modifier,
-        )
-        else -> CommunityBeaconDetail(
-            beacon = beacon,
-            distanceMeters = distanceMeters,
-            modifier = modifier,
+    }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit beacon") },
+            text = {
+                OutlinedTextField(
+                    value = editDraft,
+                    onValueChange = { if (it.length <= 140) editDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Description") },
+                    maxLines = 4,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showEditDialog = false
+                    viewModel.updateOwnedBeaconDescription(beacon.id, editDraft)
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel")
+                }
+            },
         )
     }
 }
@@ -850,28 +934,35 @@ private fun BeaconDetailSheetContent(
 private fun EventBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
+    viewModel: MapViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val repository = remember { MapBeaconRepository() }
-    var attendees by remember(beacon.id) { mutableStateOf<List<compose.project.click.click.data.api.BeaconAttendeeDto>>(emptyList()) }
-    var currentUserSignedUp by remember(beacon.id) { mutableStateOf(false) }
-    var rsvpLoading by remember(beacon.id) { mutableStateOf(true) }
+    val rsvpCache by viewModel.beaconRsvpById.collectAsState()
+    val cached = rsvpCache[beacon.id]
+    var attendees by remember(beacon.id) { mutableStateOf(cached?.attendees.orEmpty()) }
+    var currentUserSignedUp by remember(beacon.id) { mutableStateOf(cached?.currentUserSignedUp == true) }
+    var rsvpLoading by remember(beacon.id) { mutableStateOf(cached == null) }
     var rsvpSubmitting by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
 
-    DisposableEffect(Unit) {
-        onDispose { repository.close() }
+    LaunchedEffect(beacon.id, cached) {
+        if (cached != null) {
+            attendees = cached.attendees
+            currentUserSignedUp = cached.currentUserSignedUp
+            rsvpLoading = false
+        }
     }
 
     LaunchedEffect(beacon.id) {
-        rsvpLoading = true
-        repository.fetchBeaconRsvp(beacon.id).fold(
-            onSuccess = { payload ->
-                attendees = payload.attendees
-                currentUserSignedUp = payload.currentUserSignedUp
-            },
-            onFailure = { attendees = emptyList() },
-        )
+        if (cached == null) {
+            rsvpLoading = true
+            viewModel.loadBeaconRsvp(beacon.id)
+        }
+    }
+
+    LaunchedEffect(rsvpCache[beacon.id]) {
+        val entry = rsvpCache[beacon.id] ?: return@LaunchedEffect
+        attendees = entry.attendees
+        currentUserSignedUp = entry.currentUserSignedUp
         rsvpLoading = false
     }
 
@@ -942,17 +1033,12 @@ private fun EventBeaconDetail(
         Button(
             onClick = {
                 if (rsvpSubmitting || currentUserSignedUp) return@Button
-                scope.launch {
-                    rsvpSubmitting = true
-                    repository.rsvpBeacon(beacon.id).fold(
-                        onSuccess = { attendee ->
-                            currentUserSignedUp = true
-                            attendees = (attendees.filterNot { it.userId == attendee.userId } + attendee)
-                                .distinctBy { it.userId }
-                        },
-                        onFailure = { },
-                    )
+                rsvpSubmitting = true
+                viewModel.rsvpToBeacon(beacon.id) { success ->
                     rsvpSubmitting = false
+                    if (!success) {
+                        // Keep button enabled for retry.
+                    }
                 }
             },
             enabled = !currentUserSignedUp && !rsvpSubmitting,

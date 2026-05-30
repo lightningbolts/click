@@ -322,6 +322,14 @@ class HomeViewModel(
      */
     private suspend fun preloadDerivedHomeData(userId: String, connections: List<Connection>) {
         try {
+            runCatching {
+                supabaseRepository.fetchUserInterests(userId).getOrNull()?.tags.orEmpty()
+            }.onSuccess { tags ->
+                if (tags.isNotEmpty()) {
+                    AppDataManager.applyInterestTags(tags)
+                }
+            }
+
             val chats = chatRepository.fetchUserChatsWithDetails(userId)
             val lastMessageByConnectionId = chats.associate { chatWithDetails ->
                 chatWithDetails.connection.id to (
