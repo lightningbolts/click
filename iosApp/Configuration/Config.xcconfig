@@ -5,3 +5,7 @@ PRODUCT_BUNDLE_IDENTIFIER=compose.project.click.click
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.1
+
+// Native iOS Google Sign-In (optional): create an iOS OAuth client in the SAME GCP project as the web client,
+// then set GOOGLE_IOS_CLIENT_ID and add GIDClientID + reversed URL scheme to iosApp/Info.plist.
+// GOOGLE_IOS_CLIENT_ID =

@@ -46,7 +46,17 @@ actual suspend fun requestNativeGoogleSignInPayload(): Result<NativeGoogleSignIn
                 finish(Result.failure(IllegalStateException("Google ID token was unavailable.")))
                 return@addObserverForName
             }
-            finish(Result.success(NativeGoogleSignInPayload(idToken = idToken.trim())))
+            val nonce = (userInfo["nonce"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
+            val accessToken = (userInfo["accessToken"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
+            finish(
+                Result.success(
+                    NativeGoogleSignInPayload(
+                        idToken = idToken.trim(),
+                        nonce = nonce,
+                        accessToken = accessToken,
+                    ),
+                ),
+            )
         }
 
         fun postStart() {

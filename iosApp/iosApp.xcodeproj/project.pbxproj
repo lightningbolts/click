@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0037657B2F5B73FC0085C54A /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0037657A2F5B73FC0085C54A /* LiveKit */; };
+		0053FFF52FCA7B6C00F45B92 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 0053FFF62FCA7B6C00F45B92 /* GoogleSignIn */; };
 		008D49D42F75AFAE006AD3B5 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 008D49CD2F75AFAE006AD3B5 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -89,6 +90,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				0037657B2F5B73FC0085C54A /* LiveKit in Frameworks */,
+				0053FFF52FCA7B6C00F45B92 /* GoogleSignIn in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -155,6 +157,7 @@
 			name = iosApp;
 			packageProductDependencies = (
 				0037657A2F5B73FC0085C54A /* LiveKit */,
+				0053FFF62FCA7B6C00F45B92 /* GoogleSignIn */,
 			);
 			productName = iosApp;
 			productReference = 5C5F0582113B3BBBAE701F1D /* click.app */;
@@ -584,6 +587,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 003765792F5B73FC0085C54A /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
 			productName = LiveKit;
+		};
+		0053FFF62FCA7B6C00F45B92 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0053FFF42FCA7B6C00F45B91 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

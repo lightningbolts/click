@@ -26,6 +26,10 @@
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).refresh</string>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).processing</string>
 	</array>
+	<key>GIDClientID</key>
+	<string>530817233802-crnehf5a9duauov4vos4lgsijkgingdj.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>530817233802-3ki7usecs885vvag9uq92ubu5hgkv2sp.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -36,6 +40,16 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>click</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.530817233802-crnehf5a9duauov4vos4lgsijkgingdj</string>
 			</array>
 		</dict>
 	</array>

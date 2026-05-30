@@ -17,6 +17,8 @@ import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.auth.GoogleOAuthConfig
+import compose.project.click.click.getPlatform
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import kotlinx.coroutines.withTimeout
 
@@ -147,6 +149,12 @@ class AuthRepository(
 
     suspend fun signInWithGoogle(): Result<Unit> {
         return try {
+            if (isIosRuntime()) {
+                GoogleOAuthConfig.iosNativeSignInMisconfigurationMessage()?.let { message ->
+                    return Result.failure(Exception(message))
+                }
+            }
+
             val nativePayloadResult = withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
                 requestNativeGoogleSignInPayload()
             }
@@ -158,6 +166,8 @@ class AuthRepository(
                             supabase.auth.signInWith(IDToken) {
                                 provider = Google
                                 idToken = nativePayload.idToken
+                                nativePayload.accessToken?.let { accessToken = it }
+                                nativePayload.nonce?.let { nonce = it }
                             }
                         }.fold(
                             onSuccess = {
@@ -175,7 +185,7 @@ class AuthRepository(
                             onFailure = { idTokenError ->
                                 Result.failure(
                                     Exception(
-                                        mapAuthErrorMessage(
+                                        mapGoogleSignInErrorMessage(
                                             idTokenError,
                                             defaultMessage = "Google sign-in couldn't be completed right now.",
                                         ),
@@ -184,13 +194,13 @@ class AuthRepository(
                             },
                         )
                     } else {
-                        Result.failure(Exception("Google sign-in is not available on this device."))
+                        signInWithOAuth(Google)
                     }
                 },
                 onFailure = { nativeError ->
                     Result.failure(
                         Exception(
-                            mapAuthErrorMessage(
+                            mapGoogleSignInErrorMessage(
                                 nativeError,
                                 defaultMessage = "Google sign-in couldn't be completed right now.",
                             ),
@@ -201,7 +211,7 @@ class AuthRepository(
         } catch (e: Exception) {
             Result.failure(
                 Exception(
-                    mapAuthErrorMessage(
+                    mapGoogleSignInErrorMessage(
                         e,
                         defaultMessage = "Google sign-in couldn't be completed right now.",
                     ),
@@ -561,6 +571,32 @@ class AuthRepository(
         return normalizedMessage.contains("unacceptable audience in id_token") ||
             normalizedMessage.contains("audience in id_token")
     }
+
+    private fun isGoogleAudienceMismatchError(normalizedMessage: String): Boolean {
+        if (normalizedMessage.isBlank()) return false
+        return normalizedMessage.contains("invalid_audience") ||
+            normalizedMessage.contains("same project") ||
+            isAppleAudienceMismatchError(normalizedMessage)
+    }
+
+    private fun mapGoogleSignInErrorMessage(error: Throwable, defaultMessage: String): String {
+        val rawMessage = error.message?.trim().orEmpty()
+        val normalized = rawMessage.lowercase()
+        if (normalized.contains("cancel")) {
+            return "Google sign-in was canceled."
+        }
+        if (isGoogleAudienceMismatchError(normalized)) {
+            return GoogleOAuthConfig.iosNativeSignInMisconfigurationMessage()
+                ?: "Google Sign-In client mismatch: iOS and web OAuth clients must be in the same Google Cloud project."
+        }
+        if (normalized.contains("nonce") && normalized.contains("id_token")) {
+            return "Google sign-in nonce verification failed. Rebuild the app, or enable Skip nonce check in Supabase → Auth → Google."
+        }
+        return mapAuthErrorMessage(error, defaultMessage = defaultMessage)
+    }
+
+    private fun isIosRuntime(): Boolean =
+        getPlatform().name.contains("iOS", ignoreCase = true)
 
     private fun appleAudienceMismatchMessage(): String {
         return "Apple sign-in configuration mismatch: native token audience is compose.project.click.click. Add this iOS bundle ID to Apple provider Client IDs in Supabase Auth settings."

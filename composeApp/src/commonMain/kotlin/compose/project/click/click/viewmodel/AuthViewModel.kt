@@ -172,16 +172,14 @@ class AuthViewModel(
     }
 
     /**
-     * Begin a Google OAuth sign-in. The UI should show a loading state until either
-     * [authState] flips to [AuthState.Success] (deep-link callback completed the
-     * PKCE handshake) or [AuthState.Error] (browser launch failed / user cancelled).
-     *
-     * Completion is driven by [SupabaseConfig.startSessionSync], which observes
-     * `sessionStatus` changes triggered by the deep-link → PKCE code exchange.
+     * Begin Google sign-in. On iOS/Android this uses the native Google SDK and completes
+     * immediately when Supabase accepts the ID token. Browser OAuth is only used on
+     * platforms without a native Google payload (e.g. desktop previews).
      */
     fun signInWithGoogle() {
         viewModelScope.launch {
             authState = AuthState.Loading
+            var awaitingAsyncCompletion = false
             try {
                 authRepository.signInWithGoogle().fold(
                     onSuccess = {
@@ -195,7 +193,7 @@ class AuthViewModel(
                             )
                             AppDataManager.resetAndReload()
                         } else {
-                            authState = AuthState.Error("Google sign-in couldn't restore your session.")
+                            awaitingAsyncCompletion = true
                         }
                     },
                     onFailure = { error ->
@@ -208,6 +206,10 @@ class AuthViewModel(
                 authState = AuthState.Error(
                     e.message ?: "Could not start Google sign-in right now.",
                 )
+            } finally {
+                if (!awaitingAsyncCompletion && authState is AuthState.Loading) {
+                    authState = AuthState.Idle
+                }
             }
         }
     }
