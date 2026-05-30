@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -541,6 +542,11 @@ class MapViewModel : ViewModel() {
         if (_zoomLevel.value == 10.0) {
             _zoomLevel.value = targetZoom
         }
+
+        // Seed discovery feed from the map camera center (connections cluster), not GPS alone.
+        // Simulators often report a default location far from test hubs; without this, hubs only
+        // appear after the user expands the map and viewport bounds fire a fetch.
+        prefetchDiscoveryProximityData()
     }
 
     fun toggleLayerFilter(filter: MapLayerFilter) {
@@ -1173,13 +1179,72 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * Loads hubs/beacons for the discovery feed from the user's location (or map fallback),
-     * independent of map zoom / PiP bounds so feed rows are not empty until zoom-in.
+     * Loads hubs/beacons for the discovery feed from GPS **and** the map camera center so rows
+     * populate before the map is expanded. Simulators often report a default GPS fix far from
+     * test venues; the map camera (connections / last viewport) is fetched in parallel.
      */
     fun prefetchDiscoveryProximityData() {
-        viewModelScope.launch {
-            val bounds = resolveDiscoveryProximityBounds() ?: return@launch
-            fetchProximityLayersForBounds(bounds, debounceMs = 0L, jobSlot = DiscoveryFetchSlot.Discovery)
+        if (AppDataManager.currentUser.value == null) return
+        discoveryProximityJob?.cancel()
+        val seq = ++discoveryFetchSeq
+        discoveryProximityJob = viewModelScope.launch {
+            val centers = resolveDiscoveryProximityCenters()
+            if (centers.isEmpty()) return@launch
+            if (seq != discoveryFetchSeq) return@launch
+
+            val layers = _selectedLayerFilters.value
+            val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
+            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
+                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
+                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
+                layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            if (!wantHubs && !wantBeacons) return@launch
+
+            coroutineScope {
+                if (wantHubs) {
+                    val hubRows = centers.map { (lat, lon) ->
+                        async {
+                            val bounds = boundsAroundPoint(lat, lon, discoveryProximityRadiusMeters)
+                            mapBeaconRepository.fetchNearbyCommunityHubs(
+                                minLat = bounds.minLat,
+                                maxLat = bounds.maxLat,
+                                minLon = bounds.minLon,
+                                maxLon = bounds.maxLon,
+                            ).getOrNull().orEmpty()
+                        }
+                    }.awaitAll().flatten()
+                    val incoming = hubRows.map { dto ->
+                        CommunityHubPin(
+                            hubId = dto.hubId,
+                            name = dto.name,
+                            latitude = dto.latitude,
+                            longitude = dto.longitude,
+                            radiusMeters = dto.radiusMeters,
+                            activeUserCount = dto.activeUserCount,
+                        )
+                    }
+                    if (incoming.isNotEmpty()) {
+                        _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
+                    }
+                }
+                if (wantBeacons) {
+                    val beaconRows = centers.map { (lat, lon) ->
+                        async {
+                            val bounds = boundsAroundPoint(lat, lon, discoveryProximityRadiusMeters)
+                            mapBeaconRepository.fetchLocalBeacons(
+                                minLat = bounds.minLat,
+                                maxLat = bounds.maxLat,
+                                minLon = bounds.minLon,
+                                maxLon = bounds.maxLon,
+                                beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                            ).getOrNull().orEmpty()
+                        }
+                    }.awaitAll().flatten()
+                    if (beaconRows.isNotEmpty()) {
+                        _mapBeacons.update { current -> mergeMapBeaconLists(current, beaconRows) }
+                    }
+                }
+            }
         }
     }
 
@@ -1194,16 +1259,53 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    private suspend fun resolveDiscoveryProximityBounds(): BoundingBox? {
+    /**
+     * GPS plus map camera anchors for discovery prefetch. When the two are far apart (common on
+     * simulators with a default location), both are queried so the feed is not empty until the
+     * user expands the map.
+     */
+    private suspend fun resolveDiscoveryProximityCenters(): List<Pair<Double, Double>> {
+        val raw = mutableListOf<Pair<Double, Double>>()
+
         val gps = locationService.getCurrentLocation()
             ?: locationService.getHighAccuracyLocation(3_500L)
         if (gps != null) {
-            return boundsAroundPoint(gps.latitude, gps.longitude, discoveryProximityRadiusMeters)
+            raw += gps.latitude to gps.longitude
         }
-        if (_visibleBounds.value == null) {
-            estimateVisibleBounds()
+
+        listOfNotNull(
+            _cameraTarget.value?.let { it.latitude to it.longitude },
+            lastKnownCameraTarget?.let { it.latitude to it.longitude },
+            _defaultCameraTarget.value?.let { it.latitude to it.longitude },
+        ).forEach { raw += it }
+
+        _visibleBounds.value?.let { bounds ->
+            raw += bounds.centerLat to bounds.centerLon
         }
-        return _visibleBounds.value
+
+        if (raw.isEmpty()) {
+            if (_visibleBounds.value == null) {
+                estimateVisibleBounds()
+            }
+            _visibleBounds.value?.let { bounds ->
+                raw += bounds.centerLat to bounds.centerLon
+            }
+        }
+
+        return dedupeProximityCenters(raw)
+    }
+
+    /** Skip redundant fetches when GPS and map camera are essentially the same point. */
+    private fun dedupeProximityCenters(centers: List<Pair<Double, Double>>): List<Pair<Double, Double>> {
+        if (centers.isEmpty()) return emptyList()
+        val out = mutableListOf<Pair<Double, Double>>()
+        for ((lat, lon) in centers) {
+            val duplicate = out.any { (existingLat, existingLon) ->
+                haversineDistance(existingLat, existingLon, lat, lon) < 2_000.0
+            }
+            if (!duplicate) out += lat to lon
+        }
+        return out
     }
 
     private fun boundsAroundPoint(lat: Double, lon: Double, radiusMeters: Double): BoundingBox {
