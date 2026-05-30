@@ -945,33 +945,19 @@ private fun EventBeaconDetail(
     modifier: Modifier = Modifier,
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
-    val cached = rsvpCache[beacon.id]
-    var attendees by remember(beacon.id) { mutableStateOf(cached?.attendees.orEmpty()) }
-    var currentUserSignedUp by remember(beacon.id) { mutableStateOf(cached?.currentUserSignedUp == true) }
-    var rsvpLoading by remember(beacon.id) { mutableStateOf(cached == null) }
+    val rsvpLoadingIds by viewModel.beaconRsvpLoadingIds.collectAsState()
+    val currentUserId by AppDataManager.currentUser.collectAsState()
+    val entry = rsvpCache[beacon.id]
+    val attendees = entry?.attendees.orEmpty()
+    val currentUserSignedUp = entry?.currentUserSignedUp == true
+    val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
     var rsvpSubmitting by remember { mutableStateOf(false) }
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(beacon.id, cached) {
-        if (cached != null) {
-            attendees = cached.attendees
-            currentUserSignedUp = cached.currentUserSignedUp
-            rsvpLoading = false
-        }
-    }
-
-    LaunchedEffect(beacon.id) {
-        if (cached == null) {
-            rsvpLoading = true
-            viewModel.loadBeaconRsvp(beacon.id)
-        }
-    }
-
-    LaunchedEffect(rsvpCache[beacon.id]) {
-        val entry = rsvpCache[beacon.id] ?: return@LaunchedEffect
-        attendees = entry.attendees
-        currentUserSignedUp = entry.currentUserSignedUp
-        rsvpLoading = false
+    // Refresh from server whenever the sheet opens and once auth is restored after cold start.
+    LaunchedEffect(beacon.id, currentUserId?.id) {
+        if (currentUserId?.id.isNullOrBlank()) return@LaunchedEffect
+        viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
     }
 
     Column(

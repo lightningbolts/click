@@ -30,9 +30,12 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.put // pragma: allowlist secret
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -184,6 +187,10 @@ class MapViewModel : ViewModel() {
     /** Cached RSVP state keyed by beacon id — survives tab navigation and sheet dismiss. */
     private val _beaconRsvpById = MutableStateFlow<Map<String, BeaconRsvpCacheEntry>>(emptyMap())
     val beaconRsvpById: StateFlow<Map<String, BeaconRsvpCacheEntry>> = _beaconRsvpById.asStateFlow()
+
+    /** Beacon ids with an in-flight GET `/api/beacons/{id}/rsvp`. */
+    private val _beaconRsvpLoadingIds = MutableStateFlow<Set<String>>(emptySet())
+    val beaconRsvpLoadingIds: StateFlow<Set<String>> = _beaconRsvpLoadingIds.asStateFlow()
 
     private var beaconPollJob: Job? = null
     private var discoveryPollJob: Job? = null
@@ -591,27 +598,51 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    fun loadBeaconRsvp(beaconId: String) {
+    /**
+     * Loads RSVP attendees + signed-up state from click-web. Waits for the Supabase session so
+     * cold starts (app switcher kill) do not hit the API before JWT restore and cache a false
+     * "not signed up" sentinel.
+     */
+    fun loadBeaconRsvp(beaconId: String, forceRefresh: Boolean = false) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
         viewModelScope.launch {
-            mapBeaconRepository.fetchBeaconRsvp(beaconId).fold(
+            if (!awaitClickWebAuthSession()) return@launch
+            if (!forceRefresh && _beaconRsvpById.value.containsKey(id)) return@launch
+
+            _beaconRsvpLoadingIds.update { it + id }
+            mapBeaconRepository.fetchBeaconRsvp(id).fold(
                 onSuccess = { payload ->
                     _beaconRsvpById.update { current ->
-                        current + (beaconId to BeaconRsvpCacheEntry(
+                        current + (id to BeaconRsvpCacheEntry(
                             attendees = payload.attendees,
                             currentUserSignedUp = payload.currentUserSignedUp,
                         ))
                     }
                 },
                 onFailure = {
-                    _beaconRsvpById.update { current ->
-                        if (beaconId !in current) {
-                            current + (beaconId to BeaconRsvpCacheEntry(emptyList(), false))
-                        } else {
-                            current
-                        }
-                    }
+                    // Intentionally do not write a false-negative cache entry — a failed fetch
+                    // (often 401 before session restore) must not block a later retry.
                 },
             )
+            _beaconRsvpLoadingIds.update { it - id }
+        }
+    }
+
+    /** Blocks until click-web bearer auth is available, or times out without caching failure. */
+    private suspend fun awaitClickWebAuthSession(timeoutMs: Long = 15_000L): Boolean {
+        return try {
+            withTimeout(timeoutMs) {
+                while (true) {
+                    val token = SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken?.trim()
+                    if (!token.isNullOrEmpty()) return@withTimeout true
+                    delay(100)
+                }
+                @Suppress("UNREACHABLE_CODE")
+                false
+            }
+        } catch (_: TimeoutCancellationException) {
+            false
         }
     }
 
