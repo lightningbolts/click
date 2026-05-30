@@ -249,9 +249,45 @@ class MapViewModel : ViewModel() {
     init {
         observeAppData()
         subscribeToConnectionChanges()
+        seedFromAppDataPrefetch()
         if (AppDataManager.currentUser.value != null) {
             prefetchDiscoveryProximityData()
         }
+    }
+
+    /**
+     * Hydrate map state immediately from [AppDataManager]'s eager beacon/hub prefetch so the map is
+     * already populated on first render (prefetch runs in parallel with connections at app load).
+     */
+    private fun seedFromAppDataPrefetch() {
+        applyPrefetchedBeacons(AppDataManager.prefetchedMapBeacons.value)
+        applyPrefetchedHubs(AppDataManager.prefetchedCommunityHubs.value)
+        viewModelScope.launch {
+            AppDataManager.prefetchedMapBeacons.collect { applyPrefetchedBeacons(it) }
+        }
+        viewModelScope.launch {
+            AppDataManager.prefetchedCommunityHubs.collect { applyPrefetchedHubs(it) }
+        }
+    }
+
+    private fun applyPrefetchedBeacons(list: List<MapBeacon>) {
+        if (list.isEmpty()) return
+        _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+    }
+
+    private fun applyPrefetchedHubs(rows: List<compose.project.click.click.data.api.CommunityHubNearbyDto>) {
+        if (rows.isEmpty()) return
+        val incoming = rows.map { dto ->
+            CommunityHubPin(
+                hubId = dto.hubId,
+                name = dto.name,
+                latitude = dto.latitude,
+                longitude = dto.longitude,
+                radiusMeters = dto.radiusMeters,
+                activeUserCount = dto.activeUserCount,
+            )
+        }
+        _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
     }
 
     private fun observeAppData() {
@@ -575,7 +611,14 @@ class MapViewModel : ViewModel() {
 
     fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            mapBeaconRepository.rsvpBeacon(beaconId).fold(
+            // Capture the attendee's current GPS so the server can persist granular RSVP location.
+            // Location is best-effort: a null reading still RSVPs (the column is nullable server-side).
+            val loc = locationService.getHighAccuracyLocation(3500L)
+            mapBeaconRepository.rsvpBeacon(
+                beaconId = beaconId,
+                latitude = loc?.latitude,
+                longitude = loc?.longitude,
+            ).fold(
                 onSuccess = { attendee ->
                     _beaconRsvpById.update { current ->
                         val prev = current[beaconId]
@@ -585,6 +628,31 @@ class MapViewModel : ViewModel() {
                         current + (beaconId to BeaconRsvpCacheEntry(
                             attendees = mergedAttendees,
                             currentUserSignedUp = true,
+                        ))
+                    }
+                    PlatformHapticsPolicy.successNotification()
+                    onFinished(true)
+                },
+                onFailure = {
+                    onFinished(false)
+                },
+            )
+        }
+    }
+
+    /** Cancels the current user's RSVP and removes them from the cached attendee list. */
+    fun cancelRsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val currentUserId = AppDataManager.currentUser.value?.id
+            mapBeaconRepository.cancelRsvp(beaconId).fold(
+                onSuccess = {
+                    _beaconRsvpById.update { current ->
+                        val prev = current[beaconId]
+                        val remaining = prev?.attendees.orEmpty()
+                            .filterNot { it.userId == currentUserId }
+                        current + (beaconId to BeaconRsvpCacheEntry(
+                            attendees = remaining,
+                            currentUserSignedUp = false,
                         ))
                     }
                     PlatformHapticsPolicy.successNotification()

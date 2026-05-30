@@ -25,6 +25,10 @@ import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.repository.UserConnectionsSnapshot
+import compose.project.click.click.data.repository.MapBeaconRepository
+import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.api.CommunityHubNearbyDto
+import compose.project.click.click.utils.LocationService
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -34,6 +38,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,7 +104,29 @@ object AppDataManager {
     private val notificationPreferencesRepository by lazy { NotificationPreferencesRepository() }
     private val connectionRepository by lazy { ConnectionRepository() }
     private val pushNotificationService by lazy { createPushNotificationService() }
+    private val mapBeaconRepository by lazy { MapBeaconRepository() }
+    private val locationService by lazy { LocationService() }
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Eagerly-prefetched map beacons + community hubs, fetched in parallel with the connections
+     * snapshot at app load so the Social Map is already hydrated before the user opens that tab.
+     * [MapViewModel] seeds its own state from these on init.
+     */
+    private val _prefetchedMapBeacons = MutableStateFlow<List<MapBeacon>>(emptyList())
+    val prefetchedMapBeacons: StateFlow<List<MapBeacon>> = _prefetchedMapBeacons.asStateFlow()
+
+    private val _prefetchedCommunityHubs = MutableStateFlow<List<CommunityHubNearbyDto>>(emptyList())
+    val prefetchedCommunityHubs: StateFlow<List<CommunityHubNearbyDto>> = _prefetchedCommunityHubs.asStateFlow()
+
+    /** Radius (meters) for the eager beacon prefetch — matches the map discovery feed radius. */
+    private const val BEACON_PREFETCH_RADIUS_METERS = 30_000.0
+
+    /** Bounded retries so the discovery feed seeds even when GPS is slow to warm up at cold start. */
+    private const val BEACON_PREFETCH_MAX_ATTEMPTS = 6
+    private const val BEACON_PREFETCH_RETRY_DELAY_MS = 4_000L
+
+    private var beaconPrefetchJob: Job? = null
     
     // Current user state
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -567,6 +595,10 @@ object AppDataManager {
             
             println("AppDataManager: Loading data for user ${authUser.id}")
 
+            // Kick off the map beacon prefetch in parallel with the connections snapshot so map
+            // data is cached by the time the user navigates to the Social Map tab.
+            startBeaconPrefetch()
+
             withTimeout(STARTUP_TIMEOUT_MS) {
                 val snapshotDeferred = async {
                     runCatching { supabaseRepository.fetchUserConnectionsSnapshot(authUser.id) }
@@ -784,6 +816,59 @@ object AppDataManager {
     }
     
     /**
+     * Eagerly fetch nearby beacons + community hubs around the device location, off the main
+     * startup path. Runs concurrently with the connections snapshot fetch (see [loadAllData]).
+     */
+    private fun startBeaconPrefetch() {
+        if (_ghostModeEnabled.value) return
+        if (beaconPrefetchJob?.isActive == true) return
+        beaconPrefetchJob = scope.launch {
+            runCatching {
+                // GPS may not be ready the instant the app cold-starts. Retry a few times so the
+                // discovery feed is seeded with hubs + beacons without waiting for the user to
+                // open (and acquire bounds from) the expanded map.
+                var loc: compose.project.click.click.utils.LocationResult? = null
+                var attempt = 0
+                while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
+                    loc = locationService.getCurrentLocation()
+                        ?: locationService.getHighAccuracyLocation(4_000L)
+                    if (loc != null) break
+                    attempt++
+                    if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {
+                        delay(BEACON_PREFETCH_RETRY_DELAY_MS)
+                    }
+                }
+                val resolved = loc ?: return@runCatching
+                val latDelta = BEACON_PREFETCH_RADIUS_METERS / 111_320.0
+                val lonScale = kotlin.math.cos(resolved.latitude * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
+                val lonDelta = BEACON_PREFETCH_RADIUS_METERS / (111_320.0 * lonScale)
+                val minLat = (resolved.latitude - latDelta).coerceIn(-90.0, 90.0)
+                val maxLat = (resolved.latitude + latDelta).coerceIn(-90.0, 90.0)
+                val minLon = (resolved.longitude - lonDelta).coerceIn(-180.0, 180.0)
+                val maxLon = (resolved.longitude + lonDelta).coerceIn(-180.0, 180.0)
+
+                coroutineScope {
+                    val beaconsDeferred = async {
+                        mapBeaconRepository.fetchLocalBeacons(minLat, maxLat, minLon, maxLon)
+                    }
+                    val hubsDeferred = async {
+                        mapBeaconRepository.fetchNearbyCommunityHubs(minLat, maxLat, minLon, maxLon)
+                    }
+                    beaconsDeferred.await().onSuccess { list ->
+                        if (list.isNotEmpty()) _prefetchedMapBeacons.value = list
+                    }
+                    hubsDeferred.await().onSuccess { rows ->
+                        if (rows.isNotEmpty()) _prefetchedCommunityHubs.value = rows
+                    }
+                }
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
+                println("AppDataManager: beacon prefetch failed: ${e.redactedRestMessage()}")
+            }
+        }
+    }
+
+    /**
      * Refresh data - respects cooldown to prevent excessive API calls
      */
     fun refresh(force: Boolean = false) {
@@ -814,6 +899,10 @@ object AppDataManager {
         aggressiveBackgroundChatSyncJob = null
         profilePrefetchJob?.cancel()
         profilePrefetchJob = null
+        beaconPrefetchJob?.cancel()
+        beaconPrefetchJob = null
+        _prefetchedMapBeacons.value = emptyList()
+        _prefetchedCommunityHubs.value = emptyList()
         queuedProfilePrefetchIds = emptySet()
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call

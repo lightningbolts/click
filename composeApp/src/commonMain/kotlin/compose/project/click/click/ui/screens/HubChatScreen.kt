@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -79,7 +80,6 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
@@ -163,6 +163,7 @@ fun HubChatScreen(
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
 
     val isCreator by viewModel.isCreator.collectAsState()
+    val isCreatorResolved by viewModel.isCreatorResolved.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -260,21 +261,19 @@ fun HubChatScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                // ── Glass header with translucent backdrop ───────────────────
-                Box(
+                // ── Edge-to-edge translucent glass header (parity with ChatView 1-on-1 / group) ──
+                // No solid plate: the header is transparent over the ambient mesh, matching the
+                // seamless liquid-glass chrome used by standard chats.
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = topInset)
-                        .height(56.dp),
+                        .height(56.dp)
+                        .padding(horizontal = 20.dp)
+                        .testTag(ChatGlassHeaderPlateTestTag),
                 ) {
-                    ChatLiquidGlassPlate(
-                        modifier = Modifier.matchParentSize(),
-                        testTag = ChatGlassHeaderPlateTestTag,
-                    )
                     Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
+                        modifier = Modifier.fillMaxSize(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = onNavigateBack) {
@@ -314,6 +313,28 @@ fun HubChatScreen(
                                 expanded = settingsMenuExpanded,
                                 onDismissRequest = { settingsMenuExpanded = false },
                             ) {
+                                // Wait for ownership to fully resolve before listing options so all
+                                // entries appear simultaneously instead of "Leave" first, then Edit/Delete.
+                                if (!isCreatorResolved) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                CircularProgressIndicator(
+                                                    strokeWidth = 2.dp,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Text(
+                                                    "Loading…",
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        },
+                                        onClick = {},
+                                        enabled = false,
+                                    )
+                                    return@DropdownMenu
+                                }
                                 val items = visibleHubSettingsMenuItems(
                                     currentUserId = currentUserId,
                                     creatorId = if (isCreator) currentUserId else args.creatorId,

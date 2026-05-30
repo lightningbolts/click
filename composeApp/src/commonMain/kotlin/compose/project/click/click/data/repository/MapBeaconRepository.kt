@@ -56,8 +56,15 @@ class MapBeaconRepository(
     suspend fun fetchBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> =
         apiClient.getBeaconRsvp(beaconId)
 
-    suspend fun rsvpBeacon(beaconId: String): Result<BeaconAttendeeDto> =
-        apiClient.postBeaconRsvp(beaconId)
+    suspend fun rsvpBeacon(
+        beaconId: String,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): Result<BeaconAttendeeDto> =
+        apiClient.postBeaconRsvp(beaconId, latitude, longitude)
+
+    suspend fun cancelRsvp(beaconId: String): Result<Unit> =
+        apiClient.deleteBeaconRsvp(beaconId)
 
     suspend fun fetchNearbyCommunityHubs(
         minLat: Double,

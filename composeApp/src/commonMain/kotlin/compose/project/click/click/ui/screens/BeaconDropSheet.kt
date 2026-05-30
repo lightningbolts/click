@@ -42,7 +42,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 
 /**
  * Beacon drop types exposed in the map FAB flow.
@@ -55,6 +54,29 @@ enum class BeaconDropCategory {
     STUDY,
     EVENT,
     COMMUNITY_HUB,
+}
+
+/**
+ * Beacon time-to-live presets. Independent of availability-intent durations so beacons can live up
+ * to 7 days (backend caps at 30 days) while keeping the full short-duration granularity. The label
+ * maps directly to the chip text.
+ */
+enum class BeaconDuration(val durationMs: Long, val label: String) {
+    FIFTEEN_MIN(15L * 60_000L, "15 min"),
+    THIRTY_MIN(30L * 60_000L, "30 min"),
+    FORTY_FIVE_MIN(45L * 60_000L, "45 min"),
+    ONE_HOUR(60L * 60_000L, "1 hour"),
+    NINETY_MIN(90L * 60_000L, "90 min"),
+    TWO_HOURS(2L * 60L * 60_000L, "2 hours"),
+    THREE_HOURS(3L * 60L * 60_000L, "3 hours"),
+    SIX_HOURS(6L * 60L * 60_000L, "6 hours"),
+    TWENTY_FOUR_HOURS(24L * 60L * 60_000L, "24 hours"),
+    TWO_DAYS(2L * 24L * 60L * 60_000L, "2 days"),
+    THREE_DAYS(3L * 24L * 60L * 60_000L, "3 days"),
+    FOUR_DAYS(4L * 24L * 60L * 60_000L, "4 days"),
+    FIVE_DAYS(5L * 24L * 60L * 60_000L, "5 days"),
+    SIX_DAYS(6L * 24L * 60L * 60_000L, "6 days"),
+    SEVEN_DAYS(7L * 24L * 60L * 60_000L, "7 days"),
 }
 
 private val hubCategoryOptions = listOf(
@@ -76,7 +98,7 @@ fun BeaconDropSheetContent(
     var isSubmitting by remember { mutableStateOf(false) }
     val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
     val text = remember { mutableStateOf("") }
-    val expiration = remember { mutableStateOf(AvailabilityIntentDuration.THREE_HOURS) }
+    val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
 
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
@@ -212,7 +234,7 @@ fun BeaconDropSheetContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(
-                        items = AvailabilityIntentDuration.entries.toList(),
+                        items = BeaconDuration.entries.toList(),
                         key = { it.name },
                     ) { opt ->
                         FilterChip(

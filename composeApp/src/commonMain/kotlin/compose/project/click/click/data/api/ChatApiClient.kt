@@ -754,11 +754,11 @@ class ChatApiClient(
                 Result.success(response.body<ClickWebHubMessageEnvelope>().message)
             } else {
                 val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
-                val isOutOfBounds = errorBody.contains("OUT_OF_BOUNDS")
-                val message = if (isOutOfBounds) {
-                    "OUT_OF_BOUNDS"
-                } else {
-                    "Failed to send hub message: ${response.status}"
+                val message = when {
+                    errorBody.contains("OUT_OF_BOUNDS") -> "OUT_OF_BOUNDS"
+                    // 410 Gone: the ephemeral hub geofence is no longer reachable (expired / left range).
+                    response.status.value == 410 -> "HUB_OUT_OF_RANGE"
+                    else -> "Failed to send hub message: ${response.status}"
                 }
                 Result.failure(Exception(message))
             }
@@ -801,7 +801,13 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(response.body<ChatMediaUploadPathResponse>().path)
             } else {
-                Result.failure(Exception("Failed to upload hub media: ${response.status}"))
+                val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                val message = when {
+                    errorBody.contains("OUT_OF_BOUNDS") -> "OUT_OF_BOUNDS"
+                    response.status.value == 410 -> "HUB_OUT_OF_RANGE"
+                    else -> "Failed to upload hub media: ${response.status}"
+                }
+                Result.failure(Exception(message))
             }
         } catch (e: Exception) {
             Result.failure(e)

@@ -1058,17 +1058,45 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
-    /** POST `/api/beacons/{beaconId}/rsvp` — sign up for an event beacon. */
-    suspend fun postBeaconRsvp(beaconId: String): Result<BeaconAttendeeDto> {
+    /**
+     * POST `/api/beacons/{beaconId}/rsvp` — sign up for an event beacon, optionally persisting the
+     * attendee's current GPS location for granular tracking.
+     */
+    suspend fun postBeaconRsvp(
+        beaconId: String,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): Result<BeaconAttendeeDto> {
         val id = beaconId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
         return try {
-            val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp")
+            val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp") {
+                contentType(ContentType.Application.Json)
+                setBody(BeaconRsvpPostBody(latitude = latitude, longitude = longitude))
+            }
             if (response.status.value in 200..299) {
                 val payload = response.body<BeaconRsvpPostResponseDto>()
                 val attendee = payload.attendee
                     ?: return Result.failure(Exception("RSVP succeeded but attendee payload was missing"))
                 Result.success(attendee)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** DELETE `/api/beacons/{beaconId}/rsvp` — cancel the current user's RSVP. */
+    suspend fun deleteBeaconRsvp(beaconId: String): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/rsvp")
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
@@ -1116,4 +1144,10 @@ data class BeaconRsvpGetResponseDto(
 data class BeaconRsvpPostResponseDto(
     val ok: Boolean = false,
     val attendee: BeaconAttendeeDto? = null,
+)
+
+@Serializable
+data class BeaconRsvpPostBody(
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )

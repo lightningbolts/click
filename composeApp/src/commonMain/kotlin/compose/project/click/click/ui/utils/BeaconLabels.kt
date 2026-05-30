@@ -37,3 +37,36 @@ fun MapBeaconKind.userFacingLabel(): String =
 
 fun MapBeacon.displayTypeTitle(): String =
     beaconTypeDisplayLabel(sourceBeaconType, kind)
+
+/**
+ * Title shown on the beacon sheet header / cards. Unlike [displayTypeTitle] this evaluates the
+ * beacon's parsed metadata so Events show their name and Soundtracks show the song / artist,
+ * rather than the generic category label. Falls back to the type label when metadata is sparse.
+ */
+fun MapBeacon.displayDynamicTitle(): String {
+    return when (kind) {
+        MapBeaconKind.SOUNDTRACK -> {
+            val track = metadata.trackName ?: metadata.title
+            val artist = metadata.artistName ?: metadata.artist
+            when {
+                !track.isNullOrBlank() && !artist.isNullOrBlank() -> "$track — $artist"
+                !track.isNullOrBlank() -> track
+                !artist.isNullOrBlank() -> artist
+                else -> displayTypeTitle()
+            }
+        }
+        MapBeaconKind.EVENT -> {
+            val name = metadata.title?.takeIf { it.isNotBlank() }
+                ?: metadata.description
+                    ?.lineSequence()
+                    ?.firstOrNull { it.isNotBlank() }
+                    ?.trim()
+            when {
+                name.isNullOrBlank() -> displayTypeTitle()
+                name.length > 60 -> name.take(57).trimEnd() + "…"
+                else -> name
+            }
+        }
+        else -> displayTypeTitle()
+    }
+}

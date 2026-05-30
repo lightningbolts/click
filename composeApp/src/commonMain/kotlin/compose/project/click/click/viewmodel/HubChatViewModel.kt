@@ -197,6 +197,14 @@ class HubChatViewModel(
     private val _isCreator = MutableStateFlow(false)
     val isCreator: StateFlow<Boolean> = _isCreator.asStateFlow()
 
+    /**
+     * False until ownership has been authoritatively determined (after the `hub_venues` lookup, or
+     * immediately when detail loading is disabled). The settings menu waits on this so all options
+     * render at once instead of popping "Leave" first and then adding "Edit/Delete".
+     */
+    private val _isCreatorResolved = MutableStateFlow(false)
+    val isCreatorResolved: StateFlow<Boolean> = _isCreatorResolved.asStateFlow()
+
     private val _hubDetails = MutableStateFlow(
         HubDetailsState(
             name = hubTitle,
@@ -241,8 +249,15 @@ class HubChatViewModel(
                             isCreator = ownsHub,
                         )
                     }
-                } catch (_: Exception) { }
+                } catch (_: Exception) {
+                } finally {
+                    // Ownership is now authoritative (or the lookup failed and we keep the seed value).
+                    _isCreatorResolved.value = true
+                }
             }
+        } else {
+            // No remote lookup: the constructor-seeded ownership is already authoritative.
+            _isCreatorResolved.value = true
         }
         if (!startRealtime) {
             _channelReady.value = true
@@ -485,10 +500,9 @@ class HubChatViewModel(
                 ).getOrElse { e -> throw e }
                 _draft.value = ""
             } catch (e: Exception) {
-                val isOutOfBounds = e.message?.contains("OUT_OF_BOUNDS") == true
-                if (isOutOfBounds) {
+                if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
-                    _sendError.value = "You are no longer at this location."
+                    _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
                     _sendError.value = e.message ?: "Could not send"
                 }
@@ -539,10 +553,9 @@ class HubChatViewModel(
                     metadata = metadata,
                 ).getOrElse { e -> throw e }
             } catch (e: Exception) {
-                val isOutOfBounds = e.message?.contains("OUT_OF_BOUNDS") == true
-                if (isOutOfBounds) {
+                if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
-                    _sendError.value = "You are no longer at this location."
+                    _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
                     _sendError.value = e.message ?: "Could not send image"
                 }
@@ -724,6 +737,17 @@ class HubChatViewModel(
                 runCatching { ch.untrack() }
                 runCatching { ch.unsubscribe() }
             }
+        }
+    }
+
+    private companion object {
+        /** Shown when the geofence rejects a send (out of bounds) or the ephemeral hub is gone (410). */
+        const val HUB_OUT_OF_RANGE_MESSAGE = "No longer near hub. Move closer to send a message."
+
+        /** Maps the gatekeeper rejection markers surfaced by [ChatApiClient] into the user-facing state. */
+        fun isHubOutOfRange(e: Throwable): Boolean {
+            val msg = e.message ?: return false
+            return msg.contains("OUT_OF_BOUNDS") || msg.contains("HUB_OUT_OF_RANGE")
         }
     }
 }

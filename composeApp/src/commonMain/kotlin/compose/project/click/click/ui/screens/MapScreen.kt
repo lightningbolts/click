@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +76,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.ui.utils.displayTypeTitle
+import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
@@ -852,10 +854,20 @@ private fun BeaconDetailSheetContent(
                     editDraft = beacon.metadata.description?.trim().orEmpty()
                     showEditDialog = true
                 }) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit beacon")
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "Edit beacon",
+                        // Explicit tint: the sheet's themed MaterialTheme does not set LocalContentColor,
+                        // so the default (Color.Black) made these icons invisible on the OLED sheet.
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
                 IconButton(onClick = { showDeleteConfirm = true }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete beacon")
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Delete beacon",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             }
         }
@@ -879,53 +891,48 @@ private fun BeaconDetailSheetContent(
         }
     }
 
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete beacon?") },
-            text = { Text("This removes the pin from the map for everyone nearby.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    viewModel.deleteOwnedBeacon(beacon.id)
-                }) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
+    // Animated (scale + fade) confirmation, matching the create/join hub popup motion.
+    AnimatedClickDialog(
+        visible = showDeleteConfirm,
+        onDismissRequest = { showDeleteConfirm = false },
+        title = "Delete beacon?",
+        confirmLabel = "Delete",
+        onConfirm = {
+            showDeleteConfirm = false
+            viewModel.deleteOwnedBeacon(beacon.id)
+        },
+    ) {
+        Text(
+            text = "This removes the pin from the map for everyone nearby.",
+            color = GlassSheetTokens.OnOledMuted,
         )
     }
 
-    if (showEditDialog) {
-        AlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit beacon") },
-            text = {
-                OutlinedTextField(
-                    value = editDraft,
-                    onValueChange = { if (it.length <= 140) editDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Description") },
-                    maxLines = 4,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showEditDialog = false
-                    viewModel.updateOwnedBeaconDescription(beacon.id, editDraft)
-                }) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("Cancel")
-                }
-            },
+    AnimatedClickDialog(
+        visible = showEditDialog,
+        onDismissRequest = { showEditDialog = false },
+        title = "Edit beacon",
+        confirmLabel = "Save",
+        onConfirm = {
+            showEditDialog = false
+            viewModel.updateOwnedBeaconDescription(beacon.id, editDraft)
+        },
+    ) {
+        OutlinedTextField(
+            value = editDraft,
+            onValueChange = { if (it.length <= 140) editDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Description") },
+            maxLines = 4,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = GlassSheetTokens.OnOled,
+                unfocusedTextColor = GlassSheetTokens.OnOled,
+                focusedBorderColor = PrimaryBlue,
+                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                cursorColor = PrimaryBlue,
+                focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+            ),
         )
     }
 }
@@ -971,7 +978,7 @@ private fun EventBeaconDetail(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            text = beacon.displayTypeTitle(),
+            text = beacon.displayDynamicTitle(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1032,22 +1039,29 @@ private fun EventBeaconDetail(
         }
         Button(
             onClick = {
-                if (rsvpSubmitting || currentUserSignedUp) return@Button
+                if (rsvpSubmitting) return@Button
                 rsvpSubmitting = true
-                viewModel.rsvpToBeacon(beacon.id) { success ->
-                    rsvpSubmitting = false
-                    if (!success) {
-                        // Keep button enabled for retry.
-                    }
+                if (currentUserSignedUp) {
+                    viewModel.cancelRsvpToBeacon(beacon.id) { rsvpSubmitting = false }
+                } else {
+                    viewModel.rsvpToBeacon(beacon.id) { rsvpSubmitting = false }
                 }
             },
-            enabled = !currentUserSignedUp && !rsvpSubmitting,
+            enabled = !rsvpSubmitting,
+            colors = if (currentUserSignedUp) {
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                )
+            } else {
+                ButtonDefaults.buttonColors()
+            },
             modifier = Modifier.fillMaxWidth(),
         ) {
             if (rsvpSubmitting) {
                 CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
             } else {
-                Text(if (currentUserSignedUp) "Signed up" else "RSVP / Sign Up")
+                Text(if (currentUserSignedUp) "Cancel RSVP" else "RSVP / Sign Up")
             }
         }
     }
@@ -1064,7 +1078,7 @@ private fun CommunityBeaconDetail(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            text = beacon.displayTypeTitle(),
+            text = beacon.displayDynamicTitle(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1119,6 +1133,8 @@ private fun MusicPreviewCard(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
+            // Soundtrack card body below already renders the song + artist parsed from metadata,
+            // so the header stays the category label to avoid duplicating the track name.
             text = beacon.displayTypeTitle(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
