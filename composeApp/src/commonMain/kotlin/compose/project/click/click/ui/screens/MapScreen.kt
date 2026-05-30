@@ -950,6 +950,7 @@ private fun EventBeaconDetail(
     var currentUserSignedUp by remember(beacon.id) { mutableStateOf(cached?.currentUserSignedUp == true) }
     var rsvpLoading by remember(beacon.id) { mutableStateOf(cached == null) }
     var rsvpSubmitting by remember { mutableStateOf(false) }
+    var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(beacon.id, cached) {
         if (cached != null) {
@@ -1041,10 +1042,17 @@ private fun EventBeaconDetail(
             onClick = {
                 if (rsvpSubmitting) return@Button
                 rsvpSubmitting = true
+                rsvpError = null
+                val onFinished: (Boolean) -> Unit = { ok ->
+                    rsvpSubmitting = false
+                    if (!ok) {
+                        rsvpError = "Could not update RSVP. Please try again."
+                    }
+                }
                 if (currentUserSignedUp) {
-                    viewModel.cancelRsvpToBeacon(beacon.id) { rsvpSubmitting = false }
+                    viewModel.cancelRsvpToBeacon(beacon.id, onFinished)
                 } else {
-                    viewModel.rsvpToBeacon(beacon.id) { rsvpSubmitting = false }
+                    viewModel.rsvpToBeacon(beacon.id, onFinished)
                 }
             },
             enabled = !rsvpSubmitting,
@@ -1063,6 +1071,13 @@ private fun EventBeaconDetail(
             } else {
                 Text(if (currentUserSignedUp) "Cancel RSVP" else "RSVP / Sign Up")
             }
+        }
+        rsvpError?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

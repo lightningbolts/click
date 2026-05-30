@@ -49,7 +49,7 @@ actual fun PlatformMap(
     onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
     onCameraAnimationComplete: () -> Unit
 ) {
-    var lastPinsHash by remember { mutableStateOf(pins.hashCode() + clusters.hashCode()) }
+    var lastAnnotationSnapshot by remember { mutableStateOf("") }
     var hasCentered by remember { mutableStateOf(false) }
     var lastAppliedTargetLat by remember { mutableStateOf<Double?>(null) }
     var lastAppliedTargetLon by remember { mutableStateOf<Double?>(null) }
@@ -105,10 +105,11 @@ actual fun PlatformMap(
                 map.delegate = pinTapDelegate
             }
             
-            val currentHash = pins.hashCode() + clusters.hashCode()
+            val currentSnapshot = mapAnnotationSnapshot(pins, clusters)
             
-            // Handle Pins and Clusters
-            if (currentHash != lastPinsHash || !hasCentered) {
+            // Handle Pins and Clusters — incremental sync avoids remove-all/re-add flicker when
+            // beacons arrive after connections are already on the map.
+            if (currentSnapshot != lastAnnotationSnapshot || !hasCentered) {
                 // Replacing all annotations can reset the visible region on some MapKit versions;
                 // preserve the user's viewport when we are not in the middle of a VM-driven camera target.
                 val savedRegion = if (hasCentered && centerLat == null && centerLon == null) {
@@ -116,49 +117,7 @@ actual fun PlatformMap(
                 } else {
                     null
                 }
-                // Remove existing annotations (except user location)
-                val existingAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
-                if (existingAnnotations.isNotEmpty()) {
-                    map.removeAnnotations(existingAnnotations)
-                }
-
-                val pinEntries = mutableListOf<Pair<MKPointAnnotation, MapPin>>()
-                val clusterEntries = mutableListOf<Pair<MKPointAnnotation, MapClusterPin>>()
-
-                // Add individual pins with color based on time state
-                pins.forEach { pin ->
-                    val ann = MKPointAnnotation()
-                    val displayTitle = when (pin.kind) {
-                        MapPinKind.CONNECTION -> when (pin.timeState) {
-                            TimeState.LIVE -> "🔵 ${pin.title}"
-                            TimeState.RECENT -> "💠 ${pin.title}"
-                            TimeState.ARCHIVE -> "⚪ ${pin.title}"
-                        }
-                        MapPinKind.BEACON_SOUNDTRACK -> "🎵 ${pin.title}"
-                        MapPinKind.BEACON_ALERT -> "⚠️ ${pin.title}"
-                        MapPinKind.BEACON_SOCIAL -> "✨ ${pin.title}"
-                        MapPinKind.BEACON_OTHER -> "📍 ${pin.title}"
-                        MapPinKind.COMMUNITY_HUB -> "🏟️ ${pin.title}"
-                    }
-                    ann.setTitle(displayTitle)
-                    ann.setSubtitle(pin.id)
-                    ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
-                    map.addAnnotation(ann)
-                    pinEntries += ann to pin
-                }
-
-                // Add cluster pins
-                clusters.forEach { cluster ->
-                    val ann = MKPointAnnotation()
-                    ann.setTitle("${cluster.count}")
-                    ann.setSubtitle("cluster:${cluster.id}")
-                    ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
-                    map.addAnnotation(ann)
-                    clusterEntries += ann to cluster
-                }
-
-                pinTapDelegate.pinEntries = pinEntries
-                pinTapDelegate.clusterEntries = clusterEntries
+                syncMapAnnotations(map, pins, clusters, pinTapDelegate)
 
                 if (savedRegion != null && centerLat == null && centerLon == null) {
                     map.setRegion(savedRegion, false)
@@ -183,7 +142,7 @@ actual fun PlatformMap(
                         hasCentered = true
                     }
                 }
-                lastPinsHash = currentHash
+                lastAnnotationSnapshot = currentSnapshot
             }
 
             // Handle camera target animation
@@ -254,6 +213,101 @@ private fun MapPin.markerTintUIColor(): UIColor {
             MapPinKind.CONNECTION -> UIColor.magentaColor
         }
     }
+}
+
+private fun mapPinDisplayTitle(pin: MapPin): String =
+    when (pin.kind) {
+        MapPinKind.CONNECTION -> when (pin.timeState) {
+            TimeState.LIVE -> "🔵 ${pin.title}"
+            TimeState.RECENT -> "💠 ${pin.title}"
+            TimeState.ARCHIVE -> "⚪ ${pin.title}"
+        }
+        MapPinKind.BEACON_SOUNDTRACK -> "🎵 ${pin.title}"
+        MapPinKind.BEACON_ALERT -> "⚠️ ${pin.title}"
+        MapPinKind.BEACON_SOCIAL -> "✨ ${pin.title}"
+        MapPinKind.BEACON_OTHER -> "📍 ${pin.title}"
+        MapPinKind.COMMUNITY_HUB -> "🏟️ ${pin.title}"
+    }
+
+/** Stable fingerprint so we only touch MapKit annotations when pin/cluster data actually changes. */
+private fun mapAnnotationSnapshot(pins: List<MapPin>, clusters: List<MapClusterPin>): String {
+    val pinPart = pins.sortedBy { it.id }.joinToString("|") { pin ->
+        "${pin.id}:${pin.latitude},${pin.longitude}:${pin.title}:${pin.kind}:${pin.timeState}"
+    }
+    val clusterPart = clusters.sortedBy { it.id }.joinToString("|") { cluster ->
+        "${cluster.id}:${cluster.latitude},${cluster.longitude}:${cluster.count}"
+    }
+    return "$pinPart#$clusterPart"
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun syncMapAnnotations(
+    map: MKMapView,
+    pins: List<MapPin>,
+    clusters: List<MapClusterPin>,
+    pinTapDelegate: MapPinTapDelegate,
+) {
+    val desiredPinIds = pins.associateBy { it.id }
+    val desiredClusterIds = clusters.associateBy { it.id }
+
+    val existingAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
+    val stale = existingAnnotations.filter { ann ->
+        val sub = (ann.subtitle as? String)?.trim().orEmpty()
+        when {
+            sub.startsWith("cluster:") -> {
+                val id = sub.removePrefix("cluster:").trim()
+                id !in desiredClusterIds
+            }
+            sub.isNotEmpty() -> sub !in desiredPinIds
+            else -> true
+        }
+    }
+    if (stale.isNotEmpty()) {
+        map.removeAnnotations(stale)
+    }
+
+    val presentPinIds = mutableSetOf<String>()
+    val presentClusterIds = mutableSetOf<String>()
+    map.annotations.filterIsInstance<MKPointAnnotation>().forEach { ann ->
+        val sub = (ann.subtitle as? String)?.trim().orEmpty()
+        when {
+            sub.startsWith("cluster:") -> presentClusterIds += sub.removePrefix("cluster:").trim()
+            sub.isNotEmpty() -> presentPinIds += sub
+        }
+    }
+
+    pins.forEach { pin ->
+        if (pin.id in presentPinIds) return@forEach
+        val ann = MKPointAnnotation()
+        ann.setTitle(mapPinDisplayTitle(pin))
+        ann.setSubtitle(pin.id)
+        ann.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
+        map.addAnnotation(ann)
+    }
+
+    clusters.forEach { cluster ->
+        if (cluster.id in presentClusterIds) return@forEach
+        val ann = MKPointAnnotation()
+        ann.setTitle("${cluster.count}")
+        ann.setSubtitle("cluster:${cluster.id}")
+        ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
+        map.addAnnotation(ann)
+    }
+
+    val pinEntries = mutableListOf<Pair<MKPointAnnotation, MapPin>>()
+    val clusterEntries = mutableListOf<Pair<MKPointAnnotation, MapClusterPin>>()
+    map.annotations.filterIsInstance<MKPointAnnotation>().forEach { ann ->
+        val sub = (ann.subtitle as? String)?.trim().orEmpty()
+        when {
+            sub.startsWith("cluster:") -> {
+                val id = sub.removePrefix("cluster:").trim()
+                desiredClusterIds[id]?.let { clusterEntries += ann to it }
+            }
+            sub.isNotEmpty() -> desiredPinIds[sub]?.let { pinEntries += ann to it }
+        }
+    }
+    pinTapDelegate.pinEntries = pinEntries
+    pinTapDelegate.clusterEntries = clusterEntries
 }
 
 private fun computeDataCenter(pins: List<MapPin>, clusters: List<MapClusterPin>): Pair<Double, Double>? {

@@ -3,6 +3,7 @@ package compose.project.click.click.viewmodel
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.ui.utils.beaconTypeDisplayLabel
+import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.utils.userFacingLabel
 import compose.project.click.click.ui.utils.haversineDistance
@@ -21,7 +22,7 @@ internal fun availabilityIntentMatchesQuery(intent: AvailabilityIntentRow, lower
 internal fun mapBeaconSearchHaystack(beacon: MapBeacon): String {
     val meta = beacon.metadata
   return buildList {
-        add(beacon.displayTypeTitle())
+        add(beacon.displayDynamicTitle())
         add(beacon.kind.userFacingLabel())
         beacon.sourceBeaconType?.let { add(beaconTypeDisplayLabel(it, beacon.kind)) }
         meta.title?.let { add(it) }
@@ -76,12 +77,7 @@ internal fun beaconDistanceMeters(
     return haversineDistance(userLat, userLon, beacon.latitude, beacon.longitude)
 }
 
-internal fun beaconDisplayTitle(beacon: MapBeacon): String {
-    val meta = beacon.metadata
-    return meta.trackName?.trim()?.takeIf { it.isNotEmpty() }
-        ?: meta.title?.trim()?.takeIf { it.isNotEmpty() }
-        ?: beacon.displayTypeTitle()
-}
+internal fun beaconDisplayTitle(beacon: MapBeacon): String = beacon.displayDynamicTitle()
 
 internal fun beaconDisplaySubtitle(beacon: MapBeacon, distanceMeters: Double?): String {
     val meta = beacon.metadata

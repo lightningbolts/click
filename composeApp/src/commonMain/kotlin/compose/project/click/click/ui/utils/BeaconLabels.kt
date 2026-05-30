@@ -43,15 +43,19 @@ fun MapBeacon.displayTypeTitle(): String =
  * beacon's parsed metadata so Events show their name and Soundtracks show the song / artist,
  * rather than the generic category label. Falls back to the type label when metadata is sparse.
  */
+private fun truncateDynamicTitle(text: String, maxLen: Int = 60): String =
+    if (text.length > maxLen) text.take(maxLen - 1).trimEnd() + "…" else text
+
 fun MapBeacon.displayDynamicTitle(): String {
     return when (kind) {
         MapBeaconKind.SOUNDTRACK -> {
             val track = metadata.trackName ?: metadata.title
             val artist = metadata.artistName ?: metadata.artist
             when {
-                !track.isNullOrBlank() && !artist.isNullOrBlank() -> "$track — $artist"
-                !track.isNullOrBlank() -> track
-                !artist.isNullOrBlank() -> artist
+                !track.isNullOrBlank() && !artist.isNullOrBlank() ->
+                    truncateDynamicTitle("$track — $artist", 72)
+                !track.isNullOrBlank() -> truncateDynamicTitle(track, 72)
+                !artist.isNullOrBlank() -> truncateDynamicTitle(artist, 72)
                 else -> displayTypeTitle()
             }
         }
@@ -63,10 +67,17 @@ fun MapBeacon.displayDynamicTitle(): String {
                     ?.trim()
             when {
                 name.isNullOrBlank() -> displayTypeTitle()
-                name.length > 60 -> name.take(57).trimEnd() + "…"
-                else -> name
+                else -> truncateDynamicTitle(name)
             }
         }
-        else -> displayTypeTitle()
+        else -> {
+            val label = metadata.title?.trim()?.takeIf { it.isNotEmpty() }
+            val desc = metadata.description?.trim()?.takeIf { it.isNotEmpty() }
+            when {
+                !label.isNullOrBlank() -> truncateDynamicTitle(label)
+                !desc.isNullOrBlank() -> truncateDynamicTitle(desc)
+                else -> displayTypeTitle()
+            }
+        }
     }
 }

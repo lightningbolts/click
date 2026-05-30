@@ -84,7 +84,7 @@ import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
-import compose.project.click.click.ui.utils.displayTypeTitle
+import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.utils.haversineDistance
 import kotlinx.datetime.Clock
 
@@ -547,7 +547,7 @@ private fun DiscoveryFeedRow(
 ) {
     val title = when (item) {
         is DiscoveryFeedItem.Hub -> item.hub.name
-        is DiscoveryFeedItem.Beacon -> item.beacon.displayTypeTitle()
+        is DiscoveryFeedItem.Beacon -> item.beacon.displayDynamicTitle()
         is DiscoveryFeedItem.Connection -> item.point.displayName
     }
     val subtitle = when (item) {
