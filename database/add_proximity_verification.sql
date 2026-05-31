@@ -49,6 +49,10 @@ ALTER TABLE public.connections
 -- When both the initiator and scanner have GPS, rejects if they are
 -- more than 100 m apart (Haversine). The token is NOT consumed on
 -- proximity rejection so the initiator can retry in person.
+--
+-- Drop legacy single-arg overload so PostgREST (PGRST203) can resolve the RPC.
+DROP FUNCTION IF EXISTS public.redeem_qr_token(text);
+
 CREATE OR REPLACE FUNCTION public.redeem_qr_token(
     p_token TEXT,
     p_scanner_lat DOUBLE PRECISION DEFAULT NULL,
