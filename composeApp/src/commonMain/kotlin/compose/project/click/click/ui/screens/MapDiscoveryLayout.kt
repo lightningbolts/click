@@ -62,7 +62,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -72,6 +78,7 @@ import androidx.compose.foundation.layout.statusBars
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.ui.components.AppScreenDefaults
+import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.DiscoveryFloatingHeader
 import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.headerCollapseFraction
@@ -244,6 +251,36 @@ private val PipPreviewHeight = 160.dp
 private val PipDockExtraGap = AppScreenDefaults.FabGapAboveTabBar
 
 @Composable
+private fun DiscoveryFeedLoadingPulse(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        ClickLogoPulse(logoSize = 72.dp)
+    }
+}
+
+@Composable
+private fun DiscoveryFeedPullRefreshIndicator(
+    isRefreshing: Boolean,
+    pullProgress: Float,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isRefreshing || pullProgress > 0.05f) {
+            val alpha = if (isRefreshing) 1f else pullProgress.coerceIn(0.35f, 1f)
+            Box(modifier = Modifier.graphicsLayer { this.alpha = alpha }) {
+                ClickLogoPulse(logoSize = if (isRefreshing) 56.dp else 44.dp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun MapPipPreviewPlaceholder(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.background(GlassSheetTokens.OledBlack),
@@ -261,6 +298,9 @@ private fun MapPipPreviewPlaceholder(modifier: Modifier = Modifier) {
 @Composable
 internal fun MapDiscoveryScreen(
     feedItems: List<DiscoveryFeedItem>,
+    discoveryFeedPending: Boolean,
+    discoveryFeedRefreshing: Boolean,
+    onRefreshDiscovery: () -> Unit,
     mapPipExpanded: Boolean,
     onMapPipExpandedChange: (Boolean) -> Unit,
     statsLine: String,
@@ -275,11 +315,16 @@ internal fun MapDiscoveryScreen(
     val platformStyle = LocalPlatformStyle.current
     var sortMode by remember { mutableIntStateOf(0) }
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
-    val sortedFeed = remember(feedItems, discoverySortMode) {
-        sortDiscoveryFeedItems(feedItems, discoverySortMode)
+    val feedSections = remember(feedItems, discoverySortMode) {
+        groupDiscoveryFeedIntoSections(feedItems).map { section ->
+            DiscoveryFeedSection(
+                title = section.title,
+                items = sortDiscoveryFeedItems(section.items, discoverySortMode),
+            )
+        }
     }
-    val feedSections = remember(sortedFeed) {
-        groupDiscoveryFeedIntoSections(sortedFeed)
+    val sortedFeed = remember(feedSections) {
+        feedSections.flatMap { it.items }
     }
 
     val listState = remember { LazyListState(0, 0) }
@@ -338,6 +383,52 @@ internal fun MapDiscoveryScreen(
     val pipInteraction = remember { MutableInteractionSource() }
     val expandMap: () -> Unit = { onMapPipExpandedChange(true) }
 
+    val density = LocalDensity.current
+    val pullRefreshThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
+    var pullRefreshAccumulationPx by remember { mutableStateOf(0f) }
+    var pullRefreshTriggered by remember { mutableStateOf(false) }
+    val pullRefreshConnection = remember(listState, discoveryFeedRefreshing, onRefreshDiscovery) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (source != NestedScrollSource.UserInput || discoveryFeedRefreshing) return Offset.Zero
+                val atTop = listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
+                if (!atTop) {
+                    if (pullRefreshAccumulationPx > 0f) pullRefreshAccumulationPx = 0f
+                    return Offset.Zero
+                }
+                if (available.y > 0f) {
+                    pullRefreshAccumulationPx += available.y
+                    return Offset(0f, available.y * 0.35f)
+                }
+                if (available.y < 0f && pullRefreshAccumulationPx > 0f) {
+                    val consumed = minOf(-available.y, pullRefreshAccumulationPx)
+                    pullRefreshAccumulationPx -= consumed
+                    return Offset(0f, -consumed)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullRefreshAccumulationPx >= pullRefreshThresholdPx && !pullRefreshTriggered) {
+                    pullRefreshTriggered = true
+                    onRefreshDiscovery()
+                }
+                pullRefreshAccumulationPx = 0f
+                return Velocity.Zero
+            }
+        }
+    }
+    LaunchedEffect(discoveryFeedRefreshing) {
+        if (!discoveryFeedRefreshing) {
+            pullRefreshTriggered = false
+            pullRefreshAccumulationPx = 0f
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -347,6 +438,7 @@ internal fun MapDiscoveryScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                .nestedScroll(pullRefreshConnection)
                 .graphicsLayer {
                     translationX = sortContentOffsetX.value
                     alpha = sortContentAlpha.value
@@ -359,13 +451,30 @@ internal fun MapDiscoveryScreen(
                 bottom = bottomChrome + PipPreviewHeight + PipDockExtraGap + 16.dp,
             ),
         ) {
-            if (sortedFeed.isEmpty()) {
+            // Only while the user is actively pulling down — not during background/initial load.
+            if (pullRefreshAccumulationPx > 0f) {
+                item(key = "discovery_pull_refresh") {
+                    DiscoveryFeedPullRefreshIndicator(
+                        isRefreshing = discoveryFeedRefreshing,
+                        pullProgress = (pullRefreshAccumulationPx / pullRefreshThresholdPx).coerceIn(0f, 1f),
+                    )
+                }
+            }
+            if (sortedFeed.isEmpty() && !discoveryFeedPending) {
                 item(key = "discovery_empty") {
                     DiscoveryFeedRow(
                         title = "Nothing nearby yet",
                         subtitle = "Drop a beacon or join a hub from the map preview.",
                         icon = Icons.Filled.Place,
                         onClick = onDropBeacon,
+                    )
+                }
+            } else if (sortedFeed.isEmpty() && discoveryFeedPending) {
+                item(key = "discovery_loading_center") {
+                    DiscoveryFeedLoadingPulse(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 48.dp, bottom = 32.dp),
                     )
                 }
             } else {
@@ -396,6 +505,15 @@ internal fun MapDiscoveryScreen(
                         )
                     }
                 }
+                if (discoveryFeedPending) {
+                    item(key = "discovery_loading_footer") {
+                        DiscoveryFeedLoadingPulse(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 20.dp, bottom = 12.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -421,6 +539,8 @@ internal fun MapDiscoveryScreen(
                     listState.requestScrollToItem(0, 0)
                 },
                 onOpenSearch = onOpenSearch,
+                onRefresh = onRefreshDiscovery,
+                isRefreshing = discoveryFeedRefreshing,
             )
         }
 
@@ -573,6 +693,7 @@ private fun DiscoveryFeedRow(
         subtitle = subtitle,
         icon = icon,
         distanceText = distanceText,
+        reserveDistanceLine = true,
         onClick = onClick,
     )
 }
@@ -584,6 +705,7 @@ private fun DiscoveryFeedRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
     distanceText: String? = null,
+    reserveDistanceLine: Boolean = false,
 ) {
     val borderAlpha by animateFloatAsState(
         targetValue = GlassSheetTokens.GlassBorder.alpha,
@@ -633,11 +755,12 @@ private fun DiscoveryFeedRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            distanceText?.let {
+            if (reserveDistanceLine || distanceText != null) {
                 Text(
-                    text = it,
+                    text = distanceText ?: "\u00A0",
                     style = MaterialTheme.typography.labelSmall,
-                    color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.8f),
+                    color = GlassSheetTokens.OnOledMuted.copy(alpha = if (distanceText != null) 0.8f else 0f),
+                    maxLines = 1,
                 )
             }
         }

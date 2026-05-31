@@ -1,22 +1,28 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +92,9 @@ private val hubCategoryOptions = listOf(
     "gaming", "tech", "art", "fitness", "networking", "party",
 )
 
+private val BeaconSingleLineFieldHeight = 56.dp
+private val BeaconMultilineFieldHeight = 128.dp
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BeaconDropSheetContent(
@@ -103,6 +113,10 @@ fun BeaconDropSheetContent(
     modifier: Modifier = Modifier,
 ) {
     val clipboardManager = LocalClipboardManager.current
+    val focusManager = LocalFocusManager.current
+    val dismissKeyboard: () -> Unit = remember(focusManager) {
+        { focusManager.clearFocus() }
+    }
     var isSubmitting by remember { mutableStateOf(false) }
     val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
     val text = remember { mutableStateOf("") }
@@ -137,6 +151,15 @@ fun BeaconDropSheetContent(
     val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
     val chipSelected = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
     val scroll = rememberScrollState()
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
 
     Column(
         modifier = modifier
@@ -190,21 +213,14 @@ fun BeaconDropSheetContent(
         }
 
         if (isHubMode) {
-            OutlinedTextField(
+            BeaconDropOutlinedField(
                 value = hubNameDraft,
                 onValueChange = { hubNameDraft = it.take(80) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Hub name") },
+                placeholder = "Hub name",
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ),
+                trailingIcon = null,
+                colors = fieldColors,
+                onDismissKeyboard = dismissKeyboard,
             )
             Text(
                 text = "Category",
@@ -265,7 +281,7 @@ fun BeaconDropSheetContent(
             }
 
             val isUrlField = category.value == BeaconDropCategory.SOUNDTRACK
-            OutlinedTextField(
+            BeaconDropOutlinedField(
                 value = text.value,
                 onValueChange = {
                     if (it.length <= maxLen) {
@@ -273,16 +289,8 @@ fun BeaconDropSheetContent(
                         onDismissError()
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(beaconLabel) },
+                placeholder = beaconLabel,
                 singleLine = isUrlField,
-                keyboardOptions = if (isUrlField) {
-                    KeyboardOptions(keyboardType = KeyboardType.Uri)
-                } else {
-                    KeyboardOptions.Default
-                },
-                minLines = if (isUrlField) 1 else 3,
-                maxLines = if (isUrlField) 3 else 6,
                 trailingIcon = if (isUrlField) {
                     {
                         IconButton(
@@ -302,14 +310,8 @@ fun BeaconDropSheetContent(
                 } else {
                     null
                 },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ),
+                colors = fieldColors,
+                onDismissKeyboard = dismissKeyboard,
             )
         }
 
@@ -384,6 +386,7 @@ fun BeaconDropSheetContent(
         Button(
             onClick = {
                 if (isSubmitting) return@Button
+                dismissKeyboard()
                 isSubmitting = true
                 if (isHubMode) {
                     onCreateHub(hubNameDraft.trim(), hubCategory)
@@ -415,6 +418,48 @@ fun BeaconDropSheetContent(
                 Text(if (isHubMode) "Create hub" else "Drop pin")
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp + imeBottom))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BeaconDropOutlinedField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean,
+    trailingIcon: @Composable (() -> Unit)?,
+    colors: androidx.compose.material3.TextFieldColors,
+    onDismissKeyboard: () -> Unit,
+) {
+    val fieldHeight = if (singleLine) BeaconSingleLineFieldHeight else BeaconMultilineFieldHeight
+    val lineCount = if (singleLine) 1 else 3
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(fieldHeight),
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxSize(),
+            placeholder = { Text(placeholder) },
+            singleLine = singleLine,
+            minLines = lineCount,
+            maxLines = lineCount,
+            keyboardOptions = if (singleLine) {
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                )
+            } else {
+                KeyboardOptions(imeAction = ImeAction.Done)
+            },
+            keyboardActions = KeyboardActions(onDone = { onDismissKeyboard() }),
+            trailingIcon = trailingIcon,
+            colors = colors,
+            textStyle = MaterialTheme.typography.bodyLarge,
+        )
     }
 }

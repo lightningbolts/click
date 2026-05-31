@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -206,6 +207,22 @@ fun HeaderSearchIconButton(
             imageVector = Icons.Filled.Search,
             contentDescription = "Search",
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        )
+    }
+}
+
+/** Reload action for discovery feed headers (pull-to-refresh alternative). */
+@Composable
+fun HeaderRefreshIconButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = modifier) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = "Refresh feed",
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.85f else 0.4f),
         )
     }
 }

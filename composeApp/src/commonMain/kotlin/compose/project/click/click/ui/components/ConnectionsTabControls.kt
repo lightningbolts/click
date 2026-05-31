@@ -244,6 +244,8 @@ fun DiscoveryFloatingHeader(
     selectedSortIndex: Int,
     onSortSelected: (Int) -> Unit,
     onOpenSearch: (() -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null,
+    isRefreshing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val compact = collapseFraction > 0.42f
@@ -286,6 +288,12 @@ fun DiscoveryFloatingHeader(
                             )
                         }
                     }
+                    if (onRefresh != null) {
+                        HeaderRefreshIconButton(
+                            onClick = onRefresh,
+                            enabled = !isRefreshing,
+                        )
+                    }
                     if (onOpenSearch != null) {
                         HeaderSearchIconButton(onClick = onOpenSearch)
                     }
@@ -302,8 +310,18 @@ fun DiscoveryFloatingHeader(
                     title = title,
                     subtitle = subtitle,
                     collapseFraction = collapseFraction,
-                    actions = if (onOpenSearch != null) {
-                        { HeaderSearchIconButton(onClick = onOpenSearch) }
+                    actions = if (onRefresh != null || onOpenSearch != null) {
+                        {
+                            if (onRefresh != null) {
+                                HeaderRefreshIconButton(
+                                    onClick = onRefresh,
+                                    enabled = !isRefreshing,
+                                )
+                            }
+                            if (onOpenSearch != null) {
+                                HeaderSearchIconButton(onClick = onOpenSearch)
+                            }
+                        }
                     } else {
                         null
                     },

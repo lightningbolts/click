@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -198,8 +199,21 @@ class MapViewModel : ViewModel() {
     private val _beaconRsvpLoadingIds = MutableStateFlow<Set<String>>(emptySet())
     val beaconRsvpLoadingIds: StateFlow<Set<String>> = _beaconRsvpLoadingIds.asStateFlow()
 
+    /**
+     * False until startup prefetch or the first map-tab proximity fetch finishes.
+     * Silent map refreshes do not reset this.
+     */
+    private val _discoveryProximityFetchCompleted = MutableStateFlow(false)
+    val discoveryProximityFetchCompleted: StateFlow<Boolean> =
+        _discoveryProximityFetchCompleted.asStateFlow()
+
+    /** Drives the discovery feed logo pulse (initial load + user pull-to-refresh). */
+    private val _discoveryFeedLoading = MutableStateFlow(false)
+    val discoveryFeedLoading: StateFlow<Boolean> = _discoveryFeedLoading.asStateFlow()
+
+    val discoveryFeedPending: StateFlow<Boolean> = _discoveryFeedLoading
+
     private var beaconPollJob: Job? = null
-    private var discoveryPollJob: Job? = null
     private var discoveryProximityJob: Job? = null
     private var beaconFetchSeq: Long = 0L
     private var discoveryFetchSeq: Long = 0L
@@ -272,8 +286,12 @@ class MapViewModel : ViewModel() {
                 if (user != null) hydrateBeaconRsvpFromDisk(user.id)
             }
         }
-        if (AppDataManager.currentUser.value != null) {
-            prefetchDiscoveryProximityData()
+        viewModelScope.launch {
+            AppDataManager.discoveryMapPrefetchComplete.collect { done ->
+                if (done) {
+                    markDiscoveryProximityFetchCompleted()
+                }
+            }
         }
     }
 
@@ -314,6 +332,10 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch {
             AppDataManager.prefetchedCommunityHubs.collect { applyPrefetchedHubs(it) }
         }
+    }
+
+    private fun markDiscoveryProximityFetchCompleted() {
+        _discoveryProximityFetchCompleted.value = true
     }
 
     private fun applyPrefetchedBeacons(list: List<MapBeacon>) {
@@ -591,7 +613,7 @@ class MapViewModel : ViewModel() {
         // Seed discovery feed from the map camera center (connections cluster), not GPS alone.
         // Simulators often report a default location far from test hubs; without this, hubs only
         // appear after the user expands the map and viewport bounds fire a fetch.
-        prefetchDiscoveryProximityData()
+        prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
     }
 
     fun toggleLayerFilter(filter: MapLayerFilter) {
@@ -614,7 +636,7 @@ class MapViewModel : ViewModel() {
         }
         _selectedLayerFilters.value = cur.toSet()
         _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
-        prefetchDiscoveryProximityData()
+        prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
     }
 
     fun clearBeaconInsertError() {
@@ -1262,19 +1284,52 @@ class MapViewModel : ViewModel() {
                 }
             }
         }
-        prefetchDiscoveryProximityData()
+        ensureDiscoveryFeedLoaded()
     }
 
     /**
-     * Loads hubs/beacons for the discovery feed from GPS **and** the map camera center so rows
-     * populate before the map is expanded. Simulators often report a default GPS fix far from
-     * test venues; the map camera (connections / last viewport) is fetched in parallel.
+     * User-initiated discovery feed reload (pull-to-refresh or header button).
      */
-    fun prefetchDiscoveryProximityData() {
-        if (AppDataManager.currentUser.value == null) return
+    fun refreshDiscoveryFeed() {
+        prefetchDiscoveryProximityData(showPulse = true, markInitialComplete = true)
+    }
+
+    /**
+     * Silent refresh after the user opens the expanded map (viewport / more detail).
+     */
+    fun refreshDiscoveryFromMapInteraction() {
+        prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
+    }
+
+    /**
+     * Loads discovery hubs/beacons on first map visit if startup prefetch has not finished yet.
+     */
+    private fun ensureDiscoveryFeedLoaded() {
+        if (_discoveryProximityFetchCompleted.value) {
+            refreshDiscoveryFromMapInteraction()
+            return
+        }
+        if (AppDataManager.discoveryMapPrefetchComplete.value) {
+            markDiscoveryProximityFetchCompleted()
+            refreshDiscoveryFromMapInteraction()
+            return
+        }
+        prefetchDiscoveryProximityData(showPulse = true, markInitialComplete = true)
+    }
+
+    fun prefetchDiscoveryProximityData(
+        showPulse: Boolean = false,
+        markInitialComplete: Boolean = true,
+    ) {
+        if (AppDataManager.currentUser.value == null) {
+            if (markInitialComplete) markDiscoveryProximityFetchCompleted()
+            return
+        }
         discoveryProximityJob?.cancel()
         val seq = ++discoveryFetchSeq
+        if (showPulse) _discoveryFeedLoading.value = true
         discoveryProximityJob = viewModelScope.launch {
+            try {
             val centers = resolveDiscoveryProximityCenters()
             if (centers.isEmpty()) return@launch
             if (seq != discoveryFetchSeq) return@launch
@@ -1332,16 +1387,11 @@ class MapViewModel : ViewModel() {
                     }
                 }
             }
-        }
-    }
-
-    /** Re-fetch hubs/beacons on an interval so the discovery feed stays populated without map bounds. */
-    fun startDiscoveryProximityPolling() {
-        discoveryPollJob?.cancel()
-        discoveryPollJob = viewModelScope.launch {
-            while (true) {
-                prefetchDiscoveryProximityData()
-                delay(45_000L)
+            } finally {
+                if (seq == discoveryFetchSeq) {
+                    if (showPulse) _discoveryFeedLoading.value = false
+                    if (markInitialComplete) markDiscoveryProximityFetchCompleted()
+                }
             }
         }
     }

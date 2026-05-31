@@ -123,13 +123,13 @@ fun MapScreen(
     val currentUser by AppDataManager.currentUser.collectAsState()
     val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
+    val discoveryFeedPending by viewModel.discoveryFeedPending.collectAsState()
     val locationService = remember { LocationService() }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
-        viewModel.startDiscoveryProximityPolling()
         val loc = locationService.getCurrentLocation()
         userLat = loc?.latitude
         userLon = loc?.longitude
@@ -142,20 +142,13 @@ fun MapScreen(
             if (loc != null) {
                 userLat = loc.latitude
                 userLon = loc.longitude
-                viewModel.prefetchDiscoveryProximityData()
             }
         }
     }
 
-    LaunchedEffect(userLat, userLon) {
-        if (userLat != null && userLon != null) {
-            viewModel.prefetchDiscoveryProximityData()
-        }
-    }
-
-    LaunchedEffect(mapState) {
-        if (mapState is MapState.Success) {
-            viewModel.prefetchDiscoveryProximityData()
+    LaunchedEffect(mapPipExpanded) {
+        if (mapPipExpanded) {
+            viewModel.refreshDiscoveryFromMapInteraction()
         }
     }
 
@@ -262,7 +255,13 @@ fun MapScreen(
                 is MapState.Success -> {
                     val stats = viewModel.getMapStats()
                     val statsLine = "${stats.liveCount} live · ${stats.totalConnections} memories"
-                    val feedItems = remember(communityHubs, mapBeacons, renderData, userLat, userLon) {
+                    val feedItems = remember(
+                        communityHubs,
+                        mapBeacons,
+                        renderData,
+                        userLat,
+                        userLon,
+                    ) {
                         buildDiscoveryFeedItems(
                             hubs = communityHubs,
                             beacons = mapBeacons,
@@ -273,6 +272,9 @@ fun MapScreen(
                     }
                     MapDiscoveryScreen(
                         feedItems = feedItems,
+                        discoveryFeedPending = discoveryFeedPending,
+                        discoveryFeedRefreshing = discoveryFeedPending,
+                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
                         mapPipExpanded = mapPipExpanded,
                         onMapPipExpandedChange = onMapPipExpandedChanged,
                         statsLine = statsLine,

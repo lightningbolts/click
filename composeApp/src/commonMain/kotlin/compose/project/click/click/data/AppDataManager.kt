@@ -119,6 +119,10 @@ object AppDataManager {
     private val _prefetchedCommunityHubs = MutableStateFlow<List<CommunityHubNearbyDto>>(emptyList())
     val prefetchedCommunityHubs: StateFlow<List<CommunityHubNearbyDto>> = _prefetchedCommunityHubs.asStateFlow()
 
+    /** True after the startup beacon/hub prefetch attempt finishes (success, empty, or failure). */
+    private val _discoveryMapPrefetchComplete = MutableStateFlow(false)
+    val discoveryMapPrefetchComplete: StateFlow<Boolean> = _discoveryMapPrefetchComplete.asStateFlow()
+
     /** Radius (meters) for the eager beacon prefetch — matches the map discovery feed radius. */
     private const val BEACON_PREFETCH_RADIUS_METERS = 30_000.0
 
@@ -822,7 +826,9 @@ object AppDataManager {
     private fun startBeaconPrefetch() {
         if (_ghostModeEnabled.value) return
         if (beaconPrefetchJob?.isActive == true) return
+        _discoveryMapPrefetchComplete.value = false
         beaconPrefetchJob = scope.launch {
+            try {
             runCatching {
                 // GPS may not be ready the instant the app cold-starts. Retry a few times so the
                 // discovery feed is seeded with hubs + beacons without waiting for the user to
@@ -865,6 +871,9 @@ object AppDataManager {
                 if (e is CancellationException) throw e
                 println("AppDataManager: beacon prefetch failed: ${e.redactedRestMessage()}")
             }
+            } finally {
+                _discoveryMapPrefetchComplete.value = true
+            }
         }
     }
 
@@ -903,6 +912,7 @@ object AppDataManager {
         beaconPrefetchJob = null
         _prefetchedMapBeacons.value = emptyList()
         _prefetchedCommunityHubs.value = emptyList()
+        _discoveryMapPrefetchComplete.value = false
         queuedProfilePrefetchIds = emptySet()
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call
