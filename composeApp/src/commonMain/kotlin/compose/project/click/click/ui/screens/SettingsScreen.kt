@@ -83,7 +83,9 @@ import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
+import compose.project.click.click.utils.LocationPermissionDisplayState
 import compose.project.click.click.utils.LocationService
+import compose.project.click.click.utils.readLocationPermissionDisplayState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import compose.project.click.click.data.repository.NotificationPreferences
@@ -158,20 +160,23 @@ fun SettingsScreen(
     var micPermissionBump by remember { mutableIntStateOf(0) }
     var locationPermissionBump by remember { mutableIntStateOf(0) }
     var microphoneGranted by remember { mutableStateOf(ambientNoiseMonitor.hasPermission) }
-    var locationSnapGranted by remember { mutableStateOf(locationService.hasLocationPermission()) }
+    var locationPermissionState by remember {
+        mutableStateOf(locationService.readLocationPermissionDisplayState())
+    }
 
     LaunchedEffect(micPermissionBump, foregroundSyncTick) {
         microphoneGranted = ambientNoiseMonitor.hasPermission
     }
 
     LaunchedEffect(locationPermissionBump, foregroundSyncTick) {
-        locationSnapGranted = locationService.hasLocationPermission()
-        if (!locationSnapGranted) {
+        locationPermissionState = locationService.readLocationPermissionDisplayState()
+        if (locationPermissionState != LocationPermissionDisplayState.Granted) {
             repeat(4) {
                 delay(250)
-                val refreshed = locationService.hasLocationPermission()
-                locationSnapGranted = refreshed
-                if (refreshed) return@LaunchedEffect
+                locationPermissionState = locationService.readLocationPermissionDisplayState()
+                if (locationPermissionState == LocationPermissionDisplayState.Granted) {
+                    return@LaunchedEffect
+                }
             }
         }
     }
@@ -374,7 +379,7 @@ fun SettingsScreen(
                     YourDataLocationCard(
                         locationPreferences = locationPreferences,
                         ghostModeEnabled = ghostModeEnabled,
-                        locationSnapGranted = locationSnapGranted,
+                        locationPermissionState = locationPermissionState,
                         onConnectionSnapCheckedChange = { enabled ->
                             settingsScope.launch {
                                 AppDataManager.setConnectionSnapEnabled(enabled)
@@ -436,7 +441,7 @@ fun SettingsScreen(
                             ) {
                                 InlinePermissionsPanel(
                                     microphoneGranted = microphoneGranted,
-                                    locationGranted = locationSnapGranted,
+                                    locationStatus = locationPermissionState.toHubStatus(),
                                     isRequestingMic = false,
                                     isRequestingLocation = false,
                                     onRequestMicrophone = {
@@ -776,7 +781,7 @@ fun SettingsScreen(
 @Composable
 private fun InlinePermissionsPanel(
     microphoneGranted: Boolean,
-    locationGranted: Boolean,
+    locationStatus: PermissionHubStatus,
     isRequestingMic: Boolean,
     isRequestingLocation: Boolean,
     onRequestMicrophone: () -> Unit,
@@ -797,8 +802,7 @@ private fun InlinePermissionsPanel(
             icon = Icons.Default.Mic,
             title = "Microphone",
             description = "Short ambient sample during handshake.",
-            granted = microphoneGranted,
-            primaryLabel = if (microphoneGranted) null else "Allow microphone",
+            status = if (microphoneGranted) PermissionHubStatus.Granted else PermissionHubStatus.NotSet,
             primaryEnabled = !isRequestingMic,
             onPrimaryClick = onRequestMicrophone,
         )
@@ -807,18 +811,19 @@ private fun InlinePermissionsPanel(
             icon = Icons.Default.LocationOn,
             title = "Location",
             description = "One pin at the moment of a connection.",
-            granted = locationGranted,
-            primaryLabel = if (locationGranted) null else "Allow location",
+            status = locationStatus,
             primaryEnabled = !isRequestingLocation,
-            onPrimaryClick = onRequestLocation,
+            onPrimaryClick = when (locationStatus) {
+                PermissionHubStatus.Denied -> onOpenSystemSettings
+                else -> onRequestLocation
+            },
         )
         PermissionRowDivider()
         PermissionRow(
             icon = Icons.Default.BluetoothSearching,
             title = "Bluetooth",
             description = "Used for nearby tap handshake.",
-            granted = null,
-            primaryLabel = null,
+            status = PermissionHubStatus.SystemManaged,
             primaryEnabled = true,
             onPrimaryClick = {},
         )
@@ -849,11 +854,13 @@ private fun PermissionRow(
     icon: ImageVector,
     title: String,
     description: String,
-    granted: Boolean?,
-    primaryLabel: String?,
+    status: PermissionHubStatus,
     primaryEnabled: Boolean,
     onPrimaryClick: () -> Unit,
 ) {
+    val primaryLabel = status.primaryActionLabel(
+        permissionName = title.lowercase(),
+    )
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.Top,
@@ -874,7 +881,7 @@ private fun PermissionRow(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                PermissionStatusBadge(granted = granted)
+                PermissionStatusBadge(status = status)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -898,15 +905,20 @@ private fun PermissionRow(
 }
 
 @Composable
-private fun PermissionStatusBadge(granted: Boolean?) {
-    val (color, label, icon) = when (granted) {
-        true -> Triple(Color(0xFF2E7D32), "Granted", Icons.Default.CheckCircle)
-        false -> Triple(MaterialTheme.colorScheme.error, "Denied", Icons.Default.WarningAmber)
-        null -> Triple(
-            MaterialTheme.colorScheme.onSurfaceVariant,
-            "System-managed",
-            Icons.Default.WarningAmber,
-        )
+private fun PermissionStatusBadge(status: PermissionHubStatus) {
+    val (color, label, icon) = when (status) {
+        PermissionHubStatus.Granted ->
+            Triple(Color(0xFF2E7D32), "Granted", Icons.Default.CheckCircle)
+        PermissionHubStatus.NotSet ->
+            Triple(Color(0xFFF59E0B), "Not set", Icons.Default.WarningAmber)
+        PermissionHubStatus.Denied ->
+            Triple(MaterialTheme.colorScheme.error, "Denied", Icons.Default.WarningAmber)
+        PermissionHubStatus.SystemManaged ->
+            Triple(
+                MaterialTheme.colorScheme.onSurfaceVariant,
+                "System-managed",
+                Icons.Default.WarningAmber,
+            )
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
@@ -971,7 +983,7 @@ private fun SettingsSectionHeader(title: String) {
 private fun YourDataLocationCard(
     locationPreferences: LocationPreferences,
     ghostModeEnabled: Boolean,
-    locationSnapGranted: Boolean,
+    locationPermissionState: LocationPermissionDisplayState,
     onConnectionSnapCheckedChange: (Boolean) -> Unit,
 ) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
@@ -1002,13 +1014,23 @@ private fun YourDataLocationCard(
                 checked = locationPreferences.connectionSnapEnabled,
                 onCheckedChange = onConnectionSnapCheckedChange
             )
-            if (locationPreferences.connectionSnapEnabled && !locationSnapGranted) {
-                Text(
-                    text = "Location access is off — enable it in system settings to capture connection snaps.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp)
-                )
+            locationSnapHint(locationPermissionState)?.let { hint ->
+                if (locationPreferences.connectionSnapEnabled) {
+                    val hintColor = when (locationPermissionState) {
+                        LocationPermissionDisplayState.Denied ->
+                            MaterialTheme.colorScheme.error
+                        LocationPermissionDisplayState.NotSet ->
+                            Color(0xFFF59E0B)
+                        LocationPermissionDisplayState.Granted ->
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = hintColor,
+                        modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp),
+                    )
+                }
             }
 
             SettingsDivider()
