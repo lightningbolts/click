@@ -53,6 +53,10 @@ interface TokenStorage {
     suspend fun saveActiveHubs(json: String?)
     suspend fun getActiveHubs(): String?
 
+    /** JSON snapshot of per-beacon RSVP state for the signed-in user (survives process death). */
+    suspend fun saveBeaconRsvpSnapshot(snapshot: String?)
+    suspend fun getBeaconRsvpSnapshot(): String?
+
     suspend fun clearSessionData()
 }
 

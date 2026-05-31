@@ -768,6 +768,24 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
     )
 }
 
+/** Who may see a dropped beacon on the map (mirrors `beacon_visibility_audience` on click-web). */
+enum class BeaconVisibilityAudience(val apiValue: String) {
+    EVERYONE("everyone"),
+    CONNECTIONS("connections"),
+    CORE_CONNECTIONS("core_connections"),
+    ;
+
+    companion object {
+        fun fromRaw(value: String?): BeaconVisibilityAudience {
+            return when (value?.trim()?.lowercase()) {
+                "connections", "connection" -> CONNECTIONS
+                "core_connections", "core", "core_connections_only" -> CORE_CONNECTIONS
+                else -> EVERYONE
+            }
+        }
+    }
+}
+
 @Serializable
 data class MapBeaconInsert(
     val kind: String,
@@ -777,6 +795,7 @@ data class MapBeaconInsert(
     /** For non-soundtrack beacons: TTL from creation; omit for soundtrack (server default 7 days). */
     @SerialName("ttl_ms") val ttlMs: Long? = null,
     @SerialName("show_creator_name") val showCreatorName: Boolean = false,
+    @SerialName("visibility_audience") val visibilityAudience: String = BeaconVisibilityAudience.EVERYONE.apiValue,
 )
 
 /**
@@ -795,6 +814,7 @@ data class MapBeacon(
     val sourceBeaconType: String? = null,
     val showCreatorName: Boolean = false,
     val creatorDisplayName: String? = null,
+    val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
 )
 
 fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
@@ -858,6 +878,7 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         }
     } ?: false
     val creatorDisplayName = strKey("creator_name", "creatorName")
+    val visibilityAudience = BeaconVisibilityAudience.fromRaw(strKey("visibility_audience", "visibilityAudience"))
     return MapBeacon(
         id = id,
         kind = kind,
@@ -870,6 +891,7 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         sourceBeaconType = sourceBeaconType,
         showCreatorName = showCreatorName,
         creatorDisplayName = creatorDisplayName,
+        visibilityAudience = visibilityAudience,
     )
 }
 

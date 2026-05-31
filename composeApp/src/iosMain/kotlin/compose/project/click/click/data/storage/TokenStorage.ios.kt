@@ -52,6 +52,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_PENDING_CONNECTION_QUEUE = "pending_connection_queue"
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
         private const val KEY_ACTIVE_HUBS = "active_hubs"
+        private const val KEY_BEACON_RSVP_SNAPSHOT = "beacon_rsvp_snapshot"
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -329,6 +330,19 @@ class IosTokenStorage : TokenStorage {
         return userDefaults.stringForKey(KEY_ACTIVE_HUBS)
     }
 
+    override suspend fun saveBeaconRsvpSnapshot(snapshot: String?) {
+        if (snapshot == null) {
+            userDefaults.removeObjectForKey(KEY_BEACON_RSVP_SNAPSHOT)
+        } else {
+            userDefaults.setObject(snapshot, KEY_BEACON_RSVP_SNAPSHOT)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getBeaconRsvpSnapshot(): String? {
+        return userDefaults.stringForKey(KEY_BEACON_RSVP_SNAPSHOT)
+    }
+
     override suspend fun clearSessionData() {
         val sessionKeys = listOf(
             KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
@@ -337,6 +351,7 @@ class IosTokenStorage : TokenStorage {
             KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
             KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
             KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
+            KEY_BEACON_RSVP_SNAPSHOT,
         )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
         userDefaults.synchronize()

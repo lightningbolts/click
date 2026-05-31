@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 
 /**
@@ -89,7 +90,14 @@ private val hubCategoryOptions = listOf(
 fun BeaconDropSheetContent(
     errorMessage: String?,
     onDismissError: () -> Unit,
-    onSubmit: (MapBeaconKind, String, ttlMs: Long?, showCreatorName: Boolean, onRejectedEarly: () -> Unit) -> Unit,
+    onSubmit: (
+        MapBeaconKind,
+        String,
+        ttlMs: Long?,
+        showCreatorName: Boolean,
+        visibilityAudience: BeaconVisibilityAudience,
+        onRejectedEarly: () -> Unit,
+    ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
     submitLocked: Boolean = false,
     modifier: Modifier = Modifier,
@@ -103,6 +111,7 @@ fun BeaconDropSheetContent(
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
     var showCreatorName by remember { mutableStateOf(false) }
+    var visibilityAudience by remember { mutableStateOf(BeaconVisibilityAudience.EVERYONE) }
 
     val isHubMode = category.value == BeaconDropCategory.COMMUNITY_HUB
 
@@ -305,6 +314,41 @@ fun BeaconDropSheetContent(
         }
 
         if (!isHubMode) {
+            Text(
+                text = "Who can see this",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(
+                    items = BeaconVisibilityAudience.entries.toList(),
+                    key = { it.name },
+                ) { option ->
+                    FilterChip(
+                        selected = visibilityAudience == option,
+                        onClick = { visibilityAudience = option },
+                        label = {
+                            Text(
+                                when (option) {
+                                    BeaconVisibilityAudience.EVERYONE -> "Everyone"
+                                    BeaconVisibilityAudience.CONNECTIONS -> "Connections only"
+                                    BeaconVisibilityAudience.CORE_CONNECTIONS -> "Core connections only"
+                                },
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = chipContainer,
+                            selectedContainerColor = chipSelected,
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -350,7 +394,7 @@ fun BeaconDropSheetContent(
                     } else {
                         expiration.value.durationMs
                     }
-                    onSubmit(kind, text.value, ttl, showCreatorName) {
+                    onSubmit(kind, text.value, ttl, showCreatorName, visibilityAudience) {
                         isSubmitting = false
                     }
                 }

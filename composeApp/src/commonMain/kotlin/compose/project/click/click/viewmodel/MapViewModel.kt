@@ -8,17 +8,21 @@ import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secr
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.MapBeaconPatchBody
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import io.github.jan.supabase.auth.auth
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
@@ -172,6 +176,8 @@ class MapViewModel : ViewModel() {
     )
 
     private val mapBeaconRepository = MapBeaconRepository()
+    private val tokenStorage: TokenStorage = createTokenStorage()
+    private val authRepository: AuthRepository by lazy { AuthRepository(tokenStorage) }
 
     private val _beaconInsertError = MutableStateFlow<String?>(null)
     val beaconInsertError: StateFlow<String?> = _beaconInsertError.asStateFlow()
@@ -258,9 +264,41 @@ class MapViewModel : ViewModel() {
         observeAppData()
         subscribeToConnectionChanges()
         seedFromAppDataPrefetch()
+        viewModelScope.launch {
+            hydrateBeaconRsvpFromDisk()
+        }
+        viewModelScope.launch {
+            AppDataManager.currentUser.collect { user ->
+                if (user != null) hydrateBeaconRsvpFromDisk(user.id)
+            }
+        }
         if (AppDataManager.currentUser.value != null) {
             prefetchDiscoveryProximityData()
         }
+    }
+
+    private suspend fun hydrateBeaconRsvpFromDisk(userId: String? = null) {
+        val uid = userId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+            ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return
+        val restored = BeaconRsvpPersistence.load(tokenStorage, uid)
+        if (restored.isEmpty()) return
+        _beaconRsvpById.update { current -> current + restored }
+    }
+
+    private fun persistBeaconRsvpCache() {
+        viewModelScope.launch {
+            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+                ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return@launch
+            BeaconRsvpPersistence.save(tokenStorage, uid, _beaconRsvpById.value)
+        }
+    }
+
+    private fun updateBeaconRsvpCache(transform: (Map<String, BeaconRsvpCacheEntry>) -> Map<String, BeaconRsvpCacheEntry>) {
+        _beaconRsvpById.update(transform)
+        persistBeaconRsvpCache()
     }
 
     /**
@@ -607,13 +645,13 @@ class MapViewModel : ViewModel() {
         val id = beaconId.trim()
         if (id.isEmpty()) return
         viewModelScope.launch {
-            if (!awaitClickWebAuthSession()) return@launch
+            if (!ensureClickWebAuthReady()) return@launch
             if (!forceRefresh && _beaconRsvpById.value.containsKey(id)) return@launch
 
             _beaconRsvpLoadingIds.update { it + id }
             mapBeaconRepository.fetchBeaconRsvp(id).fold(
                 onSuccess = { payload ->
-                    _beaconRsvpById.update { current ->
+                    updateBeaconRsvpCache { current ->
                         current + (id to BeaconRsvpCacheEntry(
                             attendees = payload.attendees,
                             currentUserSignedUp = payload.currentUserSignedUp,
@@ -621,16 +659,24 @@ class MapViewModel : ViewModel() {
                     }
                 },
                 onFailure = {
-                    // Intentionally do not write a false-negative cache entry — a failed fetch
-                    // (often 401 before session restore) must not block a later retry.
+                    // Keep disk-hydrated cache on failure; do not write a false-negative entry.
                 },
             )
             _beaconRsvpLoadingIds.update { it - id }
         }
     }
 
+    /** Restores/refreshes Supabase session before click-web bearer calls (cold start). */
+    private suspend fun ensureClickWebAuthReady(): Boolean {
+        if (SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken.isNullOrBlank()) {
+            authRepository.restoreSession()
+        }
+        authRepository.refreshSession()
+        return awaitClickWebAuthSession()
+    }
+
     /** Blocks until click-web bearer auth is available, or times out without caching failure. */
-    private suspend fun awaitClickWebAuthSession(timeoutMs: Long = 15_000L): Boolean {
+    private suspend fun awaitClickWebAuthSession(timeoutMs: Long = 20_000L): Boolean {
         return try {
             withTimeout(timeoutMs) {
                 while (true) {
@@ -648,6 +694,10 @@ class MapViewModel : ViewModel() {
 
     fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
+            if (!ensureClickWebAuthReady()) {
+                onFinished(false)
+                return@launch
+            }
             // Capture the attendee's current GPS so the server can persist granular RSVP location.
             // Location is best-effort: a null reading still RSVPs (the column is nullable server-side).
             val loc = locationService.getHighAccuracyLocation(3500L)
@@ -657,7 +707,7 @@ class MapViewModel : ViewModel() {
                 longitude = loc?.longitude,
             ).fold(
                 onSuccess = { attendee ->
-                    _beaconRsvpById.update { current ->
+                    updateBeaconRsvpCache { current ->
                         val prev = current[beaconId]
                         val mergedAttendees = ((prev?.attendees.orEmpty())
                             .filterNot { it.userId == attendee.userId } + attendee)
@@ -680,10 +730,14 @@ class MapViewModel : ViewModel() {
     /** Cancels the current user's RSVP and removes them from the cached attendee list. */
     fun cancelRsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
+            if (!ensureClickWebAuthReady()) {
+                onFinished(false)
+                return@launch
+            }
             val currentUserId = AppDataManager.currentUser.value?.id
             mapBeaconRepository.cancelRsvp(beaconId).fold(
                 onSuccess = {
-                    _beaconRsvpById.update { current ->
+                    updateBeaconRsvpCache { current ->
                         val prev = current[beaconId]
                         val remaining = prev?.attendees.orEmpty()
                             .filterNot { it.userId == currentUserId }
@@ -707,7 +761,7 @@ class MapViewModel : ViewModel() {
             mapBeaconRepository.deleteBeacon(beaconId).fold(
                 onSuccess = {
                     _mapBeacons.update { list -> list.filterNot { it.id == beaconId } }
-                    _beaconRsvpById.update { it - beaconId }
+                    updateBeaconRsvpCache { it - beaconId }
                     if (_selection.value is MapSelection.BeaconSelected &&
                         (_selection.value as MapSelection.BeaconSelected).beacon.id == beaconId
                     ) {
@@ -758,6 +812,7 @@ class MapViewModel : ViewModel() {
         text: String,
         ttlMs: Long? = null,
         showCreatorName: Boolean = false,
+        visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -831,6 +886,7 @@ class MapViewModel : ViewModel() {
                 metadata = metadata,
                 ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
                 showCreatorName = showCreatorName,
+                visibilityAudience = visibilityAudience.apiValue,
             )
             val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
             val optimisticBeacon = MapBeacon(

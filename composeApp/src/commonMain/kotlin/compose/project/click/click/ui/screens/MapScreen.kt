@@ -363,13 +363,14 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, text, ttlMs, showCreatorName, onRejectedEarly ->
+                    onSubmit = { kind, text, ttlMs, showCreatorName, visibilityAudience, onRejectedEarly ->
                         showBeaconDropSheet = false
                         viewModel.submitBeaconDrop(
                             kind = kind,
                             text = text,
                             ttlMs = ttlMs,
                             showCreatorName = showCreatorName,
+                            visibilityAudience = visibilityAudience,
                             onAcceptedLocally = { },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -946,7 +947,6 @@ private fun EventBeaconDetail(
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
     val rsvpLoadingIds by viewModel.beaconRsvpLoadingIds.collectAsState()
-    val currentUserId by AppDataManager.currentUser.collectAsState()
     val entry = rsvpCache[beacon.id]
     val attendees = entry?.attendees.orEmpty()
     val currentUserSignedUp = entry?.currentUserSignedUp == true
@@ -954,9 +954,8 @@ private fun EventBeaconDetail(
     var rsvpSubmitting by remember { mutableStateOf(false) }
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
 
-    // Refresh from server whenever the sheet opens and once auth is restored after cold start.
-    LaunchedEffect(beacon.id, currentUserId?.id) {
-        if (currentUserId?.id.isNullOrBlank()) return@LaunchedEffect
+    // Always refresh from server when the sheet opens (disk cache may already be visible).
+    LaunchedEffect(beacon.id) {
         viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
     }
 
