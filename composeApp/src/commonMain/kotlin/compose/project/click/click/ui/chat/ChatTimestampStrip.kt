@@ -1,8 +1,8 @@
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,10 +39,8 @@ internal object ChatTimestampStripDefaults {
 }
 
 /** Same gains as swipe-to-reply in [ChatMessageBubble] (do not change reply; mirror here). */
-private const val TimestampPeekTrackGain = 0.56f
+private const val TimestampPeekTrackGain = 1f
 private const val TimestampPeekOverflowRubberGain = 0.12f
-
-private val TimestampPeekSettleEasing = CubicBezierEasing(0.17f, 0.88f, 0.24f, 1f)
 
 @Composable
 internal fun rememberTimestampPeekRevealPx(): Float {
@@ -110,7 +108,7 @@ internal fun restoreTimestampPeekRawFromDisplay(
         ).coerceIn(0f, ChatGestureMotion.RawTravelCapPx)
 }
 
-/** Same settle curve/duration as swipe-to-reply release in [ChatMessageBubble]. */
+/** Same spring-back feel as swipe-to-reply release in [ChatMessageBubble]. */
 internal fun CoroutineScope.launchTimestampPeekReplyStyleSettle(
     rawLeftPx: MutableFloatState,
     displayVisualPx: MutableFloatState,
@@ -125,9 +123,9 @@ internal fun CoroutineScope.launchTimestampPeekReplyStyleSettle(
                     initialValue = displayVisualPx.floatValue,
                     targetValue = 0f,
                     animationSpec =
-                        tween(
-                            durationMillis = ChatGestureMotion.HorizontalSwipeSettleMillis,
-                            easing = TimestampPeekSettleEasing,
+                        spring(
+                            dampingRatio = 0.75f,
+                            stiffness = Spring.StiffnessLow,
                         ),
                 ) { v, _ ->
                     displayVisualPx.floatValue = v
@@ -140,7 +138,7 @@ internal fun CoroutineScope.launchTimestampPeekReplyStyleSettle(
 
 /**
  * Local full-surface R→L peek: same drag math as swipe-to-reply; on release uses the same
- * [tween] settle as the bubble (not velocity-spring).
+ * spring settle as the bubble.
  */
 internal fun Modifier.chatTimestampPeekOnSwipeLeft(
     maxRevealPx: Float,

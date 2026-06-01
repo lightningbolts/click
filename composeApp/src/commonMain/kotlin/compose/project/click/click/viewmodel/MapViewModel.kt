@@ -648,13 +648,18 @@ class MapViewModel : ViewModel() {
     }
 
     fun onBeaconPinTapped(beaconId: String) {
-        viewModelScope.launch {
-            val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
-                ?: return@launch
+        val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
+            ?: return
+        _selection.value = MapSelection.BeaconSelected(beacon, distanceMeters = null)
+
+        viewModelScope.launch(Dispatchers.Default) {
             val distance = locationService.getHighAccuracyLocation(3500L)?.let { loc ->
                 haversineDistance(loc.latitude, loc.longitude, beacon.latitude, beacon.longitude)
             }
-            _selection.value = MapSelection.BeaconSelected(beacon, distance)
+            val current = _selection.value as? MapSelection.BeaconSelected ?: return@launch
+            if (current.beacon.id == beaconId) {
+                _selection.value = current.copy(distanceMeters = distance)
+            }
         }
     }
 
@@ -666,25 +671,28 @@ class MapViewModel : ViewModel() {
     fun loadBeaconRsvp(beaconId: String, forceRefresh: Boolean = false) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             if (!ensureClickWebAuthReady()) return@launch
             if (!forceRefresh && _beaconRsvpById.value.containsKey(id)) return@launch
 
             _beaconRsvpLoadingIds.update { it + id }
-            mapBeaconRepository.fetchBeaconRsvp(id).fold(
-                onSuccess = { payload ->
-                    updateBeaconRsvpCache { current ->
-                        current + (id to BeaconRsvpCacheEntry(
-                            attendees = payload.attendees,
-                            currentUserSignedUp = payload.currentUserSignedUp,
-                        ))
-                    }
-                },
-                onFailure = {
-                    // Keep disk-hydrated cache on failure; do not write a false-negative entry.
-                },
-            )
-            _beaconRsvpLoadingIds.update { it - id }
+            try {
+                mapBeaconRepository.fetchBeaconRsvp(id).fold(
+                    onSuccess = { payload ->
+                        updateBeaconRsvpCache { current ->
+                            current + (id to BeaconRsvpCacheEntry(
+                                attendees = payload.attendees,
+                                currentUserSignedUp = payload.currentUserSignedUp,
+                            ))
+                        }
+                    },
+                    onFailure = {
+                        // Keep disk-hydrated cache on failure; do not write a false-negative entry.
+                    },
+                )
+            } finally {
+                _beaconRsvpLoadingIds.update { it - id }
+            }
         }
     }
 
@@ -1198,14 +1206,25 @@ class MapViewModel : ViewModel() {
     fun onMapPinTapped(pin: MapPin) {
         if (pin.kind == MapPinKind.COMMUNITY_HUB || pin.id.startsWith("hub:")) {
             val raw = pin.id.removePrefix("hub:")
-            viewModelScope.launch {
-                val hub = _communityHubs.value.firstOrNull { it.hubId == raw }
-                    ?: return@launch
+            val hub = _communityHubs.value.firstOrNull { it.hubId == raw }
+                ?: return
+            _selection.value = MapSelection.HubSelected(
+                hub = hub,
+                distanceMeters = null,
+                canJoinGeofence = false,
+            )
+            viewModelScope.launch(Dispatchers.Default) {
                 val distance = locationService.getHighAccuracyLocation(4500L)?.let { loc ->
                     haversineDistance(loc.latitude, loc.longitude, hub.latitude, hub.longitude)
                 }
                 val canJoin = distance != null && distance <= 200.0
-                _selection.value = MapSelection.HubSelected(hub, distance, canJoin)
+                val current = _selection.value as? MapSelection.HubSelected ?: return@launch
+                if (current.hub.hubId == raw) {
+                    _selection.value = current.copy(
+                        distanceMeters = distance,
+                        canJoinGeofence = canJoin,
+                    )
+                }
             }
             return
         }

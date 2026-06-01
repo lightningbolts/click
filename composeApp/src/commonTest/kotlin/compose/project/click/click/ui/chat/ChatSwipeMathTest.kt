@@ -87,15 +87,11 @@ class ChatSwipeMathTest {
     }
 
     @Test
-    fun forward_zeroSlopeAtOriginAvoidsSnap() {
-        // For tiny travels the quadratic ramp should produce a much smaller
-        // visual offset than the linear region — that's what kills the
-        // "snap" when the finger first touches.
+    fun forward_tracksFingerOneToOneUntilCap() {
         val tiny = forward(1f)
         val linear = forward(50f)
-        // `tiny` would be ~0.01-0.05 px; `linear` well into the dozens.
-        assertTrue(tiny < 0.5f, "Tiny raw should map to sub-pixel visual, got $tiny")
-        assertTrue(linear > 20f, "Linear-region raw should translate substantially, got $linear")
+        assertEquals(1f, tiny, 1e-6f)
+        assertEquals(50f, linear, 1e-6f)
     }
 
     @Test

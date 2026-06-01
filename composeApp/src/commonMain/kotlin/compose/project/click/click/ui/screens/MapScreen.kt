@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -1011,6 +1012,7 @@ private fun EventBeaconDetail(
                         AsyncImage(
                             model = attendee.avatarUrl,
                             contentDescription = attendee.name,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape),

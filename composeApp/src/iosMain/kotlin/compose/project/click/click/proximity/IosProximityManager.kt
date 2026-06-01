@@ -199,7 +199,7 @@ class IosProximityManager : ProximityManager {
                             val characteristic = CBMutableCharacteristic(
                                 type = characteristicUuid,
                                 properties = CBCharacteristicPropertyRead,
-                                value = payload,
+                                value = null,
                                 permissions = CBAttributePermissionsReadable,
                             )
                             tokenCharacteristic = characteristic
@@ -329,6 +329,9 @@ class IosProximityManager : ProximityManager {
                                 CBCentralManagerScanOptionAllowDuplicatesKey to NSNumber(bool = true),
                             )
                             central.scanForPeripheralsWithServices(listOf(serviceUuid), options = opts)
+                            cont.resume(Unit)
+                        } else if (central.state != CBManagerStatePoweredOn && !started) {
+                            started = true
                             cont.resume(Unit)
                         }
                     }

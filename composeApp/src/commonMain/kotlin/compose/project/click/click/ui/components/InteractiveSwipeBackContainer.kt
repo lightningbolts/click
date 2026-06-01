@@ -1,8 +1,8 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -74,12 +74,7 @@ data class InteractiveSwipeBackRightToLeftPeek(
 internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
-private const val SwipeBackDragFriction = 0.65f
 private val SwipeBackCommitThreshold = 45.dp
-/** Settle duration when releasing without committing (snap-back to origin). */
-private const val SwipeBackCancelSettleMillis = 165
-/** Settle duration when committing to back (slide-through to full width). */
-private const val SwipeBackCompleteSettleMillis = 140
 
 /**
  * iOS-style interactive back container:
@@ -192,12 +187,6 @@ fun InteractiveSwipeBackContainer(
             isSettling = true
 
             settleJob = settleScope.launch {
-                val settleMillis = if (shouldComplete) {
-                    SwipeBackCompleteSettleMillis
-                } else {
-                    SwipeBackCancelSettleMillis
-                }
-                // Shorter settle + release velocity raises peak speed; drag friction/threshold unchanged.
                 val releaseVelocity = when {
                     shouldComplete -> velocityX.coerceAtLeast(0f)
                     else -> velocityX.coerceAtMost(0f)
@@ -206,10 +195,17 @@ fun InteractiveSwipeBackContainer(
                     initialValue = currentOffset,
                     targetValue = target,
                     initialVelocity = releaseVelocity,
-                    animationSpec = tween(
-                        durationMillis = settleMillis,
-                        easing = FastOutSlowInEasing,
-                    ),
+                    animationSpec = if (shouldComplete) {
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        )
+                    } else {
+                        spring(
+                            dampingRatio = 0.75f,
+                            stiffness = Spring.StiffnessLow,
+                        )
+                    },
                 ) { value, _ ->
                     offsetPx.floatValue = value
                     notifySwipeOffset()
@@ -239,24 +235,23 @@ fun InteractiveSwipeBackContainer(
     val dragState = rememberDraggableState { delta ->
             if (isSettling) return@rememberDraggableState
             val offset = offsetPx.floatValue
-            val frictionDelta = delta * SwipeBackDragFriction
             val peek = rightToLeftPeekState.value
             when {
                 delta > 0f && offset > 0f -> {
                     isGestureActive = true
-                    snapDragOffset(offset + frictionDelta)
+                    snapDragOffset(offset + delta)
                 }
                 delta > 0f && offset <= 0f && peek?.isPeekRevealed?.invoke() == true -> {
-                    peek.onRightDragDelta(frictionDelta)
+                    peek.onRightDragDelta(delta)
                 }
                 delta > 0f && offset <= 0f -> {
                     isGestureActive = true
                     peek?.onRightDragFromRest?.invoke(delta)
-                    snapDragOffset(offset + frictionDelta)
+                    snapDragOffset(offset + delta)
                 }
                 delta < 0f && offset > 0f -> {
                     isGestureActive = true
-                    snapDragOffset(offset + frictionDelta)
+                    snapDragOffset(offset + delta)
                 }
                 delta < 0f && offset <= 0f ->
                     peek?.onLeftDragDelta?.invoke(-delta)

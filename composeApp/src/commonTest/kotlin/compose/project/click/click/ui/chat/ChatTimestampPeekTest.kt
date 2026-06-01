@@ -17,9 +17,19 @@ class ChatTimestampPeekTest {
     @Test
     fun applyTimestampPeekDragStep_rightwardDragCollapsesRevealedPeek() {
         val raw = mutableFloatStateOf(80f)
-        val display = mutableFloatStateOf(40f)
         val maxReveal = 56f
         val softKnee = 5f
+        val display = mutableFloatStateOf(
+            swipeVisualFromRawTravel(
+                rawTravelPx = raw.floatValue,
+                isSent = false,
+                maxVisualPx = maxReveal,
+                softKneePx = softKnee,
+                trackGain = 1f,
+                overflowRubberGain = 0.12f,
+            ),
+        )
+        val initialDisplay = display.floatValue
         applyTimestampPeekDragStep(
             rawLeftPx = raw,
             displayVisualPx = display,
@@ -28,6 +38,6 @@ class ChatTimestampPeekTest {
             dLeftPx = -20f,
         )
         assertTrue(raw.floatValue < 80f)
-        assertTrue(display.floatValue < 40f)
+        assertTrue(display.floatValue < initialDisplay)
     }
 }

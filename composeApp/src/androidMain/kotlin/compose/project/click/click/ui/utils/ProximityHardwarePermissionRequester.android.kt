@@ -28,13 +28,12 @@ actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean)
             add(Manifest.permission.RECORD_AUDIO)
         }
     }
+    val requiredAudioPermission = Manifest.permission.RECORD_AUDIO
     var pendingOnResult by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
 
     fun hasAllPermissions(): Boolean {
         val context = activity ?: return false
-        return requiredPermissions.all { permission ->
-            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-        }
+        return ContextCompat.checkSelfPermission(context, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
     }
 
     val launcher = rememberLauncherForActivityResult(
@@ -42,16 +41,13 @@ actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean)
     ) { results ->
         val complete = pendingOnResult
         pendingOnResult = null
-        val granted = requiredPermissions.all { permission ->
-            results[permission] == true ||
-                (activity != null &&
-                    ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED)
-        }
+        val granted = results[requiredAudioPermission] == true ||
+            (activity != null &&
+                ContextCompat.checkSelfPermission(activity, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED)
         if (!granted && activity != null) {
-            val permanentlyDenied = requiredPermissions.any { permission ->
-                ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED &&
-                    !ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
-            }
+            val permanentlyDenied =
+                ContextCompat.checkSelfPermission(activity, requiredAudioPermission) != PackageManager.PERMISSION_GRANTED &&
+                    !ActivityCompat.shouldShowRequestPermissionRationale(activity, requiredAudioPermission)
             if (permanentlyDenied) {
                 openApplicationSystemSettings()
             }

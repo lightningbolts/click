@@ -69,15 +69,14 @@ class AndroidProximityManager(
     private var audioTrack: AudioTrack? = null
 
     override fun supportsTapExchange(): Boolean {
-        val a = adapter ?: return false
-        if (missingBluetoothRuntimePermissions().isNotEmpty()) return true
-        return a.isEnabled && advertiser != null && scanner != null &&
-            (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || a.isLeExtendedAdvertisingSupported || a.isMultipleAdvertisementSupported)
+        // Ultrasonic remains a valid high-confidence channel even when Android restricts BLE GATT.
+        return true
     }
 
     override fun capabilityNote(): String {
-        if (adapter == null) return "Bluetooth is not available on this device."
-        if (advertiser == null) return "This device cannot send BLE advertisements needed for Tap to Connect."
+        if (!canUseBleGatt()) {
+            return "Uses short-range ultrasonic tones and GPS; BLE GATT is used when Android allows it."
+        }
         return "Uses Bluetooth Low Energy and short-range audio tones (including 18.5 kHz) to find nearby taps."
     }
 
@@ -115,6 +114,19 @@ class AndroidProximityManager(
         }
     }
 
+    private fun enforceAudioRuntimePermission() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            throw ProximityHardwarePermissionException("Missing proximity hardware permission: ${Manifest.permission.RECORD_AUDIO}")
+        }
+    }
+
+    private fun canUseBleGatt(): Boolean {
+        val a = adapter ?: return false
+        if (!a.isEnabled) return false
+        if (missingBluetoothRuntimePermissions().isNotEmpty()) return false
+        return advertiser != null && scanner != null
+    }
+
     override fun openRadiosSettings() {
         val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
         val ok = runCatching {
@@ -135,36 +147,46 @@ class AndroidProximityManager(
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
-        enforceBluetoothRuntimePermissions()
+        enforceAudioRuntimePermission()
         stopBroadcastOnly()
-        val adv = advertiser ?: return
-        val payload = runCatching { buildGattTokenPayload(ephemeralToken) }.getOrElse { return }
-        val serviceUuid = ParcelUuid.fromString(CLICK_SERVICE_UUID)
-        startGattServer(payload)
+        if (canUseBleGatt()) {
+            val adv = advertiser
+            val payload = runCatching { buildGattTokenPayload(ephemeralToken) }.getOrNull()
+            val serviceUuid = runCatching { ParcelUuid.fromString(CLICK_SERVICE_UUID) }.getOrNull()
+            if (adv != null && payload != null && serviceUuid != null) {
+                val gattStarted = runCatching {
+                    startGattServer(payload)
+                    gattServer != null
+                }.getOrDefault(false)
+                if (gattStarted) withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { cont ->
+                        val cb = object : AdvertiseCallback() {
+                            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                                if (cont.isActive) cont.resume(Unit)
+                            }
 
-        withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine { cont ->
-                val cb = object : AdvertiseCallback() {
-                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                        if (cont.isActive) cont.resume(Unit)
-                    }
-
-                    override fun onStartFailure(errorCode: Int) {
-                        if (cont.isActive) cont.resume(Unit)
+                            override fun onStartFailure(errorCode: Int) {
+                                if (cont.isActive) cont.resume(Unit)
+                            }
+                        }
+                        advertiseCallback = cb
+                        val settings = AdvertiseSettings.Builder()
+                            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                            .setConnectable(true)
+                            .build()
+                        val data = AdvertiseData.Builder()
+                            .setIncludeDeviceName(false)
+                            .addServiceUuid(serviceUuid)
+                            .build()
+                        runCatching { adv.startAdvertising(settings, data, cb) }
+                            .onFailure {
+                                advertiseCallback = null
+                                if (cont.isActive) cont.resume(Unit)
+                            }
+                        cont.invokeOnCancellation { runCatching { adv.stopAdvertising(cb) } }
                     }
                 }
-                advertiseCallback = cb
-                val settings = AdvertiseSettings.Builder()
-                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                    .setConnectable(true)
-                    .build()
-                val data = AdvertiseData.Builder()
-                    .setIncludeDeviceName(false)
-                    .addServiceUuid(serviceUuid)
-                    .build()
-                adv.startAdvertising(settings, data, cb)
-                cont.invokeOnCancellation { runCatching { adv.stopAdvertising(cb) } }
             }
         }
 
@@ -175,10 +197,10 @@ class AndroidProximityManager(
     }
 
     override suspend fun startHandshakeListening(): List<String> {
-        enforceBluetoothRuntimePermissions()
+        enforceAudioRuntimePermission()
         val tokens = ConcurrentHashMap.newKeySet<String>()
         stopScanOnly()
-        val sc = scanner
+        val sc = scanner?.takeIf { canUseBleGatt() }
         val serviceUuid = ParcelUuid.fromString(CLICK_SERVICE_UUID)
         val cb = if (sc != null) {
             object : ScanCallback() {
@@ -206,7 +228,7 @@ class AndroidProximityManager(
                         .setServiceUuid(serviceUuid)
                         .build(),
                 )
-                sc.startScan(filters, settings, cb)
+                runCatching { sc.startScan(filters, settings, cb) }
             }
         }
         coroutineScope {
@@ -304,8 +326,23 @@ class AndroidProximityManager(
                 }
                 finishGatt(gatt, address)
             }
+
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+                status: Int,
+            ) {
+                if (
+                    status == BluetoothGatt.GATT_SUCCESS &&
+                    characteristic.uuid == UUID.fromString(CLICK_TOKEN_CHARACTERISTIC_UUID)
+                ) {
+                    parseGattTokenPayload(value)?.let { sink.add(it) }
+                }
+                finishGatt(gatt, address)
+            }
         }
-        val gatt = device.connectGatt(context, false, callback)
+        val gatt = runCatching { device.connectGatt(context, false, callback) }.getOrNull()
         if (gatt != null) {
             activeClientGatts.add(gatt)
         } else {

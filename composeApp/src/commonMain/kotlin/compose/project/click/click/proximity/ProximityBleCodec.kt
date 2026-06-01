@@ -1,8 +1,12 @@
 package compose.project.click.click.proximity
 
 /**
- * BLE manufacturer payload for tri-factor handshake tokens (4 decimal digits).
- * Prefix bytes are ASCII "CK" so scans can ignore unrelated advertisements.
+ * BLE identifiers for the tri-factor handshake.
+ *
+ * Active phone-to-phone discovery advertises only [CLICK_SERVICE_UUID] so the packet stays under
+ * the 31-byte legacy BLE advertisement limit. The actual handshake token is read from
+ * [CLICK_TOKEN_CHARACTERISTIC_UUID] over GATT; manufacturer payload helpers remain for codec tests
+ * and any legacy scanners that still decode the old compact frame.
  */
 internal const val CLICK_BLE_MANUFACTURER_ID: Int = 0xCAFE
 internal const val CLICK_SERVICE_UUID: String = "6f1c8c2a-1111-4000-8000-00cafe000001"

@@ -1,8 +1,8 @@
 package compose.project.click.click.ui.chat
 
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -138,9 +138,9 @@ fun ChatMessageBubble(
 
     val density = LocalDensity.current
     val swipeThresholdPx = remember(density) { with(density) { 60.dp.toPx() } }
-    val maxSwipeVisualPx = remember(density) { with(density) { 42.dp.toPx() } }
+    val maxSwipeVisualPx = swipeThresholdPx
     val swipeSoftKneePx = remember(density) { with(density) { 5.dp.toPx() } }
-    val swipeTrackGain = remember { 0.56f }
+    val swipeTrackGain = remember { 1f }
     val swipeOverflowRubberGain = remember { 0.12f }
     var rawSwipeTravelPx by remember(message.id) { mutableFloatStateOf(0f) }
     var displayVisualPx by remember(message.id) { mutableFloatStateOf(0f) }
@@ -203,9 +203,9 @@ fun ChatMessageBubble(
                     animate(
                         initialValue = displayVisualPx,
                         targetValue = 0f,
-                        animationSpec = tween(
-                            durationMillis = ChatGestureMotion.HorizontalSwipeSettleMillis,
-                            easing = CubicBezierEasing(0.17f, 0.88f, 0.24f, 1f),
+                        animationSpec = spring(
+                            dampingRatio = 0.75f,
+                            stiffness = Spring.StiffnessLow,
                         ),
                     ) { v, _ ->
                         displayVisualPx = v

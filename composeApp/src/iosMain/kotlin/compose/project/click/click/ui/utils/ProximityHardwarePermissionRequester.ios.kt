@@ -48,12 +48,10 @@ actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean)
     var bluetoothProbe by remember { mutableStateOf<IosBluetoothPermissionProbe?>(null) }
 
     fun requestBluetooth(onResult: (Boolean) -> Unit) {
-        val probe = IosBluetoothPermissionProbe { granted ->
+        val probe = IosBluetoothPermissionProbe {
             bluetoothProbe = null
-            if (!granted) {
-                openApplicationSystemSettings()
-            }
-            onResult(granted)
+            // Bluetooth denial/restriction should not block the ultrasonic + GPS fallback path.
+            onResult(true)
         }
         bluetoothProbe = probe
         probe.start()
