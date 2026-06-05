@@ -5,6 +5,7 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.PushTokenRepository
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
+import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.notifications.savePendingPushToken
@@ -55,6 +56,15 @@ fun setChatDeepLink(chatId: String, connectionId: String = "") {
 fun setCommunityHubDeepLink(hubId: String) {
     ChatDeepLinkManager.setPendingCommunityHub(hubId)
 }
+
+/** Universal Link / deep link for `/c/{userId}` — queues connection handshake in [App]. */
+fun setConnectionDeepLink(userId: String) {
+    ConnectionDeepLinkRouter.setPendingConnectionUserId(userId)
+}
+
+/** Parse and queue a connection URL. Returns true when recognized. */
+fun handleConnectionUniversalLink(url: String): Boolean =
+    ConnectionDeepLinkRouter.handleIncomingUrl(url)
 
 fun handleIncomingCallPush(
     callId: String,

@@ -17,6 +17,7 @@ import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
+import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
+        handleConnectionUniversalLinkIntent(intent)
 
         setContent {
             App()
@@ -78,6 +80,7 @@ class MainActivity : ComponentActivity() {
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
+        handleConnectionUniversalLinkIntent(intent)
     }
 
     private fun handleCommunityHubViewIntent(intent: Intent?) {
@@ -85,6 +88,12 @@ class MainActivity : ComponentActivity() {
         val uriString = intent.dataString ?: return
         val hubId = uriString.toHubIdFromClickHubUrl() ?: return
         ChatDeepLinkManager.setPendingCommunityHub(hubId)
+    }
+
+    private fun handleConnectionUniversalLinkIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uriString = intent.dataString ?: return
+        ConnectionDeepLinkRouter.handleIncomingUrl(uriString)
     }
 
     /** Required by supabase-kt: forwards `click://login` OAuth callbacks into the Auth plugin. */

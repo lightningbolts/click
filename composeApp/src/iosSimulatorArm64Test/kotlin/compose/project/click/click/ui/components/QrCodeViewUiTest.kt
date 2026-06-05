@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
 import compose.project.click.click.data.models.User
+import compose.project.click.click.qr.buildConnectionUniversalLink
 import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.parseQrCode
 import compose.project.click.click.qr.QrParseResult
@@ -43,9 +44,19 @@ class QrCodeViewUiTest {
     fun offlineFallbackPayload_roundTripsThroughParser() {
         val payload = buildOfflineQrPayload(fixtureUser.id, fixtureUser.name)
         assertTrue(payload.isNotBlank(), "offline payload must never be blank")
+        assertTrue(payload.startsWith("https://"), "QR payload must be a Universal Link URL")
 
         val parsed = parseQrCode(payload)
         val legacy = assertIs<QrParseResult.Legacy>(parsed, "offline fallback should parse as Legacy")
+        assertEquals(fixtureUser.id, legacy.userId)
+    }
+
+    @Test
+    fun universalLinkPayload_usesConnectionPath() {
+        val link = buildConnectionUniversalLink(fixtureUser.id)
+        assertEquals("https://click-us.vercel.app/c/${fixtureUser.id}", link)
+        val parsed = parseQrCode(link)
+        val legacy = assertIs<QrParseResult.Legacy>(parsed)
         assertEquals(fixtureUser.id, legacy.userId)
     }
 

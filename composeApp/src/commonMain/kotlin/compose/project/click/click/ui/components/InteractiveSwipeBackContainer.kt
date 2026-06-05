@@ -74,7 +74,8 @@ data class InteractiveSwipeBackRightToLeftPeek(
 internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
-private val SwipeBackCommitThreshold = 45.dp
+/** Commit interactive back only when the finger has dragged past the horizontal midpoint. */
+private const val SwipeBackCommitFraction = 0.5f
 
 /**
  * iOS-style interactive back container:
@@ -142,7 +143,7 @@ fun InteractiveSwipeBackContainer(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
-        val commitThresholdPx = with(density) { SwipeBackCommitThreshold.toPx() }
+        val commitThresholdPx = widthPx * SwipeBackCommitFraction
         val showPreviousLayer = isGestureActive || isSettling
 
         SideEffect {

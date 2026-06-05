@@ -76,6 +76,27 @@
                     android:host="click-us.vercel.app"
                     android:pathPrefix="/hub"/>
             </intent-filter>
+
+            <!-- Universal Link connection routing: https://click-us.vercel.app/c/{userId} -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="click-us.vercel.app"
+                    android:pathPrefix="/c"/>
+            </intent-filter>
+
+            <!-- Legacy connect deep link -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="click"
+                    android:host="connect"/>
+            </intent-filter>
         </activity>
 
         <meta-data
@@ -106,6 +127,15 @@
                     android:scheme="https"
                     android:host="click-us.vercel.app"
                     android:pathPrefix="/connect"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="click-us.vercel.app"
+                    android:pathPrefix="/c"/>
             </intent-filter>
         </activity>
 

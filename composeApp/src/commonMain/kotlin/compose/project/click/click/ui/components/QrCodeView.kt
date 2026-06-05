@@ -1,9 +1,5 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.User
+import compose.project.click.click.qr.buildConnectionUniversalLink
 import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.util.redactedRestMessage
@@ -34,7 +31,6 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import qrcode.QRCode
@@ -50,14 +46,13 @@ private val httpClient = HttpClient {
 }
 
 private const val QR_API_URL = "$CLICK_WEB_BASE_URL/api/qr"
-private const val TOKEN_TTL_SECONDS = 90
 
 /**
  * Displays the user's QR code for scanning.
  *
- * Fetches a time-bounded, single-use token from the web API and encodes it in
- * the QR. Auto-refreshes the token 5 seconds before expiry with a live countdown.
- * Falls back to a static URL if the API is unreachable.
+ * Encodes a Universal Link (`https://click-us.vercel.app/c/{userId}`) so native OS cameras
+ * route through the web/App Clip layer instead of misinterpreting raw JSON as phone numbers.
+ * Optionally registers initiator GPS with the server in the background for proximity verification.
  */
 @Composable
 fun UserQrCode(
@@ -68,24 +63,21 @@ fun UserQrCode(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    // Static fallback URL — renders instantly so user never sees a blank
-    val fallbackUrl = buildOfflineQrPayload(user.id, user.name)
+    val universalLink = remember(user.id) { buildConnectionUniversalLink(user.id) }
+    val fallbackUrl = remember(user.id, user.name) { buildOfflineQrPayload(user.id, user.name) }
 
-    var qrPayload by remember { mutableStateOf(fallbackUrl) }
-    var isLoading by remember { mutableStateOf(false) }
-    var secondsLeft by remember { mutableIntStateOf(TOKEN_TTL_SECONDS) }
+    var qrPayload by remember(user.id) {
+        mutableStateOf(universalLink.ifBlank { fallbackUrl })
+    }
+    var gpsRegistered by remember { mutableStateOf(false) }
     var fetchError by remember { mutableStateOf(false) }
-    var hasEverFetched by remember { mutableStateOf(false) }
 
-    // Fetch a new token from the web API
-    suspend fun fetchToken() {
-        isLoading = true
+    suspend fun registerGpsWithServer() {
         fetchError = false
         try {
             val session = SupabaseConfig.client.auth.currentSessionOrNull()
             val token = session?.accessToken
 
-            // Capture initiator's GPS to store alongside the token for proximity verification
             val location = try {
                 locationService?.getHighAccuracyLocation(4000L)
             } catch (_: Exception) {
@@ -108,53 +100,29 @@ fun UserQrCode(
                 val body = response.body<JsonObject>()
                 val data = body["data"]?.jsonObject
                 val payload = data?.get("qrPayload")?.jsonPrimitive?.contentOrNull
-
                 if (!payload.isNullOrBlank()) {
                     qrPayload = payload
-                    secondsLeft = TOKEN_TTL_SECONDS
                 } else {
-                    // API returned success but no token — use fallback silently
-                    qrPayload = fallbackUrl
-                    secondsLeft = TOKEN_TTL_SECONDS
+                    qrPayload = universalLink.ifBlank { fallbackUrl }
                 }
-            } else {
-                // Only show error if we've ever had a successful fetch
-                // On first load, silently fall back to static URL
-                if (hasEverFetched) fetchError = true
+                gpsRegistered = true
+            } else if (gpsRegistered) {
+                fetchError = true
             }
         } catch (e: Exception) {
-            println("UserQrCode: Failed to fetch token: ${e.redactedRestMessage()}")
-            if (hasEverFetched) fetchError = true
-            // Keep showing the last valid QR rather than going blank
-        } finally {
-            isLoading = false
-            hasEverFetched = true
+            println("UserQrCode: Failed to register GPS: ${e.redactedRestMessage()}")
+            if (gpsRegistered) fetchError = true
         }
     }
 
-    // Initial fetch + auto-refresh loop
     LaunchedEffect(user.id) {
-        // Warm up GPS while the "show my QR" surface is visible (non-blocking).
+        qrPayload = universalLink.ifBlank { fallbackUrl }
         launch(Dispatchers.Default) {
             runCatching { locationService?.getHighAccuracyLocation(4000L) }
         }
-
-        fetchToken()
-
-        // Countdown and auto-refresh
-        while (true) {
-            delay(1_000L)
-            if (secondsLeft > 0) {
-                secondsLeft--
-            }
-            // Refresh 5 seconds before expiry
-            if (secondsLeft <= 5) {
-                fetchToken()
-            }
-        }
+        registerGpsWithServer()
     }
 
-    // Generate QR bitmap from payload
     val qrImageBitmap = remember(qrPayload) {
         try {
             val qrCode = QRCode.ofSquares().build(qrPayload)
@@ -165,15 +133,7 @@ fun UserQrCode(
         }
     }
 
-    // Timer color: green → amber → red
-    val timerColor = when {
-        secondsLeft > 45 -> Color(0xFF22C55E)
-        secondsLeft > 20 -> Color(0xFFF59E0B)
-        else             -> Color(0xFFEF4444)
-    }
-
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // QR Code box
         Box(
             modifier = Modifier
                 .size(size)
@@ -198,7 +158,6 @@ fun UserQrCode(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Countdown row — only show after first successful fetch
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -210,29 +169,17 @@ fun UserQrCode(
                     fontSize = 12.sp
                 )
                 IconButton(
-                    onClick = { coroutineScope.launch { fetchToken() } },
+                    onClick = { coroutineScope.launch { registerGpsWithServer() } },
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(Icons.Filled.Refresh, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                 }
-            } else if (hasEverFetched) {
+            } else {
                 Text(
-                    text = if (secondsLeft > 0) "${secondsLeft}s" else "Refreshing…",
-                    color = timerColor,
+                    text = "Scan to connect",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "· renews automatically",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-            } else {
-                // Initial load — show nothing or subtle text
-                Text(
-                    text = "Generating secure code…",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
                 )
             }
         }

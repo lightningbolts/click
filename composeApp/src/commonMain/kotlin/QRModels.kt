@@ -7,6 +7,19 @@ import kotlinx.serialization.json.Json
 /** Base URL for the Click web app — used when generating profile QR codes. */
 const val CLICK_WEB_BASE_URL = "https://click-us.vercel.app"
 
+/** App Store listing for the full Click iOS app (App Clip CTA). */
+const val CLICK_IOS_APP_STORE_URL = "https://apps.apple.com/app/id0000000000"
+
+/** Universal Link path segment for connection routing (`/c/{userId}`). */
+const val CONNECTION_PATH_SEGMENT = "c"
+
+/** Builds the secure routing URL encoded in QR codes and Universal Links. */
+fun buildConnectionUniversalLink(userId: String): String {
+    val id = userId.trim()
+    if (id.isBlank()) return ""
+    return "$CLICK_WEB_BASE_URL/$CONNECTION_PATH_SEGMENT/$id"
+}
+
 /**
  * Legacy QR payload — JSON with userId (and optional name).
  * Used by older QR codes before the proximity verification system.
@@ -40,8 +53,9 @@ private val json = Json { ignoreUnknownKeys = true }
 
 fun QrPayload.toJson(): String = json.encodeToString(QrPayload.serializer(), this)
 
+/** Offline / immediate QR payload — always a Universal Link, never raw JSON. */
 fun buildOfflineQrPayload(userId: String, name: String?): String =
-    QrPayload(userId = userId, name = name).toJson()
+    buildConnectionUniversalLink(userId)
 
 fun String.toQrPayloadOrNull(): QrPayload? =
     try {
@@ -70,8 +84,11 @@ fun String.toTokenQrPayloadOrNull(): TokenQrPayload? =
  *   - click://connect/<uuid>            (deep link format)
  * Returns the UUID string, or null if the input doesn't match either pattern.
  */
-private val HTTP_CONNECT_PATTERN = Regex("""https?://[^/]+/connect/([0-9a-fA-F\-]{36})""")
-private val DEEP_LINK_PATTERN    = Regex("""click://connect/([0-9a-fA-F\-]{36})""")
+private val UUID_CAPTURE = """([0-9a-fA-F\-]{36})"""
+private val HTTP_C_PATTERN = Regex("""https?://[^/]+/c/$UUID_CAPTURE""")
+private val DEEP_LINK_C_PATTERN = Regex("""click://c/$UUID_CAPTURE""")
+private val HTTP_CONNECT_PATTERN = Regex("""https?://[^/]+/connect/$UUID_CAPTURE""")
+private val DEEP_LINK_PATTERN = Regex("""click://connect/$UUID_CAPTURE""")
 
 /** Ephemeral community hub: click://hub/{hub_id} or https://…/hub/{hub_id} */
 private val HUB_ID_SEGMENT = """([a-zA-Z0-9][a-zA-Z0-9_\-]{0,127})"""
@@ -85,6 +102,8 @@ fun String.toHubIdFromClickHubUrl(): String? {
 }
 
 fun String.toUserIdFromClickUrl(): String? {
+    HTTP_C_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    DEEP_LINK_C_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
     HTTP_CONNECT_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
     DEEP_LINK_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
     return null
@@ -111,7 +130,7 @@ sealed class QrParseResult {
  * Tries formats in order:
  * 1. Token-based JSON payload (new format with token field)
  * 2. Hub deep link (click://hub/{id} or https://.../hub/{id})
- * 3. URL format (https://.../connect/{uuid} or click://connect/{uuid})
+ * 3. URL format (https://.../c/{uuid}, legacy /connect/{uuid}, or click:// variants)
  * 4. Legacy JSON payload ({"userId":"...", ...})
  * 5. Invalid
  */

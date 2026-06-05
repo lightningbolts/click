@@ -90,6 +90,7 @@ import compose.project.click.click.viewmodel.OnboardingViewModel
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.rememberProximityManager
+import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
@@ -933,6 +934,8 @@ fun App() {
 
             val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
 
+            val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()
+
             // Snackbar for connection success/error feedback
             val snackbarHostState = remember { SnackbarHostState() }
 
@@ -1023,6 +1026,23 @@ fun App() {
                 if (currentUser.id.isBlank()) return@LaunchedEffect
                 ChatDeepLinkManager.consumeCommunityHub()
                 launchCommunityHubJoin(hid)
+            }
+
+            LaunchedEffect(pendingConnectionUserId, currentUser.id) {
+                val scannedUserId = pendingConnectionUserId ?: return@LaunchedEffect
+                if (scannedUserId.isBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+                if (scannedUserId == currentUser.id) {
+                    ConnectionDeepLinkRouter.consume()
+                    return@LaunchedEffect
+                }
+                ConnectionDeepLinkRouter.consume()
+                showQRScanner = false
+                showMyQRCode = false
+                connectionViewModel.presentQrContextSheetFromScan(
+                    scannedUserId = scannedUserId,
+                    qrToken = null,
+                    venueId = null,
+                )
             }
             val connectionState by connectionViewModel.connectionState.collectAsState()
             val suppressConnectionContextSheet =

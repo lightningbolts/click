@@ -100,7 +100,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             ClickKt.setCommunityHubDeepLink(hubId: hubId)
             return true
         }
+        if ClickKt.handleConnectionUniversalLink(url: url.absoluteString) {
+            return true
+        }
         return false
+    }
+
+    func application(
+        _ application: UIApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+    ) -> Bool {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let url = userActivity.webpageURL else {
+            return false
+        }
+        if let hubId = Self.communityHubId(from: url) {
+            ClickKt.setCommunityHubDeepLink(hubId: hubId)
+            return true
+        }
+        return ClickKt.handleConnectionUniversalLink(url: url.absoluteString)
     }
 
     private static func communityHubId(from url: URL) -> String? {
