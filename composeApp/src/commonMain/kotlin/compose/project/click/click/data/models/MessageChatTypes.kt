@@ -8,6 +8,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 /**
  * Values for [Message.messageType] aligned with `public.messages.message_type` (lowercase in DB).
@@ -74,6 +76,23 @@ fun Message.parsedMediaMetadata(): MessageMediaMetadata? {
 }
 
 fun Message.mediaUrlOrNull(): String? = parsedMediaMetadata()?.mediaUrl
+
+fun Message.isDisposableRoll(): Boolean {
+    val root = metadata as? JsonObject ?: return false
+    return root["disposable_roll"]?.jsonPrimitive?.booleanOrNull == true
+}
+
+fun Message.disposableRollCollaborationTtlIso(): String? {
+    val root = metadata as? JsonObject ?: return null
+    return root["collaboration_ttl"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+fun Message.isDisposableRollLocked(now: Instant = Clock.System.now()): Boolean {
+    if (!isDisposableRoll()) return false
+    val ttlIso = disposableRollCollaborationTtlIso() ?: return true
+    val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return true
+    return now < ttl
+}
 
 fun Message.hasLocalMediaUri(): Boolean =
     mediaUrlOrNull()?.startsWith("file://", ignoreCase = true) == true

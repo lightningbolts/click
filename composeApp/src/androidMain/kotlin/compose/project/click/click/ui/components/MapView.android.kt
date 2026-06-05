@@ -155,6 +155,7 @@ actual fun PlatformMap(
         pins.forEach { pin ->
             key(pin.id) {
                 val markerHue = pin.markerHueDegrees()
+                val squadScale = pin.squadMultiplier.coerceAtLeast(1f)
                 val caption = pin.caption?.trim().orEmpty()
                 val position = remember(pin.id, pin.latitude, pin.longitude) {
                     LatLng(pin.latitude, pin.longitude)
@@ -164,12 +165,22 @@ actual fun PlatformMap(
                     markerState.position = LatLng(pin.latitude, pin.longitude)
                 }
                 if (caption.isEmpty()) {
+                    val squadIcon = if (squadScale > 1f) {
+                        val cacheKey = "squad|$markerHue|$squadScale"
+                        labeledPinCache.getOrPut(cacheKey) {
+                            bitmapDescriptorForSquadPin(
+                                density = density,
+                                hueDegrees = markerHue,
+                                scale = squadScale,
+                            )
+                        }
+                    } else null
                     Marker(
                         state = markerState,
                         title = pin.title,
                         alpha = pin.opacity,
-                        zIndex = pin.zIndex,
-                        icon = BitmapDescriptorFactory.defaultMarker(markerHue),
+                        zIndex = pin.zIndex + if (squadScale > 1f) 500f else 0f,
+                        icon = squadIcon ?: BitmapDescriptorFactory.defaultMarker(markerHue),
                         onClick = {
                             onPinTapped(pin)
                             true
@@ -242,6 +253,30 @@ actual fun PlatformMap(
             }
         }
     }
+}
+
+private fun bitmapDescriptorForSquadPin(
+    density: androidx.compose.ui.unit.Density,
+    hueDegrees: Float,
+    scale: Float,
+): BitmapDescriptor {
+    val basePx = with(density) { (28.dp * scale).roundToPx() }
+    val auraPx = with(density) { (44.dp * scale).roundToPx() }
+    val bmp = Bitmap.createBitmap(auraPx, auraPx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val cx = auraPx / 2f
+    val cy = auraPx / 2f
+    val aura = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.argb(90, 0, 163, 255)
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(cx, cy, auraPx / 2f, aura)
+    val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.HSVToColor(floatArrayOf(hueDegrees, 0.92f, 0.95f))
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(cx, cy, basePx / 2f, dot)
+    return BitmapDescriptorFactory.fromBitmap(bmp)
 }
 
 private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int, fillArgb: Int): BitmapDescriptor {

@@ -1,8 +1,13 @@
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +41,7 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -82,6 +88,7 @@ import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
+import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 
@@ -101,12 +108,23 @@ internal fun ConnectionChatMessageComposer(
     editingMessageId: String?,
     replyingTo: MessageWithUser?,
     mediaPickers: ChatMediaPickerHandles,
+    collaborationSession: CollaborationSession? = null,
+    onOpenDisposableRoll: () -> Unit = {},
 ) {
     val messageInput by viewModel.messageInput.collectAsState()
     val messageSendError by viewModel.messageSendError.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
+    val disposableRollActive = collaborationSession?.isRollActive() == true
+    val rollSpring = spring<Float>(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow)
+    val infiniteGlow = rememberInfiniteTransition(label = "roll_glow")
+    val glowPulse by infiniteGlow.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
+        label = "roll_pulse",
+    )
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
 
@@ -407,26 +425,52 @@ internal fun ConnectionChatMessageComposer(
                         .zIndex(4f)
                         .focusProperties { canFocus = false },
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .background(PrimaryBlue.copy(alpha = if (isSending) 0.06f else 0.12f))
-                            .chatSpringPressScale(attachInteraction)
-                            .clickable(
-                                interactionSource = attachInteraction,
-                                indication = null,
-                                enabled = true,
-                                onClick = { attachmentMenuExpanded = true },
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = "Attach",
-                            tint = attachTint,
-                            modifier = Modifier.size(attachIconSize),
-                        )
+                    Crossfade(
+                        targetState = disposableRollActive,
+                        animationSpec = rollSpring,
+                        label = "attach_to_roll",
+                    ) { rollMode ->
+                        val bgAlpha = if (rollMode) glowPulse else if (isSending) 0.06f else 0.12f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(
+                                    if (rollMode) {
+                                        Brush.radialGradient(
+                                            colors = listOf(
+                                                PrimaryBlue.copy(alpha = bgAlpha),
+                                                LightBlue.copy(alpha = bgAlpha * 0.45f),
+                                                PrimaryBlue.copy(alpha = 0.08f),
+                                            ),
+                                        )
+                                    } else {
+                                        Brush.linearGradient(
+                                            listOf(
+                                                PrimaryBlue.copy(alpha = bgAlpha),
+                                                PrimaryBlue.copy(alpha = bgAlpha),
+                                            ),
+                                        )
+                                    },
+                                )
+                                .chatSpringPressScale(attachInteraction)
+                                .clickable(
+                                    interactionSource = attachInteraction,
+                                    indication = null,
+                                    enabled = true,
+                                    onClick = {
+                                        if (rollMode) onOpenDisposableRoll() else attachmentMenuExpanded = true
+                                    },
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                if (rollMode) Icons.Filled.PhotoCamera else Icons.Filled.Add,
+                                contentDescription = if (rollMode) "Disposable Roll" else "Attach",
+                                tint = if (rollMode) Color.White else attachTint,
+                                modifier = Modifier.size(attachIconSize),
+                            )
+                        }
                     }
                     DropdownMenu(
                         expanded = attachmentMenuExpanded,

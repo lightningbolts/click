@@ -54,6 +54,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.offsetIn
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
@@ -126,6 +127,9 @@ data class ProximityHandshakeRecoveryPayload(
 
 data class BindProximityHandshakeOutcome(
     val matches: List<User>,
+    /** Re-engagement Disposable Roll session (existing-friend bump). */
+    val encounterId: String? = null,
+    val collaborationTtl: String? = null,
     /**
      * Top-level `is_new_connection` from bind-proximity-connection when present; else derived from match rows.
      * When false, route reconnect UX (encounter logging) instead of the “new spark” sheet.
@@ -180,6 +184,8 @@ private data class BindProximityResponse(
     val matches: List<User>? = null,
     val error: String? = null,
     @SerialName("group_clique_candidate") val groupCliqueCandidate: GroupCliqueCandidatePayload? = null,
+    @SerialName("encounter_id") val encounterId: String? = null,
+    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
 )
 
 @Serializable
@@ -202,6 +208,7 @@ private data class BindProximityRequest(
     @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
     @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
     @SerialName("simulator_mock") val simulatorMock: Boolean? = null,
+    @SerialName("timezone_offset_minutes") val timezoneOffsetMinutes: Int? = null,
 )
 
 /**
@@ -464,10 +471,15 @@ class ConnectionRepository(
                 ?.filter { it.isNotEmpty() }
                 ?.distinct()
                 ?.takeIf { it.isNotEmpty() }
+            val tzOffsetMinutes = Clock.System.now()
+                .offsetIn(TimeZone.currentSystemDefault())
+                .totalSeconds
+                .div(60)
             val request = BindProximityRequest(
                 myToken = myToken,
                 tokens = heardTokens,
                 heardTokens = heardTokens,
+                timezoneOffsetMinutes = tzOffsetMinutes,
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
                 exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
@@ -518,6 +530,8 @@ class ConnectionRepository(
                     groupCliqueCandidateMemberIds = groupCliqueCandidateMemberIds,
                     connectionId = parsed.connectionId,
                     isGroup = parsed.isGroup == true,
+                    encounterId = parsed.encounterId?.trim()?.takeIf { it.isNotEmpty() },
+                    collaborationTtl = parsed.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
                 ),
             )
         } catch (e: Exception) {

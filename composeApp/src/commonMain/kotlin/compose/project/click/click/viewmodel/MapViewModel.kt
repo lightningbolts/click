@@ -23,6 +23,7 @@ import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma:
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
+import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
@@ -909,6 +910,7 @@ class MapViewModel : ViewModel() {
                     }
                 }
             }
+            val squadSession = CollaborationSessionManager.activeMapDropSession()
             val insert = MapBeaconInsert(
                 kind = kind.apiValue,
                 lat = loc.latitude,
@@ -917,6 +919,7 @@ class MapViewModel : ViewModel() {
                 ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
                 showCreatorName = showCreatorName,
                 visibilityAudience = visibilityAudience.apiValue,
+                encounterId = squadSession?.encounterId,
             )
             val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
             val optimisticBeacon = MapBeacon(

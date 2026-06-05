@@ -60,7 +60,7 @@ type PushError = {
   error: string;
 };
 
-type PushCategory = "chat_message" | "incoming_call" | "archive_warning";
+type PushCategory = "chat_message" | "incoming_call" | "archive_warning" | "disposable_reveal";
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
@@ -263,6 +263,7 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
   const t = requestBody.data?.type;
   if (t === "incoming_call") return "incoming_call";
   if (t === "archive_warning") return "archive_warning";
+  if (t === "disposable_reveal") return "disposable_reveal";
   return "chat_message";
 }
 
@@ -277,7 +278,7 @@ function shouldSendToToken(
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  if (category === "chat_message" || category === "archive_warning") {
+  if (category === "chat_message" || category === "archive_warning" || category === "disposable_reveal") {
     return tokenType != "voip";
   }
 
@@ -557,14 +558,28 @@ async function resolveChatMessageRequest(
   };
 }
 
-function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
-  if (requestBody.data?.type !== "archive_warning") return false;
-  const provided = req.headers.get("x-archive-warning-secret");
-  const expected =
+function serviceRoleOrCronSecret(): string | undefined {
+  return (
+    Deno.env.get("CRON_SECRET") ??
     Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET") ??
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
     Deno.env.get("SUPABASE_SERVICE_KEY") ??
-    Deno.env.get("SUPABASE_KEY");
+    Deno.env.get("SUPABASE_KEY")
+  );
+}
+
+function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
+  if (requestBody.data?.type !== "archive_warning") return false;
+  const provided = req.headers.get("x-archive-warning-secret");
+  const expected = serviceRoleOrCronSecret();
+  return !!provided && !!expected && provided === expected;
+}
+
+function isDisposableRevealServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
+  if (requestBody.data?.type !== "disposable_reveal") return false;
+  const authHeader = req.headers.get("authorization");
+  const provided = authHeader?.replace(/^Bearer\s+/i, "").trim();
+  const expected = serviceRoleOrCronSecret();
   return !!provided && !!expected && provided === expected;
 }
 
@@ -579,6 +594,21 @@ async function resolvePushRequest(
     const body = asNonEmptyString(requestBody.body);
     if (!recipientUserId || !title || !body) {
       throw new Error("archive_warning pushes require recipient_user_id, title, and body");
+    }
+    return {
+      recipient_user_id: recipientUserId,
+      title,
+      body,
+      data: requestBody.data,
+    };
+  }
+
+  if (isDisposableRevealServiceRequest(req, requestBody)) {
+    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
+    const title = asNonEmptyString(requestBody.title);
+    const body = asNonEmptyString(requestBody.body);
+    if (!recipientUserId || !title || !body) {
+      throw new Error("disposable_reveal pushes require recipient_user_id, title, and body");
     }
     return {
       recipient_user_id: recipientUserId,
@@ -626,6 +656,9 @@ async function recipientAllowsPush(
   const cat = getPushCategory(requestBody);
   if (cat === "incoming_call") {
     return data.call_push_enabled !== false;
+  }
+  if (cat === "disposable_reveal" || cat === "chat_message" || cat === "archive_warning") {
+    return data.message_push_enabled !== false;
   }
   return data.message_push_enabled !== false;
 }

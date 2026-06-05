@@ -3,6 +3,9 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
+import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
+import compose.project.click.click.data.repository.BindProximityHandshakeOutcome // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
@@ -139,6 +142,19 @@ class ConnectionViewModel : ViewModel() {
     private var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
+
+    private fun activateCollaborationSessionIfPresent(outcome: BindProximityHandshakeOutcome) {
+        val connectionId = outcome.connectionId ?: return
+        val encounterId = outcome.encounterId ?: return
+        val ttl = outcome.collaborationTtl ?: return
+        CollaborationSessionManager.activate(
+            CollaborationSession(
+                encounterId = encounterId,
+                connectionId = connectionId,
+                collaborationTtlIso = ttl,
+            ),
+        )
+    }
 
     /**
      * After a valid QR payload is read, show the context sheet before redeem/create.
@@ -323,6 +339,7 @@ class ConnectionViewModel : ViewModel() {
 
                 if (bindResult.isSuccess) {
                     val outcome = bindResult.getOrNull()!!
+                    activateCollaborationSessionIfPresent(outcome)
                     lastProximityEncounterLoggedAggregate = outcome.encounterLogged
                     val users = outcome.matches
                     if (users.isEmpty()) {

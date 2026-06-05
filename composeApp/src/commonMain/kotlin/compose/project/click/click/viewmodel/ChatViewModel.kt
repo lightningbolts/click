@@ -2264,6 +2264,104 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Encrypts and uploads a Disposable Roll frame tagged with the active [encounterId].
+     * Clears [bytes] from caller responsibility after upload begins.
+     */
+    fun sendDisposableRollPhoto(
+        bytes: ByteArray,
+        encounterId: String,
+        collaborationTtlIso: String,
+        mimeType: String = "image/jpeg",
+    ) {
+        if (bytes.isEmpty() || encounterId.isBlank()) return
+        val connectionId = currentConnectionId ?: return
+        val userId = _currentUserId.value ?: return
+        _messageSendError.value = null
+        viewModelScope.launch {
+            outboundChatMessageMutex.withLock {
+                _isMessageSubmitInProgress.value = true
+                try {
+                    val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                        _messageSendError.value = "Failed to send — unable to start chat"
+                        return@withLock
+                    }
+                    val tempId = "temp-roll-${Clock.System.now().toEpochMilliseconds()}"
+                    val localMs = Clock.System.now().toEpochMilliseconds()
+                    val optimistic = Message(
+                        id = tempId,
+                        user_id = userId,
+                        content = " ",
+                        timeCreated = localMs,
+                        messageType = ChatMessageType.IMAGE,
+                        metadata = buildJsonObject {
+                            put("is_encrypted_media", true)
+                            put("original_mime_type", mimeType)
+                            put("disposable_roll", true)
+                            put("encounter_id", encounterId)
+                            put("collaboration_ttl", collaborationTtlIso)
+                        },
+                        localSentAt = localMs,
+                        deliveryState = MessageDeliveryState.PENDING,
+                    )
+                    val currentUser = resolveMessageUser(userId, apiChatId)
+                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                        ?: User(id = userId, name = "You", createdAt = 0L)
+                    appendOutgoingOptimistic(optimistic, currentUser)
+                    secureImageBytesCache.put(tempId, bytes)
+                    _secureChatMediaLoadState.update {
+                        it + (
+                            tempId to SecureChatMediaLoadState(
+                                loading = false,
+                                imageBytes = bytes,
+                                uploadProgress = 0.5f,
+                            )
+                            )
+                    }
+                    val ext = extensionForChatMedia(mimeType, isImage = true)
+                    val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
+                    val path = "$userId/$apiChatId/$unique.$ext"
+                    val uploadBytes = bytes
+                    val url = chatRepository.uploadChatMedia(uploadBytes, path, mimeType) ?: run {
+                        markOptimisticSendFailed(tempId)
+                        secureImageBytesCache.remove(tempId)
+                        _secureChatMediaLoadState.update { m -> m - tempId }
+                        _messageSendError.value = "Failed to upload Disposable Roll photo"
+                        return@withLock
+                    }
+                    secureImageBytesCache.remove(tempId)
+                    _secureChatMediaLoadState.update { m -> m - tempId }
+                    val meta = buildJsonObject {
+                        put("media_url", url)
+                        put("original_mime_type", mimeType)
+                        put("is_encrypted_media", true)
+                        put("disposable_roll", true)
+                        put("encounter_id", encounterId)
+                        put("collaboration_ttl", collaborationTtlIso)
+                    }
+                    val message = chatRepository.sendMessage(
+                        chatId = apiChatId,
+                        userId = userId,
+                        content = " ",
+                        messageType = ChatMessageType.IMAGE,
+                        metadata = meta,
+                    )
+                    if (message != null) {
+                        applyInsertedMessage(message, currentUser, userId)
+                        activateConnectionIfPending(connectionId)
+                    } else {
+                        markOptimisticSendFailed(tempId)
+                        _messageSendError.value = "Failed to send Disposable Roll photo"
+                    }
+                } catch (e: Exception) {
+                    _messageSendError.value = "Failed to send Disposable Roll — ${e.message ?: "error"}"
+                } finally {
+                    _isMessageSubmitInProgress.value = false
+                }
+            }
+        }
+    }
+
     fun sendChatAudio(bytes: ByteArray, mimeType: String, durationSeconds: Int?) {
         if (bytes.isEmpty()) return
         val connectionId = currentConnectionId ?: return

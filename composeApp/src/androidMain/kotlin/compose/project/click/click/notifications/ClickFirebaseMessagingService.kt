@@ -43,6 +43,55 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         ensureNotificationChannel(applicationContext)
 
         val type = message.data["type"]
+        if (type == "disposable_reveal") {
+            if (!NotificationRuntimeState.getNotificationPreferences().messageNotificationsEnabled) {
+                return
+            }
+            val connectionId = message.data["connection_id"] ?: ""
+            val chatId = message.data["chat_id"] ?: ""
+            val deepLinkId = connectionId.ifBlank { chatId }
+            val title = message.notification?.title ?: "Disposable Roll"
+            val body = message.notification?.body
+                ?: "📸 Your Disposable Roll from last night has been revealed!"
+            val launchIntent = if (deepLinkId.isNotBlank()) {
+                MainActivity.createChatDeepLinkIntent(
+                    context = this,
+                    chatId = chatId,
+                    connectionId = connectionId,
+                )
+            } else {
+                packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                } ?: return
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                deepLinkId.hashCode(),
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = NotificationCompat.Builder(this, CLICK_MESSAGES_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+            NotificationManagerCompat.from(this).notify(
+                chatNotificationTag(deepLinkId) ?: "disposable_reveal",
+                0,
+                notification,
+            )
+            return
+        }
         if (type == "incoming_call") {
             if (!NotificationRuntimeState.getNotificationPreferences().callNotificationsEnabled) {
                 return

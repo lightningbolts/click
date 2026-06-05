@@ -12,16 +12,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.disposableRollCollaborationTtlIso
+import compose.project.click.click.data.models.isDisposableRollLocked
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.redactedRestMessage
@@ -63,6 +69,17 @@ internal fun ChatBubblePhotoContent(
     modifier: Modifier = Modifier,
     borderIfReceived: Boolean = false,
 ) {
+    val rollLocked = message.isDisposableRollLocked()
+    val countdownLabel = remember(message.id, rollLocked) {
+        if (!rollLocked) return@remember null
+        val ttlIso = message.disposableRollCollaborationTtlIso() ?: return@remember "Locked"
+        val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
+        val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+        val totalMin = remainMs / 60_000L
+        val hours = totalMin / 60L
+        val mins = totalMin % 60L
+        if (hours > 0) "Reveals in ${hours}h ${mins}m" else "Reveals in ${mins}m"
+    }
     Box(modifier = modifier.fillMaxWidth()) {
         when {
             isEncrypted && secureState?.loading == true -> {
@@ -107,8 +124,24 @@ internal fun ChatBubblePhotoContent(
                                         Modifier
                                     },
                                 )
-                                .clip(RoundedCornerShape(chatBubbleScaledDp(24f))),
+                                .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
                         )
+                        if (rollLocked && countdownLabel != null) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = countdownLabel,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White,
+                                )
+                            }
+                        }
                         if (up != null && up < 1f) {
                             Box(
                                 modifier = Modifier
@@ -137,22 +170,43 @@ internal fun ChatBubblePhotoContent(
             }
             isEncrypted -> PreparingSecureMediaText()
             else -> {
-                AsyncImage(
-                    model = mediaUrl,
-                    contentDescription = "Photo",
-                    contentScale = ContentScale.Fit,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = chatBubbleScaledDp(330f))
-                        .then(
-                            if (borderIfReceived) {
-                                Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .clip(RoundedCornerShape(chatBubbleScaledDp(24f))),
-                )
+                        .heightIn(max = chatBubbleScaledDp(330f)),
+                ) {
+                    AsyncImage(
+                        model = mediaUrl,
+                        contentDescription = "Photo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (borderIfReceived) {
+                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                            .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+                    )
+                    if (rollLocked && countdownLabel != null) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = countdownLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

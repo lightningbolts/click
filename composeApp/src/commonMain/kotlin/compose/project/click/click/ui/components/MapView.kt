@@ -9,6 +9,8 @@ import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowl
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import compose.project.click.click.ui.utils.beaconZIndex // pragma: allowlist secret
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /** Short on-map caption (beacon context or truncated connection name). */
 internal fun truncateMapPinCaption(text: String, maxChars: Int): String {
@@ -52,6 +54,8 @@ data class MapPin(
      * Optional caption drawn below the marker (truncated soundtrack / description / peer name).
      */
     val caption: String? = null,
+    /** > 1 when dropped during an active collaboration bump (Squad / Heavy Beat pin). */
+    val squadMultiplier: Float = 1f,
 ) {
     companion object {
         /**
@@ -120,6 +124,13 @@ data class MapPin(
                         ?.takeIf { it.isNotEmpty() }
                 }
             }
+            val squadMultiplier = beacon.metadata.raw
+                ?.get("squad_multiplier")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.toFloatOrNull()
+                ?.takeIf { it > 1f }
+                ?: 1f
             return MapPin(
                 id = "beacon:${beacon.id}",
                 title = label,
@@ -128,7 +139,10 @@ data class MapPin(
                 isNearby = false,
                 timeState = TimeState.RECENT,
                 opacity = 1f,
-                shouldPulse = beacon.kind == MapBeaconKind.SOS || beacon.kind == MapBeaconKind.HAZARD,
+                shouldPulse = squadMultiplier > 1f ||
+                    beacon.kind == MapBeaconKind.SOS ||
+                    beacon.kind == MapBeaconKind.HAZARD,
+                squadMultiplier = squadMultiplier,
                 imageUrl = null,
                 kind = kind,
                 beaconKind = beacon.kind,

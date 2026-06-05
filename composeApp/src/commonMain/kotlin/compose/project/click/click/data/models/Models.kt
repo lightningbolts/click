@@ -796,6 +796,8 @@ data class MapBeaconInsert(
     @SerialName("ttl_ms") val ttlMs: Long? = null,
     @SerialName("show_creator_name") val showCreatorName: Boolean = false,
     @SerialName("visibility_audience") val visibilityAudience: String = BeaconVisibilityAudience.EVERYONE.apiValue,
+    /** Active collaboration session — server applies Squad pin 2× radius/TTL when valid. */
+    @SerialName("encounter_id") val encounterId: String? = null,
 )
 
 /**
