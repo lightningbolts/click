@@ -50,6 +50,7 @@ import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlin.math.roundToInt
 
@@ -135,51 +136,56 @@ fun QRScannerScreen(
         if (isProcessingResult) return
         if (qrData == lastScannedRaw && showError) return
 
-        when (val result = parseQrCode(qrData)) {
-            is QrParseResult.TokenBased -> {
-                val now = Clock.System.now().toEpochMilliseconds()
+        scope.launch(Dispatchers.Default) {
+            val result = parseQrCode(qrData)
+            withContext(Dispatchers.Main) {
+                when (result) {
+                    is QrParseResult.TokenBased -> {
+                        val now = Clock.System.now().toEpochMilliseconds()
 
-                if (now > result.payload.exp) {
-                    lastScannedRaw = qrData
-                    errorMessage = "This QR code has expired. Ask them to generate a new one."
-                    showError = true
-                    return
-                }
+                        if (now > result.payload.exp) {
+                            lastScannedRaw = qrData
+                            errorMessage = "This QR code has expired. Ask them to generate a new one."
+                            showError = true
+                            return@withContext
+                        }
 
-                if (onQRCodeScannedWithToken != null) {
-                    lockAndContinue {
-                        onQRCodeScannedWithToken(
-                            result.payload.userId,
-                            result.payload.token,
-                            result.payload.venueId,
-                        )
+                        if (onQRCodeScannedWithToken != null) {
+                            lockAndContinue {
+                                onQRCodeScannedWithToken(
+                                    result.payload.userId,
+                                    result.payload.token,
+                                    result.payload.venueId,
+                                )
+                            }
+                        } else {
+                            lockAndContinue {
+                                onQRCodeScanned(result.payload.userId)
+                            }
+                        }
                     }
-                } else {
-                    lockAndContinue {
-                        onQRCodeScanned(result.payload.userId)
+                    is QrParseResult.Legacy -> {
+                        lockAndContinue {
+                            onQRCodeScanned(result.userId)
+                        }
+                    }
+                    is QrParseResult.CommunityHub -> {
+                        if (onCommunityHubScanned != null) {
+                            lockAndContinue {
+                                onCommunityHubScanned(result.hubId)
+                            }
+                        } else {
+                            lastScannedRaw = qrData
+                            errorMessage = "This hub QR needs a newer version of Click."
+                            showError = true
+                        }
+                    }
+                    is QrParseResult.Invalid -> {
+                        lastScannedRaw = qrData
+                        errorMessage = "Invalid Connection Code"
+                        showError = true
                     }
                 }
-            }
-            is QrParseResult.Legacy -> {
-                lockAndContinue {
-                    onQRCodeScanned(result.userId)
-                }
-            }
-            is QrParseResult.CommunityHub -> {
-                if (onCommunityHubScanned != null) {
-                    lockAndContinue {
-                        onCommunityHubScanned(result.hubId)
-                    }
-                } else {
-                    lastScannedRaw = qrData
-                    errorMessage = "This hub QR needs a newer version of Click."
-                    showError = true
-                }
-            }
-            is QrParseResult.Invalid -> {
-                lastScannedRaw = qrData
-                errorMessage = "This QR code isn't a Click profile. Please scan a valid Click QR code."
-                showError = true
             }
         }
     }

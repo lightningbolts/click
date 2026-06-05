@@ -8,7 +8,8 @@ import kotlinx.serialization.json.Json
 const val CLICK_WEB_BASE_URL = "https://click-us.vercel.app"
 
 /** App Store listing for the full Click iOS app (App Clip CTA). */
-const val CLICK_IOS_APP_STORE_URL = "https://apps.apple.com/app/id0000000000"
+const val CLICK_IOS_APP_STORE_ID = "6757996346"
+const val CLICK_IOS_APP_STORE_URL = "https://apps.apple.com/app/id$CLICK_IOS_APP_STORE_ID"
 
 /** Universal Link path segment for connection routing (`/c/{userId}`). */
 const val CONNECTION_PATH_SEGMENT = "c"
@@ -109,6 +110,38 @@ fun String.toUserIdFromClickUrl(): String? {
     return null
 }
 
+private val UNIVERSAL_LINK_C_UUID = Regex(
+    """/c/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})""",
+    RegexOption.IGNORE_CASE,
+)
+
+/**
+ * Polyglot QR payload parser — extracts a connection [userId] UUID from either:
+ * - **Branch A (new):** Universal Link URLs (`https://…/c/{uuid}`)
+ * - **Branch B (legacy):** JSON `{"userId":"…", …}`
+ *
+ * Returns `null` when neither format matches. Safe to call from a background dispatcher.
+ */
+fun parseQrPayload(rawPayload: String): String? {
+    val trimmed = rawPayload.trim()
+    if (trimmed.isEmpty()) return null
+
+    if (trimmed.startsWith("http", ignoreCase = true) && trimmed.contains("/c/")) {
+        UNIVERSAL_LINK_C_UUID.find(trimmed)?.groupValues?.getOrNull(1)?.let { return it }
+        trimmed.toUserIdFromClickUrl()?.let { return it }
+    }
+
+    if (trimmed.startsWith("{") && !trimmed.contains("\"token\"")) {
+        try {
+            trimmed.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }?.let { return it }
+        } catch (_: Exception) {
+            // Legacy JSON branch failed — fall through to null.
+        }
+    }
+
+    return null
+}
+
 /**
  * Sealed class representing the result of parsing a QR code.
  * Supports both token-based (new) and legacy (old) formats.
@@ -147,13 +180,13 @@ fun parseQrCode(rawData: String): QrParseResult {
         return QrParseResult.CommunityHub(hubId)
     }
 
-    // 3. Profile connect URL
-    trimmed.toUserIdFromClickUrl()?.let {
+    // 3. Polyglot parser — Universal Link `/c/{uuid}` or legacy JSON `{"userId":…}`
+    parseQrPayload(trimmed)?.let {
         return QrParseResult.Legacy(it)
     }
 
-    // 4. Legacy JSON
-    trimmed.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }?.let {
+    // 4. Legacy connect URLs (`/connect/{uuid}`, `click://connect/{uuid}`)
+    trimmed.toUserIdFromClickUrl()?.let {
         return QrParseResult.Legacy(it)
     }
 

@@ -1,5 +1,6 @@
 package compose.project.click.click.deeplink
 
+import compose.project.click.click.qr.parseQrPayload
 import compose.project.click.click.qr.toUserIdFromClickUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,8 +19,12 @@ object ConnectionDeepLinkRouter {
      * Parse a connection user id from a Universal Link or deep link URL.
      * Supports `https://click-us.vercel.app/c/{uuid}`, legacy `/connect/{uuid}`, and `click://` variants.
      */
-    fun parseConnectionUserId(url: String): String? =
-        url.trim().toUserIdFromClickUrl()?.takeIf { it.isNotBlank() }
+    fun parseConnectionUserId(url: String): String? {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return null
+        parseQrPayload(trimmed)?.let { return it }
+        return trimmed.toUserIdFromClickUrl()?.takeIf { it.isNotBlank() }
+    }
 
     /**
      * Queue a connection handshake for [url]. Returns true when the URL was recognized.
