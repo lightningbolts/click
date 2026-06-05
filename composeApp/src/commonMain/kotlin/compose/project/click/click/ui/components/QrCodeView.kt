@@ -19,6 +19,7 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.buildConnectionUniversalLink
 import compose.project.click.click.qr.buildOfflineQrPayload
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.utils.LocationService
 import compose.project.click.click.utils.toImageBitmap
@@ -103,14 +104,19 @@ fun UserQrCode(
                 if (!payload.isNullOrBlank()) {
                     qrPayload = payload
                 } else {
+                    TelemetryBatcher.recordQrFallback()
                     qrPayload = universalLink.ifBlank { fallbackUrl }
                 }
                 gpsRegistered = true
-            } else if (gpsRegistered) {
-                fetchError = true
+            } else {
+                if (!gpsRegistered) {
+                    TelemetryBatcher.recordQrFallback()
+                }
+                if (gpsRegistered) fetchError = true
             }
         } catch (e: Exception) {
             println("UserQrCode: Failed to register GPS: ${e.redactedRestMessage()}")
+            TelemetryBatcher.recordQrFallback()
             if (gpsRegistered) fetchError = true
         }
     }

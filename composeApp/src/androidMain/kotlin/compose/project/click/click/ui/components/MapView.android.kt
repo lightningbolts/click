@@ -42,7 +42,8 @@ actual fun PlatformMap(
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
     onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
-    onCameraAnimationComplete: () -> Unit
+    onCameraAnimationComplete: () -> Unit,
+    onMapGesture: () -> Unit,
 ) {
     // Determine center position
     val initialCenter = when {
@@ -82,6 +83,14 @@ actual fun PlatformMap(
         snapshotFlow { cameraPositionState.position.zoom.toDouble() }
             .distinctUntilChanged()
             .collectLatest { onZoomChanged(it) }
+    }
+
+    LaunchedEffect(cameraPositionState) {
+        snapshotFlow { cameraPositionState.isMoving }
+            .distinctUntilChanged()
+            .collectLatest { moving ->
+                if (moving) onMapGesture()
+            }
     }
 
     // Report true visible map bounds so "memories in view" uses the real viewport.

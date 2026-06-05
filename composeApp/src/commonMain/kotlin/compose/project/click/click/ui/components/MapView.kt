@@ -208,7 +208,9 @@ expect fun PlatformMap(
     onClusterTapped: (MapClusterPin) -> Unit = {},
     onZoomChanged: (Double) -> Unit = {},
     onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit = { _, _, _, _ -> },
-    onCameraAnimationComplete: () -> Unit = {}
+    onCameraAnimationComplete: () -> Unit = {},
+    /** User-initiated pan/zoom — used for on-device friction telemetry only. */
+    onMapGesture: () -> Unit = {},
 )
 
 /**

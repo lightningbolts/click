@@ -47,7 +47,8 @@ actual fun PlatformMap(
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
     onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
-    onCameraAnimationComplete: () -> Unit
+    onCameraAnimationComplete: () -> Unit,
+    onMapGesture: () -> Unit,
 ) {
     var lastAnnotationSnapshot by remember { mutableStateOf("") }
     var hasCentered by remember { mutableStateOf(false) }
@@ -67,6 +68,7 @@ actual fun PlatformMap(
     pinTapDelegate.onProgrammaticCameraSettled = onCameraAnimationComplete
     pinTapDelegate.onVisibleBoundsChanged = onVisibleBoundsChanged
     pinTapDelegate.onZoomChanged = onZoomChanged
+    pinTapDelegate.onMapGesture = onMapGesture
 
     UIKitView(
         modifier = modifier,
@@ -426,6 +428,7 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     var onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit =
         { _, _, _, _ -> }
     var onZoomChanged: (Double) -> Unit = {}
+    var onMapGesture: () -> Unit = {}
 
     private var lastViewportMinLat: Double? = null
     private var lastViewportMaxLat: Double? = null
@@ -668,6 +671,9 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     override fun mapView(mapView: MKMapView, regionDidChangeAnimated: Boolean) {
         dispatchViewportIfChanged(mapView)
         maybeFinishProgrammaticCamera(mapView)
+        if (pendingProgrammaticCamera == null) {
+            onMapGesture()
+        }
     }
 }
 

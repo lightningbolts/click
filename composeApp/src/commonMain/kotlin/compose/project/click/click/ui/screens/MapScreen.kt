@@ -82,6 +82,8 @@ import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
+import compose.project.click.click.telemetry.TelemetryBatcher
+import compose.project.click.click.ui.components.GlassmorphicOverlay
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /**
@@ -129,11 +131,30 @@ fun MapScreen(
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
 
+    val frictionUi by TelemetryBatcher.uiState.collectAsState()
+
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
+        TelemetryBatcher.beginMapSession()
         val loc = locationService.getCurrentLocation()
         userLat = loc?.latitude
         userLon = loc?.longitude
+        TelemetryBatcher.updateHexbinFromCoordinates(userLat, userLon)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { TelemetryBatcher.endMapSession() }
+    }
+
+    LaunchedEffect(userLat, userLon) {
+        TelemetryBatcher.updateHexbinFromCoordinates(userLat, userLon)
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5_000L)
+            TelemetryBatcher.refreshUiClock()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -280,42 +301,59 @@ fun MapScreen(
                         onMapPipExpandedChange = onMapPipExpandedChanged,
                         statsLine = statsLine,
                         onOpenSearch = onOpenSearch,
-                        onDropBeacon = { showBeaconDropSheet = true },
+                        onDropBeacon = {
+                            TelemetryBatcher.recordActionTaken()
+                            showBeaconDropSheet = true
+                        },
                         mapContent = { mapModifier, mapGesturesEnabled ->
-                            MapContent(
-                                modifier = mapModifier,
-                                renderData = renderData,
-                                communityHubs = communityHubs,
-                                zoom = cameraTarget?.zoom ?: mapBindingZoom,
-                                ghostMode = ghostModeEnabled,
-                                mapGesturesEnabled = mapGesturesEnabled,
-                                showCompass = !mapPipExpanded,
-                                cameraTarget = cameraTarget,
-                                onPinTapped = { pin ->
-                                    if (pin.kind == MapPinKind.CONNECTION) {
-                                        selectedProfileId = pin.id
-                                    } else {
-                                        selectedProfileId = null
-                                    }
-                                    viewModel.onMapPinTapped(pin)
-                                },
-                                onClusterTapped = { clusterPin ->
-                                    viewModel.onClusterTappedFromMap(clusterPin.id)
-                                },
-                                onZoomChanged = { viewModel.setZoomLevel(it) },
-                                onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
-                                    viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
-                                },
-                                onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() },
-                            )
+                            Box(modifier = mapModifier) {
+                                MapContent(
+                                    modifier = Modifier.fillMaxSize(),
+                                    renderData = renderData,
+                                    communityHubs = communityHubs,
+                                    zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                                    ghostMode = ghostModeEnabled,
+                                    mapGesturesEnabled = mapGesturesEnabled,
+                                    showCompass = !mapPipExpanded,
+                                    cameraTarget = cameraTarget,
+                                    onPinTapped = { pin ->
+                                        TelemetryBatcher.recordActionTaken()
+                                        if (pin.kind == MapPinKind.CONNECTION) {
+                                            selectedProfileId = pin.id
+                                        } else {
+                                            selectedProfileId = null
+                                        }
+                                        viewModel.onMapPinTapped(pin)
+                                    },
+                                    onClusterTapped = { clusterPin ->
+                                        TelemetryBatcher.recordActionTaken()
+                                        viewModel.onClusterTappedFromMap(clusterPin.id)
+                                    },
+                                    onZoomChanged = { viewModel.setZoomLevel(it) },
+                                    onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
+                                        viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
+                                    },
+                                    onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() },
+                                    onMapGesture = { TelemetryBatcher.recordMapPan() },
+                                )
+                                GlassmorphicOverlay(
+                                    visible = frictionUi.showGrassNudge && mapGesturesEnabled,
+                                    message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
+                                    onDismiss = { TelemetryBatcher.dismissGrassNudge() },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         },
                         onHubClick = { hub ->
+                            TelemetryBatcher.recordActionTaken()
                             viewModel.onMapPinTapped(MapPin.fromCommunityHub(hub))
                         },
                         onBeaconClick = { beacon ->
+                            TelemetryBatcher.recordActionTaken()
                             viewModel.onMapPinTapped(MapPin.fromBeacon(beacon))
                         },
                         onConnectionClick = { point ->
+                            TelemetryBatcher.recordActionTaken()
                             selectedProfileId = point.connection.id
                             viewModel.onMapPinTapped(MapPin.fromConnectionPoint(point))
                         },
@@ -324,7 +362,10 @@ fun MapScreen(
                                 dockBottomPadding = mapFabAboveNav,
                                 layerFilters = layerFilters,
                                 onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                onDropBeacon = { showBeaconDropSheet = true },
+                                onDropBeacon = {
+                            TelemetryBatcher.recordActionTaken()
+                            showBeaconDropSheet = true
+                        },
                                 onCollapseMap = { onMapPipExpandedChanged(false) },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
@@ -1467,6 +1508,7 @@ private fun MapContent(
     onZoomChanged: (Double) -> Unit,
     onVisibleBoundsChanged: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
     onCameraAnimationComplete: () -> Unit,
+    onMapGesture: () -> Unit = {},
 ) {
     val hubPins = communityHubs.map { MapPin.fromCommunityHub(it) }
     val pins = when (renderData) {
@@ -1501,6 +1543,7 @@ private fun MapContent(
         onZoomChanged = onZoomChanged,
         onVisibleBoundsChanged = onVisibleBoundsChanged,
         onCameraAnimationComplete = onCameraAnimationComplete,
+        onMapGesture = onMapGesture,
     )
 }
 

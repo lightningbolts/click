@@ -1,6 +1,7 @@
 package compose.project.click.click
 
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.PushTokenRepository
 import compose.project.click.click.calls.CallInvite
@@ -24,6 +25,11 @@ private val pushTokenRepository = PushTokenRepository()
 fun onApplicationDidBecomeActive() {
     notifyPlatformApplicationForeground()
     AppDataManager.handleApplicationForegrounded()
+}
+
+/** Called from platform lifecycle when the app moves to background. */
+fun onApplicationDidEnterBackground() {
+    TelemetryBatcher.onAppBackgrounded()
 }
 
 fun savePushToken(token: String, platform: String) {

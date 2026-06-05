@@ -153,6 +153,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        ClickKt.onApplicationDidEnterBackground()
+    }
+
     func applicationDidBecomeActive(_ application: UIApplication) {
         ClickKt.onApplicationDidBecomeActive()
 
