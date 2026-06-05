@@ -43,7 +43,7 @@
 		A1B2C3CC2F760001006AD3B5 /* Embed App Clips */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "$(CONTENTS_FOLDER_PATH)/AppClips";
-			dstSubfolder = 16;
+			dstSubfolderSpec = 16;
 			files = (
 				A1B2C3CD2F760001006AD3B5 /* ClickClip.app in Embed App Clips */,
 			);
