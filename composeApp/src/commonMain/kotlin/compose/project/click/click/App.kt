@@ -75,6 +75,9 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
+import compose.project.click.click.calendar.AvailabilityOverlapGap
+import compose.project.click.click.calendar.lockAvailabilityIntentForGap
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
 import compose.project.click.click.ui.screens.*
@@ -1682,6 +1685,10 @@ fun App() {
 
                         if (connectionState is ConnectionState.TaggingContext && !showNfcScreen && !suppressConnectionContextSheet) {
                             val tagging = connectionState as ConnectionState.TaggingContext
+                            var calendarLockInProgress by remember { mutableStateOf(false) }
+                            val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
+                            val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != currentUser.id }?.id
+                                ?: tagging.targetUsers.firstOrNull()?.id
                             val finishWithoutTags: () -> Unit = {
                                 if (!tagging.isNewConnection) {
                                     connectionViewModel.resetConnectionState()
@@ -1733,6 +1740,26 @@ fun App() {
                                             ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
                                             barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
                                         )
+                                    }
+                                },
+                                connectionId = reconnectConnectionId,
+                                peerUserId = reconnectPeerId,
+                                currentUserId = currentUser.id,
+                                lockIntentInProgress = calendarLockInProgress,
+                                onLockIntent = { gap: AvailabilityOverlapGap ->
+                                    connectionScope.launch {
+                                        calendarLockInProgress = true
+                                        val ok = withContext(Dispatchers.Default) {
+                                            lockAvailabilityIntentForGap(
+                                                repository = supabaseRepo,
+                                                userId = currentUser.id,
+                                                gap = gap,
+                                            )
+                                        }
+                                        calendarLockInProgress = false
+                                        if (ok) {
+                                            PlatformHapticsPolicy.successNotification()
+                                        }
                                     }
                                 },
                                 onConfirm = { contextTag, noiseOptIn ->

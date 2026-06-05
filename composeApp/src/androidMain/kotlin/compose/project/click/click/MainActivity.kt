@@ -21,6 +21,8 @@ import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
+import compose.project.click.click.calendar.initCalendarProvider
+import compose.project.click.click.encounter.initEncounterTetherWidgetBridge
 import compose.project.click.click.ui.utils.AppSystemSettings
 import compose.project.click.click.ui.utils.initAppSystemSettings
 import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
@@ -43,6 +45,8 @@ class MainActivity : ComponentActivity() {
 
         // Initialize location service with application context
         initLocationService(applicationContext)
+        initCalendarProvider(applicationContext)
+        initEncounterTetherWidgetBridge(applicationContext)
         initAppSystemSettings(applicationContext)
         AppSystemSettings.isDebugMode =
             (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0

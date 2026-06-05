@@ -8,6 +8,12 @@
 	<string>Click uses Bluetooth for Tap to Connect when you meet someone nearby.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Click uses your microphone for Tap to Connect and voice features.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Click reads your calendar to find mutual free time when you reconnect with a friend.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Click reads your calendar to find mutual free time when you reconnect with a friend.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Click uses your location for tether pings and nearby connection features.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

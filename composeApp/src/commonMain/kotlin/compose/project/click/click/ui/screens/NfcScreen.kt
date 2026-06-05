@@ -52,6 +52,9 @@ import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.bottomChromePadding
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
+import compose.project.click.click.calendar.AvailabilityOverlapGap
+import compose.project.click.click.calendar.lockAvailabilityIntentForGap
+import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.ui.components.PageHeader
 import compose.project.click.click.ui.components.rememberConnectionHandshakePulse
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
@@ -330,6 +333,11 @@ fun NfcScreen(
 
                 if (connectionState is ConnectionState.TaggingContext) {
                     val tagging = connectionState as ConnectionState.TaggingContext
+                    var calendarLockInProgress by remember { mutableStateOf(false) }
+                    val supabaseRepo = remember { SupabaseRepository() }
+                    val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
+                    val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != userId }?.id
+                        ?: tagging.targetUsers.firstOrNull()?.id
                     val finishWithoutTags: () -> Unit = {
                         if (!tagging.isNewConnection) {
                             connectionViewModel.resetConnectionState()
@@ -381,6 +389,26 @@ fun NfcScreen(
                                     ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
                                     barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
                                 )
+                            }
+                        },
+                        connectionId = reconnectConnectionId,
+                        peerUserId = reconnectPeerId,
+                        currentUserId = userId,
+                        lockIntentInProgress = calendarLockInProgress,
+                        onLockIntent = { gap: AvailabilityOverlapGap ->
+                            scope.launch {
+                                calendarLockInProgress = true
+                                val ok = withContext(Dispatchers.Default) {
+                                    lockAvailabilityIntentForGap(
+                                        repository = supabaseRepo,
+                                        userId = userId,
+                                        gap = gap,
+                                    )
+                                }
+                                calendarLockInProgress = false
+                                if (ok) {
+                                    PlatformHapticsPolicy.successNotification()
+                                }
                             }
                         },
                         onConfirm = { contextTag, noiseOptIn ->

@@ -35,10 +35,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +59,16 @@ import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.UserProfile
 import androidx.compose.material3.CircularProgressIndicator
+import compose.project.click.click.calendar.AvailabilityOverlapGap
+import compose.project.click.click.calendar.CalendarAccessStatus
+import compose.project.click.click.calendar.CalendarFreeBusy
+import compose.project.click.click.calendar.CalendarProvider
+import compose.project.click.click.calendar.CalendarSyncSession
+import compose.project.click.click.calendar.calculateAvailabilityOverlaps
+import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -217,6 +231,11 @@ fun ConnectionContextSheet(
     presentation: ConnectionContextPresentation = ConnectionContextPresentation.NewSpark,
     encounterSaveInProgress: Boolean = false,
     onSaveEncounter: (() -> Unit)? = null,
+    connectionId: String? = null,
+    peerUserId: String? = null,
+    currentUserId: String? = null,
+    lockIntentInProgress: Boolean = false,
+    onLockIntent: ((AvailabilityOverlapGap) -> Unit)? = null,
 ) {
     val hourOfDay = remember {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
@@ -230,6 +249,74 @@ fun ConnectionContextSheet(
     var ambientNoiseOptIn by remember(initialNoiseOptIn) { mutableStateOf(initialNoiseOptIn) }
     val isCustomSelectionInvalid = selectedTagId == "custom" && customTagText.isBlank()
     val dismissSheet = onSkip ?: onDismiss
+    val calendarProvider = remember { CalendarProvider() }
+    val requestCalendarPermission = rememberCalendarPermissionRequester()
+    val calendarScope = rememberCoroutineScope()
+    var localCalendar by remember { mutableStateOf<CalendarFreeBusy?>(null) }
+    var calendarPermissionDenied by remember { mutableStateOf(false) }
+    var bestOverlap by remember { mutableStateOf<AvailabilityOverlapGap?>(null) }
+    val peerCalendar by CalendarSyncSession.peerCalendar.collectAsState()
+    val showCalendarSync = presentation == ConnectionContextPresentation.ReconnectEncounter &&
+        !connectionId.isNullOrBlank() &&
+        !peerUserId.isNullOrBlank() &&
+        !currentUserId.isNullOrBlank()
+
+    var calendarAccessGranted by remember(showCalendarSync) { mutableStateOf(false) }
+
+    LaunchedEffect(showCalendarSync) {
+        if (!showCalendarSync) return@LaunchedEffect
+        when (calendarProvider.getAccessStatus()) {
+            CalendarAccessStatus.Granted -> calendarAccessGranted = true
+            CalendarAccessStatus.Denied,
+            CalendarAccessStatus.Restricted,
+            -> calendarPermissionDenied = true
+            CalendarAccessStatus.NotDetermined -> {
+                requestCalendarPermission {
+                    calendarScope.launch {
+                        if (calendarProvider.getAccessStatus() == CalendarAccessStatus.Granted) {
+                            calendarAccessGranted = true
+                        } else {
+                            calendarPermissionDenied = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(showCalendarSync, calendarAccessGranted, connectionId, peerUserId, currentUserId) {
+        if (!showCalendarSync || !calendarAccessGranted) return@LaunchedEffect
+        val connId = connectionId ?: return@LaunchedEffect
+        val peer = peerUserId ?: return@LaunchedEffect
+        val self = currentUserId ?: return@LaunchedEffect
+        CalendarSyncSession.start(connId, self, peer)
+        val windowStart = Clock.System.now().toEpochMilliseconds()
+        val snapshot = withContext(Dispatchers.Default) {
+            calendarProvider.fetchBusyBlocks(windowStartEpochMs = windowStart, daysAhead = 7)
+        }
+        if (snapshot != null) {
+            localCalendar = snapshot
+            CalendarSyncSession.publishLocal(connId, self, snapshot)
+        }
+    }
+
+    LaunchedEffect(localCalendar, peerCalendar) {
+        val userCal = localCalendar
+        val friendCal = peerCalendar
+        bestOverlap = if (userCal != null && friendCal != null) {
+            calculateAvailabilityOverlaps(userCal, friendCal).firstOrNull()
+        } else {
+            null
+        }
+    }
+
+    DisposableEffect(showCalendarSync, connectionId) {
+        onDispose {
+            if (showCalendarSync) {
+                calendarScope.launch { CalendarSyncSession.stop() }
+            }
+        }
+    }
 
     fun resolveSelectedTag(): ContextTag? {
         return if (selectedTagId == "custom") {
@@ -312,6 +399,24 @@ fun ConnectionContextSheet(
                     text = "Location hint: $locationName",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (showCalendarSync && calendarPermissionDenied) {
+                Text(
+                    text = "Calendar access is off — schedule overlap won't appear until you enable read-only calendar access in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            bestOverlap?.let { gap ->
+                val (dayLabel, timeLabel) = gap.formatDayAndTimeLabels()
+                CalendarOverlapBentoCard(
+                    dayLabel = dayLabel,
+                    timeLabel = timeLabel,
+                    lockInProgress = lockIntentInProgress,
+                    onLockIntent = { onLockIntent?.invoke(gap) },
                 )
             }
 
