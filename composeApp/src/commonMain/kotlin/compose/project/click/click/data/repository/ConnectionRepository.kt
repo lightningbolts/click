@@ -83,6 +83,8 @@ import kotlin.math.*
 data class ConnectionCreateOutcome(
     val connection: Connection,
     val encounterLogged: Boolean,
+    val encounterId: String? = null,
+    val collaborationTtl: String? = null,
 )
 
 internal fun Throwable.isRetryableForProximityBind(): Boolean {
@@ -864,6 +866,8 @@ class ConnectionRepository(
         @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
         val reason: String? = null,
         @SerialName("connection_id") val connectionId: String? = null,
+        @SerialName("encounter_id") val encounterId: String? = null,
+        @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
         @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
     )
 
@@ -892,6 +896,8 @@ class ConnectionRepository(
         val encounterLogged: Boolean? = null,
         val reason: String? = null,
         val connectionId: String? = null,
+        val encounterId: String? = null,
+        val collaborationTtl: String? = null,
         val message: String? = null,
         val initiatorId: String? = null,
         val targetUserName: String? = null,
@@ -905,6 +911,8 @@ class ConnectionRepository(
         @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
         val reason: String? = null,
         @SerialName("connection_id") val connectionId: String? = null,
+        @SerialName("encounter_id") val encounterId: String? = null,
+        @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
         @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
         val data: QrApiRedeemData? = null,
     )
@@ -982,6 +990,8 @@ class ConnectionRepository(
             val resolvedTokenAgeMs = redeemedToken?.tokenAgeMs ?: request.tokenAgeMs
             val preflightConnectionId = redeemedToken?.connectionId ?: request.preflightConnectionId
             val preflightEncounterLogged = redeemedToken?.encounterLogged ?: request.preflightEncounterLogged
+            val preflightEncounterId = redeemedToken?.encounterId
+            val preflightCollaborationTtl = redeemedToken?.collaborationTtl
 
             val existingConnection = findConnectionRowForUserPair(
                 request.userId1,
@@ -996,6 +1006,8 @@ class ConnectionRepository(
                     resolvedTokenAgeMs = resolvedTokenAgeMs,
                     preflightConnectionId = preflightConnectionId,
                     preflightEncounterLogged = preflightEncounterLogged,
+                    preflightEncounterId = preflightEncounterId,
+                    preflightCollaborationTtl = preflightCollaborationTtl,
                 )
             }
 
@@ -1212,6 +1224,8 @@ class ConnectionRepository(
         resolvedTokenAgeMs: Long?,
         preflightConnectionId: String?,
         preflightEncounterLogged: Boolean?,
+        preflightEncounterId: String? = null,
+        preflightCollaborationTtl: String? = null,
     ): Result<ConnectionCreateOutcome> {
         return try {
             supabaseRepository.clearConnectionJunctionForPair(existing.id, existing.user_ids)
@@ -1402,7 +1416,16 @@ class ConnectionRepository(
             }
 
             AppDataManager.applyRestoredConnection(result)
-            Result.success(ConnectionCreateOutcome(result, encounterLogged))
+            val rollEncounterId = preflightEncounterId?.trim()?.takeIf { it.isNotEmpty() }
+            val rollCollaborationTtl = preflightCollaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
+            Result.success(
+                ConnectionCreateOutcome(
+                    connection = result,
+                    encounterLogged = encounterLogged,
+                    encounterId = if (encounterLogged) rollEncounterId else null,
+                    collaborationTtl = if (encounterLogged) rollCollaborationTtl else null,
+                ),
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1829,6 +1852,8 @@ class ConnectionRepository(
             val encounterLogged = envelope.data?.encounterLogged ?: envelope.encounterLogged
             val encounterReason = envelope.data?.reason ?: envelope.reason
             val connectionId = envelope.data?.connectionId ?: envelope.connectionId
+            val encounterId = envelope.data?.encounterId ?: envelope.encounterId
+            val collaborationTtl = envelope.data?.collaborationTtl ?: envelope.collaborationTtl
 
             if (targetUserId.isNullOrBlank()) {
                 return Result.failure(Exception("Invalid QR code"))
@@ -1843,6 +1868,8 @@ class ConnectionRepository(
                         encounterLogged = false,
                         reason = encounterReason,
                         connectionId = connectionId,
+                        encounterId = encounterId,
+                        collaborationTtl = collaborationTtl,
                     )
                 )
             }
@@ -1855,6 +1882,8 @@ class ConnectionRepository(
                     encounterLogged = encounterLogged,
                     reason = encounterReason,
                     connectionId = connectionId,
+                    encounterId = encounterId,
+                    collaborationTtl = collaborationTtl,
                 )
             )
         } catch (e: Exception) {

@@ -3,6 +3,8 @@ package compose.project.click.click.ui.chat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -68,8 +70,37 @@ internal fun ChatBubblePhotoContent(
     secureState: SecureChatMediaLoadState?,
     modifier: Modifier = Modifier,
     borderIfReceived: Boolean = false,
+    onPhotoClick: (() -> Unit)? = null,
+    onPhotoLongPress: (() -> Unit)? = null,
 ) {
     val rollLocked = message.isDisposableRollLocked()
+    val canExpand = onPhotoClick != null && !rollLocked
+    val photoGestureModifier = when {
+        canExpand && onPhotoLongPress != null -> {
+            Modifier.combinedClickable(
+                indication = null,
+                interactionSource = remember(message.id) { MutableInteractionSource() },
+                onClick = onPhotoClick!!,
+                onLongClick = onPhotoLongPress,
+            )
+        }
+        canExpand -> {
+            Modifier.combinedClickable(
+                indication = null,
+                interactionSource = remember(message.id) { MutableInteractionSource() },
+                onClick = onPhotoClick!!,
+            )
+        }
+        onPhotoLongPress != null -> {
+            Modifier.combinedClickable(
+                indication = null,
+                interactionSource = remember(message.id) { MutableInteractionSource() },
+                onClick = {},
+                onLongClick = onPhotoLongPress,
+            )
+        }
+        else -> Modifier
+    }
     val countdownLabel = remember(message.id, rollLocked) {
         if (!rollLocked) return@remember null
         val ttlIso = message.disposableRollCollaborationTtlIso() ?: return@remember "Locked"
@@ -117,6 +148,7 @@ internal fun ChatBubblePhotoContent(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .then(photoGestureModifier)
                                 .then(
                                     if (borderIfReceived) {
                                         Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
@@ -181,6 +213,7 @@ internal fun ChatBubblePhotoContent(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(photoGestureModifier)
                             .then(
                                 if (borderIfReceived) {
                                     Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))

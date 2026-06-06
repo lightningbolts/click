@@ -99,6 +99,7 @@ fun ChatMessageBubble(
      */
     onDownloadAttachment: suspend (MessageWithUser, AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome =
         { _, _ -> ChatAttachmentDownloadOutcome.Failure("Download not available in this context.") },
+    onExpandPhoto: (MessageWithUser) -> Unit = {},
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -218,7 +219,7 @@ fun ChatMessageBubble(
     )
 
     val messageLongPressModifier =
-        if (enableMessageContextMenu) {
+        if (enableMessageContextMenu && !isImageMessage) {
             Modifier.pointerInput(message.id, onLongPress) {
                 detectTapGestures(
                     onLongPress = {
@@ -230,6 +231,25 @@ fun ChatMessageBubble(
         } else {
             Modifier
         }
+
+    val imageCaptionLongPressModifier =
+        if (enableMessageContextMenu && isImageMessage) {
+            Modifier.pointerInput(message.id, onLongPress) {
+                detectTapGestures(
+                    onLongPress = {
+                        PlatformHapticsPolicy.heavyImpact()
+                        onLongPress(messageWithUser)
+                    },
+                )
+            }
+        } else {
+            Modifier
+        }
+
+    val openPhotoContextMenu: () -> Unit = {
+        PlatformHapticsPolicy.heavyImpact()
+        onLongPress(messageWithUser)
+    }
 
     val dragging = swipeDragging
     val rawHintP = replyDragHintProgress(rawSwipeTravelPx, isSent, swipeThresholdPx)
@@ -325,7 +345,8 @@ fun ChatMessageBubble(
                                         .padding(
                                             horizontal = ChatBubbleTokens.replyBlockPaddingH,
                                             vertical = ChatBubbleTokens.replyBlockPaddingV,
-                                        ),
+                                        )
+                                        .then(imageCaptionLongPressModifier),
                                 ) {
                                     Text(
                                         text = "Reply",
@@ -347,11 +368,15 @@ fun ChatMessageBubble(
                                 isEncrypted = encryptedMedia,
                                 secureState = secureSt,
                                 borderIfReceived = false,
+                                onPhotoClick = { onExpandPhoto(messageWithUser) },
+                                onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
                             )
                             val capImg = message.content.trim()
                             if (capImg.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                SelectionContainer {
+                                SelectionContainer(
+                                    modifier = imageCaptionLongPressModifier,
+                                ) {
                                     ChatLinkifyText(
                                         text = capImg,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -486,7 +511,8 @@ fun ChatMessageBubble(
                                         .padding(
                                             horizontal = ChatBubbleTokens.replyBlockPaddingH,
                                             vertical = ChatBubbleTokens.replyBlockPaddingV,
-                                        ),
+                                        )
+                                        .then(imageCaptionLongPressModifier),
                                 ) {
                                     Text(
                                         text = "Reply",
@@ -510,11 +536,15 @@ fun ChatMessageBubble(
                                 isEncrypted = encryptedMedia,
                                 secureState = secureSt,
                                 borderIfReceived = true,
+                                onPhotoClick = { onExpandPhoto(messageWithUser) },
+                                onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
                             )
                             val capRx = message.content.trim()
                             if (capRx.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                SelectionContainer {
+                                SelectionContainer(
+                                    modifier = imageCaptionLongPressModifier,
+                                ) {
                                     ChatLinkifyText(
                                         text = capRx,
                                         color = onBody,

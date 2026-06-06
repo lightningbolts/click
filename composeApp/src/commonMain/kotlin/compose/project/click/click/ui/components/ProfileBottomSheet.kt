@@ -88,8 +88,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
@@ -595,45 +593,21 @@ fun ProfileBottomSheet(
                     else -> previewImageFade.snapTo(1f)
                 }
             }
-            Dialog(
+            GlassFullscreenMediaOverlay(
+                visible = mediaPreviewVisible,
                 onDismissRequest = { selectedMediaForPreview = null },
-                properties = DialogProperties(usePlatformDefaultWidth = false),
             ) {
-                val reveal by animateFloatAsState(
-                    targetValue = if (mediaPreviewVisible) 1f else 0f,
-                    animationSpec = tween(
-                        durationMillis = 320,
-                        easing = FastOutSlowInEasing,
-                    ),
-                    label = "profile_media_preview",
-                )
-                Box(
+                val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
+                Surface(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.52f * reveal.coerceIn(0f, 1f)))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { selectedMediaForPreview = null },
-                    contentAlignment = Alignment.Center,
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp)
+                        .clip(previewShape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder, previewShape),
+                    shape = previewShape,
+                    color = GlassSheetTokens.OledBlack,
+                    tonalElevation = 0.dp,
                 ) {
-                    val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 22.dp)
-                            .graphicsLayer {
-                                val t = reveal.coerceIn(0f, 1f)
-                                scaleX = 0.88f + 0.12f * t
-                                scaleY = 0.88f + 0.12f * t
-                                alpha = t
-                            }
-                            .clip(previewShape)
-                            .border(1.dp, GlassSheetTokens.GlassBorder, previewShape),
-                        shape = previewShape,
-                        color = GlassSheetTokens.OledBlack,
-                        tonalElevation = 0.dp,
-                    ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -805,7 +779,6 @@ fun ProfileBottomSheet(
                             }
                         }
                     }
-                }
             }
         }
     }

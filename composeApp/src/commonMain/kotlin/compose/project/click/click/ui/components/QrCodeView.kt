@@ -1,5 +1,8 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,7 +35,10 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 import qrcode.QRCode
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
@@ -47,6 +53,14 @@ private val httpClient = HttpClient {
 }
 
 private const val QR_API_URL = "$CLICK_WEB_BASE_URL/api/qr"
+private const val QR_TOKEN_TTL_MS = 90_000L
+
+private fun formatRefreshCountdown(secondsRemaining: Int): String {
+    val clamped = secondsRemaining.coerceAtLeast(0)
+    val minutes = clamped / 60
+    val seconds = clamped % 60
+    return "${minutes}:${seconds.toString().padStart(2, '0')}"
+}
 
 /**
  * Displays the user's QR code for scanning.
@@ -72,6 +86,8 @@ fun UserQrCode(
     }
     var gpsRegistered by remember { mutableStateOf(false) }
     var fetchError by remember { mutableStateOf(false) }
+    var tokenExpiresAtMs by remember { mutableLongStateOf(0L) }
+    var secondsUntilRefresh by remember { mutableIntStateOf(90) }
 
     suspend fun registerGpsWithServer() {
         fetchError = false
@@ -107,6 +123,8 @@ fun UserQrCode(
                     TelemetryBatcher.recordQrFallback()
                     qrPayload = universalLink.ifBlank { fallbackUrl }
                 }
+                val expiresAt = data?.get("expiresAt")?.jsonPrimitive?.longOrNull
+                tokenExpiresAtMs = expiresAt ?: (Clock.System.now().toEpochMilliseconds() + QR_TOKEN_TTL_MS)
                 gpsRegistered = true
             } else {
                 if (!gpsRegistered) {
@@ -127,6 +145,23 @@ fun UserQrCode(
             runCatching { locationService?.getHighAccuracyLocation(4000L) }
         }
         registerGpsWithServer()
+        while (isActive) {
+            delay(90_000L)
+            registerGpsWithServer()
+        }
+    }
+
+    LaunchedEffect(tokenExpiresAtMs) {
+        if (tokenExpiresAtMs <= 0L) return@LaunchedEffect
+        while (isActive) {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val remainingSec = ((tokenExpiresAtMs - now) / 1_000L).toInt()
+            secondsUntilRefresh = remainingSec.coerceAtLeast(0)
+            if (remainingSec <= 0) {
+                registerGpsWithServer()
+            }
+            delay(1_000L)
+        }
     }
 
     val qrImageBitmap = remember(qrPayload) {
@@ -182,7 +217,7 @@ fun UserQrCode(
                 }
             } else {
                 Text(
-                    text = "Scan to connect",
+                    text = "Scan to connect · ${formatRefreshCountdown(secondsUntilRefresh)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium

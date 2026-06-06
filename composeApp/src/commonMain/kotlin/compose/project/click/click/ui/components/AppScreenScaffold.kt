@@ -16,9 +16,17 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import compose.project.click.click.encounter.EncounterTetherManager
+import compose.project.click.click.encounter.tetherCompassMessage
+import compose.project.click.click.utils.LocationService
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -231,4 +239,49 @@ fun AppScreenWithFloatingHeader(
             )
         }
     }
+}
+
+/**
+ * Root-level tether compass toast — mount once from [compose.project.click.click.App] so pings
+ * surface on any tab, not only inside an open chat.
+ */
+@Composable
+fun GlobalTetherOverlay(
+    modifier: Modifier = Modifier,
+) {
+    val payload by EncounterTetherManager.activeTetherPayload.collectAsState()
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var toastMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(payload) {
+        toastMessage = payload?.let { ping ->
+            val receiver = LocationService().getCurrentLocation()
+            if (receiver != null) {
+                tetherCompassMessage(
+                    senderName = ping.senderName,
+                    receiverLat = receiver.latitude,
+                    receiverLng = receiver.longitude,
+                    senderLat = ping.latitude,
+                    senderLng = ping.longitude,
+                )
+            } else {
+                "${ping.senderName} pinged their tether"
+            }
+        }
+    }
+
+    LaunchedEffect(payload?.timestampMs) {
+        val active = payload ?: return@LaunchedEffect
+        delay(30_000L)
+        if (EncounterTetherManager.activeTetherPayload.value?.timestampMs == active.timestampMs) {
+            EncounterTetherManager.clearActiveTetherPayload()
+        }
+    }
+
+    TetherCompassToast(
+        message = toastMessage,
+        modifier = modifier
+            .padding(top = statusBarTop + 64.dp),
+        onDismissed = { EncounterTetherManager.clearActiveTetherPayload() },
+    )
 }

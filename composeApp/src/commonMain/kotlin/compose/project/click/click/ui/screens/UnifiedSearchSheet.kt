@@ -45,7 +45,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
 import compose.project.click.click.ui.components.GlassSheetTokens
@@ -68,7 +68,7 @@ fun UnifiedSearchSheet(
     onNavigateToSettings: () -> Unit = {},
     viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
 ) {
-    val sheetState = rememberAdaptiveSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberGlassAdaptiveSheetState(skipPartiallyExpanded = false)
     LaunchedEffect(sheetState) {
         delay(32)
         runCatching { sheetState.show() }

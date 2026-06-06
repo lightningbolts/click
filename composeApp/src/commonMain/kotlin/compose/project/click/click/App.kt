@@ -79,6 +79,8 @@ import compose.project.click.click.calendar.AvailabilityOverlapGap
 import compose.project.click.click.calendar.lockAvailabilityIntentForGap
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.AppShimmerScreen
+import compose.project.click.click.ui.components.GlobalTetherOverlay
+import compose.project.click.click.encounter.EncounterTetherManager
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
@@ -1119,6 +1121,9 @@ fun App() {
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
+            LaunchedEffect(currentUser.id) {
+                EncounterTetherManager.setCurrentUserId(currentUser.id)
+            }
             Scaffold(
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -2048,6 +2053,11 @@ fun App() {
                     )
                 }
             }
+            GlobalTetherOverlay(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(70f),
+            )
             } // End of Scaffold wrapper Box
 
             } // End of onboarding gate

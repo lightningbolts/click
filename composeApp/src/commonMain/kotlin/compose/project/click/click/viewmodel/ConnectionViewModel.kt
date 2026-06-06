@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionCreateOutcome // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload // pragma: allowlist secret
 import compose.project.click.click.data.repository.isRetryableForProximityBind // pragma: allowlist secret
@@ -143,16 +144,36 @@ class ConnectionViewModel : ViewModel() {
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
-    private fun activateCollaborationSessionIfPresent(outcome: BindProximityHandshakeOutcome) {
-        val connectionId = outcome.connectionId ?: return
-        val encounterId = outcome.encounterId ?: return
-        val ttl = outcome.collaborationTtl ?: return
+    private fun activateCollaborationSessionIfPresent(
+        connectionId: String?,
+        encounterId: String?,
+        collaborationTtl: String?,
+    ) {
+        val cid = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val eid = encounterId?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val ttl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() } ?: return
         CollaborationSessionManager.activate(
             CollaborationSession(
-                encounterId = encounterId,
-                connectionId = connectionId,
+                encounterId = eid,
+                connectionId = cid,
                 collaborationTtlIso = ttl,
             ),
+        )
+    }
+
+    private fun activateCollaborationSessionIfPresent(outcome: BindProximityHandshakeOutcome) {
+        activateCollaborationSessionIfPresent(
+            connectionId = outcome.connectionId,
+            encounterId = outcome.encounterId,
+            collaborationTtl = outcome.collaborationTtl,
+        )
+    }
+
+    private fun activateCollaborationSessionIfPresent(outcome: ConnectionCreateOutcome) {
+        activateCollaborationSessionIfPresent(
+            connectionId = outcome.connection.id,
+            encounterId = outcome.encounterId,
+            collaborationTtl = outcome.collaborationTtl,
         )
     }
 
@@ -586,6 +607,7 @@ class ConnectionViewModel : ViewModel() {
                     val outcome = result.getOrNull()!!
                     val connection = outcome.connection
                     val encounterLogged = outcome.encounterLogged
+                    activateCollaborationSessionIfPresent(outcome)
                     val connectedUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: scannedUserId
                     val connectedUser = withContext(Dispatchers.Default) {
                         repository.getUserById(connectedUserId)

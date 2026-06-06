@@ -26,7 +26,6 @@ fun MyQRCodeScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         AppScreenWithFloatingHeader(
             title = "My QR Code",
-            subtitle = "Share to connect",
             navigationIcon = {
                 IconButton(onClick = onNavigateBack) {
                     Icon(

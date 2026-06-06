@@ -13,7 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,9 +32,8 @@ actual fun MapBeaconSheetRoot(
 ) {
     if (!visible) return
 
-    val sheetState = rememberAdaptiveSheetState(
+    val sheetState = rememberGlassAdaptiveSheetState(
         skipPartiallyExpanded = !expandable,
-        confirmValueChange = { true },
     )
 
     LaunchedEffect(Unit) {

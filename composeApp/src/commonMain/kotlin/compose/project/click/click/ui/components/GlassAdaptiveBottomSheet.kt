@@ -23,7 +23,7 @@ import com.mohamedrejeb.calf.ui.sheet.AdaptiveSheetState
 @Composable
 fun GlassAdaptiveBottomSheet(
     onDismissRequest: () -> Unit,
-    adaptiveSheetState: AdaptiveSheetState,
+    adaptiveSheetState: AdaptiveSheetState = rememberGlassAdaptiveSheetState(),
     modifier: Modifier = Modifier,
     sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
     scrimColor: Color = Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha),

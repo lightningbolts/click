@@ -33,7 +33,7 @@ import kotlin.math.absoluteValue
 @Composable
 fun GlassModalBottomSheet(
     onDismissRequest: () -> Unit,
-    sheetState: SheetState,
+    sheetState: SheetState = rememberGlassModalBottomSheetState(),
     modifier: Modifier = Modifier,
     sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
     contentWindowInsets: androidx.compose.foundation.layout.WindowInsets = BottomSheetDefaults.windowInsets,

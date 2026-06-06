@@ -74,8 +74,9 @@ data class InteractiveSwipeBackRightToLeftPeek(
 internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
-/** Commit interactive back only when the finger has dragged past the horizontal midpoint. */
-private const val SwipeBackCommitFraction = 0.5f
+/** Commit interactive back past the horizontal midpoint or on a fast rightward flick. */
+private const val SwipeBackCommitFraction = GlassGestureCommitFraction
+private const val SwipeBackFlickVelocityPxPerSec = GlassGestureFlickVelocityPxPerSec
 
 /**
  * iOS-style interactive back container:
@@ -183,7 +184,8 @@ fun InteractiveSwipeBackContainer(
                 return
             }
 
-            val shouldComplete = currentOffset > commitThresholdPx
+            val shouldComplete =
+                currentOffset > commitThresholdPx || velocityX > SwipeBackFlickVelocityPxPerSec
             val target = if (shouldComplete) widthPx else 0f
             isSettling = true
 

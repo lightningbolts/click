@@ -52,6 +52,7 @@ internal fun ChatMessageTimeline(
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
     onDownloadAttachment: suspend (MessageWithUser, compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
+    onExpandPhoto: (MessageWithUser) -> Unit = {},
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
@@ -61,6 +62,7 @@ internal fun ChatMessageTimeline(
     val onLongPressState = rememberUpdatedState(onLongPress)
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
+    val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -151,6 +153,7 @@ internal fun ChatMessageTimeline(
                                         onDownloadAttachment = { mwu, env ->
                                             onDownloadAttachmentState.value(mwu, env)
                                         },
+                                        onExpandPhoto = { onExpandPhotoState.value(it) },
                                     )
                                 }
                                 if (isCallLog) {
