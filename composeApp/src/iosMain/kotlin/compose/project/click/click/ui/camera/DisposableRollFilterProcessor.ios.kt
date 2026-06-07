@@ -1,39 +1,73 @@
 package compose.project.click.click.ui.camera
 
+import androidx.compose.ui.graphics.ImageBitmap
+import click.disposableroll.filter.ClickApplyDisposableRollPhotoEffect
+import compose.project.click.click.utils.toImageBitmap
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.jetbrains.skia.ColorFilter
-import org.jetbrains.skia.ColorMatrix
-import org.jetbrains.skia.EncodedImageFormat
-import org.jetbrains.skia.Image
-import org.jetbrains.skia.Paint
-import org.jetbrains.skia.Surface
+import platform.Foundation.NSData
+import platform.Foundation.NSMutableData
+import platform.posix.memcpy
+
+private fun coreImagePhotoEffectName(filterIndex: Int): String? = when (filterIndex) {
+    1 -> "CIPhotoEffectTransfer"
+    2 -> "CIPhotoEffectProcess"
+    3 -> "CIPhotoEffectInstant"
+    4 -> "CIPhotoEffectChrome"
+    5 -> "CIPhotoEffectFade"
+    6 -> "CIPhotoEffectMono"
+    7 -> "CIPhotoEffectNoir"
+    8 -> "CIPhotoEffectTonal"
+    9 -> "CIPhotoEffectSilvertone"
+    else -> null
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun NSData.toByteArray(): ByteArray {
+    val len = length.toInt()
+    if (len == 0) return ByteArray(0)
+    val out = ByteArray(len)
+    val base = bytes ?: return ByteArray(0)
+    out.usePinned { op ->
+        memcpy(op.addressOf(0), base, len.toULong())
+    }
+    return out
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
+    val m = NSMutableData()
+    m.setLength(size.convert())
+    m.mutableBytes?.let { dest ->
+        memcpy(dest, pinned.addressOf(0), size.convert())
+    }
+    m
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun applyCoreImagePhotoEffect(sourceBytes: ByteArray, filterIndex: Int): ByteArray {
+    if (filterIndex <= 0 || sourceBytes.isEmpty()) return sourceBytes
+    val effectName = coreImagePhotoEffectName(filterIndex) ?: return sourceBytes
+    val filtered = ClickApplyDisposableRollPhotoEffect(sourceBytes.toNSData(), effectName)
+    return filtered.toByteArray().takeIf { it.isNotEmpty() } ?: sourceBytes
+}
+
+actual suspend fun renderDisposableRollFilteredPreview(
+    sourceBytes: ByteArray,
+    filterIndex: Int,
+): ImageBitmap? = withContext(Dispatchers.Default) {
+    runCatching {
+        applyCoreImagePhotoEffect(sourceBytes, filterIndex).toImageBitmap()
+    }.getOrNull()
+}
 
 actual suspend fun applyDisposableRollFilterToJpeg(bytes: ByteArray, filterIndex: Int): ByteArray =
     withContext(Dispatchers.Default) {
-        if (filterIndex <= 0 || bytes.isEmpty()) return@withContext bytes
         runCatching {
-            val image = Image.makeFromEncoded(bytes) ?: return@runCatching bytes
-            val surface = Surface.makeRasterN32Premul(image.width, image.height)
-            try {
-                val canvas = surface.canvas
-                val composeMatrix = DisposableRollFilters.matrixFor(filterIndex).values
-                val skiaMatrix = ColorMatrix(
-                    composeMatrix[0], composeMatrix[1], composeMatrix[2], composeMatrix[3], composeMatrix[4],
-                    composeMatrix[5], composeMatrix[6], composeMatrix[7], composeMatrix[8], composeMatrix[9],
-                    composeMatrix[10], composeMatrix[11], composeMatrix[12], composeMatrix[13], composeMatrix[14],
-                    composeMatrix[15], composeMatrix[16], composeMatrix[17], composeMatrix[18], composeMatrix[19],
-                )
-                val paint = Paint().apply {
-                    colorFilter = ColorFilter.makeMatrix(skiaMatrix)
-                }
-                canvas.drawImage(image, 0f, 0f, paint)
-                val snapshot = surface.makeImageSnapshot()
-                val encoded = snapshot.encodeToData(EncodedImageFormat.JPEG, 88)
-                encoded?.bytes?.takeIf { it.isNotEmpty() } ?: bytes
-            } finally {
-                surface.close()
-                image.close()
-            }
+            applyCoreImagePhotoEffect(bytes, filterIndex)
         }.getOrElse { bytes }
     }

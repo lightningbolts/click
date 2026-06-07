@@ -10,7 +10,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,7 +25,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -78,9 +75,9 @@ internal fun DisposableCameraChrome(
     onShutter: () -> Unit,
     onSend: () -> Unit,
     onDismiss: () -> Unit,
+    mirrorCapturedPreview: Boolean = false,
     extraBottomPadding: Dp = 0.dp,
     previewContent: @Composable () -> Unit,
-    frozenPreviewContent: @Composable (ByteArray) -> Unit,
 ) {
     val flashAlpha = remember { Animatable(0f) }
     var flashTick by remember { mutableIntStateOf(0) }
@@ -101,35 +98,27 @@ internal fun DisposableCameraChrome(
         label = "roll_glow",
     )
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        val isLandscape = maxWidth > maxHeight
-
-        Box(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            if (capturedImage == null) {
-                previewContent()
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            colorFilter = DisposableRollFilters.colorFilterFor(selectedFilterIndex)
-                        },
-                ) {
-                    frozenPreviewContent(capturedImage)
-                }
-            }
+        if (capturedImage == null) {
+            previewContent()
+        } else {
+            DisposableRollCapturedPreview(
+                sourceBytes = capturedImage,
+                filterIndex = selectedFilterIndex,
+                mirrorHorizontally = mirrorCapturedPreview,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
 
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .height(if (isLandscape) 120.dp else 190.dp)
+                .height(190.dp)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
@@ -143,36 +132,17 @@ internal fun DisposableCameraChrome(
 
         Box(
             modifier = Modifier
-                .align(if (isLandscape) Alignment.CenterEnd else Alignment.BottomCenter)
-                .then(
-                    if (isLandscape) {
-                        Modifier
-                            .fillMaxHeight()
-                            .width(220.dp)
-                    } else {
-                        Modifier
-                            .fillMaxWidth()
-                            .height(320.dp)
-                    },
-                )
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(320.dp)
                 .background(
-                    if (isLandscape) {
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.24f),
-                                Color.Black.copy(alpha = 0.78f),
-                            ),
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.24f),
-                                Color.Black.copy(alpha = 0.78f),
-                            ),
-                        )
-                    },
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.24f),
+                            Color.Black.copy(alpha = 0.78f),
+                        ),
+                    ),
                 ),
         )
 
@@ -205,20 +175,6 @@ internal fun DisposableCameraChrome(
             )
         }
 
-        if (isLandscape) {
-            DisposableRollFilterSlider(
-                selectedIndex = selectedFilterIndex,
-                onSelectedIndexChange = onFilterIndexChange,
-                isLandscape = true,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .padding(end = 18.dp, top = 72.dp, bottom = 72.dp)
-                    .fillMaxHeight(0.55f),
-            )
-        }
-
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -227,11 +183,10 @@ internal fun DisposableCameraChrome(
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (!isLandscape) {
+            if (hasCapture) {
                 DisposableRollFilterSlider(
                     selectedIndex = selectedFilterIndex,
                     onSelectedIndexChange = onFilterIndexChange,
-                    isLandscape = false,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
@@ -241,14 +196,12 @@ internal fun DisposableCameraChrome(
             DisposableCameraStatusChip(
                 capturedImage = capturedImage,
                 isShutterEnabled = isShutterEnabled,
-                compact = isLandscape,
             )
             Spacer(modifier = Modifier.height(14.dp))
             DisposableCameraCaptureControls(
                 capturedImage = capturedImage,
                 isShutterEnabled = isShutterEnabled,
                 glowAlpha = glowAlpha,
-                isLandscape = isLandscape,
                 onFlipCamera = onFlipCamera,
                 onShutter = {
                     PlatformHapticsPolicy.lightImpact()
@@ -268,14 +221,12 @@ internal fun DisposableCameraChrome(
                 .background(Color.White.copy(alpha = flashAlpha.value)),
         )
     }
-    }
 }
 
 @Composable
 private fun DisposableCameraStatusChip(
     capturedImage: ByteArray?,
     isShutterEnabled: Boolean,
-    compact: Boolean,
 ) {
     Surface(
         shape = RoundedCornerShape(999.dp),
@@ -287,15 +238,12 @@ private fun DisposableCameraStatusChip(
     ) {
         Text(
             text = when {
-                capturedImage != null -> if (compact) "Ready" else "Ready for the roll"
-                isShutterEnabled -> if (compact) "Snap" else "Snap once"
-                else -> if (compact) "..." else "Capturing..."
+                capturedImage != null -> "Ready for the roll"
+                isShutterEnabled -> "Snap once"
+                else -> "Capturing..."
             },
-            modifier = Modifier.padding(
-                horizontal = if (compact) 12.dp else 14.dp,
-                vertical = if (compact) 6.dp else 7.dp,
-            ),
-            style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
             color = Color.White.copy(alpha = 0.88f),
         )
     }
@@ -306,34 +254,11 @@ private fun DisposableCameraCaptureControls(
     capturedImage: ByteArray?,
     isShutterEnabled: Boolean,
     glowAlpha: Float,
-    isLandscape: Boolean,
     onFlipCamera: () -> Unit,
     onShutter: () -> Unit,
     onSend: () -> Unit,
 ) {
-    if (isLandscape) {
-        // Landscape: shutter stays bottom-center; flip sits directly above it.
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            FlipCameraButton(onClick = onFlipCamera)
-            Spacer(modifier = Modifier.height(14.dp))
-            if (capturedImage == null) {
-                ShutterButton(
-                    enabled = isShutterEnabled,
-                    glowAlpha = glowAlpha,
-                    onClick = onShutter,
-                )
-            } else {
-                SendRollButton(
-                    glowAlpha = glowAlpha,
-                    onClick = onSend,
-                )
-            }
-        }
-    } else {
-        // Portrait: flip sits to the right; spacer balances flip width so shutter stays centered.
+    if (capturedImage == null) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -342,20 +267,18 @@ private fun DisposableCameraCaptureControls(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Spacer(modifier = Modifier.size(52.dp))
-            if (capturedImage == null) {
-                ShutterButton(
-                    enabled = isShutterEnabled,
-                    glowAlpha = glowAlpha,
-                    onClick = onShutter,
-                )
-            } else {
-                SendRollButton(
-                    glowAlpha = glowAlpha,
-                    onClick = onSend,
-                )
-            }
+            ShutterButton(
+                enabled = isShutterEnabled,
+                glowAlpha = glowAlpha,
+                onClick = onShutter,
+            )
             FlipCameraButton(onClick = onFlipCamera)
         }
+    } else {
+        SendRollButton(
+            glowAlpha = glowAlpha,
+            onClick = onSend,
+        )
     }
 }
 
@@ -363,7 +286,6 @@ private fun DisposableCameraCaptureControls(
 private fun DisposableRollFilterSlider(
     selectedIndex: Int,
     onSelectedIndexChange: (Int) -> Unit,
-    isLandscape: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -386,102 +308,52 @@ private fun DisposableRollFilterSlider(
         Spacer(modifier = Modifier.height(10.dp))
         BoxWithConstraints(
             modifier = Modifier
-                .then(
-                    if (isLandscape) {
-                        Modifier
-                            .width(52.dp)
-                            .fillMaxHeight()
-                    } else {
-                        Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                    },
-                )
+                .fillMaxWidth()
+                .height(52.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Color.Black.copy(alpha = 0.28f))
                 .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
-                .pointerInput(isLandscape) {
+                .pointerInput(Unit) {
                     val thresholdPx = with(density) { 28.dp.toPx() }
-                    if (isLandscape) {
-                        detectVerticalDragGestures { _, dragAmount ->
-                            dragAccumulator += dragAmount
-                            while (dragAccumulator <= -thresholdPx) {
-                                dragAccumulator += thresholdPx
-                                val next = DisposableRollFilters.clampIndex(dragIndex - 1)
-                                if (next != dragIndex) {
-                                    dragIndex = next
-                                    PlatformHapticsPolicy.lightImpact()
-                                    onSelectedIndexChange(next)
-                                }
-                            }
-                            while (dragAccumulator >= thresholdPx) {
-                                dragAccumulator -= thresholdPx
-                                val next = DisposableRollFilters.clampIndex(dragIndex + 1)
-                                if (next != dragIndex) {
-                                    dragIndex = next
-                                    PlatformHapticsPolicy.lightImpact()
-                                    onSelectedIndexChange(next)
-                                }
+                    detectHorizontalDragGestures { _, dragAmount ->
+                        dragAccumulator += dragAmount
+                        while (dragAccumulator <= -thresholdPx) {
+                            dragAccumulator += thresholdPx
+                            val next = DisposableRollFilters.clampIndex(dragIndex - 1)
+                            if (next != dragIndex) {
+                                dragIndex = next
+                                PlatformHapticsPolicy.lightImpact()
+                                onSelectedIndexChange(next)
                             }
                         }
-                    } else {
-                        detectHorizontalDragGestures { _, dragAmount ->
-                            dragAccumulator += dragAmount
-                            while (dragAccumulator <= -thresholdPx) {
-                                dragAccumulator += thresholdPx
-                                val next = DisposableRollFilters.clampIndex(dragIndex - 1)
-                                if (next != dragIndex) {
-                                    dragIndex = next
-                                    PlatformHapticsPolicy.lightImpact()
-                                    onSelectedIndexChange(next)
-                                }
-                            }
-                            while (dragAccumulator >= thresholdPx) {
-                                dragAccumulator -= thresholdPx
-                                val next = DisposableRollFilters.clampIndex(dragIndex + 1)
-                                if (next != dragIndex) {
-                                    dragIndex = next
-                                    PlatformHapticsPolicy.lightImpact()
-                                    onSelectedIndexChange(next)
-                                }
+                        while (dragAccumulator >= thresholdPx) {
+                            dragAccumulator -= thresholdPx
+                            val next = DisposableRollFilters.clampIndex(dragIndex + 1)
+                            if (next != dragIndex) {
+                                dragIndex = next
+                                PlatformHapticsPolicy.lightImpact()
+                                onSelectedIndexChange(next)
                             }
                         }
                     }
                 },
             contentAlignment = Alignment.Center,
         ) {
-            val trackLength = if (isLandscape) maxHeight else maxWidth
             val dotSize = 10.dp
-            val spacing = (trackLength - dotSize * DisposableRollFilters.COUNT) /
+            val spacing = (maxWidth - dotSize * DisposableRollFilters.COUNT) /
                 (DisposableRollFilters.COUNT - 1).coerceAtLeast(1)
             Box(
                 modifier = Modifier
-                    .then(
-                        if (isLandscape) {
-                            Modifier
-                                .width(dotSize)
-                                .fillMaxHeight()
-                        } else {
-                            Modifier
-                                .fillMaxWidth()
-                                .height(dotSize)
-                        },
-                    ),
+                    .fillMaxWidth()
+                    .height(dotSize),
             ) {
                 DisposableRollFilters.all.forEachIndexed { index, _ ->
                     val selected = index == clampedIndex
                     val step = dotSize + spacing
-                    val offset = if (isLandscape) {
-                        IntOffset(
-                            x = 0,
-                            y = with(density) { (step * index).roundToPx() },
-                        )
-                    } else {
-                        IntOffset(
-                            x = with(density) { (step * index).roundToPx() },
-                            y = 0,
-                        )
-                    }
+                    val offset = IntOffset(
+                        x = with(density) { (step * index).roundToPx() },
+                        y = 0,
+                    )
                     Box(
                         modifier = Modifier
                             .offset { offset }

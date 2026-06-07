@@ -39,6 +39,7 @@
                 android:exported="true"
                 android:name=".MainActivity"
                 android:launchMode="singleTask"
+                android:screenOrientation="portrait"
                 android:showWhenLocked="true"
                 android:turnScreenOn="true"
                 android:windowSoftInputMode="adjustNothing">
@@ -119,7 +120,8 @@
             android:name=".instant.InstantProfileActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>

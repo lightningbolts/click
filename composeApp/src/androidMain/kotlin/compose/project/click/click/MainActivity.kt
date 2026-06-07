@@ -1,6 +1,7 @@
 package compose.project.click.click
 
 import android.content.pm.ApplicationInfo
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.content.Context
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         configureScreenWakeForCalls(intent)
 

@@ -2,7 +2,6 @@ package compose.project.click.click.ui.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -13,10 +12,8 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,15 +26,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -189,6 +181,7 @@ actual fun DisposableCameraView(
             }
         },
         extraBottomPadding = extraBottomPadding,
+        mirrorCapturedPreview = useFrontCamera,
         onShutter = {
             val capture = imageCapture ?: return@DisposableCameraChrome
             isCapturing = true
@@ -201,6 +194,7 @@ actual fun DisposableCameraView(
                             if (buffer == null) {
                                 ByteArray(0)
                             } else {
+                                buffer.rewind()
                                 ByteArray(buffer.remaining()).also { buffer.get(it) }
                             }
                         } finally {
@@ -275,28 +269,6 @@ actual fun DisposableCameraView(
                     }
                 },
             )
-        },
-        frozenPreviewContent = { bytes ->
-            val bitmap = remember(bytes) {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            }
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp))
-                        .then(
-                            if (useFrontCamera) {
-                                Modifier.graphicsLayer { scaleX = -1f }
-                            } else {
-                                Modifier
-                            },
-                        ),
-                )
-            }
         },
     )
 }

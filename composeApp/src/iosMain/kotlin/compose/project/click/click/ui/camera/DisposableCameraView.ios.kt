@@ -11,12 +11,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
@@ -369,6 +366,7 @@ actual fun DisposableCameraView(
             }
         },
         extraBottomPadding = extraBottomPadding,
+        mirrorCapturedPreview = useFrontCamera,
         onShutter = {
             if (!setupComplete || isCapturing) return@DisposableCameraChrome
             isCapturing = true
@@ -439,33 +437,6 @@ actual fun DisposableCameraView(
                 },
                 properties = UIKitInteropProperties(
                     isInteractive = true,
-                    isNativeAccessibilityEnabled = false,
-                ),
-            )
-        },
-        frozenPreviewContent = { bytes ->
-            UIKitView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(16.dp))
-                    .then(
-                        if (useFrontCamera) {
-                            Modifier.graphicsLayer { scaleX = -1f }
-                        } else {
-                            Modifier
-                        },
-                    ),
-                factory = {
-                    UIImageView().apply {
-                        contentMode = UIViewContentMode.UIViewContentModeScaleAspectFill
-                        clipsToBounds = true
-                    }
-                },
-                update = { imageView ->
-                    imageView.image = UIImage.imageWithData(bytes.toNSData())
-                },
-                properties = UIKitInteropProperties(
-                    isInteractive = false,
                     isNativeAccessibilityEnabled = false,
                 ),
             )
