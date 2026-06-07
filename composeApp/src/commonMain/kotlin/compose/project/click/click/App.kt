@@ -68,6 +68,8 @@ import compose.project.click.click.data.models.OnboardingState
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isPublicUserProfileIncomplete
 import compose.project.click.click.data.models.isPendingSync
+import compose.project.click.click.collaboration.CollaborationSessionManager
+import compose.project.click.click.ui.camera.DisposableCameraView
 import compose.project.click.click.ui.components.ConnectionRevealOverlay
 import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
@@ -379,6 +381,9 @@ fun App() {
     var showMyQRCode by remember { mutableStateOf(false) }
     var showQRScanner by remember { mutableStateOf(false) }
     var connectionRevealState by remember { mutableStateOf<ConnectionRevealUiState?>(null) }
+    var revealConnectionId by remember { mutableStateOf<String?>(null) }
+    var showConnectionDisposableRoll by remember { mutableStateOf(false) }
+    var connectionRollConnectionId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         launch {
@@ -1050,6 +1055,16 @@ fun App() {
                 )
             }
             val connectionState by connectionViewModel.connectionState.collectAsState()
+            val collaborationSessions by CollaborationSessionManager.sessions.collectAsState()
+            val openConnectionDisposableRoll: (String?) -> Unit = openConnectionDisposableRoll@{ connectionId ->
+                val cid = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return@openConnectionDisposableRoll
+                connectionScope.launch {
+                    if (connectionViewModel.ensureCollaborationSessionReady(cid) != null) {
+                        connectionRollConnectionId = cid
+                        showConnectionDisposableRoll = true
+                    }
+                }
+            }
             val suppressConnectionContextSheet =
                 when (connectionRevealState?.phase) {
                     ConnectionRevealPhase.Connecting,
@@ -1060,6 +1075,7 @@ fun App() {
             LaunchedEffect(connectionState, showNfcScreen) {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
+                        revealConnectionId = state.connection.id
                         if (state.connection.isPendingSync()) {
                             connectionRevealState = null
                             snackbarHostState.showSnackbar("Connection saved offline. It will sync automatically when you're back online.")
@@ -1232,6 +1248,9 @@ fun App() {
                                                 onVerifiedCliqueProximityAutofillConsumed = {
                                                     verifiedCliqueProximityAutofillIntent = null
                                                 },
+                                                onOpenDisposableRoll = { cid ->
+                                                    openConnectionDisposableRoll(cid)
+                                                },
                                             )
                                         } else {
                                             Box(
@@ -1257,6 +1276,9 @@ fun App() {
                                         mapPipExpanded = mapPipExpanded,
                                         onMapPipExpandedChanged = { mapPipExpanded = it },
                                         onOpenSearch = { showUnifiedSearchSheet = true },
+                                        onOpenDisposableRoll = { cid ->
+                                            openConnectionDisposableRoll(cid)
+                                        },
                                     )
 
                                     NavigationItem.Settings.route -> SettingsScreen(
@@ -1894,6 +1916,29 @@ fun App() {
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .zIndex(10_000f),
+                            )
+                        }
+
+                        val rollConnectionId = connectionRollConnectionId
+                        val activeRollSession = rollConnectionId?.let { collaborationSessions[it] }
+                        if (showConnectionDisposableRoll && rollConnectionId != null && activeRollSession != null) {
+                            DisposableCameraView(
+                                onPhotoConfirmed = { bytes ->
+                                    connectionScope.launch {
+                                        chatViewModel.setCurrentUser(currentUser.id)
+                                        chatViewModel.loadChatMessages(rollConnectionId)
+                                        chatViewModel.sendDisposableRollPhoto(
+                                            bytes = bytes,
+                                            encounterId = activeRollSession.encounterId,
+                                            collaborationTtlIso = activeRollSession.collaborationTtlIso,
+                                        )
+                                    }
+                                    showConnectionDisposableRoll = false
+                                },
+                                onDismiss = { showConnectionDisposableRoll = false },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(10_500f),
                             )
                         }
 

@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -111,8 +112,11 @@ fun ChatMessageBubble(
     val mt = message.messageType.lowercase()
     val mediaUrl = message.mediaUrlOrNull()
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
-    val isImageMessage = mt == ChatMessageType.IMAGE && mediaUrl != null
     val encryptedMedia = message.isEncryptedMedia()
+    val secureSt = secureMediaState
+        ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
+    val isImageMessage = mt == ChatMessageType.IMAGE &&
+        (!mediaUrl.isNullOrBlank() || secureSt?.imageBytes != null)
     val attachmentEnvelope = remember(message.id, message.content, message.metadata) {
         if (mt == ChatMessageType.FILE || message.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)) {
             AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
@@ -122,9 +126,16 @@ fun ChatMessageBubble(
     }
     val isAttachment = attachmentEnvelope != null
 
-    val secureSt = secureMediaState
-        ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
     val onRequestSecureAudio = remember(message.id) { {} }
+
+    LaunchedEffect(message.id, mediaUrl, encryptedMedia, secureSt?.imageBytes, activeChatId, currentUserId) {
+        if (!isImageMessage || !encryptedMedia) return@LaunchedEffect
+        if (secureSt?.imageBytes != null) return@LaunchedEffect
+        val url = mediaUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val scopeId = activeChatId ?: return@LaunchedEffect
+        val viewerId = currentUserId ?: return@LaunchedEffect
+        secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+    }
 
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
 

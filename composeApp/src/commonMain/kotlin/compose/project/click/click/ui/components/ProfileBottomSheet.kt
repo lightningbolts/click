@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -140,6 +141,7 @@ fun ProfileBottomSheet(
     onNudge: () -> Unit,
     onOpenLink: ((String) -> Unit)? = null,
     onDownloadFile: ((ProfileSheetFile) -> Unit)? = null,
+    onOpenDisposableRoll: (() -> Unit)? = null,
 ) {
     val visibleTabs = remember {
         listOf(
@@ -500,6 +502,19 @@ fun ProfileBottomSheet(
                     Spacer(Modifier.width(6.dp))
                     Text("Nudge", fontWeight = FontWeight.Medium)
                 }
+            }
+        }
+
+        if (onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank()) {
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = onOpenDisposableRoll,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Disposable Roll", fontWeight = FontWeight.Medium)
             }
         }
 
@@ -1775,6 +1790,7 @@ fun TabbedUserProfileSheet(
     viewerUserId: String?,
     onDismiss: () -> Unit,
     onMessage: (() -> Unit)? = null,
+    onOpenDisposableRoll: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
 ) {
     if (userId.isNullOrBlank()) return
@@ -1838,6 +1854,14 @@ fun TabbedUserProfileSheet(
                 },
                 onNudge = {
                     onDismiss()
+                },
+                onOpenDisposableRoll = profileConnectionId?.let { cid ->
+                    onOpenDisposableRoll?.let { open ->
+                        {
+                            open(cid)
+                            onDismiss()
+                        }
+                    }
                 },
             )
         }

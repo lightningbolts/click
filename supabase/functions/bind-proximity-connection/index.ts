@@ -1115,7 +1115,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!handshakeCreatedNewConnection && sharedConnectionId != null) {
+  if (sharedConnectionId != null) {
     const collaborationTtl = computeCollaborationTtl(timezoneOffsetMinutes);
     const participantIds = [...new Set([uid, ...memberIds])].sort();
     let chatId: string | null = null;

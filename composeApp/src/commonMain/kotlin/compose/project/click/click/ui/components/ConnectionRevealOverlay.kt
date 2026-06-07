@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -55,7 +56,7 @@ data class ConnectionRevealUiState(
 @Composable
 fun ConnectionRevealOverlay(
     state: ConnectionRevealUiState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(state.phase) {
         when (state.phase) {
@@ -191,6 +192,7 @@ fun ConnectionRevealOverlay(
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                 )
+
             }
         }
     }

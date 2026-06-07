@@ -214,6 +214,13 @@ data class ConnectionEncounterPostBody(
 )
 
 @Serializable
+data class CollaborationSessionPostResponse(
+    val ok: Boolean = false,
+    @SerialName("encounter_id") val encounterId: String? = null,
+    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
+)
+
+@Serializable
 data class WidgetVibePayloadDto(
     @SerialName("status_text") val statusText: String,
     @SerialName("density_hex_color") val densityHexColor: String,
@@ -988,6 +995,29 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                 response.status.value in 200..299 -> Result.success(Unit)
                 response.status.value == 429 -> Result.failure(Exception("Encounter rate limit — try again later."))
                 else -> Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/{id}/collaboration-session` — opens Disposable Roll window. */
+    suspend fun postOpenCollaborationSession(connectionId: String): Result<CollaborationSessionPostResponse> {
+        val cid = connectionId.trim()
+        if (cid.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
+        return try {
+            val response = clickWebClient.post(
+                "$clickWebAuthOrigin/api/connections/$cid/collaboration-session",
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {})
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<CollaborationSessionPostResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))

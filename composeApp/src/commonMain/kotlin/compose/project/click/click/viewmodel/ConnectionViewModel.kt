@@ -150,15 +150,24 @@ class ConnectionViewModel : ViewModel() {
         collaborationTtl: String?,
     ) {
         val cid = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return
-        val eid = encounterId?.trim()?.takeIf { it.isNotEmpty() } ?: return
-        val ttl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() } ?: return
-        CollaborationSessionManager.activate(
-            CollaborationSession(
-                encounterId = eid,
-                connectionId = cid,
-                collaborationTtlIso = ttl,
-            ),
-        )
+        val eid = encounterId?.trim()?.takeIf { it.isNotEmpty() }
+        val ttl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
+        if (eid != null && ttl != null) {
+            CollaborationSessionManager.activate(
+                CollaborationSession(
+                    encounterId = eid,
+                    connectionId = cid,
+                    collaborationTtlIso = ttl,
+                ),
+            )
+            return
+        }
+        viewModelScope.launch {
+            if (CollaborationSessionManager.forConnection(cid) != null) return@launch
+            repository.openCollaborationSession(cid)?.let { session ->
+                CollaborationSessionManager.activate(session)
+            }
+        }
     }
 
     private fun activateCollaborationSessionIfPresent(outcome: BindProximityHandshakeOutcome) {
@@ -367,9 +376,9 @@ class ConnectionViewModel : ViewModel() {
                         _connectionState.value =
                             ConnectionState.Error("No nearby tap detected. Try again closer together.")
                     } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
-                        _connectionState.value = ConnectionState.Idle
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
-                    } else {
+                    }
+                    if (users.isNotEmpty()) {
                         PlatformHapticsPolicy.successNotification()
                         val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
                         val others = groupIds?.filter { it != currentUserId }.orEmpty()
@@ -447,9 +456,7 @@ class ConnectionViewModel : ViewModel() {
         if (users.isEmpty()) return
         lastProximityEncounterLoggedAggregate = payload.encounterLogged
         if (shouldBlockForRateLimit(users, payload.encounterLogged)) {
-            _connectionState.value = ConnectionState.Idle
             _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
-            return
         }
         val groupIds = payload.groupCliqueCandidateMemberIds
         val others = groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
@@ -487,23 +494,21 @@ class ConnectionViewModel : ViewModel() {
                 !r.recoveredUsers.isNullOrEmpty() -> {
                     lastProximityEncounterLoggedAggregate = r.recoveredEncounterLogged
                     if (shouldBlockForRateLimit(r.recoveredUsers, r.recoveredEncounterLogged)) {
-                        _connectionState.value = ConnectionState.Idle
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                    }
+                    PlatformHapticsPolicy.successNotification()
+                    val g = r.groupCliqueCandidateMemberIds
+                    val others = g?.filter { it != currentUserId }?.distinct().orEmpty()
+                    if (currentUserId.isNotBlank() && g != null && others.size >= 2) {
+                        _verifiedCliqueFromProximity.emit(
+                            VerifiedCliqueProximityIntent(
+                                preselectFriendIds = others,
+                                matchedUsers = r.recoveredUsers,
+                            ),
+                        )
+                        _connectionState.value = ConnectionState.Idle
                     } else {
-                        PlatformHapticsPolicy.successNotification()
-                        val g = r.groupCliqueCandidateMemberIds
-                        val others = g?.filter { it != currentUserId }?.distinct().orEmpty()
-                        if (currentUserId.isNotBlank() && g != null && others.size >= 2) {
-                            _verifiedCliqueFromProximity.emit(
-                                VerifiedCliqueProximityIntent(
-                                    preselectFriendIds = others,
-                                    matchedUsers = r.recoveredUsers,
-                                ),
-                            )
-                            _connectionState.value = ConnectionState.Idle
-                        } else {
-                            _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
-                        }
+                        _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
                     }
                 }
                 r.remainingInQueue > 0 ->
@@ -623,8 +628,22 @@ class ConnectionViewModel : ViewModel() {
 
                     when {
                         !encounterLogged -> {
-                            _connectionState.value = ConnectionState.Idle
                             _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                            if (connection.isPendingSync()) {
+                                _connectionState.value = ConnectionState.Success(connection, connectedUser)
+                            } else if (
+                                connectionMethod == "qr" &&
+                                    contextTagObject == null &&
+                                    contextTag.isNullOrBlank()
+                            ) {
+                                _connectionState.value = ConnectionState.TaggingContext(
+                                    newConnections = listOf(connection),
+                                    targetUsers = listOf(connectedUser.toUserProfile()),
+                                    isNewConnection = true,
+                                )
+                            } else {
+                                _connectionState.value = ConnectionState.Success(connection, connectedUser)
+                            }
                         }
                         connection.isPendingSync() -> {
                             _connectionState.value = ConnectionState.Success(connection, connectedUser)
@@ -656,6 +675,16 @@ class ConnectionViewModel : ViewModel() {
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
         _connectionState.value = ConnectionState.Idle
+    }
+
+    /** Ensures a server-backed collaboration session exists for Disposable Roll. */
+    suspend fun ensureCollaborationSessionReady(connectionId: String): CollaborationSession? {
+        val cid = connectionId.trim()
+        if (cid.isEmpty()) return null
+        CollaborationSessionManager.forConnection(cid)?.let { return it }
+        val session = repository.openCollaborationSession(cid) ?: return null
+        CollaborationSessionManager.activate(session)
+        return session
     }
 
     /**

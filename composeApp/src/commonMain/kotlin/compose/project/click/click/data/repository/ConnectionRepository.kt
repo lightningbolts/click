@@ -1,5 +1,6 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.OpenMeteoWeatherService
@@ -275,6 +276,20 @@ class ConnectionRepository(
                 peerId = pid,
                 sensorData = sensorData,
             ),
+        )
+    }
+
+    /** POST `/api/connections/{id}/collaboration-session` — opens Disposable Roll for any bump. */
+    suspend fun openCollaborationSession(connectionId: String): CollaborationSession? {
+        val cid = connectionId.trim()
+        if (cid.isEmpty()) return null
+        val response = apiClient.postOpenCollaborationSession(cid).getOrNull() ?: return null
+        val encounterId = response.encounterId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val ttl = response.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return CollaborationSession(
+            encounterId = encounterId,
+            connectionId = cid,
+            collaborationTtlIso = ttl,
         )
     }
 
@@ -1422,8 +1437,8 @@ class ConnectionRepository(
                 ConnectionCreateOutcome(
                     connection = result,
                     encounterLogged = encounterLogged,
-                    encounterId = if (encounterLogged) rollEncounterId else null,
-                    collaborationTtl = if (encounterLogged) rollCollaborationTtl else null,
+                    encounterId = rollEncounterId,
+                    collaborationTtl = rollCollaborationTtl,
                 ),
             )
         } catch (e: Exception) {

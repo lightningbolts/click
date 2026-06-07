@@ -59,6 +59,7 @@ fun ConnectionsScreen(
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onHubSelected: ((compose.project.click.click.data.ActiveHubEntry) -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
+    onOpenDisposableRoll: ((String) -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() },
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
@@ -336,6 +337,7 @@ fun ConnectionsScreen(
                 }
             }
         },
+        onOpenDisposableRoll = onOpenDisposableRoll,
         localMessages = viewModel.currentChatLocalMessages(),
     )
     if (groupMemberPickerUsers != null) {

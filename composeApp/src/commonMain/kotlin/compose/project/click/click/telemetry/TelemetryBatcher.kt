@@ -2,6 +2,7 @@ package compose.project.click.click.telemetry
 
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
+import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -33,7 +35,7 @@ import kotlinx.serialization.json.Json
  */
 object TelemetryBatcher {
 
-    private const val ANOMALY_MIN_DURATION_SEC = 180L
+    private const val ANOMALY_MIN_DURATION_SEC = 30L
     private const val GRASS_NUDGE_MIN_DURATION_SEC = 240L
     private const val ACTIVE_PAN_WINDOW_MS = 45_000L
 
@@ -91,7 +93,11 @@ object TelemetryBatcher {
     }
 
     fun endMapSession() {
+        if (!mapSessionActive && session.sessionStartTimeMs == 0L) return
         mapSessionActive = false
+        scope.launch {
+            flushOnBackgroundIfNeeded()
+        }
     }
 
     fun updateHexbinFromCoordinates(latitude: Double?, longitude: Double?) {
@@ -144,7 +150,7 @@ object TelemetryBatcher {
     }
 
     private suspend fun flushOnBackgroundIfNeeded() {
-        if (!mapSessionActive && session.sessionStartTimeMs == 0L) return
+        if (session.sessionStartTimeMs == 0L) return
 
         val now = Clock.System.now().toEpochMilliseconds()
         val durationSec = ((now - session.sessionStartTimeMs) / 1000L).coerceAtLeast(0L)
@@ -152,8 +158,8 @@ object TelemetryBatcher {
 
         resetSession()
 
-        if (durationSec <= ANOMALY_MIN_DURATION_SEC) return
-        if (snapshot.actionTakenCount != 0) return
+        if (durationSec < ANOMALY_MIN_DURATION_SEC) return
+        if (snapshot.mapPanCount <= 0) return
 
         postFrictionAnomaly(
             durationSec = durationSec,
@@ -216,13 +222,17 @@ object TelemetryBatcher {
         )
 
         runCatching {
-            val response = httpClient.post(url) {
-                contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, "Bearer $token")
-                setBody(body)
-            }
-            if (!response.status.isSuccess()) {
-                println("TelemetryBatcher: friction POST failed status=${response.status.value}")
+            withContext(chatMediaDispatcher) {
+                val response = httpClient.post(url) {
+                    contentType(ContentType.Application.Json)
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    setBody(body)
+                }
+                if (response.status.isSuccess()) {
+                    println("TelemetryBatcher: friction POST ok duration=${body.durationSec}s pans=${body.panCount}")
+                } else {
+                    println("TelemetryBatcher: friction POST failed status=${response.status.value}")
+                }
             }
         }.onFailure { e ->
             println("TelemetryBatcher: friction POST error: ${e.redactedRestMessage()}")

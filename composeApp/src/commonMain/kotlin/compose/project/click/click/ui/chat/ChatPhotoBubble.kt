@@ -36,6 +36,8 @@ import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.utils.toImageBitmap
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 
+private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
+
 /**
  * Image-bubble rendering for both encrypted (E2EE) and plain photo messages.
  * Long-press / message actions are handled on the parent bubble surface.
@@ -64,7 +66,7 @@ internal val secureChatImageBitmapCache: LruMemoryCache<String, ImageBitmap> =
  */
 @Composable
 internal fun ChatBubblePhotoContent(
-    mediaUrl: String,
+    mediaUrl: String?,
     message: Message,
     isEncrypted: Boolean,
     secureState: SecureChatMediaLoadState?,
@@ -112,31 +114,21 @@ internal fun ChatBubblePhotoContent(
         if (hours > 0) "Reveals in ${hours}h ${mins}m" else "Reveals in ${mins}m"
     }
     Box(modifier = modifier.fillMaxWidth()) {
+        val localPreviewBytes = secureState?.imageBytes
         when {
-            isEncrypted && secureState?.loading == true -> {
-                PreparingSecureMediaText()
-            }
-            isEncrypted && secureState?.error?.isNotBlank() == true -> {
-                Text(
-                    text = secureState.error ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(chatBubbleScaledDp(18f)),
-                )
-            }
-            isEncrypted && secureState?.imageBytes != null -> {
-                val cachedBitmap = remember(message.id, secureState.imageBytes) {
+            localPreviewBytes != null -> {
+                val cachedBitmap = remember(message.id, localPreviewBytes) {
                     secureChatImageBitmapCache.get(message.id) ?: run {
-                        runCatching { secureState.imageBytes!!.toImageBitmap() }
+                        runCatching { localPreviewBytes.toImageBitmap() }
                             .onFailure { e ->
-                                println("ChatBubblePhotoContent: failed to decode decrypted image for message=${message.id}: ${e.redactedRestMessage()}")
+                                println("ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}")
                             }
                             .getOrNull()
                             ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
                     }
                 }
                 if (cachedBitmap != null) {
-                    val up = secureState?.uploadProgress
+                    val up = secureState.uploadProgress
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -145,25 +137,25 @@ internal fun ChatBubblePhotoContent(
                         Image(
                             bitmap = cachedBitmap,
                             contentDescription = "Photo",
-                            contentScale = ContentScale.Fit,
+                            contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .then(photoGestureModifier)
                                 .then(
                                     if (borderIfReceived) {
-                                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
                                     } else {
                                         Modifier
                                     },
                                 )
-                                .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                .clip(chatPhotoAttachmentShape)
                                 .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
                         )
                         if (rollLocked && countdownLabel != null) {
                             Box(
                                 modifier = Modifier
                                     .matchParentSize()
-                                    .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                    .clip(chatPhotoAttachmentShape)
                                     .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -178,8 +170,8 @@ internal fun ChatBubblePhotoContent(
                             Box(
                                 modifier = Modifier
                                     .matchParentSize()
-                                    .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
-                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)),
+                                    .clip(chatPhotoAttachmentShape)
+                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.22f)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 CircularProgressIndicator(
@@ -192,16 +184,22 @@ internal fun ChatBubblePhotoContent(
                         }
                     }
                 } else {
-                    Text(
-                        text = "Could not render image",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(chatBubbleScaledDp(18f)),
-                    )
+                    PreparingSecureMediaText()
                 }
             }
+            isEncrypted && secureState?.loading == true -> {
+                PreparingSecureMediaText()
+            }
+            isEncrypted && secureState?.error?.isNotBlank() == true -> {
+                Text(
+                    text = secureState.error ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(chatBubbleScaledDp(18f)),
+                )
+            }
             isEncrypted -> PreparingSecureMediaText()
-            else -> {
+            !mediaUrl.isNullOrBlank() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -210,18 +208,18 @@ internal fun ChatBubblePhotoContent(
                     AsyncImage(
                         model = mediaUrl,
                         contentDescription = "Photo",
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(photoGestureModifier)
                             .then(
                                 if (borderIfReceived) {
-                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
                                 } else {
                                     Modifier
                                 },
                             )
-                            .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                            .clip(chatPhotoAttachmentShape)
                             .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
                     )
                     if (rollLocked && countdownLabel != null) {
@@ -241,6 +239,7 @@ internal fun ChatBubblePhotoContent(
                     }
                 }
             }
+            else -> PreparingSecureMediaText()
         }
     }
 }

@@ -1433,7 +1433,16 @@ class ChatViewModel(
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.imageBytes != null || cur?.loading == true) return
         viewModelScope.launch(chatMediaDispatcher) {
-            _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            _secureChatMediaLoadState.update { map ->
+                val existing = map[message.id]
+                map + (
+                    message.id to SecureChatMediaLoadState(
+                        loading = true,
+                        imageBytes = existing?.imageBytes,
+                        uploadProgress = existing?.uploadProgress,
+                    )
+                    )
+            }
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             }.onFailure { e ->
@@ -1852,6 +1861,36 @@ class ChatViewModel(
         return chatRepository.getUserById(userId)
     }
 
+    private fun migrateOptimisticSecureImage(tempId: String, serverMessageId: String) {
+        val cachedBytes = secureImageBytesCache.get(tempId)
+            ?: _secureChatMediaLoadState.value[tempId]?.imageBytes
+        if (cachedBytes != null && cachedBytes.isNotEmpty()) {
+            secureImageBytesCache.put(serverMessageId, cachedBytes)
+            secureImageBytesCache.remove(tempId)
+            val prior = _secureChatMediaLoadState.value[tempId]
+            _secureChatMediaLoadState.update { map ->
+                val withoutTemp = map - tempId
+                if (prior != null) {
+                    withoutTemp + (
+                        serverMessageId to prior.copy(
+                            loading = false,
+                            imageBytes = cachedBytes,
+                        )
+                        )
+                } else {
+                    withoutTemp + (
+                        serverMessageId to SecureChatMediaLoadState(
+                            loading = false,
+                            imageBytes = cachedBytes,
+                        )
+                        )
+                }
+            }
+        } else {
+            _secureChatMediaLoadState.update { it - tempId }
+        }
+    }
+
     private fun stripOptimisticMatchingServerRow(
         messages: List<MessageWithUser>,
         serverMessage: Message,
@@ -1863,6 +1902,38 @@ class ChatViewModel(
                 stamp != null &&
                 mwu.message.localSentAt == stamp
         }
+    }
+
+    private fun findPendingOptimisticTempId(
+        messages: List<MessageWithUser>,
+        serverMessage: Message,
+        currentUserId: String,
+    ): String? {
+        if (serverMessage.user_id != currentUserId) return null
+        serverMessage.localSentAt?.let { stamp ->
+            messages.firstOrNull { mwu ->
+                mwu.message.id.startsWith("temp-") &&
+                    mwu.message.user_id == currentUserId &&
+                    mwu.message.localSentAt == stamp
+            }?.message?.id?.let { return it }
+        }
+        return messages.lastOrNull { mwu ->
+            mwu.message.id.startsWith("temp-") &&
+                mwu.message.user_id == currentUserId &&
+                mwu.message.messageType == serverMessage.messageType &&
+                mwu.message.deliveryState == MessageDeliveryState.PENDING
+        }?.message?.id
+    }
+
+    private fun resolveInsertedMessage(
+        serverMessage: Message,
+        messages: List<MessageWithUser>,
+        tempId: String?,
+    ): Message {
+        if (serverMessage.localSentAt != null) return serverMessage
+        val optimistic = tempId?.let { id -> messages.find { it.message.id == id }?.message }
+        val stamp = optimistic?.localSentAt ?: return serverMessage
+        return serverMessage.copy(localSentAt = stamp)
     }
 
     private fun appendOutgoingOptimistic(message: Message, currentUser: User) {
@@ -1891,30 +1962,51 @@ class ChatViewModel(
         )
     }
 
-    private fun applyInsertedMessage(message: Message, user: User, currentUserId: String) {
+    private fun applyInsertedMessage(message: Message, user: User, currentUserId: String, optimisticTempId: String? = null) {
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         val connectionId = currentState.chatDetails.connection.id
-        val baseList = stripOptimisticMatchingServerRow(currentState.messages, message)
-        val exists = baseList.any { it.message.id == message.id }
-        if (exists) {
-            // Realtime often delivers the insert before the REST send returns, or sync refreshes
-            // the thread first — the list row must still bump or the Clicks preview stays stale.
-            val merged = baseList.map { mwu ->
-                if (mwu.message.id == message.id) mwu.copy(message = message) else mwu
+        val tempIdToReplace = optimisticTempId
+            ?: findPendingOptimisticTempId(currentState.messages, message, currentUserId)
+        tempIdToReplace?.let { migrateOptimisticSecureImage(it, message.id) }
+        val mergedMessage = resolveInsertedMessage(message, currentState.messages, tempIdToReplace)
+
+        if (tempIdToReplace != null) {
+            val idx = currentState.messages.indexOfFirst { it.message.id == tempIdToReplace }
+            if (idx >= 0) {
+                val replaced = currentState.messages.toMutableList()
+                replaced[idx] = MessageWithUser(
+                    message = mergedMessage,
+                    user = user,
+                    isSent = mergedMessage.user_id == currentUserId,
+                )
+                _chatMessagesState.value = currentState.copy(messages = replaced)
+                bumpConnectionInChatList(connectionId, mergedMessage)
+                return
             }
-            _chatMessagesState.value = currentState.copy(messages = merged)
-            bumpConnectionInChatList(connectionId, message)
+        }
+
+        val baseList = stripOptimisticMatchingServerRow(currentState.messages, mergedMessage)
+        val existingIdx = baseList.indexOfFirst { it.message.id == mergedMessage.id }
+        if (existingIdx >= 0) {
+            val updated = baseList.toMutableList()
+            updated[existingIdx] = MessageWithUser(
+                message = mergedMessage,
+                user = user,
+                isSent = mergedMessage.user_id == currentUserId,
+            )
+            _chatMessagesState.value = currentState.copy(messages = updated)
+            bumpConnectionInChatList(connectionId, mergedMessage)
             return
         }
 
         _chatMessagesState.value = currentState.copy(
             messages = baseList + MessageWithUser(
-                message = message,
+                message = mergedMessage,
                 user = user,
-                isSent = message.user_id == currentUserId,
+                isSent = mergedMessage.user_id == currentUserId,
             ),
         )
-        bumpConnectionInChatList(connectionId, message)
+        bumpConnectionInChatList(connectionId, mergedMessage)
     }
 
     /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
@@ -2231,16 +2323,15 @@ class ChatViewModel(
                                 content = if (caption.isEmpty() || index > 0) " " else caption,
                                 messageType = ChatMessageType.IMAGE,
                                 metadata = meta,
+                                clientLocalSentAtMs = localMs,
                             )
                             if (message != null) {
-                                secureImageBytesCache.remove(tempId)
-                                _secureChatMediaLoadState.update { m -> m - tempId }
                                 if (index == 0) {
                                     _messageInput.value = ""
                                     updateMessageInput("")
                                     _replyingTo.value = null
                                 }
-                                applyInsertedMessage(message, currentUser, userId)
+                                applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                                 activateConnectionIfPending(connectionId)
                             } else {
                                 markOptimisticSendFailed(tempId)
@@ -2329,8 +2420,17 @@ class ChatViewModel(
                         _messageSendError.value = "Failed to upload Disposable Roll photo"
                         return@withLock
                     }
-                    secureImageBytesCache.remove(tempId)
-                    _secureChatMediaLoadState.update { m -> m - tempId }
+                    _secureChatMediaLoadState.update { m ->
+                        val cur = m[tempId]
+                        val heldBytes = cur?.imageBytes ?: uploadBytes
+                        m + (
+                            tempId to SecureChatMediaLoadState(
+                                loading = false,
+                                imageBytes = heldBytes,
+                                uploadProgress = 1f,
+                            )
+                            )
+                    }
                     val meta = buildJsonObject {
                         put("media_url", url)
                         put("original_mime_type", mimeType)
@@ -2345,9 +2445,10 @@ class ChatViewModel(
                         content = " ",
                         messageType = ChatMessageType.IMAGE,
                         metadata = meta,
+                        clientLocalSentAtMs = localMs,
                     )
                     if (message != null) {
-                        applyInsertedMessage(message, currentUser, userId)
+                        applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                         activateConnectionIfPending(connectionId)
                     } else {
                         markOptimisticSendFailed(tempId)

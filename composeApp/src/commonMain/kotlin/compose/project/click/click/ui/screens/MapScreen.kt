@@ -111,6 +111,7 @@ fun MapScreen(
     mapPipExpanded: Boolean = false,
     onMapPipExpandedChanged: (Boolean) -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
+    onOpenDisposableRoll: ((String) -> Unit)? = null,
 ) {
     val mapState by viewModel.mapState.collectAsState()
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
@@ -553,6 +554,14 @@ fun MapScreen(
                         )
                         selectedProfileId = null
                         viewModel.clearSelection()
+                    },
+                    onOpenDisposableRoll = onOpenDisposableRoll?.let { open ->
+                        {
+                            val connectionId = connectionSelection.point.connection.id
+                            selectedProfileId = null
+                            viewModel.clearSelection()
+                            open(connectionId)
+                        }
                     },
                 )
             }
