@@ -1311,6 +1311,7 @@ fun ChatView(
                             Button(
                                 onClick = {
                                     if (pingButtonLoading) return@Button
+                                    PlatformHapticsPolicy.successNotification()
                                     tetherSenderAck = "Ping tether sent"
                                     EncounterTetherManager.pingTether(
                                         encounterId = tetherEncounterId,
