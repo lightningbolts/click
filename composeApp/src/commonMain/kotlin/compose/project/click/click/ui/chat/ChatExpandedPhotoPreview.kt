@@ -5,8 +5,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -96,15 +99,19 @@ fun ChatExpandedPhotoPreview(
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     GlassFullscreenMediaOverlay(
         visible = visible,
         onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxSize(),
     ) {
         val shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 22.dp),
+                .padding(horizontal = 22.dp)
+                .clip(shape)
+                .border(1.dp, GlassSheetTokens.GlassBorder, shape),
             shape = shape,
             color = GlassSheetTokens.OledBlack,
         ) {
@@ -154,5 +161,6 @@ fun ChatExpandedPhotoPreview(
                 }
             }
         }
+    }
     }
 }

@@ -527,38 +527,46 @@ fun ChatView(
                     val isGroupChat = chatDetails.groupClique != null
                     val overlapRepo = remember { SupabaseRepository() }
                     val chatPeerId = chatDetails.otherUser.id
-                    val tetherEncounterId = remember(
+                    val tetherChannelId = remember(
                         chatDetails.connection.id,
                         collaborationSessions,
-                        isGroupChat,
                     ) {
-                        if (isGroupChat) {
-                            null
-                        } else {
-                            collaborationSessions[chatDetails.connection.id]?.encounterId
-                                ?: chatDetails.connection.recentEncounterId()
-                        }
+                        collaborationSessions[chatDetails.connection.id]?.encounterId?.takeIf { it.isNotBlank() }
+                            ?: chatDetails.connection.recentEncounterId()?.takeIf { it.isNotBlank() }
+                            ?: chatDetails.connection.id
+                    }
+                    val tetherMemberNamesById = remember(chatDetails.groupMemberUsers, currentUser, chatDetails.otherUser) {
+                        (chatDetails.groupMemberUsers + listOfNotNull(currentUser, chatDetails.otherUser))
+                            .distinctBy { it.id }
+                            .associate { user ->
+                                user.id to (user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Friend")
+                            }
                     }
                     val peerDisplayName = chatDetails.otherUser.name ?: "Friend"
-                    LaunchedEffect(tetherEncounterId, peerDisplayName) {
-                        EncounterTetherWidgetBridge.updateRecentEncounter(tetherEncounterId, peerDisplayName)
+                    LaunchedEffect(tetherChannelId, peerDisplayName) {
+                        EncounterTetherWidgetBridge.updateRecentEncounter(tetherChannelId, peerDisplayName)
                     }
-                    LaunchedEffect(tetherEncounterId, currentUserId, chatPeerId, peerDisplayName) {
+                    LaunchedEffect(tetherChannelId, currentUserId, chatPeerId, peerDisplayName, tetherMemberNamesById) {
                         val self = currentUserId ?: return@LaunchedEffect
-                        EncounterTetherManager.setPeerNameResolver { senderId ->
-                            if (senderId == chatPeerId) peerDisplayName else "Friend"
+                        val resolver: (String) -> String = { senderId ->
+                            if (isGroupChat) {
+                                tetherMemberNamesById[senderId] ?: "Someone"
+                            } else if (senderId == chatPeerId) {
+                                peerDisplayName
+                            } else {
+                                "Friend"
+                            }
                         }
-                        val encounterId = tetherEncounterId ?: return@LaunchedEffect
-                        EncounterTetherManager.subscribe(encounterId, self) { senderId ->
-                            if (senderId == chatPeerId) peerDisplayName else "Friend"
-                        }
+                        EncounterTetherManager.setPeerNameResolver(resolver)
+                        EncounterTetherManager.subscribe(tetherChannelId, self, resolver)
                     }
-                    LaunchedEffect(tetherPayload, chatPeerId) {
+                    LaunchedEffect(tetherPayload, chatPeerId, currentUserId, isGroupChat) {
                         val ping = tetherPayload ?: run {
                             tetherToastMessage = null
                             return@LaunchedEffect
                         }
-                        if (ping.senderId != chatPeerId) return@LaunchedEffect
+                        if (ping.senderId == currentUserId) return@LaunchedEffect
+                        if (!isGroupChat && ping.senderId != chatPeerId) return@LaunchedEffect
                         val receiver = LocationService().getCurrentLocation()
                         tetherToastMessage = if (receiver != null) {
                             tetherCompassMessage(
@@ -1306,46 +1314,6 @@ fun ChatView(
                             }
                         }
 
-                        if (!isGroupChat && tetherEncounterId != null && !currentUserId.isNullOrBlank()) {
-                            val pingButtonLoading = tetherSenderAck != null
-                            Button(
-                                onClick = {
-                                    if (pingButtonLoading) return@Button
-                                    PlatformHapticsPolicy.successNotification()
-                                    tetherSenderAck = "Ping tether sent"
-                                    EncounterTetherManager.pingTether(
-                                        encounterId = tetherEncounterId,
-                                        senderId = currentUserId!!,
-                                    )
-                                },
-                                enabled = !pingButtonLoading,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .height(56.dp),
-                                shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-                            ) {
-                                if (pingButtonLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(22.dp),
-                                        strokeWidth = 2.dp,
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Filled.Explore,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = "Ping Tether",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                }
-                            }
-                        }
-
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -1359,6 +1327,15 @@ fun ChatView(
                                 mediaPickers = mediaPickers,
                                 collaborationSession = collaborationSession,
                                 onOpenDisposableRoll = { showDisposableCamera = true },
+                                tetherPingEnabled = tetherChannelId.isNotBlank() && !currentUserId.isNullOrBlank(),
+                                pingTetherLoading = tetherSenderAck != null,
+                                onPingTether = {
+                                    tetherSenderAck = "Ping tether sent"
+                                    EncounterTetherManager.pingTether(
+                                        encounterId = tetherChannelId,
+                                        senderId = currentUserId!!,
+                                    )
+                                },
                             )
                         }
                     }
@@ -1406,11 +1383,13 @@ fun ChatView(
         onDismissed = { tetherSenderAck = null },
     )
 
-    ChatExpandedPhotoPreview(
-        target = expandedPhotoTarget,
-        secureMediaLoadMap = secureMediaLoadMap,
-        onDismiss = { expandedPhotoTarget = null },
-    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        ChatExpandedPhotoPreview(
+            target = expandedPhotoTarget,
+            secureMediaLoadMap = secureMediaLoadMap,
+            onDismiss = { expandedPhotoTarget = null },
+        )
+    }
 
     GlassToastHost(
         state = toastState,

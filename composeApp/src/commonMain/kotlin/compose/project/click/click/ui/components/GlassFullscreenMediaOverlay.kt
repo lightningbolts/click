@@ -22,12 +22,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
 
 /**
- * Full-screen media lightbox with an animated custom scrim ([Popup], not platform [Dialog])
- * so brightness does not pop on dismiss.
+ * Full-screen media lightbox with an animated custom scrim rendered in-tree (not [Popup] /
+ * platform [Dialog]) so the overlay stays centered and the dimming covers the full host surface.
  */
 @Composable
 fun GlassFullscreenMediaOverlay(
@@ -73,50 +72,50 @@ fun GlassFullscreenMediaOverlay(
     val scaleInSpec = tween<Float>(durationMillis = 420, easing = FastOutSlowInEasing)
     val scaleOutSpec = tween<Float>(durationMillis = 280, easing = FastOutSlowInEasing)
 
-    Popup(
-        onDismissRequest = { requestDismiss() },
-        properties = PopupProperties(
-            focusable = true,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false,
-        ),
+    PlatformBackHandler(enabled = transitionState.targetState) {
+        requestDismiss()
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .zIndex(80f),
     ) {
-        Box(modifier = modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visibleState = transitionState,
+            enter = fadeIn(animationSpec = fadeInSpec),
+            exit = fadeOut(animationSpec = fadeOutSpec),
+            label = "glass_media_scrim",
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClick = { requestDismiss() },
+                    ),
+            )
+        }
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
             AnimatedVisibility(
                 visibleState = transitionState,
-                enter = fadeIn(animationSpec = fadeInSpec),
-                exit = fadeOut(animationSpec = fadeOutSpec),
-                label = "glass_media_scrim",
+                enter = fadeIn(animationSpec = fadeInSpec) + scaleIn(
+                    initialScale = 0.92f,
+                    animationSpec = scaleInSpec,
+                ),
+                exit = fadeOut(animationSpec = fadeOutSpec) + scaleOut(
+                    targetScale = 0.94f,
+                    animationSpec = scaleOutSpec,
+                ),
+                label = "glass_media_content",
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = scrimAlpha))
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                            onClick = { requestDismiss() },
-                        ),
-                )
-            }
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                AnimatedVisibility(
-                    visibleState = transitionState,
-                    enter = fadeIn(animationSpec = fadeInSpec) + scaleIn(
-                        initialScale = 0.92f,
-                        animationSpec = scaleInSpec,
-                    ),
-                    exit = fadeOut(animationSpec = fadeOutSpec) + scaleOut(
-                        targetScale = 0.94f,
-                        animationSpec = scaleOutSpec,
-                    ),
-                    label = "glass_media_content",
-                ) {
-                    content()
-                }
+                content()
             }
         }
     }

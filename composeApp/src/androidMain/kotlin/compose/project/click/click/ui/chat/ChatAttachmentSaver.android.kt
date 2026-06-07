@@ -1,9 +1,12 @@
 package compose.project.click.click.ui.chat
 
 import android.content.ContentValues
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import java.io.File
 
 /**
@@ -45,6 +48,7 @@ actual fun saveDecryptedAttachmentToDownloads(
                 }
             val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
             resolver.update(uri, done, null, null)
+            openSavedAttachment(uri, safeMime)
             uri.toString()
         } else {
             @Suppress("DEPRECATION")
@@ -53,7 +57,18 @@ actual fun saveDecryptedAttachmentToDownloads(
             val targetDir = File(baseDir, "Click").apply { mkdirs() }
             val file = File(targetDir, safeName)
             file.writeBytes(bytes)
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            openSavedAttachment(uri, safeMime)
             file.absolutePath
         }
     }.getOrNull()
+}
+
+private fun openSavedAttachment(uri: Uri, mimeType: String) {
+    val ctx = AndroidChatImageSaveContext.applicationContext
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mimeType.ifBlank { "application/octet-stream" })
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { ctx.startActivity(intent) }
 }

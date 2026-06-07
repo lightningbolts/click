@@ -33,13 +33,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -283,17 +284,18 @@ fun ChatAudioBubble(
     }
 
     if (
-        shouldUseIosSafariForWebVoice(
+        shouldUseNativeFileFallbackForWebVoice(
             isEncrypted = isEncrypted,
             localFilePathForPlayback = localFilePathForPlayback,
             mediaUrl = mediaUrl,
             mimeTypeHint = mimeTypeHint,
         )
     ) {
-        SafariBackedWebVoiceRow(
+        NativeBackedWebVoiceRow(
             palette = palette,
             widthModifier = widthModifier,
             mediaUrl = mediaUrl,
+            mimeTypeHint = mimeTypeHint,
             totalLabel = totalLabel,
         )
         return
@@ -390,11 +392,11 @@ fun ChatAudioBubble(
 }
 
 /**
- * AVPlayer on iOS does not decode WebM/Opus from the web; Safari can play the same HTTPS URL.
- * Signed Supabase URLs often omit `*.webm` and MIME metadata, so we also treat **plaintext
- * click-web** chat-media objects as Safari-backed when AVPlayer is unlikely to handle them.
+ * AVPlayer on iOS does not decode some remote WebM/Opus voice uploads. Locally saved files can
+ * be handed to the native file opener, so we classify these remote plaintext media objects for
+ * the native-open fallback when AVPlayer is unlikely to handle them.
  */
-private fun shouldUseIosSafariForWebVoice(
+private fun shouldUseNativeFileFallbackForWebVoice(
     isEncrypted: Boolean,
     localFilePathForPlayback: String?,
     mediaUrl: String,
@@ -417,7 +419,7 @@ private fun shouldUseIosSafariForWebVoice(
     return mediaUrlLooksLikePlaintextWebChatMediaUpload(m)
 }
 
-/** Conservative: when true, keep in-app AVPlayer instead of opening Safari. */
+/** Conservative: when true, keep in-app AVPlayer instead of using the native file opener fallback. */
 private fun avPlayerLikelySupportsRemoteAudio(pathOnly: String, mime: String): Boolean {
     if (pathOnly.endsWith(".mp3") || pathOnly.endsWith(".m4a") || pathOnly.endsWith(".aac") ||
         pathOnly.endsWith(".wav") || pathOnly.endsWith(".caf")
@@ -433,14 +435,19 @@ private fun avPlayerLikelySupportsRemoteAudio(pathOnly: String, mime: String): B
 }
 
 @Composable
-private fun SafariBackedWebVoiceRow(
+private fun NativeBackedWebVoiceRow(
     palette: VoiceChromePalette,
     widthModifier: Modifier,
     mediaUrl: String,
+    mimeTypeHint: String?,
     totalLabel: String,
 ) {
-    val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
     val safeUrl = remember(mediaUrl) { mediaUrl.trim() }
+    val safeMime = remember(mimeTypeHint) {
+        mimeTypeHint?.trim()?.takeIf { it.isNotEmpty() } ?: "audio/webm"
+    }
+    var opening by remember(safeUrl, safeMime) { mutableStateOf(false) }
     VoiceNoteChromeShell(palette, widthModifier) {
         Box(
             modifier = Modifier
@@ -451,13 +458,27 @@ private fun SafariBackedWebVoiceRow(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { runCatching { uriHandler.openUri(safeUrl) } },
+                    enabled = !opening && safeUrl.isNotBlank(),
+                    onClick = {
+                        opening = true
+                        scope.launch {
+                            val bytes = fetchImageBytesFromUrl(safeUrl)
+                            if (bytes != null && bytes.isNotEmpty()) {
+                                saveDecryptedAttachmentToDownloads(
+                                    bytes = bytes,
+                                    fileName = webVoiceFallbackFileName(safeMime),
+                                    mimeType = safeMime,
+                                )
+                            }
+                            opening = false
+                        }
+                    },
                 ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Filled.PlayArrow,
-                contentDescription = "Play voice (opens in browser)",
+                contentDescription = "Open voice message",
                 tint = palette.playIcon,
                 modifier = Modifier.size(chatBubbleScaledDp(30f)),
             )
@@ -472,7 +493,7 @@ private fun SafariBackedWebVoiceRow(
             )
             Spacer(Modifier.height(chatBubbleScaledDp(6f)))
             Text(
-                text = "Tap play to open in Safari (web audio)",
+                text = if (opening) "Opening voice message..." else "Tap play to open voice message",
                 style = chatBubbleReplyLabelStyle(),
                 color = palette.timeColor.copy(alpha = 0.88f),
                 maxLines = 2,
@@ -496,6 +517,20 @@ private fun SafariBackedWebVoiceRow(
             }
         }
     }
+}
+
+private fun webVoiceFallbackFileName(mimeType: String): String {
+    val mime = mimeType.lowercase()
+    val ext = when {
+        "webm" in mime -> "webm"
+        "opus" in mime -> "opus"
+        "mpeg" in mime || "mp3" in mime -> "mp3"
+        "aac" in mime -> "aac"
+        "wav" in mime -> "wav"
+        "m4a" in mime || "mp4" in mime -> "m4a"
+        else -> "audio"
+    }
+    return "click_voice_message.$ext"
 }
 
 @Composable

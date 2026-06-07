@@ -112,6 +112,11 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.util.LruMemoryCache
+import compose.project.click.click.util.profileMediaVaultId
+import compose.project.click.click.util.profileMediaVaultLocalPath
+import compose.project.click.click.util.readProfileMediaVaultBytes
+import compose.project.click.click.util.writeProfileMediaVaultBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -200,7 +205,9 @@ fun ProfileBottomSheet(
         mutableStateOf<Map<String, String>>(emptyMap())
     }
     var profileTabsHydrating by remember { mutableStateOf(false) }
-    var profileMediaResolving by remember { mutableStateOf(false) }
+    var resolvingMediaIds by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
+        mutableStateOf<Set<String>>(emptySet())
+    }
     var openingFileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(selectedUserId, state.connectionId, effectiveViewerUserId) {
@@ -342,60 +349,108 @@ fun ProfileBottomSheet(
     }
 
     LaunchedEffect(effectiveMedia, connectionChatId, effectiveViewerUserId) {
-        profileMediaResolving = true
-        resolvedMediaUrls = emptyMap()
-        resolvedMediaBitmaps = emptyMap()
-        resolvedAudioLocalPaths = emptyMap()
-        try {
-            effectiveMedia.forEach { media ->
-                val direct = media.mediaUrl?.trim().orEmpty()
-                val fromPath = media.storagePath?.trim().orEmpty()
-                val url = when {
-                    direct.isNotBlank() -> direct
-                    fromPath.isNotBlank() -> connectionRepository.getSignedChatAttachmentUrl(fromPath).orEmpty()
-                    else -> ""
+        resolvingMediaIds = emptySet()
+        val cachedUrls = mutableMapOf<String, String>()
+        val cachedBitmaps = mutableMapOf<String, ImageBitmap>()
+        val cachedAudioPaths = mutableMapOf<String, String>()
+        effectiveMedia.forEach { media ->
+            val direct = media.mediaUrl?.trim().orEmpty()
+            val path = media.storagePath?.trim().orEmpty()
+            when {
+                direct.isNotBlank() && !media.isEncrypted -> cachedUrls[media.id] = direct
+                path.isNotBlank() && !media.isEncrypted -> {
+                    profileSignedUrlCache.get(path)?.let { cachedUrls[media.id] = it }
                 }
-                if (url.isBlank()) {
-                    delay(10)
-                    return@forEach
-                }
-
-                if (media.isEncrypted && !connectionChatId.isNullOrBlank() && !effectiveViewerUserId.isNullOrBlank()) {
-                    val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                        chatId = connectionChatId.orEmpty(),
-                        viewerUserId = effectiveViewerUserId,
-                        mediaUrl = url,
-                    )
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        if (media.mediaType == ProfileSheetMediaType.Image) {
-                            val bitmap = runCatching { bytes.toImageBitmap() }.getOrNull()
-                            if (bitmap != null) {
-                                resolvedMediaBitmaps = resolvedMediaBitmaps + (media.id to bitmap)
-                                delay(14)
-                                return@forEach
-                            }
-                        } else {
-                            val ext = extensionFromMimeType(media.mimeType)
-                            val localPath = writeSecureChatAudioTempFile(media.id, bytes, ext)
-                            if (!localPath.isNullOrBlank()) {
-                                resolvedAudioLocalPaths = resolvedAudioLocalPaths + (media.id to localPath)
-                                delay(14)
-                                return@forEach
-                            }
-                        }
+            }
+            val cacheKey = profileMediaCacheKey(media, connectionChatId, effectiveViewerUserId)
+            val vaultId = profileMediaVaultId(cacheKey)
+            val vaultExt = profileMediaVaultExtension(media)
+            profileMediaBitmapCache.get(cacheKey)?.let { cachedBitmaps[media.id] = it }
+                ?: readProfileMediaVaultBytes(vaultId, vaultExt)?.let { bytes ->
+                    runCatching { bytes.toImageBitmap() }.getOrNull()?.also { bitmap ->
+                        profileMediaBitmapCache.put(cacheKey, bitmap)
+                        cachedBitmaps[media.id] = bitmap
                     }
                 }
-
-                if (media.isEncrypted) {
-                    delay(12)
-                    return@forEach
+            profileMediaAudioPathCache.get(cacheKey)?.let { cachedAudioPaths[media.id] = it }
+                ?: profileMediaVaultLocalPath(vaultId, vaultExt)?.let { path ->
+                    profileMediaAudioPathCache.put(cacheKey, path)
+                    cachedAudioPaths[media.id] = path
                 }
+        }
+        resolvedMediaUrls = cachedUrls
+        resolvedMediaBitmaps = cachedBitmaps
+        resolvedAudioLocalPaths = cachedAudioPaths
+    }
 
-                resolvedMediaUrls = resolvedMediaUrls + (media.id to url)
-                delay(14)
+    val ensureProfileMediaResolved: (ProfileSheetMedia) -> Unit = ensure@ { media ->
+        if (media.id in resolvingMediaIds) return@ensure
+        if (resolvedMediaUrls.containsKey(media.id) ||
+            resolvedMediaBitmaps.containsKey(media.id) ||
+            resolvedAudioLocalPaths.containsKey(media.id)
+        ) {
+            return@ensure
+        }
+        val cacheKey = profileMediaCacheKey(media, connectionChatId, effectiveViewerUserId)
+        profileMediaBitmapCache.get(cacheKey)?.let { cached ->
+            resolvedMediaBitmaps = resolvedMediaBitmaps + (media.id to cached)
+            return@ensure
+        }
+        profileMediaAudioPathCache.get(cacheKey)?.let { cached ->
+            resolvedAudioLocalPaths = resolvedAudioLocalPaths + (media.id to cached)
+            return@ensure
+        }
+        val vaultId = profileMediaVaultId(cacheKey)
+        val vaultExt = profileMediaVaultExtension(media)
+        if (media.mediaType == ProfileSheetMediaType.Image) {
+            readProfileMediaVaultBytes(vaultId, vaultExt)?.let { bytes ->
+                runCatching { bytes.toImageBitmap() }.getOrNull()?.let { bitmap ->
+                    profileMediaBitmapCache.put(cacheKey, bitmap)
+                    resolvedMediaBitmaps = resolvedMediaBitmaps + (media.id to bitmap)
+                    return@ensure
+                }
             }
-        } finally {
-            profileMediaResolving = false
+        } else {
+            profileMediaVaultLocalPath(vaultId, vaultExt)?.let { path ->
+                profileMediaAudioPathCache.put(cacheKey, path)
+                resolvedAudioLocalPaths = resolvedAudioLocalPaths + (media.id to path)
+                return@ensure
+            }
+        }
+
+        scope.launch {
+            if (media.id in resolvingMediaIds) return@launch
+            resolvingMediaIds = resolvingMediaIds + media.id
+            try {
+                val url = resolveProfileMediaUrl(media, connectionRepository) ?: return@launch
+                if (!media.isEncrypted) {
+                    resolvedMediaUrls = resolvedMediaUrls + (media.id to url)
+                    return@launch
+                }
+                val chatId = connectionChatId?.trim().orEmpty()
+                val viewerId = effectiveViewerUserId?.trim().orEmpty()
+                if (chatId.isBlank() || viewerId.isBlank()) return@launch
+                val bytes = connectionRepository.downloadAndDecryptChatMedia(
+                    chatId = chatId,
+                    viewerUserId = viewerId,
+                    mediaUrl = url,
+                )
+                val plaintext = bytes?.takeIf { it.isNotEmpty() } ?: return@launch
+                writeProfileMediaVaultBytes(vaultId, plaintext, vaultExt)
+                if (media.mediaType == ProfileSheetMediaType.Image) {
+                    val bitmap = runCatching { plaintext.toImageBitmap() }.getOrNull() ?: return@launch
+                    profileMediaBitmapCache.put(cacheKey, bitmap)
+                    resolvedMediaBitmaps = resolvedMediaBitmaps + (media.id to bitmap)
+                } else {
+                    val localPath = profileMediaVaultLocalPath(vaultId, vaultExt)
+                        ?: writeSecureChatAudioTempFile(media.id, plaintext, vaultExt)
+                    if (localPath.isNullOrBlank()) return@launch
+                    profileMediaAudioPathCache.put(cacheKey, localPath)
+                    resolvedAudioLocalPaths = resolvedAudioLocalPaths + (media.id to localPath)
+                }
+            } finally {
+                resolvingMediaIds = resolvingMediaIds - media.id
+            }
         }
     }
 
@@ -434,16 +489,28 @@ fun ProfileBottomSheet(
                 if (!handled) {
                     val directUrl = file.downloadUrl?.trim().orEmpty()
                     if (directUrl.isNotBlank()) {
-                        runCatching { uriHandler.openUri(directUrl) }
-                        handled = true
+                        val bytes = fetchImageBytesFromUrl(directUrl)
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            handled = saveDecryptedAttachmentToDownloads(
+                                bytes = bytes,
+                                fileName = file.fileName,
+                                mimeType = file.mimeType,
+                            ) != null
+                        }
                     }
                 }
 
                 if (!handled && path.isNotBlank()) {
                     val signed = connectionRepository.getSignedChatAttachmentUrl(path)
                     if (!signed.isNullOrBlank()) {
-                        runCatching { uriHandler.openUri(signed) }
-                        handled = true
+                        val bytes = fetchImageBytesFromUrl(signed)
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            handled = saveDecryptedAttachmentToDownloads(
+                                bytes = bytes,
+                                fileName = file.fileName,
+                                mimeType = file.mimeType,
+                            ) != null
+                        }
                     }
                 }
 
@@ -457,6 +524,7 @@ fun ProfileBottomSheet(
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -549,8 +617,9 @@ fun ProfileBottomSheet(
                     resolvedUrls = resolvedMediaUrls,
                     resolvedBitmaps = resolvedMediaBitmaps,
                     resolvedAudioLocalPaths = resolvedAudioLocalPaths,
-                    isLoading = profileTabsHydrating || (effectiveMedia.isEmpty() && profileMediaResolving),
-                    isResolvingMedia = profileMediaResolving,
+                    isLoading = profileTabsHydrating,
+                    resolvingMediaIds = resolvingMediaIds,
+                    onEnsureMediaResolved = ensureProfileMediaResolved,
                     onOpenMedia = { selectedMediaForPreview = it },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
@@ -561,6 +630,7 @@ fun ProfileBottomSheet(
                 )
             }
         }
+    }
 
         val previewMedia = mediaPreviewModel
         if (previewMedia != null) {
@@ -591,6 +661,7 @@ fun ProfileBottomSheet(
             GlassFullscreenMediaOverlay(
                 visible = mediaPreviewVisible,
                 onDismissRequest = { selectedMediaForPreview = null },
+                modifier = Modifier.fillMaxSize(),
             ) {
                 val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
                 Surface(
@@ -753,21 +824,6 @@ fun ProfileBottomSheet(
                                     ) {
                                         Text("Share")
                                     }
-                                    /*
-                                    if (!media.isEncrypted) {
-                                        TextButton(
-                                            onClick = {
-                                                val target = resolvedMediaUrls[media.id] ?: media.mediaUrl
-                                                if (!target.isNullOrBlank()) {
-                                                    handleOpenLink(target)
-                                                }
-                                                selectedMediaForPreview = null
-                                            },
-                                        ) {
-                                            Text("Open in browser")
-                                        }
-                                    }
-                                    */
                                 }
                             } else {
                                 TextButton(onClick = { selectedMediaForPreview = null }) {
@@ -849,6 +905,16 @@ enum class ProfileSheetMediaType {
     Image,
     Audio,
 }
+
+private const val PROFILE_MEDIA_CACHE_MAX_ENTRIES = 180
+private const val PROFILE_SIGNED_URL_CACHE_MAX_ENTRIES = 360
+
+private val profileMediaBitmapCache: LruMemoryCache<String, ImageBitmap> =
+    LruMemoryCache(PROFILE_MEDIA_CACHE_MAX_ENTRIES)
+private val profileMediaAudioPathCache: LruMemoryCache<String, String> =
+    LruMemoryCache(PROFILE_MEDIA_CACHE_MAX_ENTRIES)
+private val profileSignedUrlCache: LruMemoryCache<String, String> =
+    LruMemoryCache(PROFILE_SIGNED_URL_CACHE_MAX_ENTRIES)
 
 data class ProfileSheetLink(
     val id: String,
@@ -1133,7 +1199,8 @@ private fun MediaPanel(
     resolvedBitmaps: Map<String, ImageBitmap>,
     resolvedAudioLocalPaths: Map<String, String>,
     isLoading: Boolean,
-    isResolvingMedia: Boolean,
+    resolvingMediaIds: Set<String>,
+    onEnsureMediaResolved: (ProfileSheetMedia) -> Unit,
     onOpenMedia: (ProfileSheetMedia) -> Unit,
 ) {
     val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
@@ -1193,9 +1260,13 @@ private fun MediaPanel(
                 row.forEach { media ->
                     val bitmap = resolvedBitmaps[media.id]
                     val resolvedUrl = resolvedUrls[media.id] ?: media.mediaUrl
-                    val thumbUnlocking = media.isEncrypted && bitmap == null && isResolvingMedia
+                    val thumbResolving = media.id in resolvingMediaIds
+                    val thumbUnlocking = bitmap == null && thumbResolving
                     val thumbReady = bitmap != null ||
                         (!media.isEncrypted && !resolvedUrl.isNullOrBlank())
+                    LaunchedEffect(media.id) {
+                        if (!thumbReady) onEnsureMediaResolved(media)
+                    }
                     val thumbReveal by animateFloatAsState(
                         targetValue = if (thumbReady) 1f else if (thumbUnlocking) 0.55f else 0.38f,
                         animationSpec = tween(220, easing = FastOutSlowInEasing),
@@ -1272,9 +1343,13 @@ private fun MediaPanel(
                 val local = resolvedAudioLocalPaths[media.id]
                 val canPlay = !local.isNullOrBlank() ||
                     (stream?.isNotBlank() == true && !media.isEncrypted)
-                val unlockingAudio = media.isEncrypted && local.isNullOrBlank() && isResolvingMedia
+                val resolvingAudio = media.id in resolvingMediaIds
+                LaunchedEffect(media.id) {
+                    if (!canPlay) onEnsureMediaResolved(media)
+                }
+                val unlockingAudio = local.isNullOrBlank() && resolvingAudio
                 val failedEncryptedAudio =
-                    media.isEncrypted && local.isNullOrBlank() && !isResolvingMedia
+                    media.isEncrypted && local.isNullOrBlank() && !resolvingAudio
                 val rowReveal by animateFloatAsState(
                     targetValue = if (canPlay || unlockingAudio || failedEncryptedAudio) 1f else 0.4f,
                     animationSpec = tween(200, easing = FastOutSlowInEasing),
@@ -1529,6 +1604,37 @@ private fun formatProfileSheetDate(epochMs: Long): String {
     return "${shortProfileMonth(local.monthNumber)} ${local.dayOfMonth}, ${local.year}"
 }
 
+private fun profileMediaCacheKey(
+    media: ProfileSheetMedia,
+    chatId: String?,
+    viewerUserId: String?,
+): String {
+    val source = media.storagePath?.trim()?.takeIf { it.isNotEmpty() }
+        ?: media.mediaUrl?.trim()?.takeIf { it.isNotEmpty() }
+        ?: media.id
+    return listOf(
+        chatId?.trim().orEmpty(),
+        viewerUserId?.trim().orEmpty(),
+        media.id,
+        media.mediaType.name,
+        source,
+    ).joinToString("|")
+}
+
+private suspend fun resolveProfileMediaUrl(
+    media: ProfileSheetMedia,
+    connectionRepository: ConnectionRepository,
+): String? {
+    media.mediaUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    val path = media.storagePath?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    profileSignedUrlCache.get(path)?.let { return it }
+    val signed = connectionRepository.getSignedChatAttachmentUrl(path)?.trim()?.takeIf { it.isNotEmpty() }
+    if (signed != null) {
+        profileSignedUrlCache.put(path, signed)
+    }
+    return signed
+}
+
 private fun shortProfileMonth(monthNumber: Int): String = when (monthNumber) {
     1 -> "Jan"
     2 -> "Feb"
@@ -1771,6 +1877,19 @@ private fun String.isLikelyWireEncrypted(): Boolean {
     val text = trim()
     if (text.isBlank()) return false
     return text.startsWith("e2e:", ignoreCase = true)
+}
+
+private fun profileMediaVaultExtension(media: ProfileSheetMedia): String {
+    if (media.mediaType == ProfileSheetMediaType.Audio) {
+        return extensionFromMimeType(media.mimeType)
+    }
+    val mt = media.mimeType?.trim()?.lowercase().orEmpty()
+    return when {
+        "png" in mt -> "png"
+        "webp" in mt -> "webp"
+        "gif" in mt -> "gif"
+        else -> "jpg"
+    }
 }
 
 private fun extensionFromMimeType(mimeType: String?): String {

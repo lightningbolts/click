@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
@@ -105,6 +106,9 @@ internal fun ConnectionChatMessageComposer(
     mediaPickers: ChatMediaPickerHandles,
     collaborationSession: CollaborationSession? = null,
     onOpenDisposableRoll: () -> Unit = {},
+    tetherPingEnabled: Boolean = false,
+    pingTetherLoading: Boolean = false,
+    onPingTether: () -> Unit = {},
 ) {
     val messageInput by viewModel.messageInput.collectAsState()
     val messageSendError by viewModel.messageSendError.collectAsState()
@@ -483,6 +487,30 @@ internal fun ConnectionChatMessageComposer(
                                     PlatformHapticsPolicy.lightImpact()
                                     attachmentMenuExpanded = false
                                     onOpenDisposableRoll()
+                                },
+                            )
+                        }
+                        if (tetherPingEnabled) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Ping Tether",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Explore,
+                                        contentDescription = null,
+                                        tint = PrimaryBlue.copy(alpha = 0.9f),
+                                    )
+                                },
+                                enabled = !pingTetherLoading,
+                                onClick = {
+                                    if (pingTetherLoading) return@DropdownMenuItem
+                                    PlatformHapticsPolicy.successNotification()
+                                    attachmentMenuExpanded = false
+                                    onPingTether()
                                 },
                             )
                         }
