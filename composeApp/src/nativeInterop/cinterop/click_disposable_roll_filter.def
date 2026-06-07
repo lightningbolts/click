@@ -2,5 +2,3 @@ language = Objective-C
 headers = ClickDisposableRollFilter.h
 headerFilter = ClickDisposableRollFilter.h
 package = click.disposableroll.filter
-compilerOpts = -fobjc-arc -framework Foundation -framework UIKit -framework CoreImage -framework CoreGraphics
-linkerOpts = -framework Foundation -framework UIKit -framework CoreImage -framework CoreGraphics

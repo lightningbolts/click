@@ -70,39 +70,7 @@ kotlin {
             export("com.mohamedrejeb.calf:calf-ui:0.9.0")
         }
 
-        val nativeLibDir = layout.buildDirectory.dir("native/${iosTarget.name}/clickDisposableRollFilter")
-        val nativeLibFile = nativeLibDir.map { it.file("libClickDisposableRollFilter.a") }
-        val nativeObjFile = nativeLibDir.map { it.file("ClickDisposableRollFilter.o") }
-        val nativeSource = file("src/nativeInterop/objc/ClickDisposableRollFilter.m")
-        val nativeHeaderDir = file("src/nativeInterop/objc")
-        val sdk = if (iosTarget.name.contains("Simulator", ignoreCase = true)) {
-            "iphonesimulator"
-        } else {
-            "iphoneos"
-        }
-
-        val compileClickDisposableRollFilter = tasks.register<Exec>(
-            "compileClickDisposableRollFilter${iosTarget.name.replaceFirstChar { it.titlecase() }}",
-        ) {
-            group = "build"
-            inputs.file(nativeSource)
-            outputs.file(nativeLibFile)
-            doFirst {
-                nativeLibDir.get().asFile.mkdirs()
-            }
-            commandLine(
-                "bash",
-                "-c",
-                """
-                set -euo pipefail
-                xcrun --sdk ${sdk} clang -arch arm64 -c "${nativeSource.absolutePath}" \
-                  -o "${nativeObjFile.get().asFile.absolutePath}" \
-                  -fobjc-arc -I "${nativeHeaderDir.absolutePath}"
-                xcrun --sdk ${sdk} libtool -static -o "${nativeLibFile.get().asFile.absolutePath}" \
-                  "${nativeObjFile.get().asFile.absolutePath}"
-                """.trimIndent(),
-            )
-        }
+        val nativeHeaderDir = rootProject.file("iosApp/SharedNative")
 
         iosTarget.compilations.getByName("main") {
             cinterops {
@@ -112,22 +80,6 @@ kotlin {
                     compilerOpts("-I${nativeHeaderDir.absolutePath}")
                 }
             }
-            compileTaskProvider.configure {
-                dependsOn(compileClickDisposableRollFilter)
-            }
-        }
-
-        iosTarget.binaries.all {
-            linkerOpts(
-                "-L${nativeLibDir.get().asFile.absolutePath}",
-                "-lClickDisposableRollFilter",
-            )
-        }
-
-        tasks.matching {
-            it.name == "cinteropClickDisposableRollFilter${iosTarget.name.replaceFirstChar { it.titlecase() }}"
-        }.configureEach {
-            dependsOn(compileClickDisposableRollFilter)
         }
     }
 

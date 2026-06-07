@@ -111,6 +111,11 @@
 			path = ClickClip;
 			sourceTree = "<group>";
 		};
+		C0D1E2F312345678901ABCD /* SharedNative */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedNative;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,6 +153,7 @@
 			isa = PBXGroup;
 			children = (
 				7E395A86858E543D5F52EA70 /* Configuration */,
+				C0D1E2F312345678901ABCD /* SharedNative */,
 				33D81A3716AF6A964EF4070E /* iosApp */,
 				008D49CE2F75AFAE006AD3B5 /* NotificationService */,
 				A1B2C3D52F760001006AD3B5 /* ClickClip */,
@@ -191,6 +197,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A1B2C3D52F760001006AD3B5 /* ClickClip */,
+				C0D1E2F312345678901ABCD /* SharedNative */,
 			);
 			name = ClickClip;
 			productName = ClickClip;
@@ -216,6 +223,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				33D81A3716AF6A964EF4070E /* iosApp */,
+				C0D1E2F312345678901ABCD /* SharedNative */,
 			);
 			name = iosApp;
 			packageProductDependencies = (
