@@ -85,7 +85,6 @@ internal fun DisposableCameraChrome(
     val flashAlpha = remember { Animatable(0f) }
     var flashTick by remember { mutableIntStateOf(0) }
     val hasCapture = capturedImage != null
-    val filterColorFilter = DisposableRollFilters.colorFilterFor(selectedFilterIndex)
 
     LaunchedEffect(flashTick) {
         if (flashTick == 0) return@LaunchedEffect
@@ -109,20 +108,22 @@ internal fun DisposableCameraChrome(
     ) {
         val isLandscape = maxWidth > maxHeight
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-    ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { colorFilter = filterColorFilter },
+            modifier = Modifier.fillMaxSize(),
         ) {
             if (capturedImage == null) {
                 previewContent()
             } else {
-                frozenPreviewContent(capturedImage)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            colorFilter = DisposableRollFilters.colorFilterFor(selectedFilterIndex)
+                        },
+                ) {
+                    frozenPreviewContent(capturedImage)
+                }
             }
-        }
 
         Box(
             modifier = Modifier
@@ -222,7 +223,7 @@ internal fun DisposableCameraChrome(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 52.dp + extraBottomPadding)
+                .padding(bottom = 36.dp + extraBottomPadding)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -332,7 +333,7 @@ private fun DisposableCameraCaptureControls(
             }
         }
     } else {
-        // Portrait: flip beside shutter on one row; spacer balances flip width so shutter stays centered.
+        // Portrait: flip sits to the right; spacer balances flip width so shutter stays centered.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -340,7 +341,7 @@ private fun DisposableCameraCaptureControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            FlipCameraButton(onClick = onFlipCamera)
+            Spacer(modifier = Modifier.size(52.dp))
             if (capturedImage == null) {
                 ShutterButton(
                     enabled = isShutterEnabled,
@@ -353,7 +354,7 @@ private fun DisposableCameraCaptureControls(
                     onClick = onSend,
                 )
             }
-            Spacer(modifier = Modifier.size(52.dp))
+            FlipCameraButton(onClick = onFlipCamera)
         }
     }
 }
