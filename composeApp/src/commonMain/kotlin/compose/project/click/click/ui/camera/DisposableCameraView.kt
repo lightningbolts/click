@@ -2,6 +2,8 @@ package compose.project.click.click.ui.camera
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /**
  * Locket-style in-app camera for Disposable Roll captures.
@@ -12,4 +14,5 @@ expect fun DisposableCameraView(
     onPhotoConfirmed: (ByteArray) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    extraBottomPadding: Dp = 0.dp,
 )

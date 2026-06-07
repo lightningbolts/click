@@ -189,7 +189,6 @@ import compose.project.click.click.encounter.EncounterTetherManager // pragma: a
 import compose.project.click.click.encounter.EncounterTetherWidgetBridge // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.encounter.recentEncounterId // pragma: allowlist secret
-import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
@@ -303,6 +302,7 @@ fun ChatView(
     onBackPressed: () -> Unit,
     onOpenUserProfile: (String) -> Unit = {},
     onOpenGroupMembersPicker: (List<User>) -> Unit = {},
+    onOpenDisposableRoll: ((connectionId: String) -> Unit)? = null,
     /**
      * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
      * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]). When false, the chat
@@ -329,7 +329,6 @@ fun ChatView(
     val editingMessageId by viewModel.editingMessageId.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val collaborationSessions by CollaborationSessionManager.sessions.collectAsState()
-    var showDisposableCamera by remember { mutableStateOf(false) }
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
@@ -1317,7 +1316,6 @@ fun ChatView(
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            val collaborationSession = collaborationSessions[chatDetails.connection.id]
                             ConnectionChatMessageComposer(
                                 viewModel = viewModel,
                                 chatDetails = chatDetails,
@@ -1325,8 +1323,9 @@ fun ChatView(
                                 editingMessageId = editingMessageId,
                                 replyingTo = replyingTo,
                                 mediaPickers = mediaPickers,
-                                collaborationSession = collaborationSession,
-                                onOpenDisposableRoll = { showDisposableCamera = true },
+                                onOpenDisposableRoll = {
+                                    onOpenDisposableRoll?.invoke(chatDetails.connection.id)
+                                },
                                 tetherPingEnabled = tetherChannelId.isNotBlank() && !currentUserId.isNullOrBlank(),
                                 pingTetherLoading = tetherSenderAck != null,
                                 onPingTether = {
@@ -1536,20 +1535,5 @@ fun ChatView(
             },
         )
     }
-        val activeRollSession = collaborationSessions[chatId]
-        if (showDisposableCamera && activeRollSession != null) {
-            DisposableCameraView(
-                onPhotoConfirmed = { bytes ->
-                    viewModel.sendDisposableRollPhoto(
-                        bytes = bytes,
-                        encounterId = activeRollSession.encounterId,
-                        collaborationTtlIso = activeRollSession.collaborationTtlIso,
-                    )
-                    showDisposableCamera = false
-                },
-                onDismiss = { showDisposableCamera = false },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
     } // End outer Box
 }

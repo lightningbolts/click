@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,10 +96,13 @@ actual fun PlatformBottomBar(
         else viewController.view.safeAreaInsets.useContents { bottom.dp }
     }
 
-    LaunchedEffect(visible, tabBar, safeAreaBottom) {
+    SideEffect {
         tabBar.hidden = !visible
         tabBar.alpha = if (visible) 1.0 else 0.0
         tabBar.userInteractionEnabled = visible
+    }
+
+    LaunchedEffect(visible, tabBar, safeAreaBottom) {
         if (!visible) {
             AppScreenChromeState.updateBottomChromeHeight(
                 safeAreaBottom + AppScreenDefaults.ExtraScrollBottomPadding,

@@ -71,6 +71,7 @@ import compose.project.click.click.data.models.isPendingSync
 import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.collaboration.CollaborationSessionManager
 import compose.project.click.click.ui.camera.DisposableCameraView
+import compose.project.click.click.ui.camera.rememberDisposableRollExtraBottomPadding
 import compose.project.click.click.ui.components.ConnectionRevealOverlay
 import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
@@ -1149,7 +1150,13 @@ fun App() {
             }
 
             val hideMainBottomBar =
-                isConnectionsChatOpen || hubChatArgs != null
+                isConnectionsChatOpen ||
+                    hubChatArgs != null ||
+                    showConnectionDisposableRoll ||
+                    disposableRollOpening
+            val disposableRollBottomPadding = rememberDisposableRollExtraBottomPadding(
+                isOpenedFromChat = isConnectionsChatOpen,
+            )
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
@@ -1987,6 +1994,7 @@ fun App() {
                                     showConnectionDisposableRoll = false
                                     pendingRollSession = null
                                 },
+                                extraBottomPadding = disposableRollBottomPadding,
                                 modifier = Modifier
                                     .fillMaxSize(),
                             )

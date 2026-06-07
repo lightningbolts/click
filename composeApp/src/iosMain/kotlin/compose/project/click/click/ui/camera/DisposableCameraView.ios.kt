@@ -5,13 +5,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
@@ -22,6 +26,7 @@ import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.refTo
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.launch
 import platform.AVFoundation.*
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSData
@@ -39,7 +44,7 @@ import platform.posix.memcpy
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private class PhotoPreviewView(
-    private val device: AVCaptureDevice?,
+    private var device: AVCaptureDevice?,
 ) : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0)) {
     var previewLayer: AVCaptureVideoPreviewLayer? = null
         set(value) {
@@ -50,6 +55,10 @@ private class PhotoPreviewView(
         }
 
     private var lastZoomFactor = 1.0
+
+    fun updateDevice(newDevice: AVCaptureDevice?) {
+        device = newDevice
+    }
 
     init {
         val pinch = UIPinchGestureRecognizer(target = this, action = sel_registerName("handlePinch:"))
@@ -98,7 +107,7 @@ private class PhotoCaptureDelegate(
     private val onComplete: () -> Unit,
 ) : NSObject(), AVCapturePhotoCaptureDelegateProtocol {
     override fun captureOutput(
-        output: platform.AVFoundation.AVCapturePhotoOutput,
+        output: AVCapturePhotoOutput,
         didFinishProcessingPhoto: AVCapturePhoto,
         error: platform.Foundation.NSError?,
     ) {
@@ -156,14 +165,24 @@ private fun runOnCameraQueue(block: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
+private fun captureDevice(position: Long): AVCaptureDevice? =
+    AVCaptureDevice.defaultDeviceWithDeviceType(
+        AVCaptureDeviceTypeBuiltInWideAngleCamera,
+        mediaType = AVMediaTypeVideo,
+        position = position,
+    )
+
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 @Composable
 actual fun DisposableCameraView(
     onPhotoConfirmed: (ByteArray) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier,
+    extraBottomPadding: Dp,
 ) {
     val currentOnPhotoConfirmed by rememberUpdatedState(onPhotoConfirmed)
+    val coroutineScope = rememberCoroutineScope()
     var permissionState by remember {
         mutableStateOf<DisposableCameraPermissionState>(DisposableCameraPermissionState.Checking)
     }
@@ -173,8 +192,15 @@ actual fun DisposableCameraView(
     var setupError by remember { mutableStateOf<String?>(null) }
     var retainedPhotoDelegate by remember { mutableStateOf<PhotoCaptureDelegate?>(null) }
     var isDisposed by remember { mutableStateOf(false) }
+    var useFrontCamera by remember { mutableStateOf(true) }
+    var selectedFilterIndex by remember { mutableIntStateOf(0) }
+    var isSending by remember { mutableStateOf(false) }
+    var previewHost by remember { mutableStateOf<PhotoPreviewView?>(null) }
 
-    val device = remember { AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo) }
+    val frontDevice = remember { captureDevice(AVCaptureDevicePositionFront) }
+    val backDevice = remember { captureDevice(AVCaptureDevicePositionBack) }
+    var activeDevice by remember { mutableStateOf(frontDevice) }
+
     val captureSession = remember { AVCaptureSession() }
     val photoOutput = remember { AVCapturePhotoOutput() }
     val sessionPreviewLayer = remember {
@@ -229,79 +255,96 @@ actual fun DisposableCameraView(
         DisposableCameraPermissionState.Granted -> Unit
     }
 
-    DisposableEffect(device) {
-        var disposed = false
-        isDisposed = false
-
+    fun configureSession(device: AVCaptureDevice?) {
         if (device == null) {
-            setupError = "Camera not available"
-            setupComplete = false
-            onDispose {
-                disposed = true
-                isDisposed = true
+            runOnMainQueue {
+                setupError = "Camera not available"
+                setupComplete = false
             }
-        } else {
-            runOnCameraQueue {
-                runCatching {
-                    var committed = false
-                    captureSession.beginConfiguration()
-                    try {
-                        captureSession.sessionPreset = AVCaptureSessionPresetPhoto
+            return
+        }
+        runOnCameraQueue {
+            runCatching {
+                if (captureSession.isRunning()) {
+                    captureSession.stopRunning()
+                }
+                captureSession.beginConfiguration()
+                var committed = false
+                try {
+                    captureSession.inputs.forEach { input ->
+                        captureSession.removeInput(input as AVCaptureInput)
+                    }
+                    captureSession.sessionPreset = AVCaptureSessionPresetPhoto
 
-                        val input = AVCaptureDeviceInput.deviceInputWithDevice(device, error = null)
-                        if (input != null && captureSession.canAddInput(input)) {
-                            captureSession.addInput(input)
-                        } else {
-                            throw IllegalStateException("Could not add camera input")
-                        }
+                    val input = AVCaptureDeviceInput.deviceInputWithDevice(device, error = null)
+                        ?: throw IllegalStateException("Could not add camera input")
+                    if (!captureSession.canAddInput(input)) {
+                        throw IllegalStateException("Could not add camera input")
+                    }
+                    captureSession.addInput(input)
 
+                    if (!captureSession.outputs.contains(photoOutput)) {
                         if (captureSession.canAddOutput(photoOutput)) {
                             captureSession.addOutput(photoOutput)
                         } else {
                             throw IllegalStateException("Could not add photo output")
                         }
-
-                        captureSession.commitConfiguration()
-                        committed = true
-                    } finally {
-                        if (!committed) {
-                            runCatching { captureSession.commitConfiguration() }
-                        }
                     }
 
-                    if (!captureSession.isRunning()) {
-                        captureSession.startRunning()
-                    }
-                }.onSuccess {
-                    runOnMainQueue {
-                        if (!disposed) {
-                            setupComplete = true
-                            setupError = null
-                        }
-                    }
-                }.onFailure { throwable ->
-                    runOnMainQueue {
-                        if (!disposed) {
-                            setupComplete = false
-                            setupError = throwable.message ?: "Camera setup failed"
-                        }
+                    captureSession.commitConfiguration()
+                    committed = true
+                } finally {
+                    if (!committed) {
+                        runCatching { captureSession.commitConfiguration() }
                     }
                 }
-            }
 
-            onDispose {
-                disposed = true
-                isDisposed = true
-                setupComplete = false
-                capturedImage = null
-                retainedPhotoDelegate = null
-                runOnCameraQueue {
-                    if (captureSession.isRunning()) {
-                        captureSession.stopRunning()
+                if (!captureSession.isRunning()) {
+                    captureSession.startRunning()
+                }
+            }.onSuccess {
+                runOnMainQueue {
+                    if (!isDisposed) {
+                        setupComplete = true
+                        setupError = null
+                        previewHost?.updateDevice(device)
+                    }
+                }
+            }.onFailure { throwable ->
+                runOnMainQueue {
+                    if (!isDisposed) {
+                        setupComplete = false
+                        setupError = throwable.message ?: "Camera setup failed"
                     }
                 }
             }
         }
+    }
+
+    DisposableEffect(Unit) {
+        isDisposed = false
+        activeDevice = if (useFrontCamera) frontDevice else backDevice
+        configureSession(activeDevice)
+        onDispose {
+            isDisposed = true
+            setupComplete = false
+            capturedImage = null
+            retainedPhotoDelegate = null
+            runOnCameraQueue {
+                if (captureSession.isRunning()) {
+                    captureSession.stopRunning()
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(useFrontCamera) {
+        if (isDisposed) return@LaunchedEffect
+        val nextDevice = if (useFrontCamera) frontDevice else backDevice
+        if (nextDevice == activeDevice) return@LaunchedEffect
+        activeDevice = nextDevice
+        setupComplete = false
+        configureSession(nextDevice)
     }
 
     if (setupError != null) {
@@ -317,7 +360,15 @@ actual fun DisposableCameraView(
     DisposableCameraChrome(
         modifier = modifier,
         capturedImage = capturedImage,
-        isShutterEnabled = capturedImage == null && setupComplete && !isCapturing,
+        isShutterEnabled = capturedImage == null && setupComplete && !isCapturing && !isSending,
+        selectedFilterIndex = selectedFilterIndex,
+        onFilterIndexChange = { selectedFilterIndex = it },
+        onFlipCamera = {
+            if (capturedImage == null && !isCapturing) {
+                useFrontCamera = !useFrontCamera
+            }
+        },
+        extraBottomPadding = extraBottomPadding,
         onShutter = {
             if (!setupComplete || isCapturing) return@DisposableCameraChrome
             isCapturing = true
@@ -352,22 +403,39 @@ actual fun DisposableCameraView(
         },
         onSend = {
             val bytes = capturedImage ?: return@DisposableCameraChrome
-            capturedImage = null
-            currentOnPhotoConfirmed(bytes)
+            if (isSending) return@DisposableCameraChrome
+            isSending = true
+            coroutineScope.launch {
+                val filtered = applyDisposableRollFilterToJpeg(bytes, selectedFilterIndex)
+                capturedImage = null
+                isSending = false
+                currentOnPhotoConfirmed(filtered)
+            }
         },
         onDismiss = onDismiss,
         previewContent = {
             UIKitView(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (useFrontCamera) {
+                            Modifier.graphicsLayer { scaleX = -1f }
+                        } else {
+                            Modifier
+                        },
+                    ),
                 factory = {
-                    PhotoPreviewView(device).apply {
+                    PhotoPreviewView(activeDevice).apply {
                         backgroundColor = UIColor.blackColor
                         clipsToBounds = true
                         previewLayer = sessionPreviewLayer
+                        previewHost = this
                     }
                 },
                 update = { view ->
-                    (view as? PhotoPreviewView)?.setNeedsLayout()
+                    val host = view as? PhotoPreviewView
+                    host?.updateDevice(activeDevice)
+                    host?.setNeedsLayout()
                 },
                 properties = UIKitInteropProperties(
                     isInteractive = true,
@@ -379,7 +447,14 @@ actual fun DisposableCameraView(
             UIKitView(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(16.dp)),
+                    .clip(RoundedCornerShape(16.dp))
+                    .then(
+                        if (useFrontCamera) {
+                            Modifier.graphicsLayer { scaleX = -1f }
+                        } else {
+                            Modifier
+                        },
+                    ),
                 factory = {
                     UIImageView().apply {
                         contentMode = UIViewContentMode.UIViewContentModeScaleAspectFill

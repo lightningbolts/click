@@ -269,6 +269,7 @@ fun ConnectionsScreen(
                                 integrateTimestampPeekWithSwipeBackContainer = true,
                                 onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
                                 parentInteractiveBackSwipePx = iosChatSwipeDragPx,
+                                onOpenDisposableRoll = onOpenDisposableRoll,
                             )
                         }
                     )
@@ -314,6 +315,7 @@ fun ConnectionsScreen(
                     onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
                     onOpenUserProfile = { profileUserId = it },
                     onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
+                    onOpenDisposableRoll = onOpenDisposableRoll,
                 )
             }
         }

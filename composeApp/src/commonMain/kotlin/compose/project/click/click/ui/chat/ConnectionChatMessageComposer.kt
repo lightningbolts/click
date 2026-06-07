@@ -84,7 +84,6 @@ import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
-import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 
@@ -104,7 +103,6 @@ internal fun ConnectionChatMessageComposer(
     editingMessageId: String?,
     replyingTo: MessageWithUser?,
     mediaPickers: ChatMediaPickerHandles,
-    collaborationSession: CollaborationSession? = null,
     onOpenDisposableRoll: () -> Unit = {},
     tetherPingEnabled: Boolean = false,
     pingTetherLoading: Boolean = false,
@@ -115,7 +113,6 @@ internal fun ConnectionChatMessageComposer(
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
-    val disposableRollActive = collaborationSession?.isRollActive() == true
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
 
@@ -468,28 +465,26 @@ internal fun ConnectionChatMessageComposer(
                         tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
                         shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
                     ) {
-                        if (disposableRollActive) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Disposable Roll",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Filled.PhotoCamera,
-                                        contentDescription = null,
-                                        tint = PrimaryBlue.copy(alpha = 0.9f),
-                                    )
-                                },
-                                onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    attachmentMenuExpanded = false
-                                    onOpenDisposableRoll()
-                                },
-                            )
-                        }
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "Roll",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.PhotoCamera,
+                                    contentDescription = null,
+                                    tint = PrimaryBlue.copy(alpha = 0.9f),
+                                )
+                            },
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                attachmentMenuExpanded = false
+                                onOpenDisposableRoll()
+                            },
+                        )
                         if (tetherPingEnabled) {
                             DropdownMenuItem(
                                 text = {
