@@ -50,15 +50,12 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -481,42 +478,13 @@ fun ProfileBottomSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(
-                onClick = onMessage,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Icon(Icons.Outlined.Message, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Message", fontWeight = FontWeight.SemiBold)
-            }
-            if (state.canNudge) {
-                OutlinedButton(
-                    onClick = onNudge,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(Icons.Outlined.NotificationsActive, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Nudge", fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-
-        if (onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank()) {
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = onOpenDisposableRoll,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Disposable Roll", fontWeight = FontWeight.Medium)
-            }
-        }
+        ProfileActionGrid(
+            showNudge = state.canNudge,
+            showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
+            onMessage = onMessage,
+            onNudge = onNudge,
+            onOpenDisposableRoll = onOpenDisposableRoll,
+        )
 
         Spacer(Modifier.height(18.dp))
 
@@ -966,6 +934,105 @@ private fun ProfileSheetHeader(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileActionGrid(
+    showNudge: Boolean,
+    showDisposableRoll: Boolean,
+    onMessage: () -> Unit,
+    onNudge: () -> Unit,
+    onOpenDisposableRoll: (() -> Unit)?,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ProfileActionCard(
+                label = "Message",
+                icon = Icons.Outlined.Message,
+                onClick = onMessage,
+                usePrimaryBorder = true,
+                modifier = Modifier.weight(1f),
+            )
+            when {
+                showNudge -> ProfileActionCard(
+                    label = "Nudge",
+                    icon = Icons.Outlined.NotificationsActive,
+                    onClick = onNudge,
+                    modifier = Modifier.weight(1f),
+                )
+                showDisposableRoll && onOpenDisposableRoll != null -> ProfileActionCard(
+                    label = "Disposable Roll",
+                    icon = Icons.Filled.PhotoCamera,
+                    onClick = onOpenDisposableRoll,
+                    usePrimaryBorder = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        if (showNudge && showDisposableRoll && onOpenDisposableRoll != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ProfileActionCard(
+                    label = "Disposable Roll",
+                    icon = Icons.Filled.PhotoCamera,
+                    onClick = onOpenDisposableRoll,
+                    usePrimaryBorder = true,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileActionCard(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    usePrimaryBorder: Boolean = false,
+) {
+    GlassCard(
+        modifier = modifier.heightIn(min = 52.dp),
+        onClick = onClick,
+        usePrimaryBorder = usePrimaryBorder,
+        contentPadding = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (usePrimaryBorder) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

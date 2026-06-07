@@ -68,6 +68,7 @@ import compose.project.click.click.data.models.OnboardingState
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isPublicUserProfileIncomplete
 import compose.project.click.click.data.models.isPendingSync
+import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.collaboration.CollaborationSessionManager
 import compose.project.click.click.ui.camera.DisposableCameraView
 import compose.project.click.click.ui.components.ConnectionRevealOverlay
@@ -384,6 +385,8 @@ fun App() {
     var revealConnectionId by remember { mutableStateOf<String?>(null) }
     var showConnectionDisposableRoll by remember { mutableStateOf(false) }
     var connectionRollConnectionId by remember { mutableStateOf<String?>(null) }
+    var pendingRollSession by remember { mutableStateOf<CollaborationSession?>(null) }
+    var disposableRollOpening by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         launch {
@@ -1059,9 +1062,22 @@ fun App() {
             val openConnectionDisposableRoll: (String?) -> Unit = openConnectionDisposableRoll@{ connectionId ->
                 val cid = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return@openConnectionDisposableRoll
                 connectionScope.launch {
-                    if (connectionViewModel.ensureCollaborationSessionReady(cid) != null) {
-                        connectionRollConnectionId = cid
-                        showConnectionDisposableRoll = true
+                    disposableRollOpening = true
+                    try {
+                        connectionViewModel.ensureCollaborationSessionReady(cid)
+                            .onSuccess { session ->
+                                connectionRollConnectionId = cid
+                                pendingRollSession = session
+                                showConnectionDisposableRoll = true
+                            }
+                            .onFailure { error ->
+                                val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
+                                    ?.take(160)
+                                    ?: "Couldn't open Disposable Roll"
+                                snackbarHostState.showSnackbar(message)
+                            }
+                    } finally {
+                        disposableRollOpening = false
                     }
                 }
             }
@@ -1424,6 +1440,10 @@ fun App() {
                                                     phase = ConnectionRevealPhase.Connecting,
                                                 )
                                             },
+                                            disposableRollOpening = disposableRollOpening,
+                                            onOpenDisposableRoll = { cid ->
+                                                openConnectionDisposableRoll(cid)
+                                            },
                                         )
                                     }
 
@@ -1773,6 +1793,10 @@ fun App() {
                                 peerUserId = reconnectPeerId,
                                 currentUserId = currentUser.id,
                                 lockIntentInProgress = calendarLockInProgress,
+                                disposableRollOpening = disposableRollOpening,
+                                onOpenDisposableRoll = { cid ->
+                                    openConnectionDisposableRoll(cid)
+                                },
                                 onLockIntent = { gap: AvailabilityOverlapGap ->
                                     connectionScope.launch {
                                         calendarLockInProgress = true
@@ -1920,7 +1944,22 @@ fun App() {
                         }
 
                         val rollConnectionId = connectionRollConnectionId
-                        val activeRollSession = rollConnectionId?.let { collaborationSessions[it] }
+                        val activeRollSession = pendingRollSession
+                            ?: rollConnectionId?.let { collaborationSessions[it] }
+                        if (disposableRollOpening) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(10_400f)
+                                    .background(Color.Black.copy(alpha = 0.55f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AdaptiveCircularProgressIndicator(
+                                    modifier = Modifier.size(40.dp),
+                                    color = PrimaryBlue,
+                                )
+                            }
+                        }
                         if (showConnectionDisposableRoll && rollConnectionId != null && activeRollSession != null) {
                             DisposableCameraView(
                                 onPhotoConfirmed = { bytes ->
@@ -1934,8 +1973,12 @@ fun App() {
                                         )
                                     }
                                     showConnectionDisposableRoll = false
+                                    pendingRollSession = null
                                 },
-                                onDismiss = { showConnectionDisposableRoll = false },
+                                onDismiss = {
+                                    showConnectionDisposableRoll = false
+                                    pendingRollSession = null
+                                },
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .zIndex(10_500f),

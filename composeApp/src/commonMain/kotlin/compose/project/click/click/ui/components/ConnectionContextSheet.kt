@@ -20,9 +20,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -46,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
@@ -219,6 +222,78 @@ private fun StackedProfileAvatarRow(
     }
 }
 
+@Composable
+private fun DisposableRollActionCard(
+    enabled: Boolean,
+    opening: Boolean,
+    onClick: () -> Unit,
+) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled || opening) 1f else 0.56f),
+        onClick = if (enabled) onClick else null,
+        usePrimaryBorder = true,
+        contentPadding = 14.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.PhotoCamera,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(23.dp),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Disposable Roll",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassSheetTokens.OnOled,
+                )
+                Text(
+                    text = if (enabled || opening) {
+                        "Open the shared camera drop for this connection."
+                    } else {
+                        "Available once this connection finishes saving."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = GlassSheetTokens.OnOledMuted,
+                )
+            }
+            if (opening) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Text(
+                    text = "Open",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionContextSheet(
@@ -237,6 +312,8 @@ fun ConnectionContextSheet(
     currentUserId: String? = null,
     lockIntentInProgress: Boolean = false,
     onLockIntent: ((AvailabilityOverlapGap) -> Unit)? = null,
+    disposableRollOpening: Boolean = false,
+    onOpenDisposableRoll: ((String) -> Unit)? = null,
 ) {
     val hourOfDay = remember {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
@@ -328,6 +405,10 @@ fun ConnectionContextSheet(
             allTags.firstOrNull { it.id == selectedTagId }
         }
     }
+
+    val disposableRollConnectionId = connectionId?.trim().orEmpty()
+    val canOpenDisposableRoll =
+        disposableRollConnectionId.isNotEmpty() && onOpenDisposableRoll != null && !disposableRollOpening
 
     val titleText: String
     val subtitleText: String
@@ -553,42 +634,55 @@ fun ConnectionContextSheet(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TextButton(
-                    onClick = dismissSheet,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Skip")
+                if (onOpenDisposableRoll != null) {
+                    DisposableRollActionCard(
+                        enabled = canOpenDisposableRoll,
+                        opening = disposableRollOpening,
+                        onClick = { onOpenDisposableRoll.invoke(disposableRollConnectionId) },
+                    )
                 }
-                if (presentation == ConnectionContextPresentation.ReconnectEncounter) {
-                    Button(
-                        onClick = { onSaveEncounter?.invoke() },
-                        modifier = Modifier
-                            .weight(1f)
-                            .scale(springBtn),
-                        enabled = !encounterSaveInProgress && onSaveEncounter != null,
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    TextButton(
+                        onClick = dismissSheet,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        if (encounterSaveInProgress) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text("Save Encounter")
-                        }
+                        Text("Skip")
                     }
-                } else {
-                    Button(
-                        onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .scale(springBtn),
-                        enabled = !isCustomSelectionInvalid
-                    ) {
-                        Text("Connect")
+                    if (presentation == ConnectionContextPresentation.ReconnectEncounter) {
+                        Button(
+                            onClick = { onSaveEncounter?.invoke() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .scale(springBtn),
+                            enabled = !encounterSaveInProgress && onSaveEncounter != null,
+                        ) {
+                            if (encounterSaveInProgress) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Text("Save Encounter")
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .scale(springBtn),
+                            enabled = !isCustomSelectionInvalid
+                        ) {
+                            Text("Connect")
+                        }
                     }
                 }
             }

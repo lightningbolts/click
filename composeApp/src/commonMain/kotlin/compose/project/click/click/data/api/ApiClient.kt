@@ -220,6 +220,12 @@ data class CollaborationSessionPostResponse(
     @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
 )
 
+/** Thrown for non-2xx click-web responses; carries HTTP status for fallback routing. */
+class ClickWebRequestException(
+    val statusCode: Int,
+    message: String,
+) : Exception(message)
+
 @Serializable
 data class WidgetVibePayloadDto(
     @SerialName("status_text") val statusText: String,
@@ -488,10 +494,25 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
     }
 
     private suspend fun readClickWebErrorMessage(response: HttpResponse): String {
+        val status = response.status.value
         val fromJson = runCatching { response.body<ErrorResponse>() }.getOrNull()?.error?.trim().orEmpty()
-        if (fromJson.isNotEmpty()) return fromJson
-        return runCatching { response.body<String>() }.getOrNull()?.trim().orEmpty()
-            .ifEmpty { "Request failed (${response.status.value})" }
+        if (fromJson.isNotEmpty()) return fromJson.take(200)
+        val raw = runCatching { response.bodyAsText() }.getOrNull()?.trim().orEmpty()
+        if (raw.contains("<!DOCTYPE", ignoreCase = true) || raw.contains("<html", ignoreCase = true)) {
+            return when (status) {
+                404 -> "Server update required for Disposable Roll (missing API route)."
+                401, 403 -> "Session expired. Sign in again."
+                in 500..599 -> "Server error ($status). Try again later."
+                else -> "Request failed ($status)."
+            }
+        }
+        return raw.take(200).ifEmpty { "Request failed ($status)" }
+    }
+
+    private suspend fun clickWebFailure(response: HttpResponse): Result<Nothing> {
+        val status = response.status.value
+        val message = readClickWebErrorMessage(response)
+        return Result.failure(ClickWebRequestException(status, message))
     }
 
     /**
@@ -1017,10 +1038,41 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             if (response.status.value in 200..299) {
                 Result.success(response.body<CollaborationSessionPostResponse>())
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                clickWebFailure(response)
             }
         } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+            clickWebFailure(e.response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Fallback when the dedicated collaboration-session route is not deployed yet.
+     * POST `/api/connections/encounter` with `{ connection_id, open_disposable_roll: true }`.
+     */
+    suspend fun postOpenCollaborationSessionFallback(connectionId: String): Result<CollaborationSessionPostResponse> {
+        val cid = connectionId.trim()
+        if (cid.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
+        return try {
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
+                contentType(ContentType.Application.Json)
+                // encodeDefaults is off — must emit open_disposable_roll explicitly or the
+                // server falls through to the legacy user_id/peer_id encounter validator.
+                setBody(
+                    buildJsonObject {
+                        put("connection_id", cid)
+                        put("open_disposable_roll", true)
+                    },
+                )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<CollaborationSessionPostResponse>())
+            } else {
+                clickWebFailure(response)
+            }
+        } catch (e: ClientRequestException) {
+            clickWebFailure(e.response)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -2,17 +2,16 @@ package compose.project.click.click.ui.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -22,18 +21,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.Executors
 
 @Composable
@@ -44,6 +42,7 @@ actual fun DisposableCameraView(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnPhotoConfirmed by rememberUpdatedState(onPhotoConfirmed)
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -58,58 +57,142 @@ actual fun DisposableCameraView(
         if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    if (!hasCameraPermission) return
+    if (!hasCameraPermission) {
+        DisposableCameraFallback(
+            title = "Camera permission needed",
+            message = "Disposable Roll uses the camera only for this shared drop.",
+            primaryActionLabel = "Enable camera",
+            onPrimaryAction = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+        return
+    }
 
-    var capturedImage by remember { mutableStateOf<ByteArray?>(null) }
-    var vaultAnimating by remember { mutableStateOf(false) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    var setupError by remember { mutableStateOf<String?>(null) }
+    var isCapturing by remember { mutableStateOf(false) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
+    val isDisposed = remember { AtomicBoolean(false) }
     val captureExecutor = remember { Executors.newSingleThreadExecutor() }
+    val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            captureExecutor.shutdown()
-            capturedImage = null
+    fun unbindCamera() {
+        runCatching { cameraProvider?.unbindAll() }
+        imageCapture = null
+        camera = null
+        zoomRatio = 1f
+    }
+
+    fun bindCameraIfReady() {
+        val provider = cameraProvider ?: return
+        val view = previewView ?: return
+        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+
+        runCatching {
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(view.surfaceProvider)
+            }
+            val capture = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
+
+            provider.unbindAll()
+            imageCapture = capture
+            camera = provider.bindToLifecycle(
+                lifecycleOwner,
+                CameraSelector.DEFAULT_BACK_CAMERA,
+                preview,
+                capture,
+            )
+            setupError = null
+        }.onFailure { throwable ->
             imageCapture = null
             camera = null
+            setupError = throwable.message ?: "Camera setup failed"
         }
     }
 
+    DisposableEffect(Unit) {
+        isDisposed.set(false)
+        onDispose {
+            isDisposed.set(true)
+            unbindCamera()
+            captureExecutor.shutdown()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, cameraProvider, previewView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> bindCameraIfReady()
+                Lifecycle.Event.ON_STOP,
+                Lifecycle.Event.ON_DESTROY -> unbindCamera()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        bindCameraIfReady()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            unbindCamera()
+        }
+    }
+
+    if (setupError != null) {
+        DisposableCameraFallback(
+            title = "Camera unavailable",
+            message = setupError ?: "The camera could not be prepared. Close and try again.",
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+        return
+    }
+
     DisposableCameraChrome(
-        capturedImage = capturedImage,
+        modifier = modifier,
+        isShutterEnabled = imageCapture != null && !isCapturing,
         onShutter = {
             val capture = imageCapture ?: return@DisposableCameraChrome
+            isCapturing = true
             capture.takePicture(
                 captureExecutor,
                 object : ImageCapture.OnImageCapturedCallback() {
-                    override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
-                        val buffer = image.planes[0].buffer
-                        val bytes = ByteArray(buffer.remaining())
-                        buffer.get(bytes)
-                        image.close()
-                        capturedImage = bytes
+                    override fun onCaptureSuccess(image: ImageProxy) {
+                        val bytes = try {
+                            val buffer = image.planes.firstOrNull()?.buffer
+                            if (buffer == null) {
+                                ByteArray(0)
+                            } else {
+                                ByteArray(buffer.remaining()).also { buffer.get(it) }
+                            }
+                        } finally {
+                            image.close()
+                        }
+
+                        mainExecutor.execute {
+                            if (isDisposed.get()) return@execute
+                            isCapturing = false
+                            if (bytes.isNotEmpty()) {
+                                currentOnPhotoConfirmed(bytes)
+                            }
+                        }
                     }
 
                     override fun onError(exception: ImageCaptureException) {
-                        // no-op
+                        mainExecutor.execute {
+                            if (isDisposed.get()) return@execute
+                            isCapturing = false
+                            setupError = exception.message ?: "Photo capture failed"
+                        }
                     }
                 },
             )
         },
-        onRetake = {
-            capturedImage = null
-            vaultAnimating = false
-        },
-        onConfirmSend = {
-            val bytes = capturedImage
-            capturedImage = null
-            vaultAnimating = false
-            if (bytes != null) onPhotoConfirmed(bytes)
-        },
         onDismiss = onDismiss,
-        vaultAnimating = vaultAnimating,
-        onVaultAnimationStarted = { vaultAnimating = true },
         previewContent = {
             AndroidView(
                 modifier = Modifier
@@ -125,44 +208,28 @@ actual fun DisposableCameraView(
                         }
                     },
                 factory = { ctx ->
-                    val previewView = PreviewView(ctx)
-                    val providerFuture = ProcessCameraProvider.getInstance(ctx)
-                    providerFuture.addListener({
-                        val provider = providerFuture.get()
-                        val preview = Preview.Builder().build().also {
-                            it.setSurfaceProvider(previewView.surfaceProvider)
-                        }
-                        val capture = ImageCapture.Builder()
-                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                            .build()
-                        imageCapture = capture
-                        provider.unbindAll()
-                        val cam = provider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            capture,
-                        )
-                        camera = cam
-                    }, ContextCompat.getMainExecutor(ctx))
-                    previewView
+                    PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        previewView = this
+                        val providerFuture = ProcessCameraProvider.getInstance(ctx)
+                        providerFuture.addListener({
+                            if (isDisposed.get()) return@addListener
+                            runCatching {
+                                cameraProvider = providerFuture.get()
+                                bindCameraIfReady()
+                            }.onFailure { throwable ->
+                                setupError = throwable.message ?: "Camera setup failed"
+                            }
+                        }, ContextCompat.getMainExecutor(ctx))
+                    }
+                },
+                update = {
+                    if (previewView !== it) {
+                        previewView = it
+                    }
                 },
             )
-        },
-        frozenPreviewContent = { bytes ->
-            val bitmap = remember(bytes) {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            }
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp)),
-                )
-            }
         },
     )
 }

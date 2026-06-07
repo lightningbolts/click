@@ -164,7 +164,7 @@ class ConnectionViewModel : ViewModel() {
         }
         viewModelScope.launch {
             if (CollaborationSessionManager.forConnection(cid) != null) return@launch
-            repository.openCollaborationSession(cid)?.let { session ->
+            repository.openCollaborationSession(cid).onSuccess { session ->
                 CollaborationSessionManager.activate(session)
             }
         }
@@ -678,13 +678,15 @@ class ConnectionViewModel : ViewModel() {
     }
 
     /** Ensures a server-backed collaboration session exists for Disposable Roll. */
-    suspend fun ensureCollaborationSessionReady(connectionId: String): CollaborationSession? {
+    suspend fun ensureCollaborationSessionReady(connectionId: String): Result<CollaborationSession> {
         val cid = connectionId.trim()
-        if (cid.isEmpty()) return null
-        CollaborationSessionManager.forConnection(cid)?.let { return it }
-        val session = repository.openCollaborationSession(cid) ?: return null
-        CollaborationSessionManager.activate(session)
-        return session
+        if (cid.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Invalid connection"))
+        }
+        CollaborationSessionManager.forConnection(cid)?.let { return Result.success(it) }
+        return repository.openCollaborationSession(cid).onSuccess { session ->
+            CollaborationSessionManager.activate(session)
+        }
     }
 
     /**

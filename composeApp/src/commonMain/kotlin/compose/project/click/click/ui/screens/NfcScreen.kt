@@ -81,6 +81,8 @@ fun NfcScreen(
     onConnectionCreated: (String) -> Unit,
     onBackPressed: () -> Unit,
     onProximityFinalizeStart: () -> Unit = {},
+    disposableRollOpening: Boolean = false,
+    onOpenDisposableRoll: ((String) -> Unit)? = null,
 ) {
     val connectionState by connectionViewModel.connectionState.collectAsState()
     val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
@@ -395,6 +397,8 @@ fun NfcScreen(
                         peerUserId = reconnectPeerId,
                         currentUserId = userId,
                         lockIntentInProgress = calendarLockInProgress,
+                        disposableRollOpening = disposableRollOpening,
+                        onOpenDisposableRoll = onOpenDisposableRoll,
                         onLockIntent = { gap: AvailabilityOverlapGap ->
                             scope.launch {
                                 calendarLockInProgress = true
