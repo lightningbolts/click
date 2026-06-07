@@ -9,17 +9,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.refTo
+import kotlinx.cinterop.usePinned
 import platform.AVFoundation.*
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSData
+import platform.Foundation.create
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.kCATransactionDisableActions
 import platform.UIKit.*
@@ -123,6 +129,12 @@ private fun NSData.toByteArray(): ByteArray {
     return out
 }
 
+@OptIn(ExperimentalForeignApi::class)
+private fun ByteArray.toNSData(): NSData =
+    usePinned { pinned ->
+        NSData.create(bytes = pinned.addressOf(0), length = size.toULong())
+    }
+
 private sealed class DisposableCameraPermissionState {
     object Checking : DisposableCameraPermissionState()
     object Granted : DisposableCameraPermissionState()
@@ -156,6 +168,7 @@ actual fun DisposableCameraView(
         mutableStateOf<DisposableCameraPermissionState>(DisposableCameraPermissionState.Checking)
     }
     var isCapturing by remember { mutableStateOf(false) }
+    var capturedImage by remember { mutableStateOf<ByteArray?>(null) }
     var setupComplete by remember { mutableStateOf(false) }
     var setupError by remember { mutableStateOf<String?>(null) }
     var retainedPhotoDelegate by remember { mutableStateOf<PhotoCaptureDelegate?>(null) }
@@ -280,6 +293,7 @@ actual fun DisposableCameraView(
                 disposed = true
                 isDisposed = true
                 setupComplete = false
+                capturedImage = null
                 retainedPhotoDelegate = null
                 runOnCameraQueue {
                     if (captureSession.isRunning()) {
@@ -302,7 +316,8 @@ actual fun DisposableCameraView(
 
     DisposableCameraChrome(
         modifier = modifier,
-        isShutterEnabled = setupComplete && !isCapturing,
+        capturedImage = capturedImage,
+        isShutterEnabled = capturedImage == null && setupComplete && !isCapturing,
         onShutter = {
             if (!setupComplete || isCapturing) return@DisposableCameraChrome
             isCapturing = true
@@ -315,7 +330,7 @@ actual fun DisposableCameraView(
                         if (isDisposed) return@runOnMainQueue
                         isCapturing = false
                         retainedPhotoDelegate = null
-                        currentOnPhotoConfirmed(bytes)
+                        capturedImage = bytes
                     }
                 },
                 onComplete = {
@@ -335,6 +350,11 @@ actual fun DisposableCameraView(
                 setupError = throwable.message ?: "Photo capture failed"
             }
         },
+        onSend = {
+            val bytes = capturedImage ?: return@DisposableCameraChrome
+            capturedImage = null
+            currentOnPhotoConfirmed(bytes)
+        },
         onDismiss = onDismiss,
         previewContent = {
             UIKitView(
@@ -351,6 +371,26 @@ actual fun DisposableCameraView(
                 },
                 properties = UIKitInteropProperties(
                     isInteractive = true,
+                    isNativeAccessibilityEnabled = false,
+                ),
+            )
+        },
+        frozenPreviewContent = { bytes ->
+            UIKitView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp)),
+                factory = {
+                    UIImageView().apply {
+                        contentMode = UIViewContentMode.UIViewContentModeScaleAspectFill
+                        clipsToBounds = true
+                    }
+                },
+                update = { imageView ->
+                    imageView.image = UIImage.imageWithData(bytes.toNSData())
+                },
+                properties = UIKitInteropProperties(
+                    isInteractive = false,
                     isNativeAccessibilityEnabled = false,
                 ),
             )

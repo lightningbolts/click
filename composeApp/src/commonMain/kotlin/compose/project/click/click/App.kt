@@ -1946,31 +1946,39 @@ fun App() {
                         val rollConnectionId = connectionRollConnectionId
                         val activeRollSession = pendingRollSession
                             ?: rollConnectionId?.let { collaborationSessions[it] }
-                        if (disposableRollOpening) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .zIndex(10_400f)
-                                    .background(Color.Black.copy(alpha = 0.55f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                AdaptiveCircularProgressIndicator(
-                                    modifier = Modifier.size(40.dp),
-                                    color = PrimaryBlue,
-                                )
-                            }
-                        }
-                        if (showConnectionDisposableRoll && rollConnectionId != null && activeRollSession != null) {
+                        AnimatedVisibility(
+                            visible = showConnectionDisposableRoll && rollConnectionId != null && activeRollSession != null,
+                            enter = fadeIn(animationSpec = tween(120, easing = FastOutSlowInEasing)) +
+                                scaleIn(
+                                    initialScale = 0.08f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                                ),
+                            exit = fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing)) +
+                                scaleOut(
+                                    targetScale = 0.08f,
+                                    animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                ),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(10_500f),
+                        ) {
+                            val cameraSession = activeRollSession
+                            val cameraConnectionId = rollConnectionId
                             DisposableCameraView(
                                 onPhotoConfirmed = { bytes ->
-                                    connectionScope.launch {
-                                        chatViewModel.setCurrentUser(currentUser.id)
-                                        chatViewModel.loadChatMessages(rollConnectionId)
-                                        chatViewModel.sendDisposableRollPhoto(
-                                            bytes = bytes,
-                                            encounterId = activeRollSession.encounterId,
-                                            collaborationTtlIso = activeRollSession.collaborationTtlIso,
-                                        )
+                                    if (cameraSession != null && !cameraConnectionId.isNullOrBlank()) {
+                                        connectionScope.launch {
+                                            chatViewModel.setCurrentUser(currentUser.id)
+                                            chatViewModel.loadChatMessages(cameraConnectionId)
+                                            chatViewModel.sendDisposableRollPhoto(
+                                                bytes = bytes,
+                                                encounterId = cameraSession.encounterId,
+                                                collaborationTtlIso = cameraSession.collaborationTtlIso,
+                                            )
+                                        }
                                     }
                                     showConnectionDisposableRoll = false
                                     pendingRollSession = null
@@ -1980,8 +1988,7 @@ fun App() {
                                     pendingRollSession = null
                                 },
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .zIndex(10_500f),
+                                    .fillMaxSize(),
                             )
                         }
 

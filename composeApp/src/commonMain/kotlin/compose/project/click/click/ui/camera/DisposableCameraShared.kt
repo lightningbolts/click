@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
@@ -54,13 +55,17 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 @Composable
 internal fun DisposableCameraChrome(
     modifier: Modifier = Modifier,
+    capturedImage: ByteArray?,
     isShutterEnabled: Boolean,
     onShutter: () -> Unit,
+    onSend: () -> Unit,
     onDismiss: () -> Unit,
     previewContent: @Composable () -> Unit,
+    frozenPreviewContent: @Composable (ByteArray) -> Unit,
 ) {
     val flashAlpha = remember { Animatable(0f) }
     var flashTick by remember { mutableIntStateOf(0) }
+    val hasCapture = capturedImage != null
 
     LaunchedEffect(flashTick) {
         if (flashTick == 0) return@LaunchedEffect
@@ -72,7 +77,7 @@ internal fun DisposableCameraChrome(
     }
 
     val glowAlpha by animateFloatAsState(
-        targetValue = if (isShutterEnabled) 0.55f else 0.22f,
+        targetValue = if (isShutterEnabled || hasCapture) 0.55f else 0.22f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
         label = "roll_glow",
     )
@@ -82,7 +87,11 @@ internal fun DisposableCameraChrome(
             .fillMaxSize()
             .background(Color.Black),
     ) {
-        previewContent()
+        if (capturedImage == null) {
+            previewContent()
+        } else {
+            frozenPreviewContent(capturedImage)
+        }
 
         Box(
             modifier = Modifier
@@ -162,22 +171,36 @@ internal fun DisposableCameraChrome(
                     ),
                 ) {
                     Text(
-                        text = if (isShutterEnabled) "Tap once to drop into chat" else "Capturing...",
+                        text = when {
+                            capturedImage != null -> "Ready for the roll"
+                            isShutterEnabled -> "Snap once"
+                            else -> "Capturing..."
+                        },
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.88f),
                     )
                 }
                 Spacer(modifier = Modifier.height(18.dp))
-                ShutterButton(
-                    enabled = isShutterEnabled,
-                    glowAlpha = glowAlpha,
-                    onClick = {
-                        PlatformHapticsPolicy.lightImpact()
-                        flashTick += 1
-                        onShutter()
-                    },
-                )
+                if (capturedImage == null) {
+                    ShutterButton(
+                        enabled = isShutterEnabled,
+                        glowAlpha = glowAlpha,
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            flashTick += 1
+                            onShutter()
+                        },
+                    )
+                } else {
+                    SendRollButton(
+                        glowAlpha = glowAlpha,
+                        onClick = {
+                            PlatformHapticsPolicy.successNotification()
+                            onSend()
+                        },
+                    )
+                }
             }
         }
 
@@ -280,6 +303,53 @@ private fun GlassIconButton(
             tint = Color.White,
             modifier = Modifier.size(24.dp),
         )
+    }
+}
+
+@Composable
+private fun SendRollButton(
+    glowAlpha: Float,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(96.dp)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            PrimaryBlue.copy(alpha = glowAlpha),
+                            LightBlue.copy(alpha = glowAlpha * 0.55f),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .size(78.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
+                .border(4.dp, Color.White.copy(alpha = 0.92f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = "Send to Disposable Roll",
+                tint = Color.White,
+                modifier = Modifier.size(30.dp),
+            )
+        }
     }
 }
 

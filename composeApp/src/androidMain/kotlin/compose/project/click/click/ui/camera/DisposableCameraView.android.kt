@@ -2,6 +2,7 @@ package compose.project.click.click.ui.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -12,8 +13,10 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,9 +27,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -69,6 +76,7 @@ actual fun DisposableCameraView(
         return
     }
 
+    var capturedImage by remember { mutableStateOf<ByteArray?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
@@ -121,6 +129,7 @@ actual fun DisposableCameraView(
         onDispose {
             isDisposed.set(true)
             unbindCamera()
+            capturedImage = null
             captureExecutor.shutdown()
         }
     }
@@ -154,7 +163,8 @@ actual fun DisposableCameraView(
 
     DisposableCameraChrome(
         modifier = modifier,
-        isShutterEnabled = imageCapture != null && !isCapturing,
+        capturedImage = capturedImage,
+        isShutterEnabled = capturedImage == null && imageCapture != null && !isCapturing,
         onShutter = {
             val capture = imageCapture ?: return@DisposableCameraChrome
             isCapturing = true
@@ -177,7 +187,7 @@ actual fun DisposableCameraView(
                             if (isDisposed.get()) return@execute
                             isCapturing = false
                             if (bytes.isNotEmpty()) {
-                                currentOnPhotoConfirmed(bytes)
+                                capturedImage = bytes
                             }
                         }
                     }
@@ -191,6 +201,11 @@ actual fun DisposableCameraView(
                     }
                 },
             )
+        },
+        onSend = {
+            val bytes = capturedImage ?: return@DisposableCameraChrome
+            capturedImage = null
+            currentOnPhotoConfirmed(bytes)
         },
         onDismiss = onDismiss,
         previewContent = {
@@ -230,6 +245,21 @@ actual fun DisposableCameraView(
                     }
                 },
             )
+        },
+        frozenPreviewContent = { bytes ->
+            val bitmap = remember(bytes) {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                )
+            }
         },
     )
 }

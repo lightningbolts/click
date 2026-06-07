@@ -1,13 +1,6 @@
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -79,8 +72,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
@@ -117,14 +112,6 @@ internal fun ConnectionChatMessageComposer(
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val disposableRollActive = collaborationSession?.isRollActive() == true
-    val rollSpring = spring<Float>(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow)
-    val infiniteGlow = rememberInfiniteTransition(label = "roll_glow")
-    val glowPulse by infiniteGlow.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.85f,
-        animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
-        label = "roll_pulse",
-    )
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
 
@@ -295,7 +282,10 @@ internal fun ConnectionChatMessageComposer(
                         }
                     }
                     Button(
-                        onClick = { viewModel.commitStagedMediaToUpload() },
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            viewModel.commitStagedMediaToUpload()
+                        },
                         enabled = !isSending,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
@@ -425,56 +415,42 @@ internal fun ConnectionChatMessageComposer(
                         .zIndex(4f)
                         .focusProperties { canFocus = false },
                 ) {
-                    Crossfade(
-                        targetState = disposableRollActive,
-                        animationSpec = rollSpring,
-                        label = "attach_to_roll",
-                    ) { rollMode ->
-                        val bgAlpha = if (rollMode) glowPulse else if (isSending) 0.06f else 0.12f
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                                .background(
-                                    if (rollMode) {
-                                        Brush.radialGradient(
-                                            colors = listOf(
-                                                PrimaryBlue.copy(alpha = bgAlpha),
-                                                LightBlue.copy(alpha = bgAlpha * 0.45f),
-                                                PrimaryBlue.copy(alpha = 0.08f),
-                                            ),
-                                        )
-                                    } else {
-                                        Brush.linearGradient(
-                                            listOf(
-                                                PrimaryBlue.copy(alpha = bgAlpha),
-                                                PrimaryBlue.copy(alpha = bgAlpha),
-                                            ),
-                                        )
-                                    },
-                                )
-                                .chatSpringPressScale(attachInteraction)
-                                .clickable(
-                                    interactionSource = attachInteraction,
-                                    indication = null,
-                                    enabled = true,
-                                    onClick = {
-                                        if (rollMode) onOpenDisposableRoll() else attachmentMenuExpanded = true
-                                    },
+                    val bgAlpha = if (isSending) 0.06f else 0.12f
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        PrimaryBlue.copy(alpha = bgAlpha),
+                                        PrimaryBlue.copy(alpha = bgAlpha),
+                                    ),
                                 ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                if (rollMode) Icons.Filled.PhotoCamera else Icons.Filled.Add,
-                                contentDescription = if (rollMode) "Disposable Roll" else "Attach",
-                                tint = if (rollMode) Color.White else attachTint,
-                                modifier = Modifier.size(attachIconSize),
                             )
-                        }
+                            .chatSpringPressScale(attachInteraction)
+                            .clickable(
+                                interactionSource = attachInteraction,
+                                indication = null,
+                                enabled = true,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = true
+                                },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = "Attach",
+                            tint = attachTint,
+                            modifier = Modifier.size(attachIconSize),
+                        )
                     }
                     DropdownMenu(
                         expanded = attachmentMenuExpanded,
                         onDismissRequest = { attachmentMenuExpanded = false },
+                        offset = DpOffset(x = 0.dp, y = (-10).dp),
                         shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         border = if (composerStyle.isIOS) {
@@ -488,6 +464,28 @@ internal fun ConnectionChatMessageComposer(
                         tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
                         shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
                     ) {
+                        if (disposableRollActive) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Disposable Roll",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.PhotoCamera,
+                                        contentDescription = null,
+                                        tint = PrimaryBlue.copy(alpha = 0.9f),
+                                    )
+                                },
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    onOpenDisposableRoll()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = {
                                 Text(
@@ -503,6 +501,7 @@ internal fun ConnectionChatMessageComposer(
                                 )
                             },
                             onClick = {
+                                PlatformHapticsPolicy.lightImpact()
                                 attachmentMenuExpanded = false
                                 mediaPickers.openPhotoLibrary()
                             },
@@ -522,6 +521,7 @@ internal fun ConnectionChatMessageComposer(
                                 )
                             },
                             onClick = {
+                                PlatformHapticsPolicy.lightImpact()
                                 attachmentMenuExpanded = false
                                 mediaPickers.openCamera()
                             },
@@ -541,6 +541,7 @@ internal fun ConnectionChatMessageComposer(
                                 )
                             },
                             onClick = {
+                                PlatformHapticsPolicy.lightImpact()
                                 attachmentMenuExpanded = false
                                 mediaPickers.openVoiceRecorder()
                             },
@@ -560,6 +561,7 @@ internal fun ConnectionChatMessageComposer(
                                 )
                             },
                             onClick = {
+                                PlatformHapticsPolicy.lightImpact()
                                 attachmentMenuExpanded = false
                                 mediaPickers.openFilePicker()
                             },
@@ -579,7 +581,10 @@ internal fun ConnectionChatMessageComposer(
                             interactionSource = sendInteraction,
                             indication = null,
                             enabled = canSend,
-                            onClick = { viewModel.sendMessage() },
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                viewModel.sendMessage()
+                            },
                         ),
                     contentAlignment = Alignment.Center,
                 ) {

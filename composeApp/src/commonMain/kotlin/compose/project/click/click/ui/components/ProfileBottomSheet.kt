@@ -117,6 +117,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -199,6 +201,7 @@ fun ProfileBottomSheet(
     }
     var profileTabsHydrating by remember { mutableStateOf(false) }
     var profileMediaResolving by remember { mutableStateOf(false) }
+    var openingFileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(selectedUserId, state.connectionId, effectiveViewerUserId) {
         profileTabsHydrating = true
@@ -230,7 +233,7 @@ fun ProfileBottomSheet(
                     id = msg.id,
                     content = msg.content,
                     messageType = msg.messageType,
-                    timestamp = Instant.fromEpochMilliseconds(msg.timeCreated).toString(),
+                    timestamp = formatProfileSheetDate(msg.timeCreated),
                     metadata = msg.metadata,
                 )
             }
@@ -403,9 +406,11 @@ fun ProfileBottomSheet(
             onOpenLink?.invoke(normalized)
         }
     }
-    val handleDownloadFile: (ProfileSheetFile) -> Unit = remember(onDownloadFile, connectionRepository) {
-        { file ->
+    val handleDownloadFile: (ProfileSheetFile) -> Unit = { file ->
+        if (file.id !in openingFileIds) {
+            openingFileIds = openingFileIds + file.id
             scope.launch {
+                try {
                 var handled = false
                 val path = file.attachmentPath?.trim().orEmpty()
                 val key = file.attachmentKeyBase64?.trim().orEmpty()
@@ -444,6 +449,9 @@ fun ProfileBottomSheet(
 
                 if (!handled) {
                     onDownloadFile?.invoke(file)
+                }
+                } finally {
+                    openingFileIds = openingFileIds - file.id
                 }
             }
         }
@@ -546,7 +554,11 @@ fun ProfileBottomSheet(
                     onOpenMedia = { selectedMediaForPreview = it },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
-                ProfileSheetTab.Files -> FilesPanel(items = effectiveFiles, onDownload = handleDownloadFile)
+                ProfileSheetTab.Files -> FilesPanel(
+                    items = effectiveFiles,
+                    openingFileIds = openingFileIds,
+                    onDownload = handleDownloadFile,
+                )
             }
         }
 
@@ -741,6 +753,7 @@ fun ProfileBottomSheet(
                                     ) {
                                         Text("Share")
                                     }
+                                    /*
                                     if (!media.isEncrypted) {
                                         TextButton(
                                             onClick = {
@@ -754,6 +767,7 @@ fun ProfileBottomSheet(
                                             Text("Open in browser")
                                         }
                                     }
+                                    */
                                 }
                             } else {
                                 TextButton(onClick = { selectedMediaForPreview = null }) {
@@ -961,37 +975,26 @@ private fun ProfileActionGrid(
                 usePrimaryBorder = true,
                 modifier = Modifier.weight(1f),
             )
-            when {
-                showNudge -> ProfileActionCard(
+            if (showNudge) {
+                ProfileActionCard(
                     label = "Nudge",
                     icon = Icons.Outlined.NotificationsActive,
                     onClick = onNudge,
                     modifier = Modifier.weight(1f),
                 )
-                showDisposableRoll && onOpenDisposableRoll != null -> ProfileActionCard(
-                    label = "Disposable Roll",
-                    icon = Icons.Filled.PhotoCamera,
-                    onClick = onOpenDisposableRoll,
-                    usePrimaryBorder = true,
-                    modifier = Modifier.weight(1f),
-                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
 
-        if (showNudge && showDisposableRoll && onOpenDisposableRoll != null) {
-            Row(
+        if (showDisposableRoll && onOpenDisposableRoll != null) {
+            ProfileActionCard(
+                label = "Disposable Roll",
+                icon = Icons.Filled.PhotoCamera,
+                onClick = onOpenDisposableRoll,
+                usePrimaryBorder = true,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ProfileActionCard(
-                    label = "Disposable Roll",
-                    icon = Icons.Filled.PhotoCamera,
-                    onClick = onOpenDisposableRoll,
-                    usePrimaryBorder = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(modifier = Modifier.weight(1f))
-            }
+            )
         }
     }
 }
@@ -1408,7 +1411,11 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
 }
 
 @Composable
-private fun FilesPanel(items: List<ProfileSheetFile>, onDownload: (ProfileSheetFile) -> Unit) {
+private fun FilesPanel(
+    items: List<ProfileSheetFile>,
+    openingFileIds: Set<String>,
+    onDownload: (ProfileSheetFile) -> Unit,
+) {
     if (items.isEmpty()) {
         EmptyTabState(
             icon = Icons.Outlined.AttachFile,
@@ -1423,6 +1430,7 @@ private fun FilesPanel(items: List<ProfileSheetFile>, onDownload: (ProfileSheetF
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         items(items, key = { it.id }) { file ->
+            val opening = file.id in openingFileIds
             val fileShape = RoundedCornerShape(14.dp)
             Row(
                 modifier = Modifier
@@ -1430,15 +1438,24 @@ private fun FilesPanel(items: List<ProfileSheetFile>, onDownload: (ProfileSheetF
                     .clip(fileShape)
                     .border(1.dp, GlassSheetTokens.GlassBorder, fileShape)
                     .background(GlassSheetTokens.GlassSurface)
-                    .clickable { onDownload(file) }
+                    .clickable(enabled = !opening) { onDownload(file) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Outlined.Description,
-                    contentDescription = null,
-                    tint = PrimaryBlue,
-                )
+                if (opening) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = PrimaryBlue,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    )
+                } else {
+                    Icon(
+                        Icons.Outlined.Description,
+                        contentDescription = null,
+                        tint = PrimaryBlue,
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -1450,7 +1467,11 @@ private fun FilesPanel(items: List<ProfileSheetFile>, onDownload: (ProfileSheetF
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        "${formatFileSize(file.sizeBytes)} · ${file.mimeType}",
+                        if (opening) {
+                            "Opening..."
+                        } else {
+                            "${formatFileSize(file.sizeBytes)} · ${file.mimeType}"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1500,6 +1521,27 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes < 1_024 -> "$bytes B"
     bytes < 1_024L * 1_024 -> "${bytes / 1_024} KB"
     else -> "${(bytes * 10 / (1_024L * 1_024)) / 10.0} MB"
+}
+
+private fun formatProfileSheetDate(epochMs: Long): String {
+    if (epochMs <= 0L) return ""
+    val local = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    return "${shortProfileMonth(local.monthNumber)} ${local.dayOfMonth}, ${local.year}"
+}
+
+private fun shortProfileMonth(monthNumber: Int): String = when (monthNumber) {
+    1 -> "Jan"
+    2 -> "Feb"
+    3 -> "Mar"
+    4 -> "Apr"
+    5 -> "May"
+    6 -> "Jun"
+    7 -> "Jul"
+    8 -> "Aug"
+    9 -> "Sep"
+    10 -> "Oct"
+    11 -> "Nov"
+    else -> "Dec"
 }
 
 private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
@@ -1578,20 +1620,15 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
     val envelope = AttachmentCrypto.tryDecodeEnvelope(content)
     val meta = metadata as? JsonObject
     val fileName = envelope?.name?.takeIf { it.isNotBlank() }
-        ?: meta?.get("file_name")?.jsonPrimitive?.contentOrNull
-        ?: meta?.get("filename")?.jsonPrimitive?.contentOrNull
-        ?: meta?.get("name")?.jsonPrimitive?.contentOrNull
+        ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
         ?: content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() }
         ?: "Attachment"
     val size = envelope?.size
-        ?: meta?.get("file_size")?.jsonPrimitive?.longOrNull
-        ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
-        ?: meta?.get("size")?.jsonPrimitive?.longOrNull
+        ?: meta?.firstLong("attachment_size", "file_size", "size_bytes", "size")
         ?: 0L
     val mime = envelope?.mime?.takeIf { it.isNotBlank() }
-        ?: meta?.get("mime_type")?.jsonPrimitive?.contentOrNull
-        ?: meta?.get("content_type")?.jsonPrimitive?.contentOrNull
+        ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
         ?: "application/octet-stream"
     val downloadUrl = meta?.stringAt("signed_url")
         ?: meta?.stringAt("public_url")
@@ -1599,6 +1636,7 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
         ?: meta?.stringAt("storage_url")
         ?: meta?.stringAt("media_url")
     val attachmentPath = envelope?.path?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("attachment_path")
         ?: meta?.stringAt("path")
         ?: meta?.stringAt("storage_path")
         ?: meta?.stringAt("object_path")
@@ -1624,33 +1662,36 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
 }
 
 private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile {
+    val envelope = AttachmentCrypto.tryDecodeEnvelope(content)
     val meta = metadata as? JsonObject
-    val fileName = meta?.stringAt("file_name")
-        ?: meta?.stringAt("filename")
-        ?: meta?.stringAt("name")
+    val fileName = envelope?.name?.takeIf { it.isNotBlank() }
+        ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
         ?: content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() }
         ?: "Attachment"
-    val size = meta?.get("file_size")?.jsonPrimitive?.longOrNull
-        ?: meta?.get("size_bytes")?.jsonPrimitive?.longOrNull
-        ?: meta?.get("size")?.jsonPrimitive?.longOrNull
+    val size = envelope?.size
+        ?: meta?.firstLong("attachment_size", "file_size", "size_bytes", "size")
         ?: 0L
-    val mime = meta?.stringAt("mime_type")
-        ?: meta?.stringAt("content_type")
+    val mime = envelope?.mime?.takeIf { it.isNotBlank() }
+        ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
         ?: "application/octet-stream"
     val downloadUrl = meta?.stringAt("signed_url")
         ?: meta?.stringAt("public_url")
         ?: meta?.stringAt("url")
         ?: meta?.stringAt("storage_url")
         ?: meta?.stringAt("media_url")
-    val attachmentPath = meta?.stringAt("path")
+    val attachmentPath = envelope?.path?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("attachment_path")
+        ?: meta?.stringAt("path")
         ?: meta?.stringAt("storage_path")
         ?: meta?.stringAt("object_path")
         ?: meta?.stringAt("media_path")
-    val attachmentKeyBase64 = meta?.stringAt("key")
+    val attachmentKeyBase64 = envelope?.key?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("key")
         ?: meta?.stringAt("file_key")
         ?: meta?.stringAt("file_master_key")
-    val attachmentSha256Base64 = meta?.stringAt("sha256")
+    val attachmentSha256Base64 = envelope?.sha256?.takeIf { it.isNotBlank() }
+        ?: meta?.stringAt("sha256")
         ?: meta?.stringAt("sha256_base64")
 
     return ProfileSheetFile(
@@ -1658,7 +1699,7 @@ private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile {
         fileName = fileName,
         sizeBytes = size,
         mimeType = mime,
-        timestamp = Instant.fromEpochMilliseconds(timeCreated).toString(),
+        timestamp = formatProfileSheetDate(timeCreated),
         downloadUrl = downloadUrl,
         attachmentPath = attachmentPath,
         attachmentKeyBase64 = attachmentKeyBase64,
@@ -1700,6 +1741,15 @@ private fun ProfileSheetLocalMessage.hasMetadataAttachmentV1(): Boolean {
 
 private fun JsonObject.stringAt(key: String): String? =
     this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+
+private fun JsonObject.firstString(vararg keys: String): String? =
+    keys.firstNotNullOfOrNull { key -> stringAt(key) }
+
+private fun JsonObject.firstLong(vararg keys: String): Long? =
+    keys.firstNotNullOfOrNull { key ->
+        val raw = this[key]?.jsonPrimitive ?: return@firstNotNullOfOrNull null
+        raw.longOrNull ?: raw.contentOrNull?.trim()?.toLongOrNull()
+    }
 
 private fun JsonObject.intAt(key: String): Int? {
     val raw = this[key]?.jsonPrimitive ?: return null
