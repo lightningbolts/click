@@ -117,17 +117,18 @@ internal fun ChatBubblePhotoContent(
         val localPreviewBytes = secureState?.imageBytes
         when {
             localPreviewBytes != null -> {
-                val cachedBitmap = remember(message.id, localPreviewBytes) {
-                    secureChatImageBitmapCache.get(message.id) ?: run {
-                        runCatching { localPreviewBytes.toImageBitmap() }
-                            .onFailure { e ->
-                                println("ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}")
-                            }
-                            .getOrNull()
-                            ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
-                    }
+                val cachedBitmap = remember(message.id) {
+                    secureChatImageBitmapCache.get(message.id)
                 }
-                if (cachedBitmap != null) {
+                val displayBitmap = cachedBitmap ?: remember(message.id) {
+                    runCatching { localPreviewBytes.toImageBitmap() }
+                        .onFailure { e ->
+                            println("ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}")
+                        }
+                        .getOrNull()
+                        ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
+                }
+                if (displayBitmap != null) {
                     val up = secureState.uploadProgress
                     Box(
                         modifier = Modifier
@@ -135,7 +136,7 @@ internal fun ChatBubblePhotoContent(
                             .heightIn(max = chatBubbleScaledDp(330f)),
                     ) {
                         Image(
-                            bitmap = cachedBitmap,
+                            bitmap = displayBitmap,
                             contentDescription = "Photo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier

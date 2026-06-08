@@ -3,6 +3,8 @@ package compose.project.click.click.ui.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -43,20 +45,125 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import compose.project.click.click.PlatformHapticsPolicy
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.ui.theme.LightBlue
+
+/** Anchored attachment tray that does not steal IME focus from the composer field. */
+@Composable
+internal fun ChatAttachmentMenuPopup(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    anchorYOffset: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var keepMounted by remember { mutableStateOf(false) }
+    var contentVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            keepMounted = true
+            contentVisible = false
+            withFrameNanos { }
+            contentVisible = true
+        } else if (keepMounted) {
+            contentVisible = false
+            delay(200)
+            keepMounted = false
+            onDismissRequest()
+        }
+    }
+
+    if (!keepMounted) return
+
+    val menuSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMedium,
+    )
+    val menuEnter =
+        fadeIn(animationSpec = menuSpring) +
+            scaleIn(initialScale = 0.86f, animationSpec = menuSpring)
+    val menuExit =
+        fadeOut(animationSpec = menuSpring) +
+            scaleOut(targetScale = 0.92f, animationSpec = menuSpring)
+
+    Popup(
+        alignment = Alignment.BottomStart,
+        offset = IntOffset(0, anchorYOffset),
+        onDismissRequest = {
+            if (expanded) onDismissRequest()
+        },
+        properties = PopupProperties(
+            focusable = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        AnimatedVisibility(
+            visible = contentVisible,
+            enter = menuEnter,
+            exit = menuExit,
+        ) {
+            Surface(
+                modifier = modifier.widthIn(min = 200.dp, max = 268.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 3.dp,
+                shadowElevation = 12.dp,
+                border = BorderStroke(
+                    0.5.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                ),
+            ) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ChatAttachmentMenuRow(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true),
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = onSurface.copy(alpha = if (enabled) 1f else 0.45f))
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = onSurface.copy(alpha = if (enabled) 1f else 0.45f))
+    }
+}
 
 /** Shared short tweens for chat chrome — avoids spring solvers stacking with IME translation. */
 internal object ChatChromeMotion {
@@ -259,7 +366,10 @@ internal fun ChatCallOptionsIosSurface(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = true),
-                        onClick = onVoice,
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            onVoice()
+                        },
                     )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -275,7 +385,10 @@ internal fun ChatCallOptionsIosSurface(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = true),
-                        onClick = onVideo,
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            onVideo()
+                        },
                     )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,

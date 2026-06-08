@@ -250,6 +250,7 @@ fun ProfileBottomSheet(
                     messageType = msg.messageType,
                     timestamp = formatProfileSheetDate(msg.timeCreated),
                     metadata = msg.metadata,
+                    sortEpochMs = msg.timeCreated,
                 )
             }
 
@@ -261,6 +262,7 @@ fun ProfileBottomSheet(
         connectionTabMedia = tabsPayload?.media
             ?.mapNotNull { it.toProfileSheetMediaFromTab() }
             .orEmpty()
+            .sortedByDescending { profileMediaSortEpoch(it) }
         val decryptedById = connectionLocalMessages.associateBy { it.id }
         connectionTabFiles = tabsPayload?.files?.mapNotNull { tab ->
             decryptedById[tab.id]?.toProfileSheetFile()
@@ -882,6 +884,8 @@ data class ProfileSheetLocalMessage(
     val messageType: String,
     val timestamp: String,
     val metadata: JsonElement? = null,
+    /** Epoch millis for newest-first media ordering. */
+    val sortEpochMs: Long = 0L,
 )
 
 data class ProfileSheetBadge(
@@ -905,6 +909,8 @@ data class ProfileSheetMedia(
     val isEncrypted: Boolean = false,
     val mediaType: ProfileSheetMediaType = ProfileSheetMediaType.Image,
     val captionedAt: String? = null,
+    /** Epoch millis for newest-first ordering (from message [time_created]). */
+    val sortEpochMs: Long = 0L,
     /** Voice-note length from message metadata when available. */
     val durationSeconds: Int? = null,
     val isDisposableRoll: Boolean = false,
@@ -1213,8 +1219,12 @@ private fun MediaPanel(
     onEnsureMediaResolved: (ProfileSheetMedia) -> Unit,
     onOpenMedia: (ProfileSheetMedia) -> Unit,
 ) {
-    val imageItems = items.filter { it.mediaType == ProfileSheetMediaType.Image }
-    val audioItems = items.filter { it.mediaType == ProfileSheetMediaType.Audio }
+    val imageItems = items
+        .filter { it.mediaType == ProfileSheetMediaType.Image }
+        .sortedByDescending { profileMediaSortEpoch(it) }
+    val audioItems = items
+        .filter { it.mediaType == ProfileSheetMediaType.Audio }
+        .sortedByDescending { profileMediaSortEpoch(it) }
     val imageRows = imageItems.chunked(3)
 
     if (items.isEmpty()) {
@@ -1715,6 +1725,7 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
         mediaType = mediaType,
         captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() },
+        sortEpochMs = sortEpochMs,
         durationSeconds = meta.intAt("duration_seconds")
             ?: meta.intAt("durationSeconds")
             ?: meta["duration"]?.jsonPrimitive?.intOrNull,
@@ -1753,6 +1764,7 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
         mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
         captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
             ?.takeIf { it.isNotBlank() },
+        sortEpochMs = timeCreated,
         durationSeconds = meta?.let { m ->
             m.intAt("duration_seconds")
                 ?: m.intAt("durationSeconds")
@@ -2038,12 +2050,23 @@ private fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileSheet
             isEncrypted = media.isEncrypted || prev.isEncrypted,
             mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
             captionedAt = media.captionedAt ?: prev.captionedAt,
+            sortEpochMs = maxOf(media.sortEpochMs, prev.sortEpochMs),
             durationSeconds = media.durationSeconds ?: prev.durationSeconds,
             isDisposableRoll = media.isDisposableRoll || prev.isDisposableRoll,
             collaborationTtlIso = media.collaborationTtlIso ?: prev.collaborationTtlIso,
         )
     }
-    return merged.values.toList()
+    return merged.values
+        .sortedByDescending { profileMediaSortEpoch(it) }
+}
+
+private fun profileMediaSortEpoch(media: ProfileSheetMedia): Long {
+    if (media.sortEpochMs > 0L) return media.sortEpochMs
+    val raw = media.captionedAt?.trim().orEmpty()
+    if (raw.isEmpty()) return 0L
+    return runCatching { kotlinx.datetime.Instant.parse(raw).toEpochMilliseconds() }.getOrNull()
+        ?: raw.filter(Char::isDigit).takeLast(13).toLongOrNull()
+        ?: 0L
 }
 
 private fun mergeProfileFiles(items: List<ProfileSheetFile>): List<ProfileSheetFile> {
@@ -2100,6 +2123,7 @@ fun TabbedUserProfileSheet(
     viewerUserId: String?,
     onDismiss: () -> Unit,
     onMessage: (() -> Unit)? = null,
+    onNudge: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
 ) {
@@ -2140,7 +2164,7 @@ fun TabbedUserProfileSheet(
             subtitle = resolved?.email?.takeIf { it.isNotBlank() },
             avatarUrl = resolved?.image,
             statusBadge = null,
-            canNudge = onMessage != null,
+            canNudge = onMessage != null && !profileConnectionId.isNullOrBlank(),
             timeline = emptyList(),
             media = emptyList(),
             links = emptyList(),
@@ -2163,6 +2187,7 @@ fun TabbedUserProfileSheet(
                     onDismiss()
                 },
                 onNudge = {
+                    onNudge?.invoke()
                     onDismiss()
                 },
                 onOpenDisposableRoll = profileConnectionId?.let { cid ->

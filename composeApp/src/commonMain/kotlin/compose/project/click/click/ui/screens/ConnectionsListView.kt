@@ -175,6 +175,7 @@ import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowl
 import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
+import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
@@ -256,7 +257,7 @@ fun ConnectionsListView(
     onHubSelected: ((ActiveHubEntry) -> Unit)? = null,
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onUserProfileClick: (String) -> Unit = {},
-    onGroupMembersPicker: (List<User>) -> Unit = {},
+    onGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
     isListObscured: Boolean = false,

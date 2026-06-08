@@ -117,6 +117,19 @@ class SupabaseChatRepository(
     private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
     override val presenceHealth: StateFlow<PresenceHealth> = _presenceHealth.asStateFlow()
 
+    override val messageTimelineCache = ChatTimelineCache()
+
+    override fun peekCachedMessageTimeline(connectionId: String): List<Message>? =
+        messageTimelineCache.peek(connectionId)
+
+    override fun storeCachedMessageTimeline(connectionId: String, messages: List<Message>) {
+        messageTimelineCache.store(connectionId, messages)
+    }
+
+    override fun mergeCachedTimelineMessage(connectionId: String, message: Message) {
+        messageTimelineCache.mergeMessage(connectionId, message)
+    }
+
     private data class GlobalPresenceSession(
         val channel: RealtimeChannel,
         val trackedUserId: String,
@@ -464,6 +477,7 @@ class SupabaseChatRepository(
             chatIdToConnectionId.clear()
             chatIdToGroupId.clear()
         }
+        messageTimelineCache.clear()
     }
 
     private fun decryptMessageOnCurrentThread(message: Message, crypto: ResolvedChatCrypto?): Message {
@@ -1063,9 +1077,13 @@ class SupabaseChatRepository(
                     order("time_created", Order.ASCENDING)
                 }
                 .decodeList<Message>()
-            withContext(Dispatchers.Default) {
+            val decrypted = withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
             }
+            resolveListKeyForChat(chatId)?.let { connectionId ->
+                storeCachedMessageTimeline(connectionId, decrypted)
+            }
+            decrypted
         } catch (e: Exception) {
             println("Error fetching messages: ${e.redactedRestMessage()}")
             null
@@ -1333,6 +1351,7 @@ class SupabaseChatRepository(
                         rawMessage.copy(content = "New message")
                     else -> rawMessage
                 }
+                mergeCachedTimelineMessage(listKey, message)
                 send(MessageListInsertEvent(connectionId = listKey, chatId = row.chatId, message = message))
             }
         }
@@ -1934,6 +1953,56 @@ class SupabaseChatRepository(
             put("new_name", JsonPrimitive(newName))
         }
         supabase.postgrest.rpc("rename_clique", body)
+    }
+
+    override suspend fun addCliqueMember(
+        groupId: String,
+        newMemberUserId: String,
+    ): Result<Unit> = runCatching {
+        require(groupId.isNotBlank())
+        require(newMemberUserId.isNotBlank())
+        val authToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw IllegalStateException("Not authenticated")
+        apiClient.addCliqueMember(
+            groupId = groupId,
+            newMemberUserId = newMemberUserId,
+            authToken = authToken,
+        ).getOrThrow()
+    }
+
+    override suspend fun peekGroupMasterKey(chatId: String, viewerUserId: String): ByteArray? {
+        chatCryptoMutex.withLock {
+            val cached = chatCryptoCache[chatId]
+            if (cached is ResolvedChatCrypto.GroupMaster) {
+                return cached.masterKey.copyOf()
+            }
+        }
+        return try {
+            val row = supabase.from("chats")
+                .select(columns = Columns.list("group_id")) {
+                    filter { eq("id", chatId) }
+                    limit(1)
+                }
+                .decodeList<ChatRoutingRow>()
+                .firstOrNull()
+            val groupId = row?.groupId ?: return null
+            unwrapGroupMasterKeyFromDb(groupId, viewerUserId)
+        } catch (e: Exception) {
+            println("ChatRepository: peekGroupMasterKey failed: ${e.redactedRestMessage()}")
+            null
+        }
+    }
+
+    override suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit> = runCatching {
+        require(groupId.isNotBlank())
+        require(memberUserId.isNotBlank())
+        val authToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw IllegalStateException("Not authenticated")
+        apiClient.removeCliqueMember(
+            groupId = groupId,
+            memberUserId = memberUserId,
+            authToken = authToken,
+        ).getOrThrow()
     }
 
     override fun clearChatListLocalCaches() {

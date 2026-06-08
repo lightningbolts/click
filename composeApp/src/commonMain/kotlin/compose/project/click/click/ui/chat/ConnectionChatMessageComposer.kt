@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,8 +39,6 @@ import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,8 +72,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
@@ -128,6 +130,9 @@ internal fun ConnectionChatMessageComposer(
     }
 
     val composerStyle = LocalPlatformStyle.current
+    val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val replyBannerVisible = replyingTo != null && editingMessageId == null
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
@@ -448,147 +453,79 @@ internal fun ConnectionChatMessageComposer(
                             modifier = Modifier.size(attachIconSize),
                         )
                     }
-                    DropdownMenu(
+                    val attachmentMenuYOffset = with(density) {
+                        -(auxButtonSize + 6.dp).roundToPx()
+                    }
+                    ChatAttachmentMenuPopup(
                         expanded = attachmentMenuExpanded,
                         onDismissRequest = { attachmentMenuExpanded = false },
-                        offset = DpOffset(x = 0.dp, y = (-10).dp),
-                        shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = if (composerStyle.isIOS) {
-                            BorderStroke(
-                                0.5.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                            )
-                        } else {
-                            null
-                        },
-                        tonalElevation = if (composerStyle.isIOS) 0.dp else 4.dp,
-                        shadowElevation = if (composerStyle.isIOS) 0.dp else 8.dp,
+                        anchorYOffset = attachmentMenuYOffset,
+                        modifier = Modifier,
                     ) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "Roll",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.PhotoCamera,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                attachmentMenuExpanded = false
-                                onOpenDisposableRoll()
-                            },
-                        )
-                        if (tetherPingEnabled) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Ping Tether",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Filled.Explore,
-                                        contentDescription = null,
-                                        tint = PrimaryBlue.copy(alpha = 0.9f),
-                                    )
-                                },
-                                enabled = !pingTetherLoading,
+                        Column(Modifier.padding(vertical = 6.dp)) {
+                            ChatAttachmentMenuRow(
+                                label = "Roll",
+                                icon = Icons.Filled.PhotoCamera,
                                 onClick = {
-                                    if (pingTetherLoading) return@DropdownMenuItem
-                                    PlatformHapticsPolicy.successNotification()
+                                    PlatformHapticsPolicy.lightImpact()
                                     attachmentMenuExpanded = false
-                                    onPingTether()
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    onOpenDisposableRoll()
+                                },
+                            )
+                            if (tetherPingEnabled) {
+                                ChatAttachmentMenuRow(
+                                    label = "Ping Tether",
+                                    icon = Icons.Filled.Explore,
+                                    enabled = !pingTetherLoading,
+                                    onClick = {
+                                        if (pingTetherLoading) return@ChatAttachmentMenuRow
+                                        PlatformHapticsPolicy.successNotification()
+                                        attachmentMenuExpanded = false
+                                        onPingTether()
+                                    },
+                                )
+                            }
+                            ChatAttachmentMenuRow(
+                                label = "Photo library",
+                                icon = Icons.Outlined.Image,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    mediaPickers.openPhotoLibrary()
+                                },
+                            )
+                            ChatAttachmentMenuRow(
+                                label = "Take photo",
+                                icon = Icons.Outlined.PhotoCamera,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    mediaPickers.openCamera()
+                                },
+                            )
+                            ChatAttachmentMenuRow(
+                                label = "Voice message",
+                                icon = Icons.Outlined.Mic,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    mediaPickers.openVoiceRecorder()
+                                },
+                            )
+                            ChatAttachmentMenuRow(
+                                label = "File",
+                                icon = Icons.Outlined.AttachFile,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    mediaPickers.openFilePicker()
                                 },
                             )
                         }
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "Photo library",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Image,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                attachmentMenuExpanded = false
-                                mediaPickers.openPhotoLibrary()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "Take photo",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.PhotoCamera,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                attachmentMenuExpanded = false
-                                mediaPickers.openCamera()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "Voice message",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Mic,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                attachmentMenuExpanded = false
-                                mediaPickers.openVoiceRecorder()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "File",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.AttachFile,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                attachmentMenuExpanded = false
-                                mediaPickers.openFilePicker()
-                            },
-                        )
                     }
                 }
                 Box(

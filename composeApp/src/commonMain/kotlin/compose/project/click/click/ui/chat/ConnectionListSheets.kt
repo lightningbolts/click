@@ -21,7 +21,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
@@ -142,6 +147,24 @@ internal fun orderedGroupMembersForPicker(chatDetails: ChatWithDetails): List<Us
     }
 }
 
+/** Carries group admin context so member add/remove works without an open chat session. */
+data class GroupMembersPickerContext(
+    val members: List<User>,
+    val groupId: String,
+    val createdByUserId: String,
+    val memberUserIds: List<String>,
+)
+
+internal fun groupMembersPickerContextFrom(chatDetails: ChatWithDetails): GroupMembersPickerContext? {
+    val gc = chatDetails.groupClique ?: return null
+    return GroupMembersPickerContext(
+        members = orderedGroupMembersForPicker(chatDetails),
+        groupId = gc.groupId,
+        createdByUserId = gc.createdByUserId,
+        memberUserIds = gc.memberUserIds,
+    )
+}
+
 /**
  * Modal bottom sheet listing the members of a group click, each with
  * avatar and name. Tapping a member invokes [onMemberClick] with
@@ -153,6 +176,10 @@ internal fun GroupMembersPickerSheet(
     members: List<User>,
     onDismiss: () -> Unit,
     onMemberClick: (String) -> Unit,
+    isGroupAdmin: Boolean = false,
+    currentUserId: String? = null,
+    onAddMember: (() -> Unit)? = null,
+    onRemoveMember: ((String) -> Unit)? = null,
 ) {
     fun dismissSheet() {
         onDismiss()
@@ -179,20 +206,54 @@ internal fun GroupMembersPickerSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
             Text(
-                text = "Tap someone to open their profile.",
+                text = if (isGroupAdmin) {
+                    "Tap someone to open their profile. Anyone can add members; only the creator can remove."
+                } else {
+                    "Tap someone to open their profile. You can invite verified connections to this click."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = onVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 0.dp),
             )
+            if (onAddMember != null) {
+                TextButton(
+                    onClick = {
+                        PlatformHapticsPolicy.lightImpact()
+                        onAddMember.invoke()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add member", color = PrimaryBlue)
+                }
+            }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
             )
             members.forEach { user ->
                 val label = user.name?.trim()?.ifBlank { null } ?: "Member"
+                val canKick = isGroupAdmin &&
+                    onRemoveMember != null &&
+                    !currentUserId.isNullOrBlank() &&
+                    user.id != currentUserId
                 ListItem(
                     headlineContent = {
                         Text(label, color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                    },
+                    trailingContent = if (canKick) {
+                        {
+                            IconButton(onClick = { onRemoveMember.invoke(user.id) }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = "Remove member",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                                )
+                            }
+                        }
+                    } else {
+                        null
                     },
                     leadingContent = {
                         Box(
@@ -227,6 +288,99 @@ internal fun GroupMembersPickerSheet(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Picker for adding a verified connection into an existing group (any member).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun GroupAddMemberPickerSheet(
+    candidates: List<User>,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    val scroll = rememberScrollState()
+    val surface = GlassSheetTokens.OledBlack
+    val onSurface = GlassSheetTokens.OnOled
+    val onVariant = GlassSheetTokens.OnOledMuted
+    ClickActionBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(surface)
+                .verticalScroll(scroll)
+                .padding(bottom = 28.dp),
+        ) {
+            Text(
+                text = "Add to group",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = onSurface,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            Text(
+                text = "Choose a verified connection to invite.",
+                style = MaterialTheme.typography.bodySmall,
+                color = onVariant,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+            )
+            if (candidates.isEmpty()) {
+                Text(
+                    text = "No eligible connections to add.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            } else {
+                candidates.forEach { user ->
+                    val label = user.name?.trim()?.ifBlank { null } ?: "Connection"
+                    ListItem(
+                        headlineContent = {
+                            Text(label, color = onSurface, style = MaterialTheme.typography.bodyLarge)
+                        },
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (!user.image.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = user.image,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape),
+                                    )
+                                } else {
+                                    Text(
+                                        text = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onVariant,
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.clickable {
+                            PlatformHapticsPolicy.lightImpact()
+                            onSelect(user.id)
+                            onDismiss()
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
             }
         }
     }

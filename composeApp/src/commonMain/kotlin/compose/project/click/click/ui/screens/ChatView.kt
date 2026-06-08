@@ -126,7 +126,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
@@ -180,7 +180,8 @@ import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist 
 import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
+import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
+import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
@@ -301,7 +302,7 @@ fun ChatView(
     chatId: String,
     onBackPressed: () -> Unit,
     onOpenUserProfile: (String) -> Unit = {},
-    onOpenGroupMembersPicker: (List<User>) -> Unit = {},
+    onOpenGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
     onOpenDisposableRoll: ((connectionId: String) -> Unit)? = null,
     /**
      * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
@@ -381,7 +382,7 @@ fun ChatView(
         val ref = parentInteractiveBackSwipePx ?: return@LaunchedEffect
         snapshotFlow { ref.floatValue }.collect { offset ->
             when {
-                offset > 20f && !imeClearedForInteractiveBackSwipe -> {
+                offset > 8f && !imeClearedForInteractiveBackSwipe -> {
                     imeClearedForInteractiveBackSwipe = true
                     keyboardControllerState.value?.hide()
                     focusManagerState.value.clearFocus()
@@ -518,6 +519,27 @@ fun ChatView(
                     }
                 }
                 is ChatMessagesState.Success -> {
+                    val stateMatchesThread =
+                        state.chatDetails.connection.id == chatId ||
+                            (!state.chatDetails.chat.id.isNullOrBlank() && state.chatDetails.chat.id == chatId)
+                    if (!stateMatchesThread) {
+                        val hintedRow = (chatListState as? ChatListState.Success)
+                            ?.chats
+                            ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+                        if (hintedRow != null) {
+                            ChatWarmLoadingView(
+                                topInset = topInset,
+                                onBackPressed = onBackPressed,
+                                chatRow = hintedRow,
+                            )
+                        } else {
+                            ChatChannelLoadingView(
+                                topInset = topInset,
+                                onBackPressed = onBackPressed,
+                            )
+                        }
+                        return@Column
+                    }
                     val chatDetails = state.chatDetails
                     val messages = state.messages
                     val reactionsMap by viewModel.messageReactions.collectAsState()
@@ -698,9 +720,8 @@ fun ChatView(
                                                 interactionSource = remember { MutableInteractionSource() },
                                                 indication = ripple(bounded = false, radius = 22.dp),
                                                 onClick = {
-                                                    onOpenGroupMembersPicker(
-                                                        orderedGroupMembersForPicker(chatDetails),
-                                                    )
+                                                    groupMembersPickerContextFrom(chatDetails)
+                                                        ?.let(onOpenGroupMembersPicker)
                                                 },
                                             ),
                                         contentAlignment = Alignment.CenterStart,
@@ -926,6 +947,7 @@ fun ChatView(
                                                     Icon(Icons.Filled.Call, contentDescription = null)
                                                 },
                                                 onClick = {
+                                                    PlatformHapticsPolicy.lightImpact()
                                                     showCallMenu = false
                                                     CallSessionManager.startOutgoingCall(
                                                         connectionId = chatDetails.connection.id,
@@ -941,6 +963,7 @@ fun ChatView(
                                                     Icon(Icons.Filled.Videocam, contentDescription = null)
                                                 },
                                                 onClick = {
+                                                    PlatformHapticsPolicy.lightImpact()
                                                     showCallMenu = false
                                                     CallSessionManager.startOutgoingCall(
                                                         connectionId = chatDetails.connection.id,
@@ -1392,10 +1415,17 @@ fun ChatView(
 
     GlassToastHost(
         state = toastState,
+        opaque = true,
         modifier = Modifier
-            .align(Alignment.BottomEnd)
+            .align(Alignment.BottomCenter)
             .zIndex(50f)
-            .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                bottom = edgeBottomInset +
+                    nativeKeyboardInsets.timelineBottomPadding +
+                    76.dp,
+            ),
     )
 
     // Message long-press context sheet
@@ -1493,16 +1523,38 @@ fun ChatView(
         },
     )
 
-    if (showRenameGroupDialog) {
-        val gid = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
-        GlassAlertDialog(
-            onDismissRequest = { showRenameGroupDialog = false },
-            title = { Text("Rename group") },
-            text = {
+    val renameGroupId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
+    GlassFullscreenMediaOverlay(
+        visible = showRenameGroupDialog,
+        onDismissRequest = { showRenameGroupDialog = false },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        val renameShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp)
+                .clip(renameShape)
+                .border(1.dp, GlassSheetTokens.GlassBorder, renameShape),
+            shape = renameShape,
+            color = GlassSheetTokens.OledBlack,
+            tonalElevation = 0.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = "Rename group",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassSheetTokens.OnOled,
+                )
                 OutlinedTextField(
                     value = renameGroupDraft,
                     onValueChange = { renameGroupDraft = it },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text("Group name", color = GlassSheetTokens.OnOledMuted) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = GlassSheetTokens.OnOled,
@@ -1514,26 +1566,28 @@ fun ChatView(
                         unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
                     ),
                 )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (gid != null) {
-                            viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
-                        }
-                        showRenameGroupDialog = false
-                    },
-                    enabled = renameGroupDraft.isNotBlank(),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Save", color = GlassSheetTokens.OnOled)
+                    TextButton(onClick = { showRenameGroupDialog = false }) {
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                    }
+                    TextButton(
+                        onClick = {
+                            renameGroupId?.let { gid ->
+                                viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
+                            }
+                            showRenameGroupDialog = false
+                        },
+                        enabled = renameGroupDraft.isNotBlank(),
+                    ) {
+                        Text("Save", color = GlassSheetTokens.OnOled)
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameGroupDialog = false }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
-        )
+            }
+        }
     }
     } // End outer Box
 }

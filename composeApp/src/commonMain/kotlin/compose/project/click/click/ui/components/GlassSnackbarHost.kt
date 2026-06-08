@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -67,12 +68,17 @@ fun rememberGlassToastState(): GlassToastState = remember { GlassToastState() }
 fun GlassToastHost(
     state: GlassToastState,
     modifier: Modifier = Modifier,
+    opaque: Boolean = false,
 ) {
     val platformStyle = LocalPlatformStyle.current
     val enterMs = if (platformStyle.isIOS) 280 else 200
     val text = state.message
+    val toastShape = CompactSnackbarShape
 
-    Box(modifier = modifier, contentAlignment = Alignment.CenterEnd) {
+    Box(
+        modifier = modifier,
+        contentAlignment = if (opaque) Alignment.Center else Alignment.CenterEnd,
+    ) {
         AnimatedVisibility(
             visible = text != null,
             enter = slideInVertically(
@@ -85,14 +91,22 @@ fun GlassToastHost(
             ) + fadeOut(tween(180)),
         ) {
             if (text != null) {
+                val backgroundModifier = if (opaque) {
+                    Modifier
+                        .background(GlassSheetTokens.OledBlack, toastShape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder, toastShape)
+                } else {
+                    Modifier
+                        .clip(toastShape)
+                        .background(GlassSheetTokens.GlassSurface)
+                }
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = GlassSheetTokens.OnOled,
                     modifier = Modifier
-                        .widthIn(max = 260.dp)
-                        .clip(CompactSnackbarShape)
-                        .background(GlassSheetTokens.GlassSurface)
+                        .widthIn(max = 300.dp)
+                        .then(backgroundModifier)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             }

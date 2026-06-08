@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,8 +35,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.data.models.User
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.getPlatform
+import compose.project.click.click.ui.chat.GroupAddMemberPickerSheet
+import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
@@ -75,7 +78,9 @@ fun ConnectionsScreen(
     val screenScope = rememberCoroutineScope()
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
     var profileUserId by remember { mutableStateOf<String?>(null) }
-    var groupMemberPickerUsers by remember { mutableStateOf<List<User>?>(null) }
+    var groupMembersPickerContext by remember { mutableStateOf<GroupMembersPickerContext?>(null) }
+    var showGroupMembersSheet by remember { mutableStateOf(false) }
+    var showGroupAddMemberPicker by remember { mutableStateOf(false) }
     /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
     var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
 
@@ -199,7 +204,10 @@ fun ConnectionsScreen(
                     onHubSelected = onHubSelected,
                     onNavigateToLocationSettings = onNavigateToLocationSettings,
                     onUserProfileClick = { profileUserId = it },
-                    onGroupMembersPicker = { groupMemberPickerUsers = it },
+                    onGroupMembersPicker = {
+                        groupMembersPickerContext = it
+                        showGroupMembersSheet = true
+                    },
                     verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
                     onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
                     isListObscured = selectedChatId != null,
@@ -265,7 +273,10 @@ fun ConnectionsScreen(
                                 chatId = activeChatId,
                                 onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
                                 onOpenUserProfile = { profileUserId = it },
-                                onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
+                                onOpenGroupMembersPicker = {
+                                    groupMembersPickerContext = it
+                                    showGroupMembersSheet = true
+                                },
                                 integrateTimestampPeekWithSwipeBackContainer = true,
                                 onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
                                 parentInteractiveBackSwipePx = iosChatSwipeDragPx,
@@ -303,7 +314,10 @@ fun ConnectionsScreen(
                     onHubSelected = onHubSelected,
                     onNavigateToLocationSettings = onNavigateToLocationSettings,
                     onUserProfileClick = { profileUserId = it },
-                    onGroupMembersPicker = { groupMemberPickerUsers = it },
+                    onGroupMembersPicker = {
+                        groupMembersPickerContext = it
+                        showGroupMembersSheet = true
+                    },
                     verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
                     onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
                     isListObscured = false,
@@ -314,7 +328,10 @@ fun ConnectionsScreen(
                     chatId = activeChatId,
                     onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
                     onOpenUserProfile = { profileUserId = it },
-                    onOpenGroupMembersPicker = { groupMemberPickerUsers = it },
+                    onOpenGroupMembersPicker = {
+                        groupMembersPickerContext = it
+                        showGroupMembersSheet = true
+                    },
                     onOpenDisposableRoll = onOpenDisposableRoll,
                 )
             }
@@ -339,16 +356,70 @@ fun ConnectionsScreen(
                 }
             }
         },
+        onNudge = {
+            val pid = profileUserId ?: return@TabbedUserProfileSheet
+            val conn = AppDataManager.connections.value
+                .firstOrNull { c -> pid in c.user_ids && c.user_ids.contains(userId) }
+            val peer = AppDataManager.connectedUsers.value[pid]
+            if (conn != null) {
+                profileUserId = null
+                viewModel.sendNudgeToChat(conn.id, peer?.name ?: "them")
+            }
+        },
         onOpenDisposableRoll = onOpenDisposableRoll,
         localMessages = viewModel.currentChatLocalMessages(),
     )
-    if (groupMemberPickerUsers != null) {
+    val groupPickerContext = groupMembersPickerContext
+    if (showGroupMembersSheet && groupPickerContext != null) {
+        val isGroupCreator = groupPickerContext.createdByUserId == userId
         GroupMembersPickerSheet(
-            members = groupMemberPickerUsers!!,
-            onDismiss = { groupMemberPickerUsers = null },
+            members = groupPickerContext.members,
+            onDismiss = {
+                showGroupMembersSheet = false
+                groupMembersPickerContext = null
+            },
             onMemberClick = { id ->
-                groupMemberPickerUsers = null
+                showGroupMembersSheet = false
+                groupMembersPickerContext = null
                 profileUserId = id
+            },
+            isGroupAdmin = isGroupCreator,
+            currentUserId = userId,
+            onAddMember = {
+                showGroupMembersSheet = false
+                showGroupAddMemberPicker = true
+            },
+            onRemoveMember = if (isGroupCreator) {
+                { memberId ->
+                    viewModel.removeMemberFromVerifiedClique(groupPickerContext.groupId, memberId)
+                }
+            } else {
+                null
+            },
+        )
+    }
+    if (showGroupAddMemberPicker && groupPickerContext != null) {
+        val memberIds = groupPickerContext.memberUserIds.toSet()
+        val candidates = AppDataManager.connectedUsers.value.values
+            .filter { candidate ->
+                candidate.id != userId &&
+                    candidate.id !in memberIds &&
+                    AppDataManager.connections.value.any { conn ->
+                        conn.user_ids.contains(candidate.id) &&
+                            conn.user_ids.contains(userId) &&
+                            conn.normalizedConnectionStatus() in setOf("active", "kept")
+                    }
+            }
+            .sortedBy { it.name?.lowercase().orEmpty() }
+        GroupAddMemberPickerSheet(
+            candidates = candidates,
+            onDismiss = { showGroupAddMemberPicker = false },
+            onSelect = { newMemberId ->
+                showGroupAddMemberPicker = false
+                viewModel.addMemberToVerifiedClique(
+                    groupId = groupPickerContext.groupId,
+                    newMemberUserId = newMemberId,
+                )
             },
         )
     }

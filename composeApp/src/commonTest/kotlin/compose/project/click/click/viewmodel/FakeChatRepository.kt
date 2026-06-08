@@ -8,6 +8,7 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatRealtimeEvent
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.ChatTimelineCache
 import compose.project.click.click.data.repository.PresenceHealth
 import compose.project.click.click.data.repository.UnifiedSearchSupplement
 import compose.project.click.click.data.repository.MessageChangeEvent
@@ -67,6 +68,19 @@ class FakeChatRepository(
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
     private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
     override val presenceHealth: StateFlow<PresenceHealth> = _presenceHealth.asStateFlow()
+
+    override val messageTimelineCache = ChatTimelineCache()
+
+    override fun peekCachedMessageTimeline(connectionId: String): List<Message>? =
+        messageTimelineCache.peek(connectionId)
+
+    override fun storeCachedMessageTimeline(connectionId: String, messages: List<Message>) {
+        messageTimelineCache.store(connectionId, messages)
+    }
+
+    override fun mergeCachedTimelineMessage(connectionId: String, message: Message) {
+        messageTimelineCache.mergeMessage(connectionId, message)
+    }
 
     override suspend fun startGlobalPresence(userId: String) = onStartGlobalPresence(userId)
 
@@ -193,6 +207,16 @@ class FakeChatRepository(
 
     override suspend fun renameClique(groupId: String, newName: String): Result<Unit> =
         Result.failure(UnsupportedOperationException())
+
+    override suspend fun addCliqueMember(
+        groupId: String,
+        newMemberUserId: String,
+    ): Result<Unit> = Result.failure(UnsupportedOperationException())
+
+    override suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException())
+
+    override suspend fun peekGroupMasterKey(chatId: String, viewerUserId: String): ByteArray? = null
 
     override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean = true
 

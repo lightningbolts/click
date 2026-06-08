@@ -301,8 +301,38 @@ class ChatViewModel(
     /** List rows may omit prefetch; still reuse any [prefetchedChatPayloads] so refresh never blanks the thread. */
     private fun bootstrapMessagesFromPrefetch(connectionId: String): List<MessageWithUser> =
         prefetchedChatPayloads[connectionId]?.messages
+            ?: messagesWithUsersFromHotTimeline(connectionId)
             ?: payloadFromLocalCache(connectionId)?.messages
             ?: emptyList()
+
+    private fun messagesWithUsersFromHotTimeline(connectionId: String): List<MessageWithUser>? {
+        val userId = _currentUserId.value ?: return null
+        val raw = chatRepository.peekCachedMessageTimeline(connectionId) ?: return null
+        if (raw.isEmpty()) return null
+        return raw.map { message ->
+            MessageWithUser(
+                message = message,
+                user = AppDataManager.getConnectedUser(message.user_id)
+                    ?: User(id = message.user_id, name = "Unknown", createdAt = 0L),
+                isSent = message.user_id == userId,
+            )
+        }
+    }
+
+    private fun syncPrefetchFromHotTimeline(connectionId: String) {
+        val hot = messagesWithUsersFromHotTimeline(connectionId) ?: return
+        val existing = prefetchedChatPayloads[connectionId]
+        val hotTs = hot.maxOfOrNull { it.message.timeCreated } ?: 0L
+        val existingTs = existing?.messages?.maxOfOrNull { it.message.timeCreated } ?: 0L
+        if (existing == null || hotTs >= existingTs) {
+            prefetchedChatPayloads[connectionId] = PrefetchedChatPayload(
+                messages = hot,
+                reactionsByMessageId = existing?.reactionsByMessageId.orEmpty(),
+                icebreakerPrompts = existing?.icebreakerPrompts.orEmpty(),
+                showIcebreakerPanel = existing?.showIcebreakerPanel ?: (hot.size < 5),
+            )
+        }
+    }
 
     private fun payloadFromLocalCache(threadId: String): PrefetchedChatPayload? {
         val cached = AppDataManager.cachedChatThreadFor(threadId) ?: return null
@@ -589,6 +619,8 @@ class ChatViewModel(
                 sub = subscription
                 subscription.attach()
                 flow.collect { event ->
+                    chatRepository.mergeCachedTimelineMessage(event.connectionId, event.message)
+                    syncPrefetchFromHotTimeline(event.connectionId)
                     bumpConnectionInChatList(event.connectionId, event.message)
                 }
             } catch (e: CancellationException) {
@@ -1052,6 +1084,8 @@ class ChatViewModel(
             ?.chats?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
         val connectionId = cachedChat?.connection?.id ?: chatId
 
+        syncPrefetchFromHotTimeline(connectionId)
+
         payloadFromLocalCache(connectionId)?.let { disk ->
             if (connectionId !in prefetchedChatPayloads) {
                 prefetchedChatPayloads[connectionId] = disk
@@ -1137,8 +1171,8 @@ class ChatViewModel(
                 chatDetails = cachedChat,
                 isLoadingMessages = !hasCachedTimeline,
             )
-        } else if (hasRenderableStateForTarget && currentState != null) {
-            // Keep current content visible while refreshing in background.
+        } else if (hasRenderableStateForTarget && currentState != null && !switchingConnection) {
+            // Keep current content visible while refreshing the same thread in background.
             _chatMessagesState.value = currentState.copy(
                 isLoadingMessages = currentState.messages.isEmpty(),
             )
@@ -1246,6 +1280,10 @@ class ChatViewModel(
                     }
                 }
                 prefetchedChatPayloads[resolvedConnectionId] = payload!!
+                chatRepository.storeCachedMessageTimeline(
+                    resolvedConnectionId,
+                    payload.messages.map { it.message },
+                )
                 AppDataManager.cacheChatThread(
                     connectionId = resolvedConnectionId,
                     chatId = apiChatId,
@@ -2710,10 +2748,17 @@ class ChatViewModel(
      * so the UI does not flash a full-screen loading state over the list.
      */
     fun leaveChatRoom(clearMessageSurface: Boolean = true) {
-        val chatId = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id
+        val departingState = _chatMessagesState.value as? ChatMessagesState.Success
+        val departingConnectionId = currentConnectionId ?: departingState?.chatDetails?.connection?.id
+        val chatId = departingState?.chatDetails?.chat?.id
         val userId = _currentUserId.value
         if (chatId != null && userId != null) {
              onUserStoppedTyping(chatId)
+        }
+        departingConnectionId?.let { connId ->
+            departingState?.messages?.map { it.message }?.takeIf { it.isNotEmpty() }?.let { rows ->
+                chatRepository.storeCachedMessageTimeline(connId, rows)
+            }
         }
         clearSecureChatMediaCache()
         realtimeJob?.cancel()
@@ -2747,7 +2792,13 @@ class ChatViewModel(
         _isLocalTypingActive.value = false
         _isMessageSubmitInProgress.value = false
         if (clearMessageSurface) {
-            _chatMessagesState.value = ChatMessagesState.Loading
+            val hasRetainedTimeline = departingConnectionId?.let { connId ->
+                chatRepository.peekCachedMessageTimeline(connId)?.isNotEmpty() == true ||
+                    prefetchedChatPayloads[connId]?.messages?.isNotEmpty() == true
+            } == true
+            if (!hasRetainedTimeline) {
+                _chatMessagesState.value = ChatMessagesState.Loading
+            }
         }
         resetVibeCheckState()
         resetIcebreakerState()
@@ -3488,6 +3539,63 @@ class ChatViewModel(
         }
     }
 
+    fun addMemberToVerifiedClique(
+        groupId: String,
+        newMemberUserId: String,
+        onComplete: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            if (groupId.isBlank() || newMemberUserId.isBlank()) {
+                onComplete(false)
+                return@launch
+            }
+            val result = chatRepository.addCliqueMember(groupId, newMemberUserId)
+            if (result.isSuccess) {
+                chatRepository.clearChatListLocalCaches()
+                loadChats(isForced = true)
+                val state = _chatMessagesState.value as? ChatMessagesState.Success
+                val connectionId = state?.chatDetails?.groupClique
+                    ?.takeIf { it.groupId == groupId }
+                    ?.let { state.chatDetails.connection.id }
+                    ?: groupId
+                loadChatMessages(connectionId)
+                _nudgeResult.value = "Member added"
+                onComplete(true)
+            } else {
+                _nudgeResult.value = formatAddCliqueMemberError(result.exceptionOrNull()?.message)
+                onComplete(false)
+            }
+        }
+    }
+
+    fun removeMemberFromVerifiedClique(
+        groupId: String,
+        memberUserId: String,
+        onComplete: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            if (groupId.isBlank() || memberUserId.isBlank()) {
+                onComplete(false)
+                return@launch
+            }
+            val ok = chatRepository.removeCliqueMember(groupId, memberUserId).isSuccess
+            if (ok) {
+                chatRepository.clearChatListLocalCaches()
+                loadChats(isForced = true)
+                val state = _chatMessagesState.value as? ChatMessagesState.Success
+                val connectionId = state?.chatDetails?.groupClique
+                    ?.takeIf { it.groupId == groupId }
+                    ?.let { state.chatDetails.connection.id }
+                    ?: groupId
+                loadChatMessages(connectionId)
+                _nudgeResult.value = "Member removed"
+            } else {
+                _nudgeResult.value = "Could not remove member"
+            }
+            onComplete(ok)
+        }
+    }
+
     fun renameVerifiedClique(groupId: String, newName: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val trimmed = newName.trim()
@@ -3772,6 +3880,33 @@ class ChatViewModel(
             isImage -> "jpg"
             else -> "bin"
         }
+    }
+}
+
+internal fun formatAddCliqueMemberError(raw: String?): String {
+    val trimmed = raw?.trim().orEmpty()
+    val message = runCatching {
+        kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .parseToJsonElement(trimmed)
+            .let { it as? JsonObject }
+            ?.get("error")
+            ?.let { el -> (el as? JsonPrimitive)?.contentOrNull }
+    }.getOrNull()?.takeIf { it.isNotBlank() } ?: trimmed
+
+    return when {
+        message.isBlank() -> "Could not add member"
+        message.contains("verified connection", ignoreCase = true) ||
+            message.contains("missing verified", ignoreCase = true) ->
+            "They need a verified connection with every member of this click"
+        message.contains("already a member", ignoreCase = true) ->
+            "They're already in this click"
+        message.contains("must be a group member", ignoreCase = true) ->
+            "You must be in this click to add someone"
+        message.contains("encryption", ignoreCase = true) ->
+            "Couldn't access click encryption — try reopening the chat"
+        message.contains("not authenticated", ignoreCase = true) ->
+            "Sign in again to add members"
+        else -> message.take(160)
     }
 }
 

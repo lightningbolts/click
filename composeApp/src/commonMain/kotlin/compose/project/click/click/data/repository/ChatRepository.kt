@@ -142,6 +142,22 @@ interface ChatRepository {
     /** Clears short-lived junction caches so the next chat list fetch hits the network. */
     fun clearChatListLocalCaches()
 
+    /** Hot timelines per connection — survives standard chat back-navigation. */
+    val messageTimelineCache: ChatTimelineCache
+
+    fun peekCachedMessageTimeline(connectionId: String): List<Message>?
+
+    fun storeCachedMessageTimeline(connectionId: String, messages: List<Message>)
+
+    fun mergeCachedTimelineMessage(connectionId: String, message: Message)
+
+    suspend fun addCliqueMember(groupId: String, newMemberUserId: String): Result<Unit>
+
+    suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit>
+
+    /** Returns the cached or DB-unwrapped 32-byte group master key for E2EE member distribution. */
+    suspend fun peekGroupMasterKey(chatId: String, viewerUserId: String): ByteArray?
+
     /**
      * Realtime INSERT on [messages] rows the current session may read. Emits [MessageListInsertEvent]
      * with [MessageListInsertEvent.connectionId] resolved from [chats].

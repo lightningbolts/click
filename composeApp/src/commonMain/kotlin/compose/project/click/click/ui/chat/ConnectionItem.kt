@@ -74,7 +74,7 @@ fun ConnectionItem(
     decryptedPreview: String? = null,
     hasCachedThreadPreview: Boolean = false,
     onAvatarClick: () -> Unit = {},
-    onGroupMembersPicker: (List<User>) -> Unit = {},
+    onGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
     onClick: () -> Unit,
     onLongPress: () -> Unit = {},
 ) {
@@ -166,7 +166,9 @@ fun ConnectionItem(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = ripple(bounded = false, radius = 24.dp),
-                        onClick = { onGroupMembersPicker(orderedGroupMembersForPicker(chatDetails)) },
+                        onClick = {
+                            groupMembersPickerContextFrom(chatDetails)?.let(onGroupMembersPicker)
+                        },
                     ),
                 contentAlignment = Alignment.CenterStart,
             ) {

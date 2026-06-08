@@ -608,7 +608,12 @@ private fun buildProfileSheetState(
         subtitle = otherUser?.email?.takeIf { it.isNotBlank() },
         avatarUrl = otherUser?.image,
         statusBadge = status,
-        canNudge = point.timeState == TimeState.LIVE || point.timeState == TimeState.RECENT,
+        canNudge = point.connection.id.isNotBlank() && (
+            point.connection.has_begun ||
+                point.connection.normalizedConnectionStatus() in setOf("active", "kept", "pending") ||
+                point.timeState == TimeState.LIVE ||
+                point.timeState == TimeState.RECENT
+            ),
         timeline = emptyList(),
         media = emptyList(),
         links = emptyList(),

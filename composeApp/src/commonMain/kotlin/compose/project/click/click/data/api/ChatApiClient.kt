@@ -814,6 +814,58 @@ class ChatApiClient(
         }
     }
 
+    suspend fun addCliqueMember(
+        groupId: String,
+        newMemberUserId: String,
+        authToken: String,
+    ): Result<Unit> {
+        return try {
+            val body = buildJsonObject {
+                put("group_id", groupId)
+                put("new_member_user_id", newMemberUserId)
+            }
+            val response = client.post("$clickWebBaseUrl/api/cliques/members") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                Result.failure(Exception(errorBody.ifBlank { "Failed to add member: ${response.status}" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeCliqueMember(
+        groupId: String,
+        memberUserId: String,
+        authToken: String,
+    ): Result<Unit> {
+        return try {
+            val body = buildJsonObject {
+                put("group_id", groupId)
+                put("member_user_id", memberUserId)
+            }
+            val response = client.delete("$clickWebBaseUrl/api/cliques/members") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                Result.failure(Exception(errorBody.ifBlank { "Failed to remove member: ${response.status}" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun updateHub(
         hubId: String,
         name: String?,
