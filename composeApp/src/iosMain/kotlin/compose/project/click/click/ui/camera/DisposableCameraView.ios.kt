@@ -410,7 +410,14 @@ actual fun DisposableCameraView(
                 currentOnPhotoConfirmed(filtered)
             }
         },
-        onDismiss = onDismiss,
+        onDismiss = {
+            if (capturedImage != null) {
+                capturedImage = null
+                selectedFilterIndex = 0
+            } else {
+                onDismiss()
+            }
+        },
         previewContent = {
             UIKitView(
                 modifier = Modifier

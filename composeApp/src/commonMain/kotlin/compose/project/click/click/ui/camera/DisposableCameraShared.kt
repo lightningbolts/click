@@ -148,7 +148,7 @@ internal fun DisposableCameraChrome(
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
                 .padding(start = 16.dp, top = 12.dp),
-            contentDescription = "Close camera",
+            contentDescription = if (hasCapture) "Retake photo" else "Close camera",
         )
 
         Surface(

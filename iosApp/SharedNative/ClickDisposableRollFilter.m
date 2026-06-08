@@ -110,6 +110,23 @@ static CIImage *_Nullable DownscaleIfNeeded(CIImage *input, int maxDimension) {
     return scaleFilter.outputImage ?: input;
 }
 
+static UIImage *_Nullable NormalizedUpImage(UIImage *image) {
+    if (image == nil) {
+        return nil;
+    }
+    if (image.imageOrientation == UIImageOrientationUp) {
+        return image;
+    }
+    UIGraphicsImageRendererFormat *format = [[UIGraphicsImageRendererFormat alloc] init];
+    format.scale = image.scale;
+    format.opaque = YES;
+    UIGraphicsImageRenderer *renderer =
+        [[UIGraphicsImageRenderer alloc] initWithSize:image.size format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
+    }];
+}
+
 NSData *ClickApplyDisposableRollPhotoEffect(
     NSData *jpegData,
     int filterIndex,
@@ -119,7 +136,17 @@ NSData *ClickApplyDisposableRollPhotoEffect(
         return jpegData;
     }
 
-    CIImage *input = [CIImage imageWithData:jpegData options:nil];
+    UIImage *sourceImage = [UIImage imageWithData:jpegData];
+    if (sourceImage == nil || sourceImage.CGImage == nil) {
+        return jpegData;
+    }
+
+    UIImage *uprightImage = NormalizedUpImage(sourceImage);
+    if (uprightImage == nil || uprightImage.CGImage == nil) {
+        return jpegData;
+    }
+
+    CIImage *input = [CIImage imageWithCGImage:uprightImage.CGImage];
     if (input == nil) {
         return jpegData;
     }
@@ -137,7 +164,9 @@ NSData *ClickApplyDisposableRollPhotoEffect(
         return jpegData;
     }
 
-    UIImage *filtered = [UIImage imageWithCGImage:rendered];
+    UIImage *filtered = [UIImage imageWithCGImage:rendered
+                                            scale:uprightImage.scale
+                                      orientation:UIImageOrientationUp];
     CGImageRelease(rendered);
 
     NSData *jpeg = UIImageJPEGRepresentation(filtered, 0.88);
