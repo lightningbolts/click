@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -53,13 +51,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.GlassCard
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
-import kotlin.math.roundToInt
 
 /**
  * Shared Disposable Roll chrome around the native camera preview.
@@ -306,7 +302,7 @@ private fun DisposableRollFilterSlider(
             color = Color.White.copy(alpha = 0.92f),
         )
         Spacer(modifier = Modifier.height(10.dp))
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
@@ -339,25 +335,18 @@ private fun DisposableRollFilterSlider(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            val dotSize = 10.dp
-            val spacing = (maxWidth - dotSize * DisposableRollFilters.COUNT) /
-                (DisposableRollFilters.COUNT - 1).coerceAtLeast(1)
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(dotSize),
+                    .padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 DisposableRollFilters.all.forEachIndexed { index, _ ->
                     val selected = index == clampedIndex
-                    val step = dotSize + spacing
-                    val offset = IntOffset(
-                        x = with(density) { (step * index).roundToPx() },
-                        y = 0,
-                    )
                     Box(
                         modifier = Modifier
-                            .offset { offset }
-                            .size(if (selected) 14.dp else dotSize)
+                            .size(if (selected) 14.dp else 10.dp)
                             .clip(CircleShape)
                             .background(
                                 if (selected) PrimaryBlue else Color.White.copy(alpha = 0.42f),

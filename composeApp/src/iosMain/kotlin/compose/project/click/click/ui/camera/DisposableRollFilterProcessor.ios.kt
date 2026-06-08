@@ -13,19 +13,6 @@ import platform.Foundation.NSData
 import platform.Foundation.NSMutableData
 import platform.posix.memcpy
 
-private fun coreImagePhotoEffectName(filterIndex: Int): String? = when (filterIndex) {
-    1 -> "CIPhotoEffectTransfer"
-    2 -> "CIPhotoEffectProcess"
-    3 -> "CIPhotoEffectInstant"
-    4 -> "CIPhotoEffectChrome"
-    5 -> "CIPhotoEffectFade"
-    6 -> "CIPhotoEffectMono"
-    7 -> "CIPhotoEffectNoir"
-    8 -> "CIPhotoEffectTonal"
-    9 -> "CIPhotoEffectSilvertone"
-    else -> null
-}
-
 @OptIn(ExperimentalForeignApi::class)
 private fun NSData.toByteArray(): ByteArray {
     val len = length.toInt()
@@ -48,11 +35,20 @@ private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
     m
 }
 
+internal const val DISPOSABLE_ROLL_PREVIEW_MAX_DIMENSION = 1280
+
 @OptIn(ExperimentalForeignApi::class)
-private fun applyCoreImagePhotoEffect(sourceBytes: ByteArray, filterIndex: Int): ByteArray {
+private fun applyCoreImageFilter(
+    sourceBytes: ByteArray,
+    filterIndex: Int,
+    previewMaxDimension: Int = 0,
+): ByteArray {
     if (filterIndex <= 0 || sourceBytes.isEmpty()) return sourceBytes
-    val effectName = coreImagePhotoEffectName(filterIndex) ?: return sourceBytes
-    val filtered = ClickApplyDisposableRollPhotoEffect(sourceBytes.toNSData(), effectName)
+    val filtered = ClickApplyDisposableRollPhotoEffect(
+        sourceBytes.toNSData(),
+        filterIndex,
+        previewMaxDimension,
+    )
     return filtered.toByteArray().takeIf { it.isNotEmpty() } ?: sourceBytes
 }
 
@@ -61,13 +57,17 @@ actual suspend fun renderDisposableRollFilteredPreview(
     filterIndex: Int,
 ): ImageBitmap? = withContext(Dispatchers.Default) {
     runCatching {
-        applyCoreImagePhotoEffect(sourceBytes, filterIndex).toImageBitmap()
+        applyCoreImageFilter(
+            sourceBytes = sourceBytes,
+            filterIndex = filterIndex,
+            previewMaxDimension = DISPOSABLE_ROLL_PREVIEW_MAX_DIMENSION,
+        ).toImageBitmap()
     }.getOrNull()
 }
 
 actual suspend fun applyDisposableRollFilterToJpeg(bytes: ByteArray, filterIndex: Int): ByteArray =
     withContext(Dispatchers.Default) {
         runCatching {
-            applyCoreImagePhotoEffect(bytes, filterIndex)
+            applyCoreImageFilter(bytes, filterIndex)
         }.getOrElse { bytes }
     }

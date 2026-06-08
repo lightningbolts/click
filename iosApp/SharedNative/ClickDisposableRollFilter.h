@@ -4,7 +4,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSData *ClickApplyDisposableRollPhotoEffect(
     NSData *jpegData,
-    NSString *_Nullable effectName
+    int filterIndex,
+    int previewMaxDimension
 );
 
 NS_ASSUME_NONNULL_END

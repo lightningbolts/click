@@ -14,7 +14,12 @@ actual suspend fun renderDisposableRollFilteredPreview(
 ): ImageBitmap? = withContext(Dispatchers.Default) {
     val context = AndroidChatImageSaveContext.applicationContext ?: return@withContext null
     runCatching {
-        applyGpuImageFilter(context, sourceBytes, filterIndex)?.asImageBitmap()
+        applyGpuImageFilter(
+            context = context,
+            sourceBytes = sourceBytes,
+            filterIndex = filterIndex,
+            previewMaxDimension = DISPOSABLE_ROLL_PREVIEW_MAX_DIMENSION,
+        )?.asImageBitmap()
     }.getOrNull()
 }
 
