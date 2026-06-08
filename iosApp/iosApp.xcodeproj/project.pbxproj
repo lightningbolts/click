@@ -214,6 +214,7 @@
 				A774A904F6121A4DCE9176A3 /* Resources */,
 				008D49D52F75AFAE006AD3B5 /* Embed Foundation Extensions */,
 				A1B2C3CC2F760001006AD3B5 /* Embed App Clips */,
+				B2C3D4E52F760001006AD3B6 /* Generate LiveKitWebRTC dSYM */,
 			);
 			buildRules = (
 			);
@@ -311,6 +312,16 @@
 				"fi",
 				"cd \"$SRCROOT/..\"",
 				"./gradlew :composeApp:embedAndSignAppleFrameworkForXcode",
+				"",
+			);
+		};
+		B2C3D4E52F760001006AD3B6 /* Generate LiveKitWebRTC dSYM */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 0;
+			name = "Generate LiveKitWebRTC dSYM";
+			shellPath = /bin/sh;
+			shellScript = (
+				"\"${SRCROOT}/scripts/generate-livekit-dsym.sh\"",
 				"",
 			);
 		};

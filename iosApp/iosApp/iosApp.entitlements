@@ -12,5 +12,9 @@
 	<array>
 		<string>applinks:click-us.vercel.app</string>
 	</array>
+	<key>com.apple.developer.associated-appclip-app-identifiers</key>
+	<array>
+		<string>$(AppIdentifierPrefix)compose.project.click.click.Clip</string>
+	</array>
 </dict>
 </plist>
