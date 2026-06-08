@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.platform.KeyboardHeightProvider
+import compose.project.click.click.platform.rememberKeyboardHeightProvider
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /** Shared horizontal gutter for tab-root screens. */
@@ -95,6 +98,7 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
 private fun Modifier.chatBottomInsetUnion(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPx: Float? = null,
+    keyboardHeightProvider: KeyboardHeightProvider? = null,
 ): Modifier = composed {
     val density = LocalDensity.current
     val style = LocalPlatformStyle.current
@@ -103,12 +107,18 @@ private fun Modifier.chatBottomInsetUnion(
     val navBottomPx = navInsets.getBottom(density)
     val navBottomDp = with(density) { navBottomPx.toDp() }
 
-    if (style.isIOS && nativeKeyboardLiftPx != null) {
+    if (style.isIOS) {
+        val liftPx = nativeKeyboardLiftPx ?: run {
+            val provider = keyboardHeightProvider
+                ?: rememberKeyboardHeightProvider()
+            val heightPoints by provider.keyboardHeight.collectAsState()
+            ((heightPoints * density.density) - navBottomPx).coerceAtLeast(0f)
+        }
         return@composed Modifier
             .padding(bottom = navBottomDp + extraBottom)
             .clipToBounds()
             .graphicsLayer {
-                translationY = -nativeKeyboardLiftPx.coerceAtLeast(0f)
+                translationY = -liftPx.coerceAtLeast(0f)
             }
     }
 
@@ -143,7 +153,8 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
 fun Modifier.chatThreadKeyboardDock(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPx: Float? = null,
-): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx)
+    keyboardHeightProvider: KeyboardHeightProvider? = null,
+): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx, keyboardHeightProvider)
 
 /** @see chatThreadKeyboardDock */
 fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =

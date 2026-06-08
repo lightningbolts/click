@@ -84,7 +84,7 @@ import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowl
 import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatKeyboardLiftDp // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
@@ -166,7 +166,7 @@ fun HubChatScreen(
     val hubPeekScope = rememberCoroutineScope()
     val hubListState = remember(args.realtimeChannel) { LazyListState() }
     val density = LocalDensity.current
-    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
+    val chatKeyboardLiftDp = rememberChatKeyboardLiftDp(keyboardHeightProvider)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
@@ -497,7 +497,7 @@ fun HubChatScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .chatThreadKeyboardDock(
-                            nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                            keyboardHeightProvider = keyboardHeightProvider,
                         ),
                 ) {
                 Box(
@@ -513,7 +513,7 @@ fun HubChatScreen(
                         start = 6.dp,
                         end = 6.dp,
                         top = 24.dp + reverseListNewestEdgePad,
-                        bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
+                        bottom = 8.dp + ChatComposerStripReserve,
                     ),
                     dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                     displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -555,11 +555,7 @@ fun HubChatScreen(
                 }
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
-                        },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     HubChatInputBar(
                         viewModel = viewModel,

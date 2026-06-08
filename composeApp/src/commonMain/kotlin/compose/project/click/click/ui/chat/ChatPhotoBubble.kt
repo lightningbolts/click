@@ -115,12 +115,20 @@ internal fun ChatBubblePhotoContent(
     }
     Box(modifier = modifier.fillMaxWidth()) {
         val localPreviewBytes = secureState?.imageBytes
+        val cachedBitmap = remember(message.id) { secureChatImageBitmapCache.get(message.id) }
         when {
+            cachedBitmap != null -> {
+                PhotoBitmapContent(
+                    bitmap = cachedBitmap,
+                    rollLocked = rollLocked,
+                    countdownLabel = countdownLabel,
+                    borderIfReceived = borderIfReceived,
+                    photoGestureModifier = photoGestureModifier,
+                    uploadProgress = secureState?.uploadProgress,
+                )
+            }
             localPreviewBytes != null -> {
-                val cachedBitmap = remember(message.id) {
-                    secureChatImageBitmapCache.get(message.id)
-                }
-                val displayBitmap = cachedBitmap ?: remember(message.id) {
+                val displayBitmap = remember(message.id) {
                     runCatching { localPreviewBytes.toImageBitmap() }
                         .onFailure { e ->
                             println("ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}")
@@ -129,67 +137,20 @@ internal fun ChatBubblePhotoContent(
                         ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
                 }
                 if (displayBitmap != null) {
-                    val up = secureState.uploadProgress
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = chatBubbleScaledDp(330f)),
-                    ) {
-                        Image(
-                            bitmap = displayBitmap,
-                            contentDescription = "Photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(photoGestureModifier)
-                                .then(
-                                    if (borderIfReceived) {
-                                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
-                                    } else {
-                                        Modifier
-                                    },
-                                )
-                                .clip(chatPhotoAttachmentShape)
-                                .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
-                        )
-                        if (rollLocked && countdownLabel != null) {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(chatPhotoAttachmentShape)
-                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = countdownLabel,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = Color.White,
-                                )
-                            }
-                        }
-                        if (up != null && up < 1f) {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(chatPhotoAttachmentShape)
-                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.22f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(
-                                    progress = { up },
-                                    modifier = Modifier.size(chatBubbleScaledDp(44f)),
-                                    strokeWidth = chatBubbleScaledDp(4f),
-                                    color = PrimaryBlue,
-                                )
-                            }
-                        }
-                    }
+                    PhotoBitmapContent(
+                        bitmap = displayBitmap,
+                        rollLocked = rollLocked,
+                        countdownLabel = countdownLabel,
+                        borderIfReceived = borderIfReceived,
+                        photoGestureModifier = photoGestureModifier,
+                        uploadProgress = secureState?.uploadProgress,
+                    )
                 } else {
-                    PreparingSecureMediaText()
+                    SecurePhotoLoadingPlaceholder()
                 }
             }
             isEncrypted && secureState?.loading == true -> {
-                PreparingSecureMediaText()
+                SecurePhotoLoadingPlaceholder()
             }
             isEncrypted && secureState?.error?.isNotBlank() == true -> {
                 Text(
@@ -199,7 +160,7 @@ internal fun ChatBubblePhotoContent(
                     modifier = Modifier.padding(chatBubbleScaledDp(18f)),
                 )
             }
-            isEncrypted -> PreparingSecureMediaText()
+            isEncrypted -> SecurePhotoLoadingPlaceholder()
             !mediaUrl.isNullOrBlank() -> {
                 Box(
                     modifier = Modifier
@@ -240,23 +201,91 @@ internal fun ChatBubblePhotoContent(
                     }
                 }
             }
-            else -> PreparingSecureMediaText()
+            else -> SecurePhotoLoadingPlaceholder()
         }
     }
 }
 
 @Composable
-private fun PreparingSecureMediaText() {
+private fun SecurePhotoLoadingPlaceholder() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(220f)),
+            .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(220f))
+            .clip(chatPhotoAttachmentShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "Preparing photo",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            strokeWidth = 2.dp,
+            color = PrimaryBlue,
         )
+    }
+}
+
+@Composable
+private fun PhotoBitmapContent(
+    bitmap: ImageBitmap,
+    rollLocked: Boolean,
+    countdownLabel: String?,
+    borderIfReceived: Boolean,
+    photoGestureModifier: Modifier,
+    uploadProgress: Float?,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = chatBubbleScaledDp(330f)),
+    ) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = "Photo",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(photoGestureModifier)
+                .then(
+                    if (borderIfReceived) {
+                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
+                    } else {
+                        Modifier
+                    },
+                )
+                .clip(chatPhotoAttachmentShape)
+                .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+        )
+        if (rollLocked && countdownLabel != null) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(chatPhotoAttachmentShape)
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = countdownLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White,
+                )
+            }
+        }
+        val up = uploadProgress
+        if (up != null && up < 1f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(chatPhotoAttachmentShape)
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    progress = { up },
+                    modifier = Modifier.size(chatBubbleScaledDp(44f)),
+                    strokeWidth = chatBubbleScaledDp(4f),
+                    color = PrimaryBlue,
+                )
+            }
+        }
     }
 }

@@ -129,7 +129,7 @@ import compose.project.click.click.ui.components.GlassCard // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatKeyboardLiftDp // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -346,7 +346,7 @@ fun ChatView(
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
+    val chatKeyboardLiftDp = rememberChatKeyboardLiftDp(keyboardHeightProvider)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -998,7 +998,7 @@ fun ChatView(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                                        keyboardHeightProvider = keyboardHeightProvider,
                                     ),
                             ) {
                             Box(
@@ -1184,7 +1184,7 @@ fun ChatView(
                                 start = 12.dp,
                                 end = 12.dp,
                                 top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
+                                bottom = 8.dp + ChatComposerStripReserve,
                             ),
                             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                             displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -1196,7 +1196,7 @@ fun ChatView(
                             reactionsMap = reactionsMap,
                             secureMediaLoadMap = secureMediaLoadMap,
                             secureMediaHost = viewModel,
-                            activeChatId = activeApiChatId,
+                            activeChatId = activeApiChatId ?: chatDetails.chat.id,
                             onToggleReaction = { messageId, reaction ->
                                 viewModel.toggleReaction(messageId, reaction)
                             },
@@ -1230,11 +1230,7 @@ fun ChatView(
                             }
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
-                            },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
@@ -1422,9 +1418,7 @@ fun ChatView(
             .padding(
                 start = 20.dp,
                 end = 20.dp,
-                bottom = edgeBottomInset +
-                    nativeKeyboardInsets.timelineBottomPadding +
-                    76.dp,
+                bottom = edgeBottomInset + chatKeyboardLiftDp + 76.dp,
             ),
     )
 

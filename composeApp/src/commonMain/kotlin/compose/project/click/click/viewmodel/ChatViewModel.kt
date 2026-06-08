@@ -58,9 +58,11 @@ import compose.project.click.click.util.redactedRestMessage // pragma: allowlist
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
+import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
+import compose.project.click.click.util.readChatMediaVaultBytesForMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -262,6 +264,7 @@ class ChatViewModel(
         _secureChatMediaLoadState.asStateFlow()
     private val secureImageBytesCache =
         LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
+    private val secureImageNetworkLoads = Semaphore(SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY)
     private val secureAudioPathCache =
         LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
@@ -1105,6 +1108,9 @@ class ChatViewModel(
                 _messageReactions.value = mergedPrefetch.reactionsByMessageId
                 _icebreakerPrompts.value = mergedPrefetch.icebreakerPrompts
                 _showIcebreakerPanel.value = mergedPrefetch.showIcebreakerPanel
+                viewModelScope.launch {
+                    warmSecureMediaForTimeline(mergedPrefetch.messages)
+                }
                 _chatMessagesState.value = ChatMessagesState.Success(
                     messages = mergedPrefetch.messages,
                     chatDetails = rowForDisk,
@@ -1166,6 +1172,9 @@ class ChatViewModel(
             _messageReactions.value = prefetchedPayload.reactionsByMessageId
             _icebreakerPrompts.value = prefetchedPayload.icebreakerPrompts
             _showIcebreakerPanel.value = prefetchedPayload.showIcebreakerPanel
+            viewModelScope.launch {
+                warmSecureMediaForTimeline(prefetchedPayload.messages)
+            }
             _chatMessagesState.value = ChatMessagesState.Success(
                 messages = prefetchedPayload.messages,
                 chatDetails = cachedChat,
@@ -1179,6 +1188,9 @@ class ChatViewModel(
         } else if (cachedChat != null) {
             // Show header, composer, and conversation starters immediately instead of a blank loading screen.
             val boot = bootstrapMessagesFromPrefetch(connectionId)
+            viewModelScope.launch {
+                warmSecureMediaForTimeline(boot)
+            }
             _chatMessagesState.value = ChatMessagesState.Success(
                 messages = boot,
                 chatDetails = cachedChat,
@@ -1302,6 +1314,7 @@ class ChatViewModel(
                     _icebreakerPrompts.value = emptyList()
                 }
                 ensureActive()
+                warmSecureMediaForTimeline(payload.messages)
                 _chatMessagesState.value = ChatMessagesState.Success(
                     messages = payload.messages,
                     chatDetails = hydratedChatDetails,
@@ -1456,8 +1469,69 @@ class ChatViewModel(
         }
     }
 
+    private fun hydrateSecureMediaStateFromByteCache(messages: List<MessageWithUser>) {
+        if (messages.isEmpty()) return
+        _secureChatMediaLoadState.update { map ->
+            var out = map
+            for (mwu in messages) {
+                val id = mwu.message.id
+                if (out[id]?.imageBytes != null) continue
+                val bytes = secureImageBytesCache.get(id)?.takeIf { it.isNotEmpty() } ?: continue
+                out = out + (id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
+            }
+            out
+        }
+    }
+
+    private suspend fun hydrateSecureMediaFromDiskVault(messages: List<MessageWithUser>) {
+        if (messages.isEmpty()) return
+        val imageMessages = messages.filter {
+            it.message.messageType.lowercase() == ChatMessageType.IMAGE
+        }
+        val visibleBatch = imageMessages.takeLast(SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH)
+        val deferredBatch = imageMessages.dropLast(SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH)
+        applyDiskVaultHydration(visibleBatch)
+        if (deferredBatch.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.Default) {
+                applyDiskVaultHydration(deferredBatch)
+            }
+        }
+    }
+
+    private suspend fun applyDiskVaultHydration(batch: List<MessageWithUser>) {
+        if (batch.isEmpty()) return
+        val updates = withContext(Dispatchers.Default) {
+            val out = LinkedHashMap<String, SecureChatMediaLoadState>()
+            for (mwu in batch) {
+                val msg = mwu.message
+                if (msg.messageType.lowercase() != ChatMessageType.IMAGE) continue
+                val id = msg.id
+                if (_secureChatMediaLoadState.value[id]?.imageBytes != null) continue
+                val memCached = secureImageBytesCache.get(id)?.takeIf { it.isNotEmpty() }
+                if (memCached != null) {
+                    out[id] = SecureChatMediaLoadState(loading = false, imageBytes = memCached)
+                    continue
+                }
+                if (secureChatImageBitmapCache.get(id) != null) continue
+                val vaultBytes = readChatMediaVaultBytesForMessage(id, msg.mediaUrlOrNull()) ?: continue
+                secureImageBytesCache.put(id, vaultBytes)
+                out[id] = SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes)
+            }
+            out
+        }
+        if (updates.isNotEmpty()) {
+            _secureChatMediaLoadState.update { it + updates }
+        }
+    }
+
+    private suspend fun warmSecureMediaForTimeline(
+        messages: List<MessageWithUser>,
+    ) {
+        hydrateSecureMediaStateFromByteCache(messages)
+        hydrateSecureMediaFromDiskVault(messages)
+    }
+
     override fun ensureSecureChatImageLoaded(scopeId: String, viewerUserId: String, message: Message) {
-        if (!message.isEncryptedMedia()) return
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
@@ -1470,7 +1544,19 @@ class ChatViewModel(
         }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.imageBytes != null || cur?.loading == true) return
+        if (secureChatImageBitmapCache.get(message.id) != null) return
+
         viewModelScope.launch(chatMediaDispatcher) {
+            readChatMediaVaultBytesForMessage(message.id, url)?.takeIf { it.isNotEmpty() }?.let { vaultBytes ->
+                secureImageBytesCache.put(message.id, vaultBytes)
+                _secureChatMediaLoadState.update {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes))
+                }
+                return@launch
+            }
+
+            if (!message.isEncryptedMedia()) return@launch
+
             _secureChatMediaLoadState.update { map ->
                 val existing = map[message.id]
                 map + (
@@ -1482,7 +1568,9 @@ class ChatViewModel(
                     )
             }
             val bytes = runCatching {
-                chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+                secureImageNetworkLoads.withPermit {
+                    chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+                }
             }.onFailure { e ->
                 println("ChatViewModel: secure image decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
@@ -1548,13 +1636,19 @@ class ChatViewModel(
 
     suspend fun fetchDecryptedChatMediaBytes(message: Message): ByteArray? {
         secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
+        readChatMediaVaultBytesForMessage(message.id, message.mediaUrlOrNull())
+            ?.takeIf { it.isNotEmpty() }
+            ?.also { secureImageBytesCache.put(message.id, it) }
+            ?.let { return it }
         val s = _chatMessagesState.value as? ChatMessagesState.Success ?: return null
         val cid = s.chatDetails.chat.id ?: return null
         val uid = _currentUserId.value ?: return null
         val url = message.mediaUrlOrNull() ?: return null
         if (!message.isEncryptedMedia()) return null
         val bytes = withContext(chatMediaDispatcher) {
-            chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
+            secureImageNetworkLoads.withPermit {
+                chatRepository.downloadAndDecryptChatMedia(cid, uid, url)
+            }
         }
         if (bytes != null && bytes.isNotEmpty()) {
             secureImageBytesCache.put(message.id, bytes)
@@ -3916,4 +4010,6 @@ private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
 private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 800L
 private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L
 private const val SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES = 160
+private const val SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY = 4
+private const val SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH = 36
 private const val SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES = 80

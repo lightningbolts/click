@@ -129,8 +129,9 @@ fun ChatMessageBubble(
     val onRequestSecureAudio = remember(message.id) { {} }
 
     LaunchedEffect(message.id, mediaUrl, encryptedMedia, secureSt?.imageBytes, activeChatId, currentUserId) {
-        if (!isImageMessage || !encryptedMedia) return@LaunchedEffect
+        if (!isImageMessage) return@LaunchedEffect
         if (secureSt?.imageBytes != null) return@LaunchedEffect
+        if (secureChatImageBitmapCache.get(message.id) != null) return@LaunchedEffect
         val url = mediaUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
