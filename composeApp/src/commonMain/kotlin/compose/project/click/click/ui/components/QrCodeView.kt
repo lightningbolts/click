@@ -55,11 +55,18 @@ private val httpClient = HttpClient {
 private const val QR_API_URL = "$CLICK_WEB_BASE_URL/api/qr"
 private const val QR_TOKEN_TTL_MS = 90_000L
 
-private fun formatRefreshCountdown(secondsRemaining: Int): String {
+internal fun formatRefreshCountdown(secondsRemaining: Int): String {
     val clamped = secondsRemaining.coerceAtLeast(0)
     val minutes = clamped / 60
     val seconds = clamped % 60
     return "${minutes}:${seconds.toString().padStart(2, '0')}"
+}
+
+private fun parseJsonEpochMs(element: JsonElement?): Long? {
+    val raw = element?.jsonPrimitive ?: return null
+    return raw.longOrNull
+        ?: raw.contentOrNull?.trim()?.toLongOrNull()
+        ?: raw.contentOrNull?.trim()?.toDoubleOrNull()?.toLong()
 }
 
 /**
@@ -89,8 +96,9 @@ fun UserQrCode(
     var tokenExpiresAtMs by remember { mutableLongStateOf(0L) }
     var secondsUntilRefresh by remember { mutableIntStateOf(90) }
 
-    suspend fun registerGpsWithServer() {
+    suspend fun registerGpsWithServer(): Long {
         fetchError = false
+        val fallbackExpiry = Clock.System.now().toEpochMilliseconds() + QR_TOKEN_TTL_MS
         try {
             val session = SupabaseConfig.client.auth.currentSessionOrNull()
             val token = session?.accessToken
@@ -123,9 +131,10 @@ fun UserQrCode(
                     TelemetryBatcher.recordQrFallback()
                     qrPayload = universalLink.ifBlank { fallbackUrl }
                 }
-                val expiresAt = data?.get("expiresAt")?.jsonPrimitive?.longOrNull
-                tokenExpiresAtMs = expiresAt ?: (Clock.System.now().toEpochMilliseconds() + QR_TOKEN_TTL_MS)
+                val expiry = parseJsonEpochMs(data?.get("expiresAt")) ?: fallbackExpiry
+                tokenExpiresAtMs = expiry
                 gpsRegistered = true
+                return expiry
             } else {
                 if (!gpsRegistered) {
                     TelemetryBatcher.recordQrFallback()
@@ -137,6 +146,10 @@ fun UserQrCode(
             TelemetryBatcher.recordQrFallback()
             if (gpsRegistered) fetchError = true
         }
+        if (tokenExpiresAtMs <= 0L) {
+            tokenExpiresAtMs = fallbackExpiry
+        }
+        return tokenExpiresAtMs
     }
 
     LaunchedEffect(user.id) {
@@ -144,15 +157,12 @@ fun UserQrCode(
         launch(Dispatchers.Default) {
             runCatching { locationService?.getHighAccuracyLocation(4000L) }
         }
-        registerGpsWithServer()
-        while (isActive) {
-            delay(90_000L)
-            registerGpsWithServer()
-        }
-    }
 
-    LaunchedEffect(tokenExpiresAtMs) {
-        if (tokenExpiresAtMs <= 0L) return@LaunchedEffect
+        tokenExpiresAtMs = Clock.System.now().toEpochMilliseconds() + QR_TOKEN_TTL_MS
+        secondsUntilRefresh = (QR_TOKEN_TTL_MS / 1_000L).toInt()
+
+        registerGpsWithServer()
+
         while (isActive) {
             val now = Clock.System.now().toEpochMilliseconds()
             val remainingSec = ((tokenExpiresAtMs - now) / 1_000L).toInt()
