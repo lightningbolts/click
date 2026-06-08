@@ -1,13 +1,14 @@
 package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
@@ -62,15 +63,10 @@ fun rememberChatKeyboardLiftDp(
     val platformStyle = LocalPlatformStyle.current
     if (!platformStyle.isIOS) return 0.dp
     val nativeKeyboardHeightPoints by keyboardHeightProvider.keyboardHeight.collectAsStateLifecycleAware()
-    val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
-    val liftPx = ((nativeKeyboardHeightPoints * density.density) - navBottomPx).coerceAtLeast(0f)
+    val navBottomPx = WindowInsets.navigationBars.getBottom(density)
+    val imePx = WindowInsets.ime.getBottom(density)
+    val trackedPx = (nativeKeyboardHeightPoints * density.density).roundToInt()
+    val liftPx = (maxOf(imePx, trackedPx) - navBottomPx).coerceAtLeast(0)
     return with(density) { liftPx.toDp() }
 }
 
-/** GPU translate for composer / timeline — no layout reflow. */
-fun Modifier.chatNativeGpuLift(liftPx: Float): Modifier = composed {
-    if (!LocalPlatformStyle.current.isIOS) return@composed this
-    graphicsLayer {
-        translationY = -liftPx.coerceAtLeast(0f)
-    }
-}
