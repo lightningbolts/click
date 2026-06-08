@@ -122,15 +122,19 @@ object AttachmentCrypto {
         val meta = metadata as? JsonObject
         if (base == null && meta == null) return null
 
-        val fileName = meta.stringAt("file_name")
+        val fileName = meta.stringAt("attachment_name")
+            ?: meta.stringAt("file_name")
             ?: meta.stringAt("filename")
             ?: meta.stringAt("name")
-        val mimeType = meta.stringAt("mime_type")
+        val mimeType = meta.stringAt("attachment_mime")
+            ?: meta.stringAt("mime_type")
             ?: meta.stringAt("content_type")
-        val size = meta.longAt("file_size")
+        val size = meta.longAt("attachment_size")
+            ?: meta.longAt("file_size")
             ?: meta.longAt("size_bytes")
             ?: meta.longAt("size")
-        val path = meta.stringAt("path")
+        val path = meta.stringAt("attachment_path")
+            ?: meta.stringAt("path")
             ?: meta.stringAt("storage_path")
             ?: meta.stringAt("object_path")
         val key = meta.stringAt("key")

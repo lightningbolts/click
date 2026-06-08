@@ -74,6 +74,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -95,6 +96,7 @@ import compose.project.click.click.data.api.ConnectionTabMessage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.AttachmentCrypto
+import compose.project.click.click.chat.attachments.ChatAttachmentValidator
 import compose.project.click.click.ui.chat.ChatAudioBubble
 import compose.project.click.click.ui.chat.ChatAudioChromeKind
 import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
@@ -121,9 +123,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -174,8 +178,12 @@ fun ProfileBottomSheet(
                 }
             }
             else -> {
-                mediaPreviewModel = m
-                mediaPreviewVisible = true
+                if (m.isDisposableRollLocked()) {
+                    selectedMediaForPreview = null
+                } else {
+                    mediaPreviewModel = m
+                    mediaPreviewVisible = true
+                }
             }
         }
     }
@@ -253,9 +261,11 @@ fun ProfileBottomSheet(
         connectionTabMedia = tabsPayload?.media
             ?.mapNotNull { it.toProfileSheetMediaFromTab() }
             .orEmpty()
-        connectionTabFiles = tabsPayload?.files
-            ?.map { it.toProfileSheetFileFromTab() }
-            .orEmpty()
+        val decryptedById = connectionLocalMessages.associateBy { it.id }
+        connectionTabFiles = tabsPayload?.files?.mapNotNull { tab ->
+            decryptedById[tab.id]?.toProfileSheetFile()
+                ?: tab.toProfileSheetFileFromTab().takeIf { it.canOpenProfileFile() }
+        }.orEmpty()
         } finally {
             profileTabsHydrating = false
         }
@@ -340,8 +350,12 @@ fun ProfileBottomSheet(
         )
     }
     val effectiveFiles = remember(localFileMessages, connectionTabFiles, state.files) {
+        val localFiles = localFileMessages.map { it.toProfileSheetFile() }
+        val localFileIds = localFiles.map { it.id }.toSet()
         mergeProfileFiles(
-            localFileMessages.map { it.toProfileSheetFile() } + connectionTabFiles + state.files,
+            localFiles +
+                connectionTabFiles.filter { it.id !in localFileIds } +
+                state.files,
         )
     }
     val effectiveLinks = remember(localLinkMessages, state.links) {
@@ -470,6 +484,7 @@ fun ProfileBottomSheet(
                 val path = file.attachmentPath?.trim().orEmpty()
                 val key = file.attachmentKeyBase64?.trim().orEmpty()
                 val sha = file.attachmentSha256Base64?.trim().orEmpty()
+                val saveName = ensureProfileAttachmentFileName(file.fileName, file.mimeType)
 
                 if (path.isNotBlank() && key.isNotBlank() && sha.isNotBlank()) {
                     val plain = connectionRepository.downloadAttachmentPlaintext(
@@ -480,34 +495,23 @@ fun ProfileBottomSheet(
                     if (plain != null) {
                         handled = saveDecryptedAttachmentToDownloads(
                             bytes = plain,
-                            fileName = file.fileName,
+                            fileName = saveName,
                             mimeType = file.mimeType,
                         ) != null
                     }
                 }
 
-                if (!handled) {
+                // Encrypted chat-attachments must never be saved from a raw signed URL — that
+                // writes ciphertext to disk and Preview reports the file as corrupted.
+                val isEncryptedAttachment = path.isNotBlank()
+                if (!handled && !isEncryptedAttachment) {
                     val directUrl = file.downloadUrl?.trim().orEmpty()
                     if (directUrl.isNotBlank()) {
                         val bytes = fetchImageBytesFromUrl(directUrl)
                         if (bytes != null && bytes.isNotEmpty()) {
                             handled = saveDecryptedAttachmentToDownloads(
                                 bytes = bytes,
-                                fileName = file.fileName,
-                                mimeType = file.mimeType,
-                            ) != null
-                        }
-                    }
-                }
-
-                if (!handled && path.isNotBlank()) {
-                    val signed = connectionRepository.getSignedChatAttachmentUrl(path)
-                    if (!signed.isNullOrBlank()) {
-                        val bytes = fetchImageBytesFromUrl(signed)
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            handled = saveDecryptedAttachmentToDownloads(
-                                bytes = bytes,
-                                fileName = file.fileName,
+                                fileName = saveName,
                                 mimeType = file.mimeType,
                             ) != null
                         }
@@ -620,7 +624,11 @@ fun ProfileBottomSheet(
                     isLoading = profileTabsHydrating,
                     resolvingMediaIds = resolvingMediaIds,
                     onEnsureMediaResolved = ensureProfileMediaResolved,
-                    onOpenMedia = { selectedMediaForPreview = it },
+                    onOpenMedia = { media ->
+                        if (!media.isDisposableRollLocked()) {
+                            selectedMediaForPreview = media
+                        }
+                    },
                 )
                 ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
                 ProfileSheetTab.Files -> FilesPanel(
@@ -899,6 +907,8 @@ data class ProfileSheetMedia(
     val captionedAt: String? = null,
     /** Voice-note length from message metadata when available. */
     val durationSeconds: Int? = null,
+    val isDisposableRoll: Boolean = false,
+    val collaborationTtlIso: String? = null,
 )
 
 enum class ProfileSheetMediaType {
@@ -1258,12 +1268,16 @@ private fun MediaPanel(
         items(imageRows, key = { row -> row.firstOrNull()?.id ?: "row" }) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { media ->
+                    val rollLocked = media.isDisposableRollLocked()
                     val bitmap = resolvedBitmaps[media.id]
                     val resolvedUrl = resolvedUrls[media.id] ?: media.mediaUrl
                     val thumbResolving = media.id in resolvingMediaIds
                     val thumbUnlocking = bitmap == null && thumbResolving
                     val thumbReady = bitmap != null ||
                         (!media.isEncrypted && !resolvedUrl.isNullOrBlank())
+                    val countdownLabel = remember(media.id, rollLocked) {
+                        media.disposableRollCountdownLabel()
+                    }
                     LaunchedEffect(media.id) {
                         if (!thumbReady) onEnsureMediaResolved(media)
                     }
@@ -1296,7 +1310,7 @@ private fun MediaPanel(
                         .clickable(
                             interactionSource = thumbInteraction,
                             indication = ripple(bounded = true, radius = 52.dp),
-                            enabled = thumbReady,
+                            enabled = thumbReady && !rollLocked,
                         ) { onOpenMedia(media) }
                     Box(modifier = thumbModifier, contentAlignment = Alignment.Center) {
                         when {
@@ -1305,7 +1319,9 @@ private fun MediaPanel(
                                     bitmap = bitmap,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
                                 )
                             }
                             thumbUnlocking -> {
@@ -1321,7 +1337,26 @@ private fun MediaPanel(
                                     model = resolvedUrl,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+                                )
+                            }
+                        }
+                        if (rollLocked && countdownLabel != null) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clip(thumbShape)
+                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = countdownLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
                                 )
                             }
                         }
@@ -1661,6 +1696,7 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
     if (url == null && path == null) return null
     val lowerType = messageType.lowercase()
     val mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image
+    val (isDisposableRoll, collaborationTtlIso) = meta.disposableRollMetadata()
     return ProfileSheetMedia(
         id = id,
         mediaUrl = url,
@@ -1682,6 +1718,8 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
         durationSeconds = meta.intAt("duration_seconds")
             ?: meta.intAt("durationSeconds")
             ?: meta["duration"]?.jsonPrimitive?.intOrNull,
+        isDisposableRoll = isDisposableRoll,
+        collaborationTtlIso = collaborationTtlIso,
     )
 }
 
@@ -1696,6 +1734,7 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
         meta?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
     }
     if (url == null && path == null) return null
+    val (isDisposableRoll, collaborationTtlIso) = meta?.disposableRollMetadata() ?: (false to null)
     return ProfileSheetMedia(
         id = id,
         mediaUrl = url,
@@ -1719,11 +1758,34 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
                 ?: m.intAt("durationSeconds")
                 ?: m["duration"]?.jsonPrimitive?.intOrNull
         },
+        isDisposableRoll = isDisposableRoll,
+        collaborationTtlIso = collaborationTtlIso,
     )
 }
 
-private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
-    val envelope = AttachmentCrypto.tryDecodeEnvelope(content)
+private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile =
+    buildProfileSheetFile(
+        id = id,
+        content = content,
+        metadata = metadata,
+        timestamp = timestamp,
+    )
+
+private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile =
+    buildProfileSheetFile(
+        id = id,
+        content = content,
+        metadata = metadata,
+        timestamp = formatProfileSheetDate(timeCreated),
+    )
+
+private fun buildProfileSheetFile(
+    id: String,
+    content: String,
+    metadata: JsonElement?,
+    timestamp: String,
+): ProfileSheetFile {
+    val envelope = AttachmentCrypto.resolveEnvelope(content, metadata)
     val meta = metadata as? JsonObject
     val fileName = envelope?.name?.takeIf { it.isNotBlank() }
         ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
@@ -1736,11 +1798,6 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
     val mime = envelope?.mime?.takeIf { it.isNotBlank() }
         ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
         ?: "application/octet-stream"
-    val downloadUrl = meta?.stringAt("signed_url")
-        ?: meta?.stringAt("public_url")
-        ?: meta?.stringAt("url")
-        ?: meta?.stringAt("storage_url")
-        ?: meta?.stringAt("media_url")
     val attachmentPath = envelope?.path?.takeIf { it.isNotBlank() }
         ?: meta?.stringAt("attachment_path")
         ?: meta?.stringAt("path")
@@ -1754,6 +1811,15 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
     val attachmentSha256Base64 = envelope?.sha256?.takeIf { it.isNotBlank() }
         ?: meta?.stringAt("sha256")
         ?: meta?.stringAt("sha256_base64")
+    val downloadUrl = if (!attachmentPath.isNullOrBlank()) {
+        null
+    } else {
+        meta?.stringAt("signed_url")
+            ?: meta?.stringAt("public_url")
+            ?: meta?.stringAt("url")
+            ?: meta?.stringAt("storage_url")
+            ?: meta?.stringAt("media_url")
+    }
     return ProfileSheetFile(
         id = id,
         fileName = fileName,
@@ -1767,50 +1833,31 @@ private fun ProfileSheetLocalMessage.toProfileSheetFile(): ProfileSheetFile {
     )
 }
 
-private fun ConnectionTabMessage.toProfileSheetFileFromTab(): ProfileSheetFile {
-    val envelope = AttachmentCrypto.tryDecodeEnvelope(content)
-    val meta = metadata as? JsonObject
-    val fileName = envelope?.name?.takeIf { it.isNotBlank() }
-        ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
-        ?: content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
-            ?.takeIf { it.isNotBlank() }
-        ?: "Attachment"
-    val size = envelope?.size
-        ?: meta?.firstLong("attachment_size", "file_size", "size_bytes", "size")
-        ?: 0L
-    val mime = envelope?.mime?.takeIf { it.isNotBlank() }
-        ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
-        ?: "application/octet-stream"
-    val downloadUrl = meta?.stringAt("signed_url")
-        ?: meta?.stringAt("public_url")
-        ?: meta?.stringAt("url")
-        ?: meta?.stringAt("storage_url")
-        ?: meta?.stringAt("media_url")
-    val attachmentPath = envelope?.path?.takeIf { it.isNotBlank() }
-        ?: meta?.stringAt("attachment_path")
-        ?: meta?.stringAt("path")
-        ?: meta?.stringAt("storage_path")
-        ?: meta?.stringAt("object_path")
-        ?: meta?.stringAt("media_path")
-    val attachmentKeyBase64 = envelope?.key?.takeIf { it.isNotBlank() }
-        ?: meta?.stringAt("key")
-        ?: meta?.stringAt("file_key")
-        ?: meta?.stringAt("file_master_key")
-    val attachmentSha256Base64 = envelope?.sha256?.takeIf { it.isNotBlank() }
-        ?: meta?.stringAt("sha256")
-        ?: meta?.stringAt("sha256_base64")
+private fun ProfileSheetFile.canOpenProfileFile(): Boolean {
+    val path = attachmentPath?.trim().orEmpty()
+    if (path.isNotBlank()) {
+        return attachmentKeyBase64?.trim().orEmpty().isNotBlank() &&
+            attachmentSha256Base64?.trim().orEmpty().isNotBlank()
+    }
+    return !downloadUrl.isNullOrBlank()
+}
 
-    return ProfileSheetFile(
-        id = id,
-        fileName = fileName,
-        sizeBytes = size,
-        mimeType = mime,
-        timestamp = formatProfileSheetDate(timeCreated),
-        downloadUrl = downloadUrl,
-        attachmentPath = attachmentPath,
-        attachmentKeyBase64 = attachmentKeyBase64,
-        attachmentSha256Base64 = attachmentSha256Base64,
-    )
+private fun ensureProfileAttachmentFileName(fileName: String, mimeType: String): String {
+    val trimmed = fileName.trim().ifBlank { "attachment" }
+    if (ChatAttachmentValidator.extensionOf(trimmed) != null) return trimmed
+    val ext = when {
+        mimeType.contains("pdf", ignoreCase = true) -> "pdf"
+        mimeType.contains("png", ignoreCase = true) -> "png"
+        mimeType.contains("jpeg", ignoreCase = true) || mimeType.contains("jpg", ignoreCase = true) -> "jpg"
+        mimeType.contains("plain", ignoreCase = true) || mimeType.contains("text/", ignoreCase = true) -> "txt"
+        mimeType.contains("csv", ignoreCase = true) -> "csv"
+        mimeType.contains("zip", ignoreCase = true) -> "zip"
+        mimeType.contains("mp4", ignoreCase = true) -> "mp4"
+        mimeType.contains("quicktime", ignoreCase = true) -> "mov"
+        mimeType.contains("wordprocessingml", ignoreCase = true) -> "docx"
+        else -> return trimmed
+    }
+    return "$trimmed.$ext"
 }
 
 private val METADATA_URL_KEYS = listOf(
@@ -1829,6 +1876,30 @@ private val METADATA_PATH_KEYS = listOf(
     "object_path",
     "media_path",
 )
+
+private fun JsonObject.disposableRollMetadata(): Pair<Boolean, String?> {
+    val isRoll = this["disposable_roll"]?.jsonPrimitive?.booleanOrNull == true
+    val ttl = this["collaboration_ttl"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    return isRoll to ttl
+}
+
+private fun ProfileSheetMedia.isDisposableRollLocked(now: Instant = Clock.System.now()): Boolean {
+    if (!isDisposableRoll) return false
+    val ttlIso = collaborationTtlIso ?: return true
+    val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return true
+    return now < ttl
+}
+
+private fun ProfileSheetMedia.disposableRollCountdownLabel(): String? {
+    if (!isDisposableRollLocked()) return null
+    val ttlIso = collaborationTtlIso ?: return "Locked"
+    val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return "Locked"
+    val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+    val totalMin = remainMs / 60_000L
+    val hours = totalMin / 60L
+    val mins = totalMin % 60L
+    return if (hours > 0) "Reveals in ${hours}h ${mins}m" else "Reveals in ${mins}m"
+}
 
 private fun ProfileSheetLocalMessage.hasMetadataMediaUrl(): Boolean {
     val meta = metadata as? JsonObject ?: return false
@@ -1968,6 +2039,8 @@ private fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileSheet
             mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
             captionedAt = media.captionedAt ?: prev.captionedAt,
             durationSeconds = media.durationSeconds ?: prev.durationSeconds,
+            isDisposableRoll = media.isDisposableRoll || prev.isDisposableRoll,
+            collaborationTtlIso = media.collaborationTtlIso ?: prev.collaborationTtlIso,
         )
     }
     return merged.values.toList()
@@ -1987,10 +2060,11 @@ private fun mergeProfileFiles(items: List<ProfileSheetFile>): List<ProfileSheetF
             sizeBytes = if (file.sizeBytes > 0) file.sizeBytes else prev.sizeBytes,
             mimeType = if (file.mimeType != "application/octet-stream") file.mimeType else prev.mimeType,
             timestamp = if (file.timestamp.isNotBlank()) file.timestamp else prev.timestamp,
-            downloadUrl = file.downloadUrl ?: prev.downloadUrl,
-            attachmentPath = file.attachmentPath ?: prev.attachmentPath,
-            attachmentKeyBase64 = file.attachmentKeyBase64 ?: prev.attachmentKeyBase64,
-            attachmentSha256Base64 = file.attachmentSha256Base64 ?: prev.attachmentSha256Base64,
+            downloadUrl = file.downloadUrl?.takeIf { it.isNotBlank() } ?: prev.downloadUrl,
+            attachmentPath = file.attachmentPath?.takeIf { it.isNotBlank() } ?: prev.attachmentPath,
+            attachmentKeyBase64 = file.attachmentKeyBase64?.takeIf { it.isNotBlank() } ?: prev.attachmentKeyBase64,
+            attachmentSha256Base64 = file.attachmentSha256Base64?.takeIf { it.isNotBlank() }
+                ?: prev.attachmentSha256Base64,
         )
     }
     return merged.values.toList()
