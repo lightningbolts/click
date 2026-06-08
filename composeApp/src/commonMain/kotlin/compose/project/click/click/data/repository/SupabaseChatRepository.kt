@@ -73,6 +73,10 @@ import kotlinx.serialization.json.put
 import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.chatMediaVaultLocalPath
+import compose.project.click.click.util.imageVaultFileExtension
+import compose.project.click.click.util.readChatMediaVaultBytes
+import compose.project.click.click.util.vaultCacheExtension
 import compose.project.click.click.util.writeChatMediaVaultFile
 
 /**
@@ -2251,34 +2255,61 @@ class SupabaseChatRepository(
         message: Message,
     ): Message {
         val type = message.messageType.lowercase()
-        if (type != ChatMessageType.IMAGE && type != ChatMessageType.AUDIO) return message
+        return when (type) {
+            ChatMessageType.FILE -> vaultFileAttachmentMessage(chatId, message)
+            ChatMessageType.IMAGE, ChatMessageType.AUDIO -> vaultRemoteEncryptedMediaMessage(
+                chatId = chatId,
+                viewerUserId = viewerUserId,
+                message = message,
+                type = type,
+            )
+            else -> message
+        }
+    }
+
+    private suspend fun vaultRemoteEncryptedMediaMessage(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        type: String,
+    ): Message {
         if (!message.isEncryptedMedia() || message.hasLocalMediaUri()) return message
         val remoteUrl = message.mediaUrlOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return message
+        val extension = when (type) {
+            ChatMessageType.AUDIO -> message.audioCacheFileExtension()
+            else -> imageVaultFileExtension(message.originalMimeTypeOrNull(), remoteUrl)
+        }
+        if (readChatMediaVaultBytes(message.id, extension)?.isNotEmpty() == true) {
+            val localUri = chatMediaVaultLocalUri(message.id, extension) ?: return message
+            return message.withLocalMediaUri(localUri)
+        }
         val plain = downloadAndDecryptChatMedia(chatId, viewerUserId, remoteUrl)
             ?.takeIf { it.isNotEmpty() }
             ?: return message
-        val extension = when (type) {
-            ChatMessageType.AUDIO -> message.audioCacheFileExtension()
-            else -> imageCacheFileExtension(message.originalMimeTypeOrNull(), remoteUrl)
-        }
         val localUri = writeChatMediaVaultFile(message.id, plain, extension) ?: return message
         return message.withLocalMediaUri(localUri)
     }
 
-    private fun imageCacheFileExtension(mimeType: String?, mediaUrl: String): String {
-        val mime = mimeType?.lowercase().orEmpty()
-        return when {
-            "png" in mime -> "png"
-            "webp" in mime -> "webp"
-            "gif" in mime -> "gif"
-            "heic" in mime || "heif" in mime -> "heic"
-            "jpeg" in mime || "jpg" in mime -> "jpg"
-            else -> mediaUrl.substringBefore('?')
-                .substringAfterLast('/', "")
-                .substringAfterLast('.', "")
-                .takeIf { it.length in 2..5 && it.all { ch -> ch.isLetterOrDigit() } }
-                ?: "jpg"
+    private suspend fun vaultFileAttachmentMessage(
+        chatId: String,
+        message: Message,
+    ): Message {
+        val envelope = AttachmentCrypto.resolveEnvelope(message.content, message.metadata) ?: return message
+        val extension = envelope.vaultCacheExtension()
+        if (readChatMediaVaultBytes(message.id, extension)?.isNotEmpty() == true) {
+            return message
         }
+        val plain = downloadAttachmentPlaintext(
+            path = envelope.path,
+            fileMasterKeyBase64 = envelope.key,
+            expectedSha256Base64 = envelope.sha256,
+        )?.takeIf { it.isNotEmpty() } ?: return message
+        writeChatMediaVaultFile(message.id, plain, extension)
+        return message
+    }
+
+    private fun chatMediaVaultLocalUri(messageId: String, extension: String): String? {
+        return chatMediaVaultLocalPath(messageId, extension)?.let { "file://$it" }
     }
 
     override suspend fun downloadAndDecryptChatMedia(

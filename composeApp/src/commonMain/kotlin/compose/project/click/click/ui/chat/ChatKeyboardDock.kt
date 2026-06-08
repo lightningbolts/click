@@ -1,24 +1,28 @@
 package compose.project.click.click.ui.chat
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.platform.KeyboardHeightProvider
+import compose.project.click.click.platform.rememberKeyboardHeightProvider
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.util.collectAsStateLifecycleAware
 
 /** Extra visual breathing room above the composer; the composer itself is measured by the layout. */
 internal val ChatComposerStripReserve = 0.dp
 
 /**
- * iOS keyboard lift via native [WindowInsets.ime] + GPU [graphicsLayer].
- * [timelineBottomPadding] stays static so LazyColumn is not relaid out every keyboard frame.
+ * Native keyboard lift split used by connection and hub chats on iOS: the timeline keeps
+ * scrollable space via [timelineBottomPadding] while the composer follows the keyboard on a
+ * graphics layer. Android lifts the whole thread dock via IME insets instead.
  */
 data class ChatNativeKeyboardInsets(
     val composerLiftPx: Float,
@@ -26,45 +30,48 @@ data class ChatNativeKeyboardInsets(
     val threadDockNativeKeyboardLiftPx: Float?,
 )
 
+private fun Int.toUIKitKeyboardEasing() = when (this) {
+    0 -> CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
+    1 -> CubicBezierEasing(0.42f, 0f, 1f, 1f)
+    2 -> CubicBezierEasing(0f, 0f, 0.58f, 1f)
+    3 -> LinearEasing
+    else -> CubicBezierEasing(0.17f, 0.84f, 0.44f, 1f)
+}
+
 @Composable
-fun rememberChatNativeKeyboardInsets(): ChatNativeKeyboardInsets {
+fun rememberChatNativeKeyboardInsets(
+    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
+): ChatNativeKeyboardInsets {
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
-    if (!platformStyle.isIOS) {
-        return ChatNativeKeyboardInsets(
-            composerLiftPx = 0f,
-            timelineBottomPadding = 0.dp,
-            threadDockNativeKeyboardLiftPx = null,
-        )
+    val nativeKeyboardHeightPoints by keyboardHeightProvider.keyboardHeight.collectAsStateLifecycleAware()
+    val nativeKeyboardDurationMillis by keyboardHeightProvider.animationDurationMillis.collectAsStateLifecycleAware()
+    val nativeKeyboardAnimationCurve by keyboardHeightProvider.animationCurve.collectAsStateLifecycleAware()
+    val nativeKeyboardLiftTargetPx = if (platformStyle.isIOS) {
+        val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
+        val keyboardHeightPx = with(density) { nativeKeyboardHeightPoints.dp.toPx() }
+        (keyboardHeightPx - navBottomPx).coerceAtLeast(0f)
+    } else {
+        0f
     }
-
-    val imePx = WindowInsets.ime.getBottom(density).toFloat()
-    val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
-    val liftPx = (imePx - navBottomPx).coerceAtLeast(0f)
-
-    return ChatNativeKeyboardInsets(
-        composerLiftPx = liftPx,
-        timelineBottomPadding = 0.dp,
-        threadDockNativeKeyboardLiftPx = liftPx,
+    val animatedNativeKeyboardLiftPx by animateFloatAsState(
+        targetValue = nativeKeyboardLiftTargetPx,
+        animationSpec = tween(
+            durationMillis = nativeKeyboardDurationMillis,
+            easing = nativeKeyboardAnimationCurve.toUIKitKeyboardEasing(),
+        ),
+        label = "native_keyboard_lift",
     )
-}
-
-/** Isolated lift read for toasts/chrome so the chat timeline tree does not recompose every frame. */
-@Composable
-fun rememberChatKeyboardLiftDp(): Dp {
-    val density = LocalDensity.current
-    val platformStyle = LocalPlatformStyle.current
-    if (!platformStyle.isIOS) return 0.dp
-    val imePx = WindowInsets.ime.getBottom(density).toFloat()
-    val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
-    val liftPx = (imePx - navBottomPx).coerceAtLeast(0f)
-    return with(density) { liftPx.toDp() }
-}
-
-/** GPU translate for composer / timeline — no layout reflow. */
-fun Modifier.chatNativeGpuLift(liftPx: Float): Modifier = composed {
-    if (!LocalPlatformStyle.current.isIOS) return@composed this
-    graphicsLayer {
-        translationY = -liftPx.coerceAtLeast(0f)
+    val composerLiftPx = if (platformStyle.isIOS) animatedNativeKeyboardLiftPx else 0f
+    val timelineBottomPadding = if (platformStyle.isIOS) {
+        with(density) { animatedNativeKeyboardLiftPx.toDp() }
+    } else {
+        0.dp
     }
+    val threadDockNativeKeyboardLiftPx = if (platformStyle.isIOS) 0f else null
+    return ChatNativeKeyboardInsets(
+        composerLiftPx = composerLiftPx,
+        timelineBottomPadding = timelineBottomPadding,
+        threadDockNativeKeyboardLiftPx = threadDockNativeKeyboardLiftPx,
+    )
 }

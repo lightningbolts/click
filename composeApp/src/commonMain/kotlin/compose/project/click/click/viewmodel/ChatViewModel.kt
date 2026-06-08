@@ -17,7 +17,9 @@ import compose.project.click.click.data.models.withDbDerivedDeliveryState // pra
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
+import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
@@ -62,7 +64,14 @@ import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma:
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
+import compose.project.click.click.util.chatMediaVaultExtensionForMessage // pragma: allowlist secret
+import compose.project.click.click.util.imageVaultFileExtension // pragma: allowlist secret
+import compose.project.click.click.util.fileUriToLocalPath // pragma: allowlist secret
+import compose.project.click.click.util.isChatMediaVaultLocalPath // pragma: allowlist secret
 import compose.project.click.click.util.readChatMediaVaultBytesForMessage // pragma: allowlist secret
+import compose.project.click.click.util.readChatMediaVaultLocalPathForMessage // pragma: allowlist secret
+import compose.project.click.click.util.writeChatMediaVaultFile // pragma: allowlist secret
+import compose.project.click.click.util.vaultCacheExtension // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -1485,11 +1494,12 @@ class ChatViewModel(
 
     private suspend fun hydrateSecureMediaFromDiskVault(messages: List<MessageWithUser>) {
         if (messages.isEmpty()) return
-        val imageMessages = messages.filter {
-            it.message.messageType.lowercase() == ChatMessageType.IMAGE
+        val vaultMessages = messages.filter {
+            val type = it.message.messageType.lowercase()
+            type == ChatMessageType.IMAGE || type == ChatMessageType.AUDIO
         }
-        val visibleBatch = imageMessages.takeLast(SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH)
-        val deferredBatch = imageMessages.dropLast(SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH)
+        val visibleBatch = vaultMessages.takeLast(SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH)
+        val deferredBatch = vaultMessages.dropLast(SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH)
         applyDiskVaultHydration(visibleBatch)
         if (deferredBatch.isNotEmpty()) {
             viewModelScope.launch(Dispatchers.Default) {
@@ -1504,24 +1514,49 @@ class ChatViewModel(
             val out = LinkedHashMap<String, SecureChatMediaLoadState>()
             for (mwu in batch) {
                 val msg = mwu.message
-                if (msg.messageType.lowercase() != ChatMessageType.IMAGE) continue
                 val id = msg.id
-                if (_secureChatMediaLoadState.value[id]?.imageBytes != null) continue
-                val memCached = secureImageBytesCache.get(id)?.takeIf { it.isNotEmpty() }
-                if (memCached != null) {
-                    out[id] = SecureChatMediaLoadState(loading = false, imageBytes = memCached)
-                    continue
+                val extension = chatMediaVaultExtensionForMessage(msg)
+                when (msg.messageType.lowercase()) {
+                    ChatMessageType.IMAGE -> {
+                        if (_secureChatMediaLoadState.value[id]?.imageBytes != null) continue
+                        val memCached = secureImageBytesCache.get(id)?.takeIf { it.isNotEmpty() }
+                        if (memCached != null) {
+                            out[id] = SecureChatMediaLoadState(loading = false, imageBytes = memCached)
+                            continue
+                        }
+                        if (secureChatImageBitmapCache.get(id) != null) continue
+                        val vaultBytes = readChatMediaVaultBytesForMessage(
+                            messageId = id,
+                            mediaUrl = msg.mediaUrlOrNull(),
+                            preferredExtension = extension,
+                        ) ?: continue
+                        secureImageBytesCache.put(id, vaultBytes)
+                        out[id] = SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes)
+                    }
+                    ChatMessageType.AUDIO -> {
+                        if (_secureChatMediaLoadState.value[id]?.audioLocalPath != null) continue
+                        val audioPath = resolveVaultedAudioLocalPath(msg, extension) ?: continue
+                        secureAudioPathCache.put(id, audioPath)
+                        out[id] = SecureChatMediaLoadState(loading = false, audioLocalPath = audioPath)
+                    }
                 }
-                if (secureChatImageBitmapCache.get(id) != null) continue
-                val vaultBytes = readChatMediaVaultBytesForMessage(id, msg.mediaUrlOrNull()) ?: continue
-                secureImageBytesCache.put(id, vaultBytes)
-                out[id] = SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes)
             }
             out
         }
         if (updates.isNotEmpty()) {
             _secureChatMediaLoadState.update { it + updates }
         }
+    }
+
+    private fun resolveVaultedAudioLocalPath(message: Message, extension: String?): String? {
+        if (message.hasLocalMediaUri()) {
+            return fileUriToLocalPath(message.mediaUrlOrNull().orEmpty()).takeIf { it.isNotBlank() }
+        }
+        return readChatMediaVaultLocalPathForMessage(
+            messageId = message.id,
+            preferredExtension = extension,
+            mediaUrl = message.mediaUrlOrNull(),
+        )
     }
 
     private suspend fun warmSecureMediaForTimeline(
@@ -1547,7 +1582,12 @@ class ChatViewModel(
         if (secureChatImageBitmapCache.get(message.id) != null) return
 
         viewModelScope.launch(chatMediaDispatcher) {
-            readChatMediaVaultBytesForMessage(message.id, url)?.takeIf { it.isNotEmpty() }?.let { vaultBytes ->
+            val imageExtension = chatMediaVaultExtensionForMessage(message)
+            readChatMediaVaultBytesForMessage(
+                messageId = message.id,
+                mediaUrl = url,
+                preferredExtension = imageExtension,
+            )?.takeIf { it.isNotEmpty() }?.let { vaultBytes ->
                 secureImageBytesCache.put(message.id, vaultBytes)
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes))
@@ -1581,6 +1621,8 @@ class ChatViewModel(
                 }
             } else {
                 secureImageBytesCache.put(message.id, bytes)
+                val extension = imageExtension ?: imageVaultFileExtension(message.originalMimeTypeOrNull(), url)
+                writeChatMediaVaultFile(message.id, bytes, extension)
                 _secureChatMediaLoadState.update {
                     it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
                 }
@@ -1589,10 +1631,10 @@ class ChatViewModel(
     }
 
     override fun ensureSecureChatAudioLoaded(scopeId: String, viewerUserId: String, message: Message) {
-        if (!message.isEncryptedMedia()) return
         if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
         val url = message.mediaUrlOrNull() ?: return
-        if (url.isBlank()) return
+        if (url.isBlank() && !message.hasLocalMediaUri()) return
+        val extension = chatMediaVaultExtensionForMessage(message)
         val cachedPath = secureAudioPathCache.get(message.id)
         if (!cachedPath.isNullOrBlank()) {
             _secureChatMediaLoadState.update {
@@ -1600,8 +1642,16 @@ class ChatViewModel(
             }
             return
         }
+        resolveVaultedAudioLocalPath(message, extension)?.let { localPath ->
+            secureAudioPathCache.put(message.id, localPath)
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = localPath))
+            }
+            return
+        }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.audioLocalPath != null || cur?.loading == true) return
+        if (!message.isEncryptedMedia()) return
         viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
@@ -1616,7 +1666,7 @@ class ChatViewModel(
                 }
                 return@launch
             }
-            val path = writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
+            val path = cacheSecureAudioOnDisk(message.id, bytes, message.audioCacheFileExtension())
             if (path.isNullOrBlank()) {
                 println("ChatViewModel: secure audio cache write failed for message=${message.id}")
                 _secureChatMediaLoadState.update {
@@ -1624,7 +1674,7 @@ class ChatViewModel(
                 }
             } else {
                 val evictedPath = secureAudioPathCache.put(message.id, path)
-                if (!evictedPath.isNullOrBlank() && evictedPath != path) {
+                if (!evictedPath.isNullOrBlank() && evictedPath != path && !isChatMediaVaultLocalPath(evictedPath)) {
                     deleteSecureChatAudioTempFile(evictedPath)
                 }
                 _secureChatMediaLoadState.update {
@@ -1634,9 +1684,21 @@ class ChatViewModel(
         }
     }
 
+    private fun cacheSecureAudioOnDisk(messageId: String, bytes: ByteArray, extension: String): String? {
+        val vaultUri = writeChatMediaVaultFile(messageId, bytes, extension)
+        if (!vaultUri.isNullOrBlank()) {
+            return fileUriToLocalPath(vaultUri)
+        }
+        return writeSecureChatAudioTempFile(messageId, bytes, extension)
+    }
+
     suspend fun fetchDecryptedChatMediaBytes(message: Message): ByteArray? {
         secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
-        readChatMediaVaultBytesForMessage(message.id, message.mediaUrlOrNull())
+        readChatMediaVaultBytesForMessage(
+            messageId = message.id,
+            mediaUrl = message.mediaUrlOrNull(),
+            preferredExtension = chatMediaVaultExtensionForMessage(message),
+        )
             ?.takeIf { it.isNotEmpty() }
             ?.also { secureImageBytesCache.put(message.id, it) }
             ?.let { return it }
@@ -1652,6 +1714,9 @@ class ChatViewModel(
         }
         if (bytes != null && bytes.isNotEmpty()) {
             secureImageBytesCache.put(message.id, bytes)
+            chatMediaVaultExtensionForMessage(message)?.let { ext ->
+                writeChatMediaVaultFile(message.id, bytes, ext)
+            }
         }
         return bytes
     }
@@ -2762,18 +2827,26 @@ class ChatViewModel(
      * are surfaced as a user-visible [ChatAttachmentDownloadOutcome.Failure].
      */
     suspend fun downloadChatAttachment(
+        messageId: String,
         envelope: AttachmentCrypto.Envelope,
     ): ChatAttachmentDownloadOutcome {
         if (envelope.path.isBlank() || envelope.key.isBlank() || envelope.sha256.isBlank()) {
             return ChatAttachmentDownloadOutcome.Failure("Attachment envelope is invalid.")
         }
-        val plaintext = chatRepository.downloadAttachmentPlaintext(
+        val extension = envelope.vaultCacheExtension()
+        val vaultedBytes = messageId.takeIf { it.isNotBlank() }
+            ?.let { readChatMediaVaultBytesForMessage(it, preferredExtension = extension) }
+            ?.takeIf { it.isNotEmpty() }
+        val plaintext = vaultedBytes ?: chatRepository.downloadAttachmentPlaintext(
             path = envelope.path,
             fileMasterKeyBase64 = envelope.key,
             expectedSha256Base64 = envelope.sha256,
         ) ?: return ChatAttachmentDownloadOutcome.Failure(
             "Download failed — integrity check did not pass.",
         )
+        if (vaultedBytes == null && messageId.isNotBlank()) {
+            writeChatMediaVaultFile(messageId, plaintext, extension)
+        }
         val savedPath = saveDecryptedAttachmentToDownloads(
             bytes = plaintext,
             fileName = envelope.name.ifBlank { "attachment" },

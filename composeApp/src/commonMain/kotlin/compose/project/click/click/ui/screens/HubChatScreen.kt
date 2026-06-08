@@ -94,9 +94,12 @@ import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: al
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pragma: allowlist secret
-import compose.project.click.click.ui.components.ChatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -125,6 +128,7 @@ fun HubChatScreen(
      */
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
+    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
         HubChatViewModel(
@@ -162,6 +166,7 @@ fun HubChatScreen(
     val hubPeekScope = rememberCoroutineScope()
     val hubListState = remember(args.realtimeChannel) { LazyListState() }
     val density = LocalDensity.current
+    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
@@ -488,10 +493,13 @@ fun HubChatScreen(
                         .fillMaxWidth()
                         .clipToBounds(),
                 ) {
-                ChatThreadKeyboardDock(
-                    modifier = Modifier.fillMaxSize(),
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .chatThreadKeyboardDock(
+                            nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                        ),
                 ) {
-                Column(modifier = Modifier.fillMaxSize()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -505,7 +513,7 @@ fun HubChatScreen(
                         start = 6.dp,
                         end = 6.dp,
                         top = 24.dp + reverseListNewestEdgePad,
-                        bottom = 8.dp + ChatComposerStripReserve,
+                        bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
                     ),
                     dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                     displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -547,7 +555,11 @@ fun HubChatScreen(
                 }
 
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
+                        },
                 ) {
                     HubChatInputBar(
                         viewModel = viewModel,
@@ -555,7 +567,6 @@ fun HubChatScreen(
                         isOutOfBounds = outOfBounds,
                         onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
                     )
-                }
                 }
                 }
                 }

@@ -49,7 +49,14 @@ actual fun writeChatMediaVaultFile(messageId: String, bytes: ByteArray, extensio
 }
 
 @OptIn(ExperimentalForeignApi::class)
-actual fun readChatMediaVaultBytes(messageId: String): ByteArray? {
+actual fun readChatMediaVaultBytes(messageId: String, preferredExtension: String?): ByteArray? {
+    val path = chatMediaVaultLocalPath(messageId, preferredExtension) ?: return null
+    val data = NSData.dataWithContentsOfFile(path) as NSData? ?: return null
+    return data.toByteArray()
+}
+
+@OptIn(ExperimentalForeignApi::class)
+actual fun chatMediaVaultLocalPath(messageId: String, preferredExtension: String?): String? {
     if (messageId.isBlank()) return null
     val safeId = messageId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
     val dirs = listOf(
@@ -57,10 +64,15 @@ actual fun readChatMediaVaultBytes(messageId: String): ByteArray? {
         NSTemporaryDirectory().trimEnd('/'),
     ).distinct()
     for (dir in dirs) {
-        for (ext in vaultFileExtensionCandidates(preferredExtension = null)) {
-            val path = "$dir/click_media_vault_$safeId.$ext"
-            val data = NSData.dataWithContentsOfFile(path) as NSData? ?: continue
-            return data.toByteArray()
+        for (ext in vaultFileExtensionCandidates(preferredExtension)) {
+            val prefixed = "$dir/click_media_vault_$safeId.$ext"
+            if (NSFileManager.defaultManager.fileExistsAtPath(prefixed)) {
+                return prefixed
+            }
+            val plain = "$dir/$safeId.$ext"
+            if (NSFileManager.defaultManager.fileExistsAtPath(plain)) {
+                return plain
+            }
         }
     }
     return null

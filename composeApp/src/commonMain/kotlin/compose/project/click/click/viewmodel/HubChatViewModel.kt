@@ -11,6 +11,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.audioCacheFileExtension
+import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload
@@ -20,6 +21,12 @@ import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
+import compose.project.click.click.util.chatMediaVaultExtensionForMessage
+import compose.project.click.click.util.fileUriToLocalPath
+import compose.project.click.click.util.isChatMediaVaultLocalPath
+import compose.project.click.click.util.readChatMediaVaultBytesForMessage
+import compose.project.click.click.util.readChatMediaVaultLocalPathForMessage
+import compose.project.click.click.util.writeChatMediaVaultFile
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
@@ -608,10 +615,10 @@ class HubChatViewModel(
 
     override fun ensureSecureChatAudioLoaded(scopeId: String, viewerUserId: String, message: Message) {
         if (scopeId != hubId) return
-        if (!message.isEncryptedMedia()) return
         if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
         val url = message.mediaUrlOrNull() ?: return
-        if (url.isBlank()) return
+        if (url.isBlank() && !message.hasLocalMediaUri()) return
+        val extension = chatMediaVaultExtensionForMessage(message)
         val cachedPath = secureAudioPathCache.get(message.id)
         if (!cachedPath.isNullOrBlank()) {
             _secureChatMediaLoadState.update {
@@ -619,8 +626,20 @@ class HubChatViewModel(
             }
             return
         }
+        readChatMediaVaultLocalPathForMessage(
+            messageId = message.id,
+            preferredExtension = extension,
+            mediaUrl = message.mediaUrlOrNull(),
+        )?.let { localPath ->
+            secureAudioPathCache.put(message.id, localPath)
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = localPath))
+            }
+            return
+        }
         val cur = _secureChatMediaLoadState.value[message.id]
         if (cur?.audioLocalPath != null || cur?.loading == true) return
+        if (!message.isEncryptedMedia()) return
         viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes = runCatching {
@@ -640,7 +659,9 @@ class HubChatViewModel(
                 }
                 return@launch
             }
-            val path = writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
+            val path = writeChatMediaVaultFile(message.id, bytes, message.audioCacheFileExtension())
+                ?.let { fileUriToLocalPath(it) }
+                ?: writeSecureChatAudioTempFile(message.id, bytes, message.audioCacheFileExtension())
             if (path.isNullOrBlank()) {
                 println("HubChatViewModel: secure audio cache write failed for message=${message.id}")
                 _secureChatMediaLoadState.update {
@@ -648,7 +669,7 @@ class HubChatViewModel(
                 }
             } else {
                 val evictedPath = secureAudioPathCache.put(message.id, path)
-                if (!evictedPath.isNullOrBlank() && evictedPath != path) {
+                if (!evictedPath.isNullOrBlank() && evictedPath != path && !isChatMediaVaultLocalPath(evictedPath)) {
                     deleteSecureChatAudioTempFile(evictedPath)
                 }
                 _secureChatMediaLoadState.update {

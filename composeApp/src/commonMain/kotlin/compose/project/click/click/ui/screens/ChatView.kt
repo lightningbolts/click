@@ -124,9 +124,10 @@ import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allo
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
-import compose.project.click.click.ui.components.ChatThreadKeyboardDock // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatToastKeyboardBottomPadding // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -304,6 +305,7 @@ fun ChatView(
      * horizontal slide — avoid stacking a redundant [Modifier.offset] for the same translation.
      */
     parentInteractiveBackSwipePx: MutableFloatState? = null,
+    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
@@ -331,6 +333,7 @@ fun ChatView(
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
+    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
@@ -979,10 +982,13 @@ fun ChatView(
                                 .fillMaxWidth()
                                 .clipToBounds(),
                         ) {
-                            ChatThreadKeyboardDock(
-                                modifier = Modifier.fillMaxSize(),
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .chatThreadKeyboardDock(
+                                        nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                                    ),
                             ) {
-                            Column(modifier = Modifier.fillMaxSize()) {
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -1166,7 +1172,7 @@ fun ChatView(
                                 start = 12.dp,
                                 end = 12.dp,
                                 top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 8.dp + ChatComposerStripReserve,
+                                bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
                             ),
                             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                             displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -1185,8 +1191,8 @@ fun ChatView(
                             onForward = { msgId -> forwardMessageId = msgId },
                             onLongPress = { contextMenuMessage = it },
                             onSwipeReply = { viewModel.startReplyTo(it) },
-                            onDownloadAttachment = { _, env ->
-                                viewModel.downloadChatAttachment(env)
+                            onDownloadAttachment = { mwu, env ->
+                                viewModel.downloadChatAttachment(mwu.message.id, env)
                             },
                             onExpandPhoto = { expandedPhotoTarget = it },
                             modifier = messageContentModifier
@@ -1212,7 +1218,11 @@ fun ChatView(
                             }
 
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
+                            },
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(
@@ -1340,7 +1350,6 @@ fun ChatView(
                         }
                     }
                             }
-                            }
                     }
 
                     if (forwardMessageId != null) {
@@ -1396,12 +1405,9 @@ fun ChatView(
         state = toastState,
         opaque = true,
         modifier = Modifier
-            .align(Alignment.BottomCenter)
+            .align(Alignment.BottomEnd)
             .zIndex(50f)
-            .chatToastKeyboardBottomPadding(
-                edgeBottomInset = edgeBottomInset,
-            )
-            .padding(horizontal = 20.dp),
+            .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
     )
 
     // Message long-press context sheet

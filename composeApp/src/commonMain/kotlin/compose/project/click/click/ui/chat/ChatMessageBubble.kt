@@ -57,6 +57,7 @@ import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.originalMimeTypeOrNull
@@ -126,7 +127,15 @@ fun ChatMessageBubble(
     }
     val isAttachment = attachmentEnvelope != null
 
-    val onRequestSecureAudio = remember(message.id) { {} }
+    val onRequestSecureAudio = remember(message.id, activeChatId, currentUserId, secureMediaHost) {
+        {
+            val scopeId = activeChatId
+            val viewerId = currentUserId
+            if (scopeId != null && viewerId != null) {
+                secureMediaHost?.ensureSecureChatAudioLoaded(scopeId, viewerId, message)
+            }
+        }
+    }
 
     LaunchedEffect(message.id, mediaUrl, encryptedMedia, secureSt?.imageBytes, activeChatId, currentUserId) {
         if (!isImageMessage) return@LaunchedEffect
@@ -136,6 +145,24 @@ fun ChatMessageBubble(
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
         secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+    }
+
+    LaunchedEffect(
+        message.id,
+        mediaUrl,
+        encryptedMedia,
+        secureSt?.audioLocalPath,
+        activeChatId,
+        currentUserId,
+    ) {
+        if (mt != ChatMessageType.AUDIO) return@LaunchedEffect
+        if (secureSt?.audioLocalPath != null) return@LaunchedEffect
+        if (!encryptedMedia && !message.hasLocalMediaUri()) return@LaunchedEffect
+        val url = mediaUrl?.takeIf { it.isNotBlank() } ?: message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
+        if (url.isNullOrBlank() && !message.hasLocalMediaUri()) return@LaunchedEffect
+        val scopeId = activeChatId ?: return@LaunchedEffect
+        val viewerId = currentUserId ?: return@LaunchedEffect
+        secureMediaHost?.ensureSecureChatAudioLoaded(scopeId, viewerId, message)
     }
 
     val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
