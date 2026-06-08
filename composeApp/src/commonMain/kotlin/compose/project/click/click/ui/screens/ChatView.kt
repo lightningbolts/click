@@ -26,13 +26,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -118,8 +116,6 @@ import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist se
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
-import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
@@ -129,7 +125,8 @@ import compose.project.click.click.ui.components.GlassCard // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatKeyboardLiftDp // pragma: allowlist secret
+import compose.project.click.click.ui.components.ChatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatToastKeyboardBottomPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -285,16 +282,6 @@ import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: a
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 
-private fun Int.toUIKitKeyboardEasing() = when (this) {
-    0 -> CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
-    1 -> CubicBezierEasing(0.42f, 0f, 1f, 1f)
-    2 -> CubicBezierEasing(0f, 0f, 0.58f, 1f)
-    3 -> LinearEasing
-    // iOS keyboards commonly report the private curve 7; use an early-moving curve so the chat
-    // dock does not visually trail the keyboard during appearance.
-    else -> CubicBezierEasing(0.17f, 0.84f, 0.44f, 1f)
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatView(
@@ -317,7 +304,6 @@ fun ChatView(
      * horizontal slide — avoid stacking a redundant [Modifier.offset] for the same translation.
      */
     parentInteractiveBackSwipePx: MutableFloatState? = null,
-    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
@@ -346,7 +332,6 @@ fun ChatView(
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val chatKeyboardLiftDp = rememberChatKeyboardLiftDp(keyboardHeightProvider)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -994,13 +979,10 @@ fun ChatView(
                                 .fillMaxWidth()
                                 .clipToBounds(),
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .chatThreadKeyboardDock(
-                                        keyboardHeightProvider = keyboardHeightProvider,
-                                    ),
+                            ChatThreadKeyboardDock(
+                                modifier = Modifier.fillMaxSize(),
                             ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -1358,6 +1340,7 @@ fun ChatView(
                         }
                     }
                             }
+                            }
                     }
 
                     if (forwardMessageId != null) {
@@ -1415,11 +1398,10 @@ fun ChatView(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .zIndex(50f)
-            .padding(
-                start = 20.dp,
-                end = 20.dp,
-                bottom = edgeBottomInset + chatKeyboardLiftDp + 76.dp,
-            ),
+            .chatToastKeyboardBottomPadding(
+                edgeBottomInset = edgeBottomInset,
+            )
+            .padding(horizontal = 20.dp),
     )
 
     // Message long-press context sheet

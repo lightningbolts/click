@@ -8,7 +8,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.platform.ensureKeyboardOverlapTrackingStarted
 import compose.project.click.click.ui.utils.AppSystemSettings
 import io.github.jan.supabase.auth.handleDeeplinks
 import kotlinx.datetime.Clock
@@ -41,7 +40,6 @@ fun MainViewController() = ComposeUIViewController(
     configure = {
         // Compose handles IME via the native keyboard bridge; avoid UIKit double-pan.
         onFocusBehavior = OnFocusBehavior.DoNothing
-        ensureKeyboardOverlapTrackingStarted()
     },
 ) {
     AppSystemSettings.isDebugMode = Platform.isDebugBinary

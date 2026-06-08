@@ -25,6 +25,7 @@ import platform.UIKit.UIKeyboardDidChangeFrameNotification
 import platform.UIKit.UIKeyboardDidHideNotification
 import platform.UIKit.UIKeyboardWillChangeFrameNotification
 import platform.UIKit.UIKeyboardWillHideNotification
+import platform.UIKit.UIKeyboardWillShowNotification
 import platform.UIKit.CGRectValue
 import platform.UIKit.UIScreen
 import platform.UIKit.UIWindow
@@ -38,7 +39,6 @@ import kotlin.math.roundToInt
 private const val UIKIT_ANIMATION_CURVE_EASE_IN_OUT = 0
 private const val UIKIT_ANIMATION_CURVE_KEYBOARD = 7
 
-/** UIView.AnimationCurve.keyboard — matches ChatView keyboard dock easing. */
 private val keyboardCurveEasing = CubicBezierEasing(0.17f, 0.84f, 0.44f, 1f)
 private val easeInOutEasing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 private val easeInEasing = CubicBezierEasing(0.42f, 0f, 1f, 1f)
@@ -54,11 +54,6 @@ private class KeyboardHeightDisplayLinkTarget : NSObject() {
     }
 }
 
-/**
- * Tracks keyboard overlap each display refresh. Prefers the live UIKit keyboard window position
- * (pixel-locked to the system animation) and falls back to notification-timed easing only while
- * the window is not yet measurable.
- */
 @OptIn(ExperimentalForeignApi::class)
 private object IosKeyboardHeightTracker {
     private val notificationCenter = NSNotificationCenter.defaultCenter
@@ -71,6 +66,7 @@ private object IosKeyboardHeightTracker {
     private val _animationCurve = MutableStateFlow(UIKIT_ANIMATION_CURVE_EASE_IN_OUT)
     val animationCurve: StateFlow<Int> = _animationCurve.asStateFlow()
 
+    private var willShowObserver: Any? = null
     private var willChangeFrameObserver: Any? = null
     private var willHideObserver: Any? = null
     private var didChangeFrameObserver: Any? = null
@@ -85,12 +81,23 @@ private object IosKeyboardHeightTracker {
     private var animStartTime = 0.0
     private var animDurationSec = 0.0
     private var animCurve = UIKIT_ANIMATION_CURVE_KEYBOARD
+    /** Suppresses stale [UIKeyboardDidHide] after a rapid hide→show (back then open another chat). */
+    private var trackingEpoch = 0
+    private var hideEpoch = 0
 
-    fun currentHeightPoints(): Float = _keyboardHeight.value
+    private var cachedKeyboardWindow: UIWindow? = null
 
     fun ensureStarted() {
         if (started) return
         started = true
+
+        willShowObserver = notificationCenter.addObserverForName(
+            name = UIKeyboardWillShowNotification,
+            `object` = null,
+            queue = NSOperationQueue.mainQueue,
+        ) { notification: NSNotification? ->
+            beginTracking(notification)
+        }
 
         willChangeFrameObserver = notificationCenter.addObserverForName(
             name = UIKeyboardWillChangeFrameNotification,
@@ -105,6 +112,7 @@ private object IosKeyboardHeightTracker {
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) { notification: NSNotification? ->
+            hideEpoch = ++trackingEpoch
             beginTracking(notification, targetHeight = 0f)
         }
 
@@ -117,7 +125,7 @@ private object IosKeyboardHeightTracker {
                 notification.keyboardOverlapHeight(),
                 liveKeyboardOverlapHeightPoints(),
             )
-            _keyboardHeight.value = overlap
+            commitHeight(overlap)
             endTracking()
         }
 
@@ -126,12 +134,28 @@ private object IosKeyboardHeightTracker {
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) { _ ->
-            _keyboardHeight.value = 0f
+            val epochAtHide = hideEpoch
+            if (trackingEpoch > epochAtHide) return@addObserverForName
+            val live = liveKeyboardOverlapHeightPoints()
+            if (live > 0f) {
+                commitHeight(live)
+                return@addObserverForName
+            }
+            cachedKeyboardWindow = null
+            commitHeight(0f)
             endTracking()
         }
     }
 
+    fun syncFromSystem() {
+        val live = liveKeyboardOverlapHeightPoints()
+        if (live > 0f) {
+            commitHeight(live)
+        }
+    }
+
     private fun beginTracking(notification: NSNotification?, targetHeight: Float? = null) {
+        ++trackingEpoch
         updateAnimationMetadata(notification)
         animFrom = notification.keyboardOverlapBeginHeight()
         animTo = targetHeight ?: notification.keyboardOverlapHeight()
@@ -145,12 +169,14 @@ private object IosKeyboardHeightTracker {
     }
 
     private fun publishTrackedHeight() {
-        val live = liveKeyboardOverlapHeightPoints()
         val interpolated = interpolatedHeight()
-        _keyboardHeight.value = when {
-            live > 0f -> max(live, interpolated)
-            trackingFrames -> interpolated
-            else -> _keyboardHeight.value
+        val live = if (trackingFrames) liveKeyboardOverlapHeightPoints() else 0f
+        commitHeight(maxOf(live, interpolated))
+    }
+
+    private fun commitHeight(points: Float) {
+        if (_keyboardHeight.value != points) {
+            _keyboardHeight.value = points
         }
     }
 
@@ -169,7 +195,7 @@ private object IosKeyboardHeightTracker {
     }
 
     private fun startDisplayLink() {
-        if (displayLink != null) return
+        stopDisplayLink()
         displayLinkTarget.onFrame = {
             if (!trackingFrames) {
                 stopDisplayLink()
@@ -194,6 +220,64 @@ private object IosKeyboardHeightTracker {
         _animationDurationMillis.value = notification.animationDurationMillis()
         _animationCurve.value = notification.animationCurve()
     }
+
+    private fun liveKeyboardOverlapHeightPoints(): Float {
+        cachedKeyboardWindow?.let { cached ->
+            if (!cached.hidden) {
+                val overlap = cached.overlapPoints()
+                if (overlap > 0f) return overlap
+            }
+            cachedKeyboardWindow = null
+        }
+
+        val screenBounds = UIScreen.mainScreen.bounds.useContents { this }
+        val screenTop = screenBounds.origin.y
+        val screenBottom = screenTop + screenBounds.size.height
+        var bestWindow: UIWindow? = null
+        var maxOverlap = 0f
+
+        fun consider(window: UIWindow) {
+            if (window.hidden || window.isKeyWindow()) return
+            val overlap = window.overlapPoints(screenTop, screenBottom)
+            if (overlap > maxOverlap) {
+                maxOverlap = overlap
+                bestWindow = window
+            }
+        }
+
+        val app = UIApplication.sharedApplication
+        app.windows.forEach { win ->
+            (win as? UIWindow)?.let { consider(it) }
+        }
+        app.connectedScenes.forEach { scene ->
+            val windowScene = scene as? UIWindowScene ?: return@forEach
+            windowScene.windows.forEach { win ->
+                (win as? UIWindow)?.let { consider(it) }
+            }
+        }
+
+        if (bestWindow != null && maxOverlap > 0.0) {
+            cachedKeyboardWindow = bestWindow
+        }
+        return maxOverlap.toFloat()
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun UIWindow.overlapPoints(
+    screenTop: Double = UIScreen.mainScreen.bounds.useContents { origin.y },
+    screenBottom: Double = UIScreen.mainScreen.bounds.useContents { origin.y + size.height },
+): Float {
+    var overlap = 0.0
+    frame.useContents {
+        val frameTop = origin.y
+        val frameBottom = origin.y + size.height
+        if (frameBottom <= screenTop + 40.0) return 0f
+        val visibleTop = max(frameTop, screenTop)
+        val visibleBottom = min(frameBottom, screenBottom)
+        overlap = (visibleBottom - visibleTop).coerceAtLeast(0.0)
+    }
+    return overlap.toFloat()
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -206,12 +290,13 @@ actual class KeyboardHeightProvider actual constructor() {
     actual val animationDurationMillis: StateFlow<Int> = IosKeyboardHeightTracker.animationDurationMillis
     actual val animationCurve: StateFlow<Int> = IosKeyboardHeightTracker.animationCurve
 
-    actual fun currentKeyboardHeightPoints(): Float = IosKeyboardHeightTracker.currentHeightPoints()
+    actual fun syncFromSystem() {
+        IosKeyboardHeightTracker.syncFromSystem()
+    }
 
     actual fun dispose() = Unit
 }
 
-/** App launch hook — keyboard observers must be live before the first chat composer focuses. */
 fun ensureKeyboardOverlapTrackingStarted() {
     IosKeyboardHeightTracker.ensureStarted()
 }
@@ -225,39 +310,6 @@ private fun interpolateKeyboardT(t: Float, curve: Int): Float {
         else -> easeInOutEasing
     }
     return easing.transform(t)
-}
-
-@OptIn(ExperimentalForeignApi::class)
-private fun liveKeyboardOverlapHeightPoints(): Float {
-    val screenBounds = UIScreen.mainScreen.bounds.useContents { this }
-    val screenTop = screenBounds.origin.y
-    val screenBottom = screenTop + screenBounds.size.height
-    var maxOverlap = 0.0
-
-    fun consider(window: UIWindow) {
-        if (window.isKeyWindow()) return
-        window.frame.useContents {
-            val frameTop = origin.y
-            val frameBottom = origin.y + size.height
-            if (frameBottom <= screenTop + 40.0) return
-            val visibleTop = max(frameTop, screenTop)
-            val visibleBottom = min(frameBottom, screenBottom)
-            val overlap = (visibleBottom - visibleTop).coerceAtLeast(0.0)
-            if (overlap > maxOverlap) maxOverlap = overlap
-        }
-    }
-
-    val app = UIApplication.sharedApplication
-    app.windows.forEach { win ->
-        (win as? UIWindow)?.let { consider(it) }
-    }
-    app.connectedScenes.forEach { scene ->
-        val windowScene = scene as? UIWindowScene ?: return@forEach
-        windowScene.windows.forEach { win ->
-            (win as? UIWindow)?.let { consider(it) }
-        }
-    }
-    return maxOverlap.toFloat()
 }
 
 @OptIn(ExperimentalForeignApi::class)

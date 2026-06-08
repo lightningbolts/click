@@ -14,7 +14,7 @@ actual class KeyboardHeightProvider actual constructor() {
     private val _animationCurve = MutableStateFlow(0)
     actual val animationCurve: StateFlow<Int> = _animationCurve.asStateFlow()
 
-    actual fun currentKeyboardHeightPoints(): Float = _keyboardHeight.value
+    actual fun syncFromSystem() = Unit
 
     actual fun dispose() = Unit
 }

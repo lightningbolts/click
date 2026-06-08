@@ -1,14 +1,13 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,10 +17,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.platform.KeyboardHeightProvider
-import compose.project.click.click.platform.rememberKeyboardHeightProvider
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /** Shared horizontal gutter for tab-root screens. */
@@ -89,52 +85,26 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
 }
 
 /**
- * Smooth keyboard dock.
+ * Smooth keyboard dock — same native Compose IME bridge as [compose.project.click.click.ui.screens.UnifiedSearchSheet]
+ * ([WindowInsets.ime] with [androidx.compose.ui.uikit.OnFocusBehavior.DoNothing] on iOS).
  *
- * The bottom chrome padding is static. Android keeps Compose's optimized IME inset placement,
- * while iOS can pass a native keyboard lift and move the already-measured block on a graphics
- * layer, avoiding per-frame chat relayout.
+ * Static tab-bar padding; keyboard lift is a GPU translate so the message list is not relaid out
+ * every animation frame.
  */
-private fun Modifier.chatBottomInsetUnion(
-    extraBottom: Dp = 0.dp,
-    nativeKeyboardLiftPx: Float? = null,
-    keyboardHeightProvider: KeyboardHeightProvider? = null,
-): Modifier = composed {
+private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier = composed {
     val density = LocalDensity.current
-    val style = LocalPlatformStyle.current
     val imeInsets = WindowInsets.ime
     val navInsets = WindowInsets.navigationBars
     val navBottomPx = navInsets.getBottom(density)
     val navBottomDp = with(density) { navBottomPx.toDp() }
 
-    if (style.isIOS) {
-        val provider = keyboardHeightProvider ?: rememberKeyboardHeightProvider()
-        // Recompose each display-link frame; lift is read synchronously inside graphicsLayer.
-        provider.keyboardHeight.collectAsState()
-        WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-        return@composed Modifier
-            .padding(bottom = navBottomDp + extraBottom)
-            .clipToBounds()
-            .graphicsLayer {
-                val nativePx = if (nativeKeyboardLiftPx != null) {
-                    nativeKeyboardLiftPx
-                } else {
-                    provider.currentKeyboardHeightPoints() * density.density
-                }
-                val imePx = imeInsets.getBottom(density).toFloat()
-                val liftPx = (maxOf(nativePx, imePx) - navBottomPx).coerceAtLeast(0f)
-                translationY = -liftPx
-            }
-    }
-
     Modifier
         .padding(bottom = navBottomDp + extraBottom)
         .clipToBounds()
-        .offset {
-            val imePx = imeInsets.getBottom(density)
-            val navPx = navInsets.getBottom(density)
-            val liftPx = (imePx - navPx).coerceAtLeast(0)
-            IntOffset(0, -liftPx)
+        .graphicsLayer {
+            val imePx = imeInsets.getBottom(density).toFloat()
+            val navPx = navBottomPx.toFloat()
+            translationY = -((imePx - navPx).coerceAtLeast(0f))
         }
 }
 
@@ -155,15 +125,23 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
  * Thread + composer column below the fixed chat header. Slides the **entire** block (messages and
  * input row) above the keyboard without [imePadding] layout resize.
  */
-fun Modifier.chatThreadKeyboardDock(
-    extraBottom: Dp = 0.dp,
-    nativeKeyboardLiftPx: Float? = null,
-    keyboardHeightProvider: KeyboardHeightProvider? = null,
-): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx, keyboardHeightProvider)
+fun Modifier.chatThreadKeyboardDock(extraBottom: Dp = 0.dp): Modifier =
+    chatBottomInsetUnion(extraBottom)
 
 /** @see chatThreadKeyboardDock */
 fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =
     chatBottomInsetUnion(extraBottom)
+
+/** Lifts [content] with the system keyboard on a GPU layer driven by native IME insets. */
+@Composable
+fun ChatThreadKeyboardDock(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(modifier = modifier.chatThreadKeyboardDock()) {
+        content()
+    }
+}
 
 @Composable
 fun rememberEdgeToEdgeBottomPadding(extra: Dp = 0.dp): Dp {
@@ -177,4 +155,20 @@ fun Modifier.bottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottom
 
 fun Modifier.composerBottomPadding(extra: Dp = 0.dp): Modifier = composed {
     Modifier.chatComposerDock(extra)
+}
+
+/** Toast bottom inset — reads native IME insets in an isolated [composed] scope. */
+fun Modifier.chatToastKeyboardBottomPadding(
+    edgeBottomInset: Dp,
+    extraAboveKeyboard: Dp = 76.dp,
+): Modifier = composed {
+    val style = LocalPlatformStyle.current
+    val liftDp = if (style.isIOS) {
+        val ime = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        (ime - nav).coerceAtLeast(0.dp)
+    } else {
+        0.dp
+    }
+    padding(bottom = edgeBottomInset + liftDp + extraAboveKeyboard)
 }

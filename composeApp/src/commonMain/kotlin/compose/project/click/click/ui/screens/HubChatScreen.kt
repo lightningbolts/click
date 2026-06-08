@@ -84,9 +84,6 @@ import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowl
 import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatKeyboardLiftDp // pragma: allowlist secret
-import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
@@ -99,7 +96,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.ChatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -128,7 +125,6 @@ fun HubChatScreen(
      */
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
-    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
         HubChatViewModel(
@@ -166,7 +162,6 @@ fun HubChatScreen(
     val hubPeekScope = rememberCoroutineScope()
     val hubListState = remember(args.realtimeChannel) { LazyListState() }
     val density = LocalDensity.current
-    val chatKeyboardLiftDp = rememberChatKeyboardLiftDp(keyboardHeightProvider)
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
@@ -493,13 +488,10 @@ fun HubChatScreen(
                         .fillMaxWidth()
                         .clipToBounds(),
                 ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .chatThreadKeyboardDock(
-                            keyboardHeightProvider = keyboardHeightProvider,
-                        ),
+                ChatThreadKeyboardDock(
+                    modifier = Modifier.fillMaxSize(),
                 ) {
+                Column(modifier = Modifier.fillMaxSize()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -563,6 +555,7 @@ fun HubChatScreen(
                         isOutOfBounds = outOfBounds,
                         onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
                     )
+                }
                 }
                 }
                 }

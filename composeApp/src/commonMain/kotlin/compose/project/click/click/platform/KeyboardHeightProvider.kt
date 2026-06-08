@@ -10,8 +10,8 @@ expect class KeyboardHeightProvider() {
     val animationDurationMillis: StateFlow<Int>
     val animationCurve: StateFlow<Int>
 
-    /** Latest keyboard overlap in points — safe to read from [graphicsLayer] each draw frame. */
-    fun currentKeyboardHeightPoints(): Float
+    /** Re-read the live keyboard overlap — call when a chat thread becomes active. */
+    fun syncFromSystem()
 
     fun dispose()
 }

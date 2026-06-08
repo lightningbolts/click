@@ -83,6 +83,7 @@ fun ConnectionsScreen(
     var showGroupAddMemberPicker by remember { mutableStateOf(false) }
     /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
     var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(selectedChatId) {
         if (selectedChatId != null) {
@@ -107,6 +108,9 @@ fun ConnectionsScreen(
             closeCleanupJob?.cancel()
             chatTransitionMode = mode
             isTapCloseInFlight = mode == ChatTransitionMode.Tap
+            if (isIOS) {
+                focusManager.clearFocus()
+            }
             selectedChatId = null
             if (mode == ChatTransitionMode.Tap) {
                 closeCleanupJob = screenScope.launch {
