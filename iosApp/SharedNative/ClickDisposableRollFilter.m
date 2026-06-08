@@ -1,7 +1,7 @@
 #import "ClickDisposableRollFilter.h"
 
 #import <CoreImage/CoreImage.h>
-#import <UIKit/UIKit.h>
+#import <ImageIO/ImageIO.h>
 
 static CIImage *_Nullable ApplyColorControls(
     CIImage *input,
@@ -110,21 +110,39 @@ static CIImage *_Nullable DownscaleIfNeeded(CIImage *input, int maxDimension) {
     return scaleFilter.outputImage ?: input;
 }
 
-static UIImage *_Nullable NormalizedUpImage(UIImage *image) {
-    if (image == nil) {
+static CIImage *_Nullable OrientedCIImageFromJPEG(NSData *jpegData) {
+    if (jpegData.length == 0) {
         return nil;
     }
-    if (image.imageOrientation == UIImageOrientationUp) {
-        return image;
+
+    CIImage *input = [CIImage imageWithData:jpegData options:nil];
+    if (input == nil) {
+        return nil;
     }
-    UIGraphicsImageRendererFormat *format = [[UIGraphicsImageRendererFormat alloc] init];
-    format.scale = image.scale;
-    format.opaque = YES;
-    UIGraphicsImageRenderer *renderer =
-        [[UIGraphicsImageRenderer alloc] initWithSize:image.size format:format];
-    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
-    }];
+
+    NSNumber *orientationValue = input.properties[(NSString *)kCGImagePropertyOrientation];
+    if (orientationValue == nil) {
+        return input;
+    }
+
+    int orientation = orientationValue.intValue;
+    if (orientation == kCGImagePropertyOrientationUp) {
+        return input;
+    }
+
+    return [input imageByApplyingOrientation:orientation] ?: input;
+}
+
+static CIImage *_Nullable NormalizedExtent(CIImage *input) {
+    CGRect extent = input.extent;
+    if (CGRectIsEmpty(extent) || CGRectIsInfinite(extent)) {
+        return input;
+    }
+    if (extent.origin.x == 0.0 && extent.origin.y == 0.0) {
+        return input;
+    }
+    CGAffineTransform translate = CGAffineTransformMakeTranslation(-extent.origin.x, -extent.origin.y);
+    return [input imageByApplyingTransform:translate] ?: input;
 }
 
 NSData *ClickApplyDisposableRollPhotoEffect(
@@ -136,39 +154,33 @@ NSData *ClickApplyDisposableRollPhotoEffect(
         return jpegData;
     }
 
-    UIImage *sourceImage = [UIImage imageWithData:jpegData];
-    if (sourceImage == nil || sourceImage.CGImage == nil) {
-        return jpegData;
+    @autoreleasepool {
+        CIImage *input = OrientedCIImageFromJPEG(jpegData);
+        if (input == nil) {
+            return jpegData;
+        }
+
+        input = DownscaleIfNeeded(input, previewMaxDimension);
+
+        CIImage *output = ApplyFilterChain(input, filterIndex);
+        if (output == nil) {
+            return jpegData;
+        }
+
+        output = NormalizedExtent(output);
+        CGRect extent = output.extent;
+        if (CGRectIsEmpty(extent) || CGRectIsInfinite(extent)) {
+            return jpegData;
+        }
+
+        CIContext *context = [CIContext contextWithOptions:nil];
+        CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+        NSData *jpeg = [context JPEGRepresentationOfImage:output
+                                               colorSpace:colorSpace
+                                                  options:@{
+                                                      (NSString *)kCGImageDestinationLossyCompressionQuality: @0.88,
+                                                  }];
+        CGColorSpaceRelease(colorSpace);
+        return jpeg.length > 0 ? jpeg : jpegData;
     }
-
-    UIImage *uprightImage = NormalizedUpImage(sourceImage);
-    if (uprightImage == nil || uprightImage.CGImage == nil) {
-        return jpegData;
-    }
-
-    CIImage *input = [CIImage imageWithCGImage:uprightImage.CGImage];
-    if (input == nil) {
-        return jpegData;
-    }
-
-    input = DownscaleIfNeeded(input, previewMaxDimension);
-
-    CIImage *output = ApplyFilterChain(input, filterIndex);
-    if (output == nil) {
-        return jpegData;
-    }
-
-    CIContext *context = [CIContext contextWithOptions:nil];
-    CGImageRef rendered = [context createCGImage:output fromRect:output.extent];
-    if (rendered == nil) {
-        return jpegData;
-    }
-
-    UIImage *filtered = [UIImage imageWithCGImage:rendered
-                                            scale:uprightImage.scale
-                                      orientation:UIImageOrientationUp];
-    CGImageRelease(rendered);
-
-    NSData *jpeg = UIImageJPEGRepresentation(filtered, 0.88);
-    return jpeg ?: jpegData;
 }

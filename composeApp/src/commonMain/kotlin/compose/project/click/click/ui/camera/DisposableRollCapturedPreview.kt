@@ -38,12 +38,10 @@ internal fun DisposableRollCapturedPreview(
             previewBitmap = natural
         }
         for (index in 1 until DisposableRollFilters.COUNT) {
-            renderScope.launch {
-                renderDisposableRollFilteredPreview(sourceBytes, index)?.let { bitmap ->
-                    previewCache[index] = bitmap
-                    if (index == filterIndex) {
-                        previewBitmap = bitmap
-                    }
+            renderDisposableRollFilteredPreview(sourceBytes, index)?.let { bitmap ->
+                previewCache[index] = bitmap
+                if (index == filterIndex) {
+                    previewBitmap = bitmap
                 }
             }
         }
