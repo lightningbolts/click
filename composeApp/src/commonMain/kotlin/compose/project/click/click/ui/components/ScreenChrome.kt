@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.platform.KeyboardHeightProvider
 import compose.project.click.click.platform.rememberKeyboardHeightProvider
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-import kotlin.math.roundToInt
 
 /** Shared horizontal gutter for tab-root screens. */
 object AppScreenDefaults {
@@ -108,28 +107,34 @@ private fun Modifier.chatBottomInsetUnion(
     val navBottomPx = navInsets.getBottom(density)
     val navBottomDp = with(density) { navBottomPx.toDp() }
 
-    val trackedPoints = if (style.isIOS && nativeKeyboardLiftPx == null) {
+    if (style.isIOS) {
         val provider = keyboardHeightProvider ?: rememberKeyboardHeightProvider()
-        val height by provider.keyboardHeight.collectAsState()
-        height
-    } else {
-        0f
+        // Recompose each display-link frame; lift is read synchronously inside graphicsLayer.
+        provider.keyboardHeight.collectAsState()
+        WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        return@composed Modifier
+            .padding(bottom = navBottomDp + extraBottom)
+            .clipToBounds()
+            .graphicsLayer {
+                val nativePx = if (nativeKeyboardLiftPx != null) {
+                    nativeKeyboardLiftPx
+                } else {
+                    provider.currentKeyboardHeightPoints() * density.density
+                }
+                val imePx = imeInsets.getBottom(density).toFloat()
+                val liftPx = (maxOf(nativePx, imePx) - navBottomPx).coerceAtLeast(0f)
+                translationY = -liftPx
+            }
     }
-    // Subscribe to Compose IME animation (native keyboard bridge on iOS).
-    WindowInsets.ime.asPaddingValues().calculateBottomPadding()
 
     Modifier
         .padding(bottom = navBottomDp + extraBottom)
         .clipToBounds()
-        .graphicsLayer {
-            val imePx = imeInsets.getBottom(density).toFloat()
-            val trackedPx = trackedPoints * density.density
-            val liftPx = when {
-                nativeKeyboardLiftPx != null -> nativeKeyboardLiftPx
-                style.isIOS -> (maxOf(imePx, trackedPx) - navBottomPx).coerceAtLeast(0f)
-                else -> (imePx - navBottomPx).coerceAtLeast(0f)
-            }
-            translationY = -liftPx
+        .offset {
+            val imePx = imeInsets.getBottom(density)
+            val navPx = navInsets.getBottom(density)
+            val liftPx = (imePx - navPx).coerceAtLeast(0)
+            IntOffset(0, -liftPx)
         }
 }
 

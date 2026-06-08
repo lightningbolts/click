@@ -10,6 +10,9 @@ expect class KeyboardHeightProvider() {
     val animationDurationMillis: StateFlow<Int>
     val animationCurve: StateFlow<Int>
 
+    /** Latest keyboard overlap in points — safe to read from [graphicsLayer] each draw frame. */
+    fun currentKeyboardHeightPoints(): Float
+
     fun dispose()
 }
 
