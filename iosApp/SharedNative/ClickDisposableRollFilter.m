@@ -90,47 +90,46 @@ static CIImage *_Nullable ApplyFilterChain(CIImage *input, int filterIndex) {
     }
 }
 
-static CIImage *_Nullable DownscaleIfNeeded(CIImage *input, int maxDimension) {
-    if (maxDimension <= 0) {
-        return input;
-    }
-    CGRect extent = input.extent;
-    CGFloat largest = MAX(extent.size.width, extent.size.height);
-    if (largest <= maxDimension) {
-        return input;
-    }
-    CGFloat scale = (CGFloat)maxDimension / largest;
-    CIFilter *scaleFilter = [CIFilter filterWithName:@"CILanczosScaleTransform"];
-    if (scaleFilter == nil) {
-        return input;
-    }
-    [scaleFilter setValue:input forKey:kCIInputImageKey];
-    [scaleFilter setValue:@(scale) forKey:kCIInputScaleKey];
-    [scaleFilter setValue:@(1.0) forKey:kCIInputAspectRatioKey];
-    return scaleFilter.outputImage ?: input;
-}
-
-static CIImage *_Nullable OrientedCIImageFromJPEG(NSData *jpegData) {
+static CIImage *_Nullable OrientedCIImageFromJPEG(NSData *jpegData, int maxDimension) {
     if (jpegData.length == 0) {
         return nil;
     }
 
-    CIImage *input = [CIImage imageWithData:jpegData options:nil];
-    if (input == nil) {
+    CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)jpegData, NULL);
+    if (source == NULL) {
         return nil;
     }
 
-    NSNumber *orientationValue = input.properties[(NSString *)kCGImagePropertyOrientation];
-    if (orientationValue == nil) {
-        return input;
+    CFMutableDictionaryRef options = CFDictionaryCreateMutable(
+        kCFAllocatorDefault,
+        0,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks
+    );
+    if (options == NULL) {
+        CFRelease(source);
+        return nil;
     }
 
-    int orientation = orientationValue.intValue;
-    if (orientation == kCGImagePropertyOrientationUp) {
-        return input;
+    CFDictionarySetValue(options, kCGImageSourceCreateThumbnailFromImageAlways, kCFBooleanTrue);
+    CFDictionarySetValue(options, kCGImageSourceCreateThumbnailWithTransform, kCFBooleanTrue);
+    if (maxDimension > 0) {
+        CFNumberRef maxSize = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &maxDimension);
+        CFDictionarySetValue(options, kCGImageSourceThumbnailMaxPixelSize, maxSize);
+        CFRelease(maxSize);
     }
 
-    return [input imageByApplyingOrientation:orientation] ?: input;
+    CGImageRef cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options);
+    CFRelease(options);
+    CFRelease(source);
+
+    if (cgImage == NULL) {
+        return nil;
+    }
+
+    CIImage *ciImage = [CIImage imageWithCGImage:cgImage];
+    CGImageRelease(cgImage);
+    return ciImage;
 }
 
 static CIImage *_Nullable NormalizedExtent(CIImage *input) {
@@ -155,12 +154,10 @@ NSData *ClickApplyDisposableRollPhotoEffect(
     }
 
     @autoreleasepool {
-        CIImage *input = OrientedCIImageFromJPEG(jpegData);
+        CIImage *input = OrientedCIImageFromJPEG(jpegData, previewMaxDimension);
         if (input == nil) {
             return jpegData;
         }
-
-        input = DownscaleIfNeeded(input, previewMaxDimension);
 
         CIImage *output = ApplyFilterChain(input, filterIndex);
         if (output == nil) {

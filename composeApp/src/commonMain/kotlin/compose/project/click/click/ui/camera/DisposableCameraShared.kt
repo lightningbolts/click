@@ -65,6 +65,8 @@ internal fun DisposableCameraChrome(
     modifier: Modifier = Modifier,
     capturedImage: ByteArray?,
     isShutterEnabled: Boolean,
+    isCapturingPhoto: Boolean = false,
+    isFlippingCamera: Boolean = false,
     selectedFilterIndex: Int,
     onFilterIndexChange: (Int) -> Unit,
     onFlipCamera: () -> Unit,
@@ -192,6 +194,8 @@ internal fun DisposableCameraChrome(
             DisposableCameraStatusChip(
                 capturedImage = capturedImage,
                 isShutterEnabled = isShutterEnabled,
+                isCapturingPhoto = isCapturingPhoto,
+                isFlippingCamera = isFlippingCamera,
             )
             Spacer(modifier = Modifier.height(14.dp))
             DisposableCameraCaptureControls(
@@ -223,6 +227,8 @@ internal fun DisposableCameraChrome(
 private fun DisposableCameraStatusChip(
     capturedImage: ByteArray?,
     isShutterEnabled: Boolean,
+    isCapturingPhoto: Boolean,
+    isFlippingCamera: Boolean,
 ) {
     Surface(
         shape = RoundedCornerShape(999.dp),
@@ -235,8 +241,10 @@ private fun DisposableCameraStatusChip(
         Text(
             text = when {
                 capturedImage != null -> "Ready for the roll"
+                isCapturingPhoto -> "Capturing..."
+                isFlippingCamera -> "Flipping..."
                 isShutterEnabled -> "Snap once"
-                else -> "Capturing..."
+                else -> "Preparing..."
             },
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,

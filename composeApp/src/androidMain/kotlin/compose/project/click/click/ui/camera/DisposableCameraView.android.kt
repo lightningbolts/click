@@ -86,6 +86,7 @@ actual fun DisposableCameraView(
     var useFrontCamera by remember { mutableStateOf(true) }
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
     var isSending by remember { mutableStateOf(false) }
+    var isFlippingCamera by remember { mutableStateOf(false) }
     val isDisposed = remember { AtomicBoolean(false) }
     val captureExecutor = remember { Executors.newSingleThreadExecutor() }
     val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
@@ -125,10 +126,12 @@ actual fun DisposableCameraView(
             )
             view.scaleX = if (useFrontCamera) -1f else 1f
             setupError = null
+            isFlippingCamera = false
         }.onFailure { throwable ->
             imageCapture = null
             camera = null
             setupError = throwable.message ?: "Camera setup failed"
+            isFlippingCamera = false
         }
     }
 
@@ -173,10 +176,13 @@ actual fun DisposableCameraView(
         modifier = modifier,
         capturedImage = capturedImage,
         isShutterEnabled = capturedImage == null && imageCapture != null && !isCapturing && !isSending,
+        isCapturingPhoto = isCapturing,
+        isFlippingCamera = isFlippingCamera,
         selectedFilterIndex = selectedFilterIndex,
         onFilterIndexChange = { selectedFilterIndex = it },
         onFlipCamera = {
             if (capturedImage == null && !isCapturing) {
+                isFlippingCamera = true
                 useFrontCamera = !useFrontCamera
             }
         },

@@ -192,6 +192,7 @@ actual fun DisposableCameraView(
     var useFrontCamera by remember { mutableStateOf(true) }
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
     var isSending by remember { mutableStateOf(false) }
+    var isFlippingCamera by remember { mutableStateOf(false) }
     var previewHost by remember { mutableStateOf<PhotoPreviewView?>(null) }
 
     val frontDevice = remember { captureDevice(AVCaptureDevicePositionFront) }
@@ -257,6 +258,7 @@ actual fun DisposableCameraView(
             runOnMainQueue {
                 setupError = "Camera not available"
                 setupComplete = false
+                isFlippingCamera = false
             }
             return
         }
@@ -304,6 +306,7 @@ actual fun DisposableCameraView(
                     if (!isDisposed) {
                         setupComplete = true
                         setupError = null
+                        isFlippingCamera = false
                         previewHost?.updateDevice(device)
                     }
                 }
@@ -312,6 +315,7 @@ actual fun DisposableCameraView(
                     if (!isDisposed) {
                         setupComplete = false
                         setupError = throwable.message ?: "Camera setup failed"
+                        isFlippingCamera = false
                     }
                 }
             }
@@ -339,6 +343,7 @@ actual fun DisposableCameraView(
         if (isDisposed) return@LaunchedEffect
         val nextDevice = if (useFrontCamera) frontDevice else backDevice
         if (nextDevice == activeDevice) return@LaunchedEffect
+        isFlippingCamera = true
         activeDevice = nextDevice
         setupComplete = false
         configureSession(nextDevice)
@@ -358,6 +363,8 @@ actual fun DisposableCameraView(
         modifier = modifier,
         capturedImage = capturedImage,
         isShutterEnabled = capturedImage == null && setupComplete && !isCapturing && !isSending,
+        isCapturingPhoto = isCapturing,
+        isFlippingCamera = isFlippingCamera,
         selectedFilterIndex = selectedFilterIndex,
         onFilterIndexChange = { selectedFilterIndex = it },
         onFlipCamera = {
