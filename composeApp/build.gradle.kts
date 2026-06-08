@@ -2,7 +2,21 @@
 
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
 import java.util.Properties
+
+fun org.gradle.api.Project.patchComposeAppFrameworkPlist(plist: File) {
+    if (!plist.exists()) return
+    val replaceResult = exec {
+        commandLine("plutil", "-replace", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath)
+        isIgnoreExitValue = true
+    }
+    if (replaceResult.exitValue != 0) {
+        exec {
+            commandLine("plutil", "-insert", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath)
+        }
+    }
+}
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -232,7 +246,22 @@ compose.resources {
     publicResClass = true
 }
 
+tasks.matching { it.name.startsWith("link") && it.name.contains("Framework") }.configureEach {
+    doLast {
+        fileTree(layout.buildDirectory).matching {
+            include("**/ComposeApp.framework/Info.plist")
+        }.forEach { plist ->
+            patchComposeAppFrameworkPlist(plist)
+        }
+    }
+}
 
-
-
-
+tasks.matching { it.name == "embedAndSignAppleFrameworkForXcode" }.configureEach {
+    doLast {
+        fileTree(layout.buildDirectory).matching {
+            include("**/ComposeApp.framework/Info.plist")
+        }.forEach { plist ->
+            patchComposeAppFrameworkPlist(plist)
+        }
+    }
+}
