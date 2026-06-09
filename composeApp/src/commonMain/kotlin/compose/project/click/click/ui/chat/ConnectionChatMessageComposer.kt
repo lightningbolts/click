@@ -72,11 +72,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
@@ -130,7 +128,6 @@ internal fun ConnectionChatMessageComposer(
     }
 
     val composerStyle = LocalPlatformStyle.current
-    val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val replyBannerVisible = replyingTo != null && editingMessageId == null
@@ -414,55 +411,42 @@ internal fun ConnectionChatMessageComposer(
                         )
                     },
                 )
-                Box(
+                ChatAttachmentMenuAnchorHost(
+                    expanded = attachmentMenuExpanded,
+                    onExpandedChange = { attachmentMenuExpanded = it },
+                    anchorSize = auxButtonSize,
+                    anchorInteraction = attachInteraction,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .size(auxButtonSize)
                         .zIndex(4f)
                         .focusProperties { canFocus = false },
-                ) {
-                    val bgAlpha = if (isSending) 0.06f else 0.12f
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        PrimaryBlue.copy(alpha = bgAlpha),
-                                        PrimaryBlue.copy(alpha = bgAlpha),
+                    anchor = {
+                        val bgAlpha = if (isSending) 0.12f else 0.24f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            PrimaryBlue.copy(alpha = bgAlpha),
+                                            PrimaryBlue.copy(alpha = bgAlpha),
+                                        ),
                                     ),
-                                ),
+                                )
+                                .chatSpringPressScale(attachInteraction),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = "Attach",
+                                tint = attachTint,
+                                modifier = Modifier.size(attachIconSize),
                             )
-                            .chatSpringPressScale(attachInteraction)
-                            .clickable(
-                                interactionSource = attachInteraction,
-                                indication = null,
-                                enabled = true,
-                                onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    attachmentMenuExpanded = true
-                                },
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = "Attach",
-                            tint = attachTint,
-                            modifier = Modifier.size(attachIconSize),
-                        )
-                    }
-                    val attachmentMenuYOffset = with(density) {
-                        -(auxButtonSize + 6.dp).roundToPx()
-                    }
-                    ChatAttachmentMenuPopup(
-                        expanded = attachmentMenuExpanded,
-                        onDismissRequest = { attachmentMenuExpanded = false },
-                        anchorYOffset = attachmentMenuYOffset,
-                        modifier = Modifier,
-                    ) {
-                        Column(Modifier.padding(vertical = 6.dp)) {
+                        }
+                    },
+                    menuContent = {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                             ChatAttachmentMenuRow(
                                 label = "Roll",
                                 icon = Icons.Filled.PhotoCamera,
@@ -526,8 +510,8 @@ internal fun ConnectionChatMessageComposer(
                                 },
                             )
                         }
-                    }
-                }
+                    },
+                )
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)

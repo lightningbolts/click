@@ -18,6 +18,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -76,7 +77,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentMenuAnchorHost // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
@@ -565,7 +570,7 @@ fun HubChatScreen(
                         viewModel = viewModel,
                         inLobby = inLobby,
                         isOutOfBounds = outOfBounds,
-                        onOpenPhotoLibrary = { mediaPickers.openPhotoLibrary() },
+                        mediaPickers = mediaPickers,
                     )
                 }
                 }
@@ -655,7 +660,7 @@ private fun HubChatInputBar(
     viewModel: HubChatViewModel,
     inLobby: Boolean,
     isOutOfBounds: Boolean = false,
-    onOpenPhotoLibrary: () -> Unit,
+    mediaPickers: ChatMediaPickerHandles,
 ) {
     var localDraft by remember { mutableStateOf("") }
     val vmDraft by viewModel.draft.collectAsState()
@@ -691,6 +696,8 @@ private fun HubChatInputBar(
     val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
     val fieldSideInset = auxButtonSize + composerGap
 
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val attachInteraction = remember { MutableInteractionSource() }
     val sendInteraction = remember { MutableInteractionSource() }
     val composerStripInteraction = remember { MutableInteractionSource() }
@@ -822,70 +829,68 @@ private fun HubChatInputBar(
                 )
 
                 // ── Attach button (left, same as ConnectionChatMessageComposer) ─
-                Box(
+                ChatAttachmentMenuAnchorHost(
+                    expanded = attachmentMenuExpanded,
+                    onExpandedChange = { attachmentMenuExpanded = it },
+                    anchorSize = auxButtonSize,
+                    anchorInteraction = attachInteraction,
+                    anchorEnabled = enabled,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .size(auxButtonSize)
                         .zIndex(4f)
                         .focusProperties { canFocus = false },
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .background(PrimaryBlue.copy(alpha = if (isSending || inLobby) 0.06f else 0.12f))
-                            .chatSpringPressScale(attachInteraction)
-                            .clickable(
-                                interactionSource = attachInteraction,
-                                indication = null,
+                    anchor = {
+                        val bgAlpha = if (isSending || inLobby) 0.12f else 0.24f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            PrimaryBlue.copy(alpha = bgAlpha),
+                                            PrimaryBlue.copy(alpha = bgAlpha),
+                                        ),
+                                    ),
+                                )
+                                .chatSpringPressScale(attachInteraction),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = "Attach",
+                                tint = if (enabled) attachTint else attachTint.copy(alpha = 0.35f),
+                                modifier = Modifier.size(attachIconSize),
+                            )
+                        }
+                    },
+                    menuContent = {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            ChatAttachmentMenuRow(
+                                label = "Photo library",
+                                icon = Icons.Outlined.Image,
                                 enabled = enabled,
-                                onClick = { attachmentMenuExpanded = true },
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = "Attach",
-                            tint = if (enabled) attachTint else attachTint.copy(alpha = 0.35f),
-                            modifier = Modifier.size(attachIconSize),
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = attachmentMenuExpanded,
-                        onDismissRequest = { attachmentMenuExpanded = false },
-                        shape = RoundedCornerShape(if (composerStyle.isIOS) 14.dp else 12.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Photo library", style = MaterialTheme.typography.bodyLarge) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Image,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                attachmentMenuExpanded = false
-                                onOpenPhotoLibrary()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Take photo", style = MaterialTheme.typography.bodyLarge) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.PhotoCamera,
-                                    contentDescription = null,
-                                    tint = PrimaryBlue.copy(alpha = 0.9f),
-                                )
-                            },
-                            onClick = {
-                                attachmentMenuExpanded = false
-                                onOpenPhotoLibrary()
-                            },
-                        )
-                    }
-                }
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    mediaPickers.openPhotoLibrary()
+                                },
+                            )
+                            ChatAttachmentMenuRow(
+                                label = "Take photo",
+                                icon = Icons.Outlined.PhotoCamera,
+                                enabled = enabled,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    mediaPickers.openCamera()
+                                },
+                            )
+                        }
+                    },
+                )
 
                 // ── Send button (right, gradient pill, same as ConnectionChatMessageComposer) ─
                 Box(

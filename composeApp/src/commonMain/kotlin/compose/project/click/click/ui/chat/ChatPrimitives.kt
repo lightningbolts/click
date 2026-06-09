@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,8 +61,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import compose.project.click.click.data.models.Message
@@ -88,7 +92,6 @@ internal fun ChatAttachmentMenuPopup(
             contentVisible = false
             delay(200)
             keepMounted = false
-            onDismissRequest()
         }
     }
 
@@ -114,7 +117,8 @@ internal fun ChatAttachmentMenuPopup(
         properties = PopupProperties(
             focusable = false,
             dismissOnBackPress = true,
-            dismissOnClickOutside = true,
+            // Disabled: + taps are "outside" the menu surface and would dismiss then retoggle open.
+            dismissOnClickOutside = false,
         ),
     ) {
         AnimatedVisibility(
@@ -139,6 +143,85 @@ internal fun ChatAttachmentMenuPopup(
     }
 }
 
+/**
+ * Hosts the attachment (+) anchor and menu popup. The anchor is rendered in its own
+ * non-focusable popup so it stays tappable while the menu is open — the menu popup layer
+ * otherwise sits above the in-tree compose hierarchy and swallows taps on the + button.
+ */
+@Composable
+internal fun ChatAttachmentMenuAnchorHost(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    anchorSize: Dp,
+    anchorInteraction: MutableInteractionSource,
+    modifier: Modifier = Modifier,
+    anchorEnabled: Boolean = true,
+    anchor: @Composable () -> Unit,
+    menuContent: @Composable () -> Unit,
+) {
+    val density = LocalDensity.current
+    val menuYOffset = with(density) { -(anchorSize + 6.dp).roundToPx() }
+    val dismissMenu = { onExpandedChange(false) }
+    val scrimInteraction = remember { MutableInteractionSource() }
+
+    Box(modifier = modifier.size(anchorSize)) {
+        if (expanded) {
+            Popup(
+                alignment = Alignment.TopStart,
+                onDismissRequest = dismissMenu,
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = false,
+                ),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = scrimInteraction,
+                            onClick = dismissMenu,
+                        ),
+                )
+            }
+        }
+        ChatAttachmentMenuPopup(
+            expanded = expanded,
+            onDismissRequest = dismissMenu,
+            anchorYOffset = menuYOffset,
+        ) {
+            menuContent()
+        }
+        Popup(
+            alignment = Alignment.BottomStart,
+            onDismissRequest = {},
+            properties = PopupProperties(
+                focusable = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(anchorSize)
+                    .clickable(
+                        interactionSource = anchorInteraction,
+                        indication = null,
+                        enabled = anchorEnabled,
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            onExpandedChange(!expanded)
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                anchor()
+            }
+        }
+    }
+}
+
 @Composable
 internal fun ChatAttachmentMenuRow(
     label: String,
@@ -149,6 +232,7 @@ internal fun ChatAttachmentMenuRow(
     val onSurface = MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .clickable(
                 enabled = enabled,
