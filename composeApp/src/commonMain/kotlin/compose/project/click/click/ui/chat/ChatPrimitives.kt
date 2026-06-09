@@ -144,9 +144,10 @@ internal fun ChatAttachmentMenuPopup(
 }
 
 /**
- * Hosts the attachment (+) anchor and menu popup. The anchor is rendered in its own
- * non-focusable popup so it stays tappable while the menu is open — the menu popup layer
- * otherwise sits above the in-tree compose hierarchy and swallows taps on the + button.
+ * Hosts the attachment (+) anchor and menu popup. The anchor stays in the compose tree
+ * (not a popup) so it follows the composer [graphicsLayer] keyboard lift on iOS. Menu
+ * outside-tap dismiss uses a scrim popup; [ChatAttachmentMenuPopup] keeps
+ * [PopupProperties.dismissOnClickOutside] off so + toggles do not dismiss-then-reopen.
  */
 @Composable
 internal fun ChatAttachmentMenuAnchorHost(
@@ -193,31 +194,21 @@ internal fun ChatAttachmentMenuAnchorHost(
         ) {
             menuContent()
         }
-        Popup(
-            alignment = Alignment.BottomStart,
-            onDismissRequest = {},
-            properties = PopupProperties(
-                focusable = false,
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false,
-            ),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = anchorInteraction,
+                    indication = null,
+                    enabled = anchorEnabled,
+                    onClick = {
+                        PlatformHapticsPolicy.lightImpact()
+                        onExpandedChange(!expanded)
+                    },
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(anchorSize)
-                    .clickable(
-                        interactionSource = anchorInteraction,
-                        indication = null,
-                        enabled = anchorEnabled,
-                        onClick = {
-                            PlatformHapticsPolicy.lightImpact()
-                            onExpandedChange(!expanded)
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                anchor()
-            }
+            anchor()
         }
     }
 }
