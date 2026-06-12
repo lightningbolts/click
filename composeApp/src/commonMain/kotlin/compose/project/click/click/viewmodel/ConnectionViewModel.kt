@@ -291,7 +291,7 @@ class ConnectionViewModel : ViewModel() {
                         locationService.requestLocationPermission()
                         delay(800L)
                     }
-                    runCatching { locationService.getHighAccuracyLocation(5000L) }.getOrNull()
+                    runCatching { locationService.getHighAccuracyLocation(6500L) }.getOrNull()
                 } else {
                     null
                 }
