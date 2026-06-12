@@ -5,7 +5,9 @@ import compose.project.click.click.data.models.HeightCategory
 data class BarometricHeightSample(
     val category: HeightCategory,
     val elevationMeters: Double,
-    val pressureHpa: Double? = null
+    val pressureHpa: Double? = null,
+    /** False when elevation used the 1013.25 hPa ISA fallback because live MSL pressure was unavailable. */
+    val isCalibrated: Boolean = true,
 )
 
 interface BarometricHeightMonitor {
@@ -20,14 +22,25 @@ interface BarometricHeightMonitor {
     /** Stops background sampling started by [ensureBackgroundCaching]. */
     fun releaseBackgroundCaching() {}
 
-    suspend fun sampleHeightReading(durationMs: Int = 1500): BarometricHeightSample?
+    suspend fun sampleHeightReading(
+        durationMs: Int = 1500,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): BarometricHeightSample?
 
-    suspend fun sampleHeightCategory(durationMs: Int = 1500): HeightCategory? =
-        sampleHeightReading(durationMs)?.category
+    suspend fun sampleHeightCategory(
+        durationMs: Int = 1500,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): HeightCategory? = sampleHeightReading(durationMs, latitude, longitude)?.category
 }
 
 object NoOpBarometricHeightMonitor : BarometricHeightMonitor {
     override val isAvailable: Boolean = false
 
-    override suspend fun sampleHeightReading(durationMs: Int): BarometricHeightSample? = null
+    override suspend fun sampleHeightReading(
+        durationMs: Int,
+        latitude: Double?,
+        longitude: Double?,
+    ): BarometricHeightSample? = null
 }

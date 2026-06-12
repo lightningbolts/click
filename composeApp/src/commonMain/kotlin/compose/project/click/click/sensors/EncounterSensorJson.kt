@@ -19,6 +19,9 @@ fun buildEncounterSensorJson(
         ?.let { put("elevation_category", it) }
     context?.exactBarometricElevationMeters?.takeIf { it.isFinite() }
         ?.let { put("exact_barometric_elevation_m", it) }
+    if (context?.barometricCalibrated == false) {
+        put("barometric_calibrated", false)
+    }
     hardwareVibe?.luxLevel?.takeIf { it.isFinite() }?.let { put("lux_level", it.toDouble()) }
     hardwareVibe?.motionVariance?.takeIf { it.isFinite() }?.let { put("motion_variance", it.toDouble()) }
     hardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.let { put("compass_azimuth", it.toDouble()) }

@@ -22,6 +22,8 @@ data class ConnectionSensorContext(
     val heightCategory: HeightCategory?,
     val exactBarometricElevationMeters: Double?,
     val exactBarometricPressureHpa: Double? = null,
+    /** False when barometric elevation used the 1013.25 hPa ISA fallback (Open-Meteo MSL unavailable). */
+    val barometricCalibrated: Boolean? = null,
 )
 
 private val LocalAmbientNoiseMonitor = staticCompositionLocalOf<AmbientNoiseMonitor> {
@@ -78,6 +80,8 @@ suspend fun captureConnectionSensorContext(
     barometricHeightMonitor: BarometricHeightMonitor,
     ambientNoiseOptIn: Boolean,
     barometricContextOptIn: Boolean,
+    latitude: Double? = null,
+    longitude: Double? = null,
 ): ConnectionSensorContext {
     if (!ambientNoiseOptIn && !barometricContextOptIn) {
         return ConnectionSensorContext(
@@ -86,6 +90,7 @@ suspend fun captureConnectionSensorContext(
             heightCategory = null,
             exactBarometricElevationMeters = null,
             exactBarometricPressureHpa = null,
+            barometricCalibrated = null,
         )
     }
     return coroutineScope {
@@ -100,7 +105,11 @@ suspend fun captureConnectionSensorContext(
             if (!barometricContextOptIn) {
                 null
             } else {
-                barometricHeightMonitor.sampleHeightReading(CONNECTION_CONTEXT_SENSOR_BAROMETRIC_SAMPLE_MS)
+                barometricHeightMonitor.sampleHeightReading(
+                    durationMs = CONNECTION_CONTEXT_SENSOR_BAROMETRIC_SAMPLE_MS,
+                    latitude = latitude,
+                    longitude = longitude,
+                )
             }
         }
         val noise = noiseDeferred.await()
@@ -111,6 +120,7 @@ suspend fun captureConnectionSensorContext(
             heightCategory = baro?.category,
             exactBarometricElevationMeters = baro?.elevationMeters,
             exactBarometricPressureHpa = baro?.pressureHpa,
+            barometricCalibrated = baro?.isCalibrated,
         )
     }
 }

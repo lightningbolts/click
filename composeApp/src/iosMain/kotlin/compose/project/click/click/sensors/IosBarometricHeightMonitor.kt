@@ -3,7 +3,6 @@ package compose.project.click.click.sensors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
-import compose.project.click.click.data.models.deriveHeightCategory
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
@@ -18,7 +17,6 @@ import platform.darwin.dispatch_get_main_queue
 import platform.darwin.dispatch_time
 import platform.darwin.NSEC_PER_MSEC
 import kotlin.coroutines.resume
-import kotlin.math.pow
 
 /**
  * Shared relative-altitude stream so [sampleHeightReading] can return a recent sample
@@ -86,15 +84,9 @@ private object IosBarometricAltimeterStream {
                 val kpa = data?.pressure?.doubleValue ?: return@baro
                 if (kpa <= 0.0) return@baro
                 val hpa = kpa * 10.0
-                val elevation = 44330.0 * (1.0 - (hpa / 1013.25).pow(0.1903))
-                if (!elevation.isFinite() || elevation !in -500.0..12000.0) return@baro
-                val category = deriveHeightCategory(elevation) ?: return@baro
+                val sample = fallbackBarometricHeightSampleFromPressure(hpa) ?: return@baro
                 withLock {
-                    cachedSample = BarometricHeightSample(
-                        category = category,
-                        elevationMeters = elevation,
-                        pressureHpa = hpa,
-                    )
+                    cachedSample = sample
                     cacheEpochMs = Clock.System.now().toEpochMilliseconds()
                 }
             },
@@ -116,7 +108,11 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
         IosBarometricAltimeterStream.release()
     }
 
-    override suspend fun sampleHeightReading(durationMs: Int): BarometricHeightSample? {
+    override suspend fun sampleHeightReading(
+        durationMs: Int,
+        latitude: Double?,
+        longitude: Double?,
+    ): BarometricHeightSample? {
         if (!isAvailable) return null
 
         IosBarometricAltimeterStream.cached(maxAgeMs = 12_000L)?.let { return it }
@@ -133,21 +129,8 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
                     altimeter.stopRelativeAltitudeUpdates()
                     val averagePressureKpa = pressureReadings.average().takeIf { !it.isNaN() }
                     val pressureHpa = averagePressureKpa?.times(10.0)
-                    val altitudeMeters = pressureHpa?.let { pressure ->
-                        44330.0 * (1.0 - (pressure / 1013.25).pow(0.1903))
-                    }
                     if (continuation.isActive) {
-                        val sample = altitudeMeters
-                            ?.takeIf { it.isFinite() && it in -500.0..12000.0 }
-                            ?.let { elevation ->
-                                deriveHeightCategory(elevation)?.let { category ->
-                                    BarometricHeightSample(
-                                        category = category,
-                                        elevationMeters = elevation,
-                                        pressureHpa = pressureHpa,
-                                    )
-                                }
-                            }
+                        val sample = pressureHpa?.let(::fallbackBarometricHeightSampleFromPressure)
                         continuation.resume(sample)
                     }
                 }

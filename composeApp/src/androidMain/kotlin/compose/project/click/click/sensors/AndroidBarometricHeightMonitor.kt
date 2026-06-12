@@ -11,13 +11,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import compose.project.click.click.data.models.deriveHeightCategory
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.datetime.Clock
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
-import kotlin.math.pow
 
 internal class AndroidBarometricStream(
     private val sensorManager: SensorManager,
@@ -41,16 +39,8 @@ internal class AndroidBarometricStream(
         val lis = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 val pressureHpa = event.values.firstOrNull()?.takeIf { it > 0f }?.toDouble() ?: return
-                val elevation = 44330.0 * (1.0 - (pressureHpa / 1013.25).pow(0.1903))
-                if (!elevation.isFinite() || elevation !in -500.0..12000.0) return
-                val category = deriveHeightCategory(elevation) ?: return
-                cachedSample.set(
-                    BarometricHeightSample(
-                        category = category,
-                        elevationMeters = elevation,
-                        pressureHpa = pressureHpa,
-                    ),
-                )
+                val sample = fallbackBarometricHeightSampleFromPressure(pressureHpa) ?: return
+                cachedSample.set(sample)
                 cacheEpochMs.set(Clock.System.now().toEpochMilliseconds())
             }
 
@@ -102,7 +92,11 @@ internal class AndroidBarometricHeightMonitor(
         stream?.release()
     }
 
-    override suspend fun sampleHeightReading(durationMs: Int): BarometricHeightSample? {
+    override suspend fun sampleHeightReading(
+        durationMs: Int,
+        latitude: Double?,
+        longitude: Double?,
+    ): BarometricHeightSample? {
         val manager = sensorManager ?: return null
         val sensor = pressureSensor ?: return null
 
@@ -124,22 +118,9 @@ internal class AndroidBarometricHeightMonitor(
             fun finish() {
                 manager.unregisterListener(listener)
                 mainHandler.removeCallbacksAndMessages(null)
-                val averagePressure = pressureReadings.average().takeIf { !it.isNaN() }?.toFloat()
-                val altitudeMeters = averagePressure?.let {
-                    SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, it)
-                }?.toDouble()
+                val averagePressure = pressureReadings.average().takeIf { !it.isNaN() }?.toDouble()
                 if (continuation.isActive) {
-                    val sample = altitudeMeters
-                        ?.takeIf { it.isFinite() && it in -500.0..12000.0 }
-                        ?.let { elevation ->
-                            deriveHeightCategory(elevation)?.let { category ->
-                                BarometricHeightSample(
-                                    category = category,
-                                    elevationMeters = elevation,
-                                    pressureHpa = averagePressure?.toDouble(),
-                                )
-                            }
-                        }
+                    val sample = averagePressure?.let(::fallbackBarometricHeightSampleFromPressure)
                     continuation.resume(sample)
                 }
             }

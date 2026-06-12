@@ -3,7 +3,7 @@ package compose.project.click.click.data.models
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlin.math.pow
+import compose.project.click.click.sensors.computeBarometricElevationMeters
 
 @Serializable
 data class MemoryCapsule(
@@ -73,16 +73,8 @@ fun deriveHeightCategory(altitudeMeters: Double?): HeightCategory? {
 
 fun calibrateBarometricElevationMeters(
     stationPressureHpa: Double?,
-    seaLevelPressureHpa: Double?
-): Double? {
-    val stationPressure = stationPressureHpa?.takeIf { it.isFinite() && it > 0.0 } ?: return null
-    val seaLevelPressure = seaLevelPressureHpa?.takeIf { it.isFinite() && it > 0.0 } ?: return null
-    val pressureRatio = stationPressure / seaLevelPressure
-    if (!pressureRatio.isFinite() || pressureRatio <= 0.0) return null
-
-    val altitude = 44330.0 * (1.0 - pressureRatio.pow(0.1903))
-    return altitude.takeIf { it.isFinite() && it in -500.0..12000.0 }
-}
+    seaLevelPressureHpa: Double?,
+): Double? = computeBarometricElevationMeters(stationPressureHpa, seaLevelPressureHpa)?.elevationMeters
 
 @Serializable
 data class ContextTag(

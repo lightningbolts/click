@@ -106,6 +106,7 @@ import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pr
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.ConnectionSensorMonitorsProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
+import compose.project.click.click.sensors.CalibratedBarometricHeightMonitor
 import compose.project.click.click.sensors.rememberBarometricHeightMonitor
 import compose.project.click.click.sensors.HardwareVibeMonitor
 import compose.project.click.click.data.OpenMeteoWeatherService
@@ -155,11 +156,14 @@ fun App() {
     // Auth ViewModel with TokenStorage
     val tokenStorage = remember { createTokenStorage() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
-    val barometricHeightMonitor = rememberBarometricHeightMonitor()
+    val platformBarometricHeightMonitor = rememberBarometricHeightMonitor()
+    val openMeteoWeather = remember { OpenMeteoWeatherService() }
+    val barometricHeightMonitor = remember(platformBarometricHeightMonitor, openMeteoWeather) {
+        CalibratedBarometricHeightMonitor(platformBarometricHeightMonitor, openMeteoWeather)
+    }
     val appScope = rememberCoroutineScope()
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
-    val openMeteoWeather = remember { OpenMeteoWeatherService() }
 
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }

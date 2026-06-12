@@ -337,6 +337,8 @@ class ConnectionViewModel : ViewModel() {
                             barometricHeightMonitor = barometricHeightMonitor,
                             ambientNoiseOptIn = noiseOptIn,
                             barometricContextOptIn = baroOptIn,
+                            latitude = lastProximityLat,
+                            longitude = lastProximityLng,
                         )
                     } else {
                         null
@@ -717,6 +719,8 @@ class ConnectionViewModel : ViewModel() {
                         barometricHeightMonitor = barometricHeightMonitor,
                         ambientNoiseOptIn = ambientNoiseOptIn,
                         barometricContextOptIn = barometricContextOptIn,
+                        latitude = lastProximityLat,
+                        longitude = lastProximityLng,
                     )
                 } else {
                     null
@@ -869,6 +873,8 @@ class ConnectionViewModel : ViewModel() {
                         barometricHeightMonitor = barometricHeightMonitor,
                         ambientNoiseOptIn = ambientNoiseOptIn,
                         barometricContextOptIn = barometricContextOptIn,
+                        latitude = lastProximityLat,
+                        longitude = lastProximityLng,
                     )
                 } else {
                     null
