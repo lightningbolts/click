@@ -380,6 +380,12 @@ async function validateIncomingCallRequest(
   }
 }
 
+function isServiceSecretRequest(req: Request): boolean {
+  const bearer = getBearerToken(req)?.trim();
+  const expected = serviceRoleOrCronSecret();
+  return !!bearer && !!expected && bearer === expected;
+}
+
 async function resolveChatMessageRequest(
   req: Request,
   supabase: ReturnType<typeof createClient>,
@@ -389,7 +395,11 @@ async function resolveChatMessageRequest(
   const providedTitle = asNonEmptyString(requestBody.title);
   const providedBody = asNonEmptyString(requestBody.body);
 
-  if (providedRecipientUserId && providedTitle && providedBody) {
+  // Full-payload pushes (arbitrary recipient/title/body) are reserved for trusted
+  // service callers (pg_cron maintenance, internal jobs). User-originated requests
+  // must go through the validated chat-message path below, which authenticates the
+  // sender and verifies connection membership.
+  if (providedRecipientUserId && providedTitle && providedBody && isServiceSecretRequest(req)) {
     const data = requestBody.data ?? {};
     const senderUserId = asNonEmptyString(data.sender_user_id);
     const messageId = asNonEmptyString(data.message_id);
@@ -677,7 +687,16 @@ Deno.serve(async (req: Request) => {
 
   try {
     const requestBody = await req.json() as PushRequestBody;
-    console.log("Received request body:", requestBody);
+    // Log routing metadata only — title/body/data may contain message previews.
+    console.log(
+      "Received push request:",
+      JSON.stringify({
+        category: getPushCategory(requestBody),
+        has_recipient: !!requestBody.recipient_user_id,
+        has_title: !!requestBody.title,
+        has_body: !!requestBody.body,
+      }),
+    );
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },

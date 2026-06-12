@@ -5,10 +5,34 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.83.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
+function authorize(req: Request): boolean {
+  const auth = req.headers.get("authorization") ?? "";
+  if (CRON_SECRET && auth === `Bearer ${CRON_SECRET}`) return true;
+  if (SUPABASE_SERVICE_KEY && auth === `Bearer ${SUPABASE_SERVICE_KEY}`) return true;
+  return false;
+}
+
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "authorization, content-type",
+      },
+    });
+  }
+
+  if (!authorize(req)) {
+    return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },

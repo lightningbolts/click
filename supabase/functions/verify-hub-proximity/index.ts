@@ -89,6 +89,17 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    // Require an authenticated user: this endpoint reveals hub channel names and
+    // venue geofence proximity, so anonymous probing must be rejected.
+    const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!bearer) {
+      return jsonResponse({ error: "Authorization required" }, 401);
+    }
+    const { data: authData, error: authErr } = await supabase.auth.getUser(bearer);
+    if (authErr || !authData?.user) {
+      return jsonResponse({ error: "Invalid or expired token" }, 401);
+    }
+
     const { data: venue, error } = await supabase
       .from("hub_venues")
       .select("id, name, geofence_lat, geofence_long, radius_meters")
@@ -124,6 +135,20 @@ Deno.serve(async (req: Request) => {
         },
         403,
       );
+    }
+
+    // Register the verified user as a hub participant. hub_messages RLS scopes
+    // reads to participants, so this grant is what lets the client load and
+    // subscribe to hub chat after passing the geofence check.
+    const { error: participantErr } = await supabase
+      .from("hub_participants")
+      .upsert(
+        { hub_id: venue.id, user_id: authData.user.id },
+        { onConflict: "hub_id,user_id", ignoreDuplicates: true },
+      );
+    if (participantErr) {
+      console.error("hub_participants upsert error:", participantErr.message);
+      return jsonResponse({ error: "Failed to register hub participant" }, 500);
     }
 
     const channel = `hub:${venue.id}`;

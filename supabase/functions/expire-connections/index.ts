@@ -10,6 +10,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.83.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_KEY")!;
+const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+
+function authorize(req: Request): boolean {
+  const auth = req.headers.get("authorization") ?? "";
+  if (CRON_SECRET && auth === `Bearer ${CRON_SECRET}`) return true;
+  if (SUPABASE_SERVICE_KEY && auth === `Bearer ${SUPABASE_SERVICE_KEY}`) return true;
+  return false;
+}
 
 const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -61,6 +69,7 @@ async function sendArchiveWarningPushes(
         ? `You have ${timeLabel} left to send a first message.`
         : `No messages in a week — reply within ${timeLabel} to keep this chat active.`;
 
+    let anyDelivered = false;
     for (const uid of c.user_ids) {
       try {
         const res = await fetch(pushUrl, {
@@ -83,6 +92,7 @@ async function sendArchiveWarningPushes(
         });
         pushAttempts += 1;
         if (res.ok) {
+          anyDelivered = true;
           await res.json().catch(() => ({}));
         } else {
           console.error(
@@ -96,18 +106,38 @@ async function sendArchiveWarningPushes(
       }
     }
 
-    const col =
-      kind === "pending"
-        ? "archive_warning_pending_sent_at"
-        : "archive_warning_idle_sent_at";
-    const now = Date.now();
-    await supabase.from("connections").update({ [col]: now }).eq("id", c.id);
+    // Only mark the warning as sent when at least one push was accepted, so a
+    // transient push outage gets retried on the next cron run instead of
+    // silently skipping the warning forever.
+    if (anyDelivered) {
+      const col =
+        kind === "pending"
+          ? "archive_warning_pending_sent_at"
+          : "archive_warning_idle_sent_at";
+      await supabase.from("connections").update({ [col]: Date.now() }).eq("id", c.id);
+    }
   }
 
   return pushAttempts;
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "authorization, content-type",
+      },
+    });
+  }
+
+  if (!authorize(req)) {
+    return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
