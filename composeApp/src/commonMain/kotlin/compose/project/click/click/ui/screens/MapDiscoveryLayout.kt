@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,13 +51,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -264,19 +270,33 @@ private fun DiscoveryFeedPullRefreshIndicator(
     isRefreshing: Boolean,
     pullProgress: Float,
 ) {
+    val progress = pullProgress.coerceIn(0f, 1f)
+    val scale = 0.76f + 0.24f * progress
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp, bottom = 8.dp),
+            .padding(vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        if (isRefreshing || pullProgress > 0.05f) {
-            val alpha = if (isRefreshing) 1f else pullProgress.coerceIn(0.35f, 1f)
-            Box(modifier = Modifier.graphicsLayer { this.alpha = alpha }) {
+        if (isRefreshing || progress > 0.04f) {
+            val alpha = if (isRefreshing) 1f else 0.3f + 0.7f * progress
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    this.alpha = alpha
+                    scaleX = if (isRefreshing) 1f else scale
+                    scaleY = if (isRefreshing) 1f else scale
+                },
+            ) {
                 ClickLogoPulse(logoSize = if (isRefreshing) 56.dp else 44.dp)
             }
         }
     }
+}
+
+private fun rubberBandPullOffset(current: Float, delta: Float, maxPull: Float): Float {
+    if (delta <= 0f) return current
+    val resistance = 1f - (current / maxPull).coerceIn(0f, 0.9f)
+    return (current + delta * resistance.coerceAtLeast(0.15f)).coerceIn(0f, maxPull)
 }
 
 @Composable
@@ -383,50 +403,96 @@ internal fun MapDiscoveryScreen(
     val expandMap: () -> Unit = { onMapPipExpandedChange(true) }
 
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     val pullRefreshThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
-    var pullRefreshAccumulationPx by remember { mutableStateOf(0f) }
+    val pullRefreshMaxPx = remember(density) { with(density) { 120.dp.toPx() } }
+    val pullRefreshHoldPx = remember(density) { with(density) { 52.dp.toPx() } }
+    var pullOffsetPx by remember { mutableFloatStateOf(0f) }
     var pullRefreshTriggered by remember { mutableStateOf(false) }
-    val pullRefreshConnection = remember(listState, discoveryFeedRefreshing, onRefreshDiscovery) {
-        object : NestedScrollConnection {
+    var pullSettleJob by remember { mutableStateOf<Job?>(null) }
+
+    fun launchSettlePullOffset(target: Float) {
+        pullSettleJob?.cancel()
+        pullSettleJob = scope.launch {
+            val anim = Animatable(pullOffsetPx)
+            anim.animateTo(
+                targetValue = target,
+                animationSpec = spring(
+                    dampingRatio = 0.88f,
+                    stiffness = 320f,
+                ),
+            ) {
+                pullOffsetPx = value
+            }
+        }
+    }
+
+    fun atListTop(): Boolean =
+        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+
+    val pullRefreshConnection = object : NestedScrollConnection {
             override fun onPreScroll(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
                 if (source != NestedScrollSource.UserInput || discoveryFeedRefreshing) return Offset.Zero
-                val atTop = listState.firstVisibleItemIndex == 0 &&
-                    listState.firstVisibleItemScrollOffset == 0
-                if (!atTop) {
-                    if (pullRefreshAccumulationPx > 0f) pullRefreshAccumulationPx = 0f
-                    return Offset.Zero
-                }
-                if (available.y > 0f) {
-                    pullRefreshAccumulationPx += available.y
-                    return Offset(0f, available.y * 0.35f)
-                }
-                if (available.y < 0f && pullRefreshAccumulationPx > 0f) {
-                    val consumed = minOf(-available.y, pullRefreshAccumulationPx)
-                    pullRefreshAccumulationPx -= consumed
+                if (available.y < 0f && pullOffsetPx > 0f) {
+                    pullSettleJob?.cancel()
+                    val newOffset = (pullOffsetPx + available.y).coerceAtLeast(0f)
+                    val consumed = pullOffsetPx - newOffset
+                    pullOffsetPx = newOffset
                     return Offset(0f, -consumed)
+                }
+                if (!atListTop() && pullOffsetPx > 0f) {
+                    pullOffsetPx = 0f
                 }
                 return Offset.Zero
             }
 
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (source != NestedScrollSource.UserInput || discoveryFeedRefreshing) return Offset.Zero
+                if (!atListTop() || available.y <= 0f) return Offset.Zero
+                pullSettleJob?.cancel()
+                pullOffsetPx = rubberBandPullOffset(pullOffsetPx, available.y, pullRefreshMaxPx)
+                return Offset(0f, available.y)
+            }
+
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (pullRefreshAccumulationPx >= pullRefreshThresholdPx && !pullRefreshTriggered) {
+                if (discoveryFeedRefreshing) return Velocity.Zero
+                if (pullOffsetPx >= pullRefreshThresholdPx && !pullRefreshTriggered) {
                     pullRefreshTriggered = true
                     onRefreshDiscovery()
+                } else {
+                    launchSettlePullOffset(0f)
                 }
-                pullRefreshAccumulationPx = 0f
                 return Velocity.Zero
             }
         }
-    }
+
     LaunchedEffect(discoveryFeedRefreshing) {
+        pullSettleJob?.cancel()
         if (!discoveryFeedRefreshing) {
             pullRefreshTriggered = false
-            pullRefreshAccumulationPx = 0f
+        }
+        val target = if (discoveryFeedRefreshing) pullRefreshHoldPx else 0f
+        val anim = Animatable(pullOffsetPx)
+        anim.animateTo(
+            targetValue = target,
+            animationSpec = spring(
+                dampingRatio = 0.88f,
+                stiffness = 320f,
+            ),
+        ) {
+            pullOffsetPx = value
         }
     }
+
+    val pullProgress = (pullOffsetPx / pullRefreshThresholdPx).coerceIn(0f, 1f)
+    val listPullOffsetPx = pullOffsetPx.roundToInt()
 
     Box(
         modifier = Modifier
@@ -437,6 +503,7 @@ internal fun MapDiscoveryScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(0, listPullOffsetPx) }
                 .nestedScroll(pullRefreshConnection)
                 .graphicsLayer {
                     translationX = sortContentOffsetX.value
@@ -450,15 +517,6 @@ internal fun MapDiscoveryScreen(
                 bottom = bottomChrome + PipPreviewHeight + PipDockExtraGap + 16.dp,
             ),
         ) {
-            // Only while the user is actively pulling down — not during background/initial load.
-            if (pullRefreshAccumulationPx > 0f) {
-                item(key = "discovery_pull_refresh") {
-                    DiscoveryFeedPullRefreshIndicator(
-                        isRefreshing = discoveryFeedRefreshing,
-                        pullProgress = (pullRefreshAccumulationPx / pullRefreshThresholdPx).coerceIn(0f, 1f),
-                    )
-                }
-            }
             if (sortedFeed.isEmpty() && !discoveryFeedPending) {
                 item(key = "discovery_empty") {
                     DiscoveryFeedRow(
@@ -513,6 +571,29 @@ internal fun MapDiscoveryScreen(
                         )
                     }
                 }
+            }
+        }
+
+        if (pullOffsetPx > 0f || discoveryFeedRefreshing) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(
+                        start = AppScreenDefaults.HorizontalPadding,
+                        end = AppScreenDefaults.HorizontalPadding,
+                        top = listTopPadding,
+                    )
+                    .offset {
+                        val travel = (pullOffsetPx * 0.45f).roundToInt()
+                        IntOffset(0, travel.coerceAtLeast(0))
+                    }
+                    .zIndex(0.5f),
+            ) {
+                DiscoveryFeedPullRefreshIndicator(
+                    isRefreshing = discoveryFeedRefreshing,
+                    pullProgress = pullProgress,
+                )
             }
         }
 
