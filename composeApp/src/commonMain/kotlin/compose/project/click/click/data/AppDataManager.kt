@@ -834,6 +834,9 @@ object AppDataManager {
         beaconPrefetchJob = scope.launch {
             try {
             runCatching {
+                if (!locationService.hasLocationPermission()) {
+                    return@runCatching
+                }
                 // GPS may not be ready the instant the app cold-starts. Retry a few times so the
                 // discovery feed is seeded with hubs + beacons without waiting for the user to
                 // open (and acquire bounds from) the expanded map.
@@ -841,7 +844,7 @@ object AppDataManager {
                 var attempt = 0
                 while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
                     loc = locationService.getCurrentLocation()
-                        ?: locationService.getHighAccuracyLocation(4_000L)
+                        ?: locationService.getHighAccuracyLocation(2_000L)
                     if (loc != null) break
                     attempt++
                     if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {

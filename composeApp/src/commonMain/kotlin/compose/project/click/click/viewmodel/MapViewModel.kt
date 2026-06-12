@@ -233,11 +233,14 @@ class MapViewModel : ViewModel() {
     private var beaconPollJob: Job? = null
     private var discoveryProximityJob: Job? = null
     private var discoveryPrefetchRetryJob: Job? = null
+    private var discoveryPrefetchAttempts = 0
     private var beaconFetchSeq: Long = 0L
     private var discoveryFetchSeq: Long = 0L
 
     /** Discovery feed uses a GPS-centered radius so beacons load before the map is zoomed in. */
     private val discoveryProximityRadiusMeters = 30_000.0
+
+    private val maxDiscoveryPrefetchAttempts = 5
 
     private val locationService = LocationService()
 
@@ -327,13 +330,42 @@ class MapViewModel : ViewModel() {
 
     private fun scheduleDiscoveryPrefetchRetry(delayMs: Long = 2_000L) {
         if (_discoveryProximityFetchCompleted.value) return
+        if (discoveryPrefetchAttempts >= maxDiscoveryPrefetchAttempts ||
+            !canEverResolveProximityCenters()
+        ) {
+            finishDiscoveryPrefetchAttempt()
+            return
+        }
         discoveryPrefetchRetryJob?.cancel()
+        discoveryPrefetchAttempts++
+        val backoffMs = delayMs * discoveryPrefetchAttempts
         discoveryPrefetchRetryJob = viewModelScope.launch {
-            delay(delayMs)
+            delay(backoffMs)
             if (!_discoveryProximityFetchCompleted.value) {
                 warmDiscoveryFeed()
             }
         }
+    }
+
+    private fun canEverResolveProximityCenters(): Boolean {
+        if (locationService.hasLocationPermission()) return true
+        if (AppDataManager.lastKnownDeviceLocation.value != null) return true
+        if (AppDataManager.connections.value.any { it.connectionMapGeo() != null }) return true
+        if (_defaultCameraTarget.value != null || lastKnownCameraTarget != null) return true
+        if (_visibleBounds.value != null) return true
+        return false
+    }
+
+    private fun finishDiscoveryPrefetchAttempt() {
+        markDiscoveryProximityFetchCompleted()
+        _discoveryFeedLoading.value = false
+        discoveryPrefetchRetryJob?.cancel()
+        discoveryPrefetchRetryJob = null
+    }
+
+    private fun completeDiscoveryPrefetchAfterSuccess() {
+        discoveryPrefetchAttempts = 0
+        finishDiscoveryPrefetchAttempt()
     }
 
     private suspend fun hydrateBeaconRsvpFromDisk(userId: String? = null) {
@@ -1493,10 +1525,12 @@ class MapViewModel : ViewModel() {
                     if (showPulse) _discoveryFeedLoading.value = false
                     if (markInitialComplete) {
                         val hasFeedData = _mapBeacons.value.isNotEmpty() || _communityHubs.value.isNotEmpty()
-                        if (fetchRan || hasFeedData) {
-                            markDiscoveryProximityFetchCompleted()
-                        } else {
-                            scheduleDiscoveryPrefetchRetry()
+                        when {
+                            fetchRan || hasFeedData -> completeDiscoveryPrefetchAfterSuccess()
+                            !canEverResolveProximityCenters() -> finishDiscoveryPrefetchAttempt()
+                            discoveryPrefetchAttempts >= maxDiscoveryPrefetchAttempts ->
+                                finishDiscoveryPrefetchAttempt()
+                            else -> scheduleDiscoveryPrefetchRetry()
                         }
                     }
                 }
@@ -1511,12 +1545,6 @@ class MapViewModel : ViewModel() {
      */
     private suspend fun resolveDiscoveryProximityCenters(): List<Pair<Double, Double>> {
         val raw = mutableListOf<Pair<Double, Double>>()
-
-        val gps = locationService.getCurrentLocation()
-            ?: locationService.getHighAccuracyLocation(3_500L)
-        if (gps != null) {
-            raw += gps.latitude to gps.longitude
-        }
 
         AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
             raw += lat to lon
@@ -1543,6 +1571,14 @@ class MapViewModel : ViewModel() {
             }
             _visibleBounds.value?.let { bounds ->
                 raw += bounds.centerLat to bounds.centerLon
+            }
+        }
+
+        if (raw.isEmpty() && locationService.hasLocationPermission()) {
+            val gps = locationService.getCurrentLocation()
+                ?: locationService.getHighAccuracyLocation(1_500L)
+            if (gps != null) {
+                raw += gps.latitude to gps.longitude
             }
         }
 
