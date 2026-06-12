@@ -178,6 +178,9 @@ import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist 
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.matchesConnectionPickerSearch // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionPickerListAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionPickerSearchBar // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
@@ -314,6 +317,7 @@ fun ConnectionsListView(
 
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
+    var cliqueSearchQuery by remember { mutableStateOf("") }
     val listScope = rememberCoroutineScope()
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
@@ -349,6 +353,7 @@ fun ConnectionsListView(
 
     fun dismissVerifiedCliqueSheet(onAfterHide: () -> Unit = {}) {
         cliqueSheetVisible = false
+        cliqueSearchQuery = ""
         proximityCliqueHintUsers = emptyList()
         onAfterHide()
     }
@@ -817,21 +822,70 @@ fun ConnectionsListView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
             ) {
                 Text(
                     text = "Create verified click",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = GlassSheetTokens.OnOled,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Pick friends who are pairwise connected (pending, active, kept, or archived 1:1). Friend–friend edges are checked on the server.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = GlassSheetTokens.OnOledMuted,
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                ConnectionPickerSearchBar(
+                    query = cliqueSearchQuery,
+                    onQueryChange = { cliqueSearchQuery = it },
+                    placeholder = "Search connections",
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                )
+                if (selectedCliqueFriendIds.isNotEmpty()) {
+                    val selectedCliqueUsers = remember(
+                        verifiedCliquePickableOneToOneChats,
+                        selectedCliqueFriendIds,
+                    ) {
+                        verifiedCliquePickableOneToOneChats
+                            .filter { it.otherUser.id in selectedCliqueFriendIds }
+                            .map { it.otherUser }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        selectedCliqueUsers.forEach { user ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .width(56.dp)
+                                    .clickable {
+                                        selectedCliqueFriendIds = selectedCliqueFriendIds - user.id
+                                    },
+                            ) {
+                                ConnectionPickerListAvatar(
+                                    displayName = user.name,
+                                    email = user.email,
+                                    avatarUrl = user.image,
+                                    userId = user.id,
+                                    selected = true,
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = user.name?.trim()?.ifBlank { null } ?: "Friend",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = GlassSheetTokens.OnOledMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
                 if (cliqueProximityAutofillLoading) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -919,83 +973,72 @@ fun ConnectionsListView(
                         color = GlassSheetTokens.OnOledMuted,
                     )
                 } else {
+                    val filteredCliquePickableChats = remember(
+                        verifiedCliquePickableOneToOneChats,
+                        cliqueSearchQuery,
+                    ) {
+                        verifiedCliquePickableOneToOneChats.filter {
+                            matchesConnectionPickerSearch(it.otherUser, cliqueSearchQuery)
+                        }
+                    }
+                    if (filteredCliquePickableChats.isEmpty()) {
+                        Text(
+                            text = "No matches for \"$cliqueSearchQuery\".",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GlassSheetTokens.OnOledMuted,
+                        )
+                    } else {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f, fill = true),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        items(verifiedCliquePickableOneToOneChats, key = { it.connection.id }) { chatDetails ->
+                        items(filteredCliquePickableChats, key = { it.connection.id }) { chatDetails ->
                             val friendId = chatDetails.otherUser.id
                             val checked = friendId in selectedCliqueFriendIds
                             val canSelect =
                                 checked || (cliqueSheetEligibilityReady && cliqueAddableMask[friendId] == true)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable(enabled = canSelect) {
-                                        selectedCliqueFriendIds = if (checked) {
-                                            selectedCliqueFriendIds - friendId
+                            val label = chatDetails.otherUser.name?.trim()?.ifBlank { null } ?: "Friend"
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = if (canSelect) {
+                                            GlassSheetTokens.OnOled
                                         } else {
-                                            selectedCliqueFriendIds + friendId
-                                        }
-                                    }
-                                    .padding(vertical = 8.dp, horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { wantChecked ->
-                                        if (wantChecked == checked) return@Checkbox
-                                        if (!wantChecked) {
-                                            selectedCliqueFriendIds = selectedCliqueFriendIds - friendId
-                                        } else if (canSelect) {
-                                            selectedCliqueFriendIds = selectedCliqueFriendIds + friendId
-                                        } else {
-                                            toastState.show(
-                                                listScope,
-                                                "That friend isn’t connected to everyone already selected.",
-                                            )
-                                        }
-                                    },
-                                    enabled = canSelect,
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = PrimaryBlue,
-                                        uncheckedColor = GlassSheetTokens.OnOledMuted,
-                                        checkmarkColor = Color.White,
-                                        disabledUncheckedColor = GlassSheetTokens.OnOledMuted.copy(alpha = 0.35f),
-                                        disabledCheckedColor = PrimaryBlue.copy(alpha = 0.45f),
-                                    ),
-                                )
-                                AvatarWithOnlineIndicator(
-                                    isOnline = chatDetails.otherUser.id in onlineUsers,
-                                    modifier = Modifier.size(44.dp),
-                                ) {
-                                    ConnectionListUserAvatarFace(
+                                            GlassSheetTokens.OnOledMuted
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                leadingContent = {
+                                    ConnectionPickerListAvatar(
                                         displayName = chatDetails.otherUser.name,
                                         email = chatDetails.otherUser.email,
                                         avatarUrl = chatDetails.otherUser.image,
                                         userId = chatDetails.otherUser.id,
-                                        modifier = Modifier.fillMaxSize(),
-                                        useCompactTypography = false,
+                                        selected = checked,
+                                        enabled = canSelect,
                                     )
-                                }
-                                Text(
-                                    text = chatDetails.otherUser.name?.trim()?.ifBlank { null } ?: "Friend",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = if (canSelect) {
-                                        GlassSheetTokens.OnOled
+                                },
+                                modifier = Modifier.clickable(enabled = canSelect) {
+                                    if (checked) {
+                                        selectedCliqueFriendIds = selectedCliqueFriendIds - friendId
+                                    } else if (canSelect) {
+                                        selectedCliqueFriendIds = selectedCliqueFriendIds + friendId
                                     } else {
-                                        GlassSheetTokens.OnOledMuted
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                                        toastState.show(
+                                            listScope,
+                                            "That friend isn’t connected to everyone already selected.",
+                                        )
+                                    }
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            )
                         }
+                    }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))

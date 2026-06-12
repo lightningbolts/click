@@ -12,13 +12,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -35,16 +45,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
@@ -53,6 +63,103 @@ import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist sec
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+
+private val PickerSelectionPurple = Color(0xFF9D4EDD)
+private val PickerSelectionRingWidth = 2.5.dp
+
+internal fun matchesConnectionPickerSearch(user: User, query: String): Boolean {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return true
+    val name = user.name?.trim()?.lowercase().orEmpty()
+    val email = user.email?.trim()?.lowercase().orEmpty()
+    return name.contains(q) || email.contains(q)
+}
+
+@Composable
+internal fun ConnectionPickerSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White.copy(alpha = 0.08f),
+    ) {
+        TextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            placeholder = {
+                Text(
+                    placeholder,
+                    color = GlassSheetTokens.OnOledMuted,
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = GlassSheetTokens.OnOledMuted,
+                    modifier = Modifier.size(20.dp),
+                )
+            },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedTextColor = GlassSheetTokens.OnOled,
+                unfocusedTextColor = GlassSheetTokens.OnOled,
+                cursorColor = PrimaryBlue,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        )
+    }
+}
+
+@Composable
+internal fun ConnectionPickerListAvatar(
+    displayName: String?,
+    email: String?,
+    avatarUrl: String?,
+    userId: String,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    avatarSize: Dp = 40.dp,
+) {
+    val ringPad = if (selected) PickerSelectionRingWidth else 0.dp
+    val outerSize = avatarSize + ringPad * 2
+    Box(
+        modifier = Modifier.size(outerSize),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(avatarSize)
+                .then(
+                    if (selected) {
+                        Modifier.border(PickerSelectionRingWidth, PickerSelectionPurple, CircleShape)
+                    } else {
+                        Modifier
+                    },
+                )
+                .clip(CircleShape)
+                .alpha(if (enabled) 1f else 0.45f),
+        ) {
+            ConnectionListUserAvatarFace(
+                displayName = displayName,
+                email = email,
+                avatarUrl = avatarUrl,
+                userId = userId,
+                modifier = Modifier.fillMaxSize(),
+                useCompactTypography = true,
+            )
+        }
+    }
+}
 
 /**
  * Inline row shown under a 1:1 connection when GPS is missing — matches [ConnectionItem] card chrome.
@@ -256,31 +363,12 @@ internal fun GroupMembersPickerSheet(
                         null
                     },
                     leadingContent = {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (!user.image.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = user.image,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape),
-                                )
-                            } else {
-                                Text(
-                                    text = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = onVariant,
-                                )
-                            }
-                        }
+                        ConnectionPickerListAvatar(
+                            displayName = user.name,
+                            email = user.email,
+                            avatarUrl = user.image,
+                            userId = user.id,
+                        )
                     },
                     modifier = Modifier.clickable {
                         onMemberClick(user.id)
@@ -303,6 +391,10 @@ internal fun GroupAddMemberPickerSheet(
     onDismiss: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredCandidates = remember(candidates, searchQuery) {
+        candidates.filter { matchesConnectionPickerSearch(it, searchQuery) }
+    }
     val scroll = rememberScrollState()
     val surface = GlassSheetTokens.OledBlack
     val onSurface = GlassSheetTokens.OnOled
@@ -328,6 +420,12 @@ internal fun GroupAddMemberPickerSheet(
                 color = onVariant,
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
+            ConnectionPickerSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                placeholder = "Search connections",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
@@ -339,39 +437,27 @@ internal fun GroupAddMemberPickerSheet(
                     color = onVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
+            } else if (filteredCandidates.isEmpty()) {
+                Text(
+                    text = "No matches for \"$searchQuery\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
             } else {
-                candidates.forEach { user ->
+                filteredCandidates.forEach { user ->
                     val label = user.name?.trim()?.ifBlank { null } ?: "Connection"
                     ListItem(
                         headlineContent = {
                             Text(label, color = onSurface, style = MaterialTheme.typography.bodyLarge)
                         },
                         leadingContent = {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (!user.image.isNullOrBlank()) {
-                                    AsyncImage(
-                                        model = user.image,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape),
-                                    )
-                                } else {
-                                    Text(
-                                        text = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = onVariant,
-                                    )
-                                }
-                            }
+                            ConnectionPickerListAvatar(
+                                displayName = user.name,
+                                email = user.email,
+                                avatarUrl = user.image,
+                                userId = user.id,
+                            )
                         },
                         modifier = Modifier.clickable {
                             PlatformHapticsPolicy.lightImpact()
