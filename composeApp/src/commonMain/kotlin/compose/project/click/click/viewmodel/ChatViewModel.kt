@@ -3353,6 +3353,10 @@ class ChatViewModel(
         _nudgeResult.value = null
     }
 
+    fun notifyVerifiedCliqueSelectionBlocked() {
+        _nudgeResult.value = "That friend isn't connected to everyone already selected."
+    }
+
     /**
      * Snapshot of the current chat's locally-decrypted messages shaped for the
      * [ProfileBottomSheet] Media / Files / Links tabs. Returns an empty list
@@ -3378,6 +3382,29 @@ class ChatViewModel(
      */
     suspend fun memberSetSatisfiesVerifiedCliqueGraph(memberUserIds: List<String>): Boolean =
         chatRepository.verifiedCliqueEdgesExist(memberUserIds)
+
+    /**
+     * Which [candidateUserIds] can join [baseMemberUserIds] while preserving a verified clique.
+     * Selected candidates stay enabled so users can deselect them while eligibility recalculates.
+     */
+    suspend fun computeVerifiedCliqueAddableMask(
+        baseMemberUserIds: List<String>,
+        candidateUserIds: List<String>,
+        selectedCandidateIds: Set<String>,
+    ): Map<String, Boolean> = coroutineScope {
+        candidateUserIds.map { candidateId ->
+            async {
+                val ok = if (candidateId in selectedCandidateIds) {
+                    true
+                } else {
+                    memberSetSatisfiesVerifiedCliqueGraph(
+                        (baseMemberUserIds + selectedCandidateIds + candidateId).distinct().sorted(),
+                    )
+                }
+                candidateId to ok
+            }
+        }.map { it.await() }.toMap()
+    }
 
     private fun buildInitialVerifiedCliqueDisplayName(memberUserIds: List<String>, currentUserId: String): String {
         val ordered = memberUserIds.distinct().sorted()

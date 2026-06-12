@@ -30,8 +30,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -106,6 +104,10 @@ import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pr
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: allowlist secret
@@ -157,6 +159,7 @@ fun HubChatScreen(
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var editNameDraft by remember { mutableStateOf(hubDetails.name) }
     var editCategoryDraft by remember { mutableStateOf(hubDetails.category) }
@@ -339,7 +342,7 @@ fun HubChatScreen(
                                         },
                                         onClick = {
                                             settingsMenuExpanded = false
-                                            viewModel.leaveHub()
+                                            showLeaveConfirm = true
                                         },
                                         modifier = Modifier.testTag("hub_settings_leave"),
                                     )
@@ -582,68 +585,101 @@ fun HubChatScreen(
     }
 
     if (showEditDialog && isCreator) {
-        AlertDialog(
+        UnifiedPopupFormDialog(
+            visible = showEditDialog,
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Hub") },
-            text = {
+            title = "Edit Hub",
+            confirmLabel = "Save",
+            onConfirm = {
+                if (editNameDraft.isBlank() || editCategoryDraft.isBlank()) return@UnifiedPopupFormDialog
+                viewModel.editHubDetails(editNameDraft, editCategoryDraft) { success ->
+                    if (success) showEditDialog = false
+                }
+            },
+            body = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = editNameDraft,
                         onValueChange = { editNameDraft = it.take(80) },
-                        label = { Text("Hub name") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = GlassSheetTokens.OnOled,
+                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            cursorColor = PrimaryBlue,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                        ),
                     )
                     OutlinedTextField(
                         value = editCategoryDraft,
                         onValueChange = { editCategoryDraft = it.take(40) },
-                        label = { Text("Category") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Category", color = GlassSheetTokens.OnOledMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = GlassSheetTokens.OnOled,
+                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            cursorColor = PrimaryBlue,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                        ),
                     )
                 }
             },
+        )
+    }
+
+    if (showLeaveConfirm) {
+        GlassAlertDialog(
+            onDismissRequest = { showLeaveConfirm = false },
+            title = { Text("Leave hub?") },
+            text = {
+                Text("You will leave this community hub and lose quick access from your Groups list.")
+            },
             confirmButton = {
+                val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                 TextButton(
                     onClick = {
-                        viewModel.editHubDetails(editNameDraft, editCategoryDraft) { success ->
-                            if (success) showEditDialog = false
-                        }
+                        dismissAnimated()
+                        viewModel.leaveHub()
                     },
-                    enabled = editNameDraft.isNotBlank() && editCategoryDraft.isNotBlank(),
                 ) {
-                    Text("Save")
+                    Text("Leave", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("Cancel")
+                val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                TextButton(onClick = dismissAnimated) {
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )
     }
 
     if (showDeleteConfirm && isCreator) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Hub?") },
+            title = { Text("Delete hub?") },
             text = { Text("Are you sure? This will kick all users and delete the history.") },
             confirmButton = {
+                val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                 TextButton(
                     onClick = {
-                        showDeleteConfirm = false
+                        dismissAnimated()
                         viewModel.deleteHub()
                     },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
                 ) {
-                    Text("Delete")
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
+                val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                TextButton(onClick = dismissAnimated) {
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },
         )

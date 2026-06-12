@@ -122,7 +122,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
@@ -1506,70 +1506,36 @@ fun ChatView(
     )
 
     val renameGroupId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
-    GlassFullscreenMediaOverlay(
+    UnifiedPopupFormDialog(
         visible = showRenameGroupDialog,
         onDismissRequest = { showRenameGroupDialog = false },
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        val renameShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp)
-                .clip(renameShape)
-                .border(1.dp, GlassSheetTokens.GlassBorder, renameShape),
-            shape = renameShape,
-            color = GlassSheetTokens.OledBlack,
-            tonalElevation = 0.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text(
-                    text = "Rename group",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = GlassSheetTokens.OnOled,
-                )
-                OutlinedTextField(
-                    value = renameGroupDraft,
-                    onValueChange = { renameGroupDraft = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Group name", color = GlassSheetTokens.OnOledMuted) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = GlassSheetTokens.OnOled,
-                        unfocusedTextColor = GlassSheetTokens.OnOled,
-                        focusedBorderColor = PrimaryBlue,
-                        unfocusedBorderColor = GlassSheetTokens.GlassBorder,
-                        cursorColor = PrimaryBlue,
-                        focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                        unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
-                    ),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = { showRenameGroupDialog = false }) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                    }
-                    TextButton(
-                        onClick = {
-                            renameGroupId?.let { gid ->
-                                viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
-                            }
-                            showRenameGroupDialog = false
-                        },
-                        enabled = renameGroupDraft.isNotBlank(),
-                    ) {
-                        Text("Save", color = GlassSheetTokens.OnOled)
-                    }
-                }
+        title = "Rename group",
+        confirmLabel = "Save",
+        onConfirm = {
+            if (renameGroupDraft.isBlank()) return@UnifiedPopupFormDialog
+            renameGroupId?.let { gid ->
+                viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
             }
-        }
-    }
+            showRenameGroupDialog = false
+        },
+        body = {
+            OutlinedTextField(
+                value = renameGroupDraft,
+                onValueChange = { renameGroupDraft = it },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Group name", color = GlassSheetTokens.OnOledMuted) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = GlassSheetTokens.OnOled,
+                    unfocusedTextColor = GlassSheetTokens.OnOled,
+                    focusedBorderColor = PrimaryBlue,
+                    unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                    cursorColor = PrimaryBlue,
+                    focusedLabelColor = GlassSheetTokens.OnOledMuted,
+                    unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                ),
+            )
+        },
+    )
     } // End outer Box
 }

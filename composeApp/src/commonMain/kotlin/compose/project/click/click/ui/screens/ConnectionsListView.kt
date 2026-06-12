@@ -140,6 +140,8 @@ import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlis
 import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
@@ -413,28 +415,19 @@ fun ConnectionsListView(
         }
         cliqueSheetEligibilityReady = false
         val others = verifiedCliquePickableOneToOneChats.map { it.otherUser.id }
+        val uidNonNull = uid
         coroutineScope {
-            val maskEntries = others.map { oid ->
-                async {
-                    val ok = if (oid in selectedCliqueFriendIds) {
-                        true
-                    } else {
-                        viewModel.memberSetSatisfiesVerifiedCliqueGraph(
-                            (listOf(uid) + selectedCliqueFriendIds + oid).distinct().sorted(),
-                        )
-                    }
-                    oid to ok
-                }
-            }.awaitAll()
-            val mask = linkedMapOf<String, Boolean>().apply { putAll(maskEntries) }
+            val mask = viewModel.computeVerifiedCliqueAddableMask(
+                baseMemberUserIds = listOf(uidNonNull) + selectedCliqueFriendIds.toList(),
+                candidateUserIds = others,
+                selectedCandidateIds = selectedCliqueFriendIds,
+            )
             val fullOk = if (selectedCliqueFriendIds.isEmpty()) {
                 false
             } else {
-                async {
-                    viewModel.memberSetSatisfiesVerifiedCliqueGraph(
-                        (listOf(uid) + selectedCliqueFriendIds).distinct().sorted(),
-                    )
-                }.await()
+                viewModel.memberSetSatisfiesVerifiedCliqueGraph(
+                    (listOf(uidNonNull) + selectedCliqueFriendIds).distinct().sorted(),
+                )
             }
             cliqueAddableMask = mask
             cliqueCreateGraphOk = fullOk
@@ -828,10 +821,7 @@ fun ConnectionsListView(
                 null
             },
             onSelectionBlocked = {
-                toastState.show(
-                    listScope,
-                    "That friend isn’t connected to everyone already selected.",
-                )
+                viewModel.notifyVerifiedCliqueSelectionBlocked()
             },
             primaryButtonLabel = "Create",
             primaryEnabled = canCreateVerifiedClique,
@@ -1034,6 +1024,7 @@ private fun HubActionSheet(
     var detailsLoadAttempted by remember(hub.hubId) { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
+    var hubSheetDismissedForDialog by remember { mutableStateOf(false) }
     var confirmTitle by remember { mutableStateOf("") }
     var confirmBody by remember { mutableStateOf("") }
     var confirmButton by remember { mutableStateOf("") }
@@ -1058,6 +1049,7 @@ private fun HubActionSheet(
     }
 
     fun openConfirm(title: String, body: String, button: String, action: () -> Unit) {
+        hubSheetDismissedForDialog = true
         confirmTitle = title
         confirmBody = body
         confirmButton = button
@@ -1065,6 +1057,7 @@ private fun HubActionSheet(
         showConfirm = true
     }
 
+    if (!hubSheetDismissedForDialog && !showEditDialog) {
     ClickActionBottomSheet(
         onDismissRequest = onDismiss,
     ) {
@@ -1119,6 +1112,7 @@ private fun HubActionSheet(
                     onClick = {
                         editNameDraft = details?.name ?: hub.name
                         editCategoryDraft = details?.category ?: hub.category
+                        hubSheetDismissedForDialog = true
                         showEditDialog = true
                     },
                     leading = {
@@ -1170,12 +1164,35 @@ private fun HubActionSheet(
             )
         }
     }
+    }
 
     if (showEditDialog && isCreator) {
-        GlassAlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Hub") },
-            text = {
+        UnifiedPopupFormDialog(
+            visible = showEditDialog,
+            onDismissRequest = {
+                showEditDialog = false
+                onDismiss()
+            },
+            title = "Edit Hub",
+            confirmLabel = "Save",
+            onConfirm = {
+                viewModel.updateActiveHub(
+                    hubId = hub.hubId,
+                    name = editNameDraft,
+                    category = editCategoryDraft,
+                ) { ok ->
+                    if (ok) {
+                        scope.launch {
+                            details = details?.copy(
+                                name = editNameDraft.trim(),
+                                category = editCategoryDraft.trim(),
+                            )
+                            showEditDialog = false
+                        }
+                    }
+                }
+            },
+            body = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = editNameDraft,
@@ -1209,56 +1226,31 @@ private fun HubActionSheet(
                     )
                 }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.updateActiveHub(
-                            hubId = hub.hubId,
-                            name = editNameDraft,
-                            category = editCategoryDraft,
-                        ) { ok ->
-                            if (ok) {
-                                scope.launch {
-                                    details = details?.copy(
-                                        name = editNameDraft.trim(),
-                                        category = editCategoryDraft.trim(),
-                                    )
-                                    showEditDialog = false
-                                }
-                            }
-                        }
-                    },
-                    enabled = editNameDraft.isNotBlank() && editCategoryDraft.isNotBlank(),
-                ) {
-                    Text("Save", color = GlassSheetTokens.OnOled)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                }
-            },
         )
     }
 
     if (showConfirm) {
         GlassAlertDialog(
-            onDismissRequest = { showConfirm = false },
+            onDismissRequest = {
+                showConfirm = false
+                onDismiss()
+            },
             title = { Text(confirmTitle) },
             text = { Text(confirmBody) },
             confirmButton = {
+                val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                 TextButton(
                     onClick = {
-                        val action = confirmAction
-                        showConfirm = false
-                        action?.invoke()
+                        confirmAction?.invoke()
+                        dismissAnimated()
                     },
                 ) {
                     Text(confirmButton, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirm = false }) {
+                val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                TextButton(onClick = dismissAnimated) {
                     Text("Cancel", color = GlassSheetTokens.OnOledMuted)
                 }
             },

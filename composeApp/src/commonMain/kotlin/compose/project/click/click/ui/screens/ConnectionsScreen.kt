@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.getPlatform
-import compose.project.click.click.ui.chat.GroupAddMemberPickerSheet
+import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet
 import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet
 import compose.project.click.click.ui.chat.ConnectionSheetDialog
@@ -84,6 +84,9 @@ fun ConnectionsScreen(
     var showGroupMembersSheet by remember { mutableStateOf(false) }
     var showGroupAddMemberPicker by remember { mutableStateOf(false) }
     var pendingRemoveGroupMember by remember { mutableStateOf<ConnectionSheetDialog.RemoveGroupMember?>(null) }
+    var selectedAddMemberIds by remember { mutableStateOf(setOf<String>()) }
+    var addMemberEligibilityMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var addMemberEligibilityReady by remember { mutableStateOf(false) }
     /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
     var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
     val focusManager = LocalFocusManager.current
@@ -394,6 +397,7 @@ fun ConnectionsScreen(
             currentUserId = userId,
             onAddMember = {
                 showGroupMembersSheet = false
+                selectedAddMemberIds = emptySet()
                 showGroupAddMemberPicker = true
             },
             onRemoveMember = if (isGroupCreator) {
@@ -444,15 +448,52 @@ fun ConnectionsScreen(
                     }
             }
             .sortedBy { it.name?.lowercase().orEmpty() }
-        GroupAddMemberPickerSheet(
+        LaunchedEffect(
+            showGroupAddMemberPicker,
+            groupPickerContext.groupId,
+            selectedAddMemberIds,
+            candidates.map { it.id },
+        ) {
+            if (!showGroupAddMemberPicker) {
+                addMemberEligibilityMask = emptyMap()
+                addMemberEligibilityReady = false
+                return@LaunchedEffect
+            }
+            addMemberEligibilityReady = false
+            addMemberEligibilityMask = viewModel.computeVerifiedCliqueAddableMask(
+                baseMemberUserIds = groupPickerContext.memberUserIds,
+                candidateUserIds = candidates.map { it.id },
+                selectedCandidateIds = selectedAddMemberIds,
+            )
+            addMemberEligibilityReady = true
+        }
+        ConnectionMemberPickerSheet(
+            onDismissRequest = {
+                showGroupAddMemberPicker = false
+                selectedAddMemberIds = emptySet()
+            },
+            title = "Add to group",
+            subtitle = "Choose verified connections who are connected to everyone in this click.",
             candidates = candidates,
-            onDismiss = { showGroupAddMemberPicker = false },
-            onAddMembers = { memberIds ->
+            selectedIds = selectedAddMemberIds,
+            onSelectedIdsChange = { selectedAddMemberIds = it },
+            eligibilityMask = addMemberEligibilityMask,
+            eligibilityReady = addMemberEligibilityReady,
+            eligibilityCheckingLabel = "Checking who can join…",
+            onSelectionBlocked = { viewModel.notifyVerifiedCliqueSelectionBlocked() },
+            primaryButtonLabel = when (selectedAddMemberIds.size) {
+                0 -> "Add"
+                1 -> "Add"
+                else -> "Add ${selectedAddMemberIds.size}"
+            },
+            primaryEnabled = addMemberEligibilityReady && selectedAddMemberIds.isNotEmpty(),
+            onPrimaryClick = {
                 showGroupAddMemberPicker = false
                 viewModel.addMembersToVerifiedClique(
                     groupId = groupPickerContext.groupId,
-                    newMemberUserIds = memberIds,
+                    newMemberUserIds = selectedAddMemberIds.toList(),
                 )
+                selectedAddMemberIds = emptySet()
             },
         )
     }
