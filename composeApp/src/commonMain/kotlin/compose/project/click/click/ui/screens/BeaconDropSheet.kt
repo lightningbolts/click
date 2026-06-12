@@ -112,6 +112,7 @@ fun BeaconDropSheetContent(
         showCreatorName: Boolean,
         visibilityAudience: BeaconVisibilityAudience,
         eventSchedule: compose.project.click.click.events.EventSchedule?,
+        eventTitle: String?,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -129,6 +130,8 @@ fun BeaconDropSheetContent(
     val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
     var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
     var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
+    var eventTitleDraft by remember { mutableStateOf("") }
+    var submitValidationError by remember { mutableStateOf<String?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
@@ -152,7 +155,7 @@ fun BeaconDropSheetContent(
         BeaconDropCategory.UTILITY -> "What's here? (max 140)"
         BeaconDropCategory.SOS -> "SOS message (max 140)"
         BeaconDropCategory.STUDY -> "Study spot note (max 140)"
-        BeaconDropCategory.EVENT -> "Event details (max 140)"
+        BeaconDropCategory.EVENT -> "Event description (max 140)"
         BeaconDropCategory.COMMUNITY_HUB -> ""
     }
     val maxLen = if (category.value == BeaconDropCategory.SOUNDTRACK) 2000 else 140
@@ -191,10 +194,12 @@ fun BeaconDropSheetContent(
             ) { cat ->
                 FilterChip(
                     selected = category.value == cat,
-                    onClick = {
+                        onClick = {
                         category.value = cat
                         val newMaxLen = if (cat == BeaconDropCategory.SOUNDTRACK) 2000 else 140
                         if (text.value.length > newMaxLen) text.value = text.value.take(newMaxLen)
+                        if (cat != BeaconDropCategory.EVENT) eventTitleDraft = ""
+                        submitValidationError = null
                         onDismissError()
                     },
                     label = {
@@ -265,6 +270,20 @@ fun BeaconDropSheetContent(
                             onDismissError()
                         },
                         validationError = eventScheduleError,
+                    )
+                    BeaconDropOutlinedField(
+                        value = eventTitleDraft,
+                        onValueChange = {
+                            if (it.length <= 80) {
+                                eventTitleDraft = it
+                                onDismissError()
+                            }
+                        },
+                        placeholder = "Event title (max 80)",
+                        singleLine = true,
+                        trailingIcon = null,
+                        colors = fieldColors,
+                        onDismissKeyboard = dismissKeyboard,
                     )
                 } else {
                 Text(
@@ -396,7 +415,10 @@ fun BeaconDropSheetContent(
             }
         }
 
-        errorMessage?.takeIf { it.isNotBlank() }?.let { err ->
+        listOfNotNull(
+            submitValidationError?.takeIf { it.isNotBlank() },
+            errorMessage?.takeIf { it.isNotBlank() },
+        ).firstOrNull()?.let { err ->
             Text(
                 text = err,
                 color = MaterialTheme.colorScheme.error,
@@ -407,6 +429,7 @@ fun BeaconDropSheetContent(
             onClick = {
                 if (isSubmitting) return@Button
                 dismissKeyboard()
+                submitValidationError = null
                 isSubmitting = true
                 if (isHubMode) {
                     onCreateHub(hubNameDraft.trim(), hubCategory)
@@ -420,6 +443,11 @@ fun BeaconDropSheetContent(
                         expiration.value.durationMs
                     }
                     val schedule = if (category.value == BeaconDropCategory.EVENT) {
+                        if (eventTitleDraft.trim().isEmpty()) {
+                            submitValidationError = "Please add an event title."
+                            isSubmitting = false
+                            return@Button
+                        }
                         eventScheduleError = validateEventSchedule(
                             eventSchedule.startEpochMs,
                             eventSchedule.endEpochMs,
@@ -432,7 +460,20 @@ fun BeaconDropSheetContent(
                     } else {
                         null
                     }
-                    onSubmit(kind, text.value, ttl, showCreatorName, visibilityAudience, schedule) {
+                    val titleForEvent = if (category.value == BeaconDropCategory.EVENT) {
+                        eventTitleDraft.trim()
+                    } else {
+                        null
+                    }
+                    onSubmit(
+                        kind,
+                        text.value,
+                        ttl,
+                        showCreatorName,
+                        visibilityAudience,
+                        schedule,
+                        titleForEvent,
+                    ) {
                         isSubmitting = false
                     }
                 }

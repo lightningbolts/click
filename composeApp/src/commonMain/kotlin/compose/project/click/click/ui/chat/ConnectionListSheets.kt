@@ -8,12 +8,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +50,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
+import compose.project.click.click.ui.components.ClickFormBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +75,10 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 
 private val PickerSelectionPurple = Color(0xFF9D4EDD)
 private val PickerSelectionRingWidth = 2.5.dp
+private val PickerSearchBarHeight = 48.dp
+private val PickerAvatarSize = 40.dp
+private val PickerAvatarOuterSize = PickerAvatarSize + PickerSelectionRingWidth * 2
+private val PickerSelectedStripHeight = 76.dp
 
 internal fun matchesConnectionPickerSearch(user: User, query: String): Boolean {
     val q = query.trim().lowercase()
@@ -83,12 +96,14 @@ internal fun ConnectionPickerSearchBar(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(PickerSearchBarHeight),
         shape = RoundedCornerShape(14.dp),
         color = Color.White.copy(alpha = 0.08f),
     ) {
         TextField(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
@@ -96,8 +111,10 @@ internal fun ConnectionPickerSearchBar(
                 Text(
                     placeholder,
                     color = GlassSheetTokens.OnOledMuted,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             },
+            textStyle = MaterialTheme.typography.bodyMedium,
             leadingIcon = {
                 Icon(
                     Icons.Filled.Search,
@@ -128,23 +145,19 @@ internal fun ConnectionPickerListAvatar(
     userId: String,
     selected: Boolean = false,
     enabled: Boolean = true,
-    avatarSize: Dp = 40.dp,
+    avatarSize: Dp = PickerAvatarSize,
 ) {
-    val ringPad = if (selected) PickerSelectionRingWidth else 0.dp
-    val outerSize = avatarSize + ringPad * 2
     Box(
-        modifier = Modifier.size(outerSize),
+        modifier = Modifier.size(PickerAvatarOuterSize),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
                 .size(avatarSize)
-                .then(
-                    if (selected) {
-                        Modifier.border(PickerSelectionRingWidth, PickerSelectionPurple, CircleShape)
-                    } else {
-                        Modifier
-                    },
+                .border(
+                    width = if (selected) PickerSelectionRingWidth else 0.dp,
+                    color = if (selected) PickerSelectionPurple else Color.Transparent,
+                    shape = CircleShape,
                 )
                 .clip(CircleShape)
                 .alpha(if (enabled) 1f else 0.45f),
@@ -159,6 +172,279 @@ internal fun ConnectionPickerListAvatar(
             )
         }
     }
+}
+
+@Composable
+private fun ConnectionPickerSelectedStrip(
+    selectedUsers: List<User>,
+    onRemove: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(PickerSelectedStripHeight)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        selectedUsers.forEach { user ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .width(56.dp)
+                    .clickable {
+                        PlatformHapticsPolicy.lightImpact()
+                        onRemove(user.id)
+                    },
+            ) {
+                ConnectionPickerListAvatar(
+                    displayName = user.name,
+                    email = user.email,
+                    avatarUrl = user.image,
+                    userId = user.id,
+                    selected = true,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = user.name?.trim()?.ifBlank { null } ?: "Friend",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GlassSheetTokens.OnOledMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionPickerUserRow(
+    user: User,
+    selected: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+) {
+    val label = user.name?.trim()?.ifBlank { null } ?: "Connection"
+    ListItem(
+        headlineContent = {
+            Text(
+                text = label,
+                color = if (enabled || selected) GlassSheetTokens.OnOled else GlassSheetTokens.OnOledMuted,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        leadingContent = {
+            ConnectionPickerListAvatar(
+                displayName = user.name,
+                email = user.email,
+                avatarUrl = user.image,
+                userId = user.id,
+                selected = selected,
+                enabled = enabled,
+            )
+        },
+        modifier = Modifier.clickable(enabled = enabled || selected, onClick = onToggle),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
+}
+
+/**
+ * Unified multi-select connection picker for creating a verified click or adding members to one.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ConnectionMemberPickerSheet(
+    onDismissRequest: () -> Unit,
+    title: String,
+    subtitle: String,
+    candidates: List<User>,
+    selectedIds: Set<String>,
+    onSelectedIdsChange: (Set<String>) -> Unit,
+    primaryButtonLabel: String,
+    primaryEnabled: Boolean,
+    onPrimaryClick: () -> Unit,
+    eligibilityMask: Map<String, Boolean> = emptyMap(),
+    eligibilityReady: Boolean = true,
+    eligibilityCheckingLabel: String? = null,
+    errorMessage: String? = null,
+    onSelectionBlocked: (() -> Unit)? = null,
+    headerContent: @Composable () -> Unit = {},
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredCandidates = remember(candidates, searchQuery) {
+        candidates.filter { matchesConnectionPickerSearch(it, searchQuery) }
+    }
+    val selectedUsers = remember(candidates, selectedIds) {
+        candidates.filter { it.id in selectedIds }
+    }
+    val onSurface = GlassSheetTokens.OnOled
+    val onVariant = GlassSheetTokens.OnOledMuted
+
+    fun toggleUser(userId: String) {
+        if (userId in selectedIds) {
+            PlatformHapticsPolicy.lightImpact()
+            onSelectedIdsChange(selectedIds - userId)
+            return
+        }
+        val canSelect = eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[userId] == true)
+        if (canSelect) {
+            PlatformHapticsPolicy.lightImpact()
+            onSelectedIdsChange(selectedIds + userId)
+        } else {
+            onSelectionBlocked?.invoke()
+        }
+    }
+
+    ClickFormBottomSheet(onDismissRequest = onDismissRequest) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(GlassSheetTokens.OledBlack)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = onSurface,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = onVariant,
+            )
+            headerContent()
+            ConnectionPickerSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                placeholder = "Search connections",
+                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PickerSelectedStripHeight),
+            ) {
+                if (selectedUsers.isNotEmpty()) {
+                    ConnectionPickerSelectedStrip(
+                        selectedUsers = selectedUsers,
+                        onRemove = { userId -> onSelectedIdsChange(selectedIds - userId) },
+                    )
+                }
+            }
+            if (!eligibilityCheckingLabel.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 20.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = eligibilityCheckingLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.alpha(if (!eligibilityReady && candidates.isNotEmpty()) 1f else 0f),
+                    )
+                }
+            }
+            errorMessage?.takeIf { it.isNotBlank() }?.let { err ->
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+            )
+            if (candidates.isEmpty()) {
+                Text(
+                    text = "No eligible connections yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onVariant,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            } else if (filteredCandidates.isEmpty()) {
+                Text(
+                    text = "No matches for \"$searchQuery\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onVariant,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    filteredCandidates.forEach { user ->
+                        val selected = user.id in selectedIds
+                        val enabled = selected ||
+                            (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
+                        ConnectionPickerUserRow(
+                            user = user,
+                            selected = selected,
+                            enabled = enabled,
+                            onToggle = { toggleUser(user.id) },
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismissRequest) {
+                    Text("Cancel", color = onVariant)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        PlatformHapticsPolicy.heavyImpact()
+                        onPrimaryClick()
+                    },
+                    enabled = primaryEnabled,
+                ) {
+                    Text(primaryButtonLabel)
+                }
+            }
+        }
+    }
+}
+
+/** Thin wrapper — prefer [ConnectionMemberPickerSheet] with [onAddMembers]. */
+@Composable
+internal fun GroupAddMemberPickerSheet(
+    candidates: List<User>,
+    onDismiss: () -> Unit,
+    onAddMembers: (List<String>) -> Unit,
+) {
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    ConnectionMemberPickerSheet(
+        onDismissRequest = onDismiss,
+        title = "Add to group",
+        subtitle = "Choose verified connections to invite.",
+        candidates = candidates,
+        selectedIds = selectedIds,
+        onSelectedIdsChange = { selectedIds = it },
+        primaryButtonLabel = if (selectedIds.size <= 1) "Add" else "Add ${selectedIds.size}",
+        primaryEnabled = selectedIds.isNotEmpty(),
+        onPrimaryClick = {
+            onAddMembers(selectedIds.toList())
+            onDismiss()
+        },
+    )
 }
 
 /**
@@ -376,97 +662,6 @@ internal fun GroupMembersPickerSheet(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
-            }
-        }
-    }
-}
-
-/**
- * Picker for adding a verified connection into an existing group (any member).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun GroupAddMemberPickerSheet(
-    candidates: List<User>,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit,
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    val filteredCandidates = remember(candidates, searchQuery) {
-        candidates.filter { matchesConnectionPickerSearch(it, searchQuery) }
-    }
-    val scroll = rememberScrollState()
-    val surface = GlassSheetTokens.OledBlack
-    val onSurface = GlassSheetTokens.OnOled
-    val onVariant = GlassSheetTokens.OnOledMuted
-    ClickActionBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(surface)
-                .verticalScroll(scroll)
-                .padding(bottom = 28.dp),
-        ) {
-            Text(
-                text = "Add to group",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = onSurface,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-            )
-            Text(
-                text = "Choose a verified connection to invite.",
-                style = MaterialTheme.typography.bodySmall,
-                color = onVariant,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
-            ConnectionPickerSearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                placeholder = "Search connections",
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
-            )
-            if (candidates.isEmpty()) {
-                Text(
-                    text = "No eligible connections to add.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = onVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                )
-            } else if (filteredCandidates.isEmpty()) {
-                Text(
-                    text = "No matches for \"$searchQuery\".",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = onVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                )
-            } else {
-                filteredCandidates.forEach { user ->
-                    val label = user.name?.trim()?.ifBlank { null } ?: "Connection"
-                    ListItem(
-                        headlineContent = {
-                            Text(label, color = onSurface, style = MaterialTheme.typography.bodyLarge)
-                        },
-                        leadingContent = {
-                            ConnectionPickerListAvatar(
-                                displayName = user.name,
-                                email = user.email,
-                                avatarUrl = user.image,
-                                userId = user.id,
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            PlatformHapticsPolicy.lightImpact()
-                            onSelect(user.id)
-                            onDismiss()
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
             }
         }
     }

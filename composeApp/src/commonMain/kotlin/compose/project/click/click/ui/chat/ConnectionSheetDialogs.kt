@@ -31,6 +31,10 @@ internal sealed class ConnectionSheetDialog {
     data class Report(val reason: String = "") : ConnectionSheetDialog()
     data object LeaveGroup : ConnectionSheetDialog()
     data object DeleteGroup : ConnectionSheetDialog()
+    data class RemoveGroupMember(
+        val memberUserId: String,
+        val memberName: String,
+    ) : ConnectionSheetDialog()
 }
 
 @Composable
@@ -42,6 +46,7 @@ internal fun ConnectionSheetDialogs(
     onConfirmReport: (String) -> Unit,
     onConfirmLeaveGroup: () -> Unit,
     onConfirmDeleteGroup: () -> Unit,
+    onConfirmRemoveGroupMember: (String) -> Unit = {},
 ) {
     when (val d = dialog) {
         null -> Unit
@@ -176,6 +181,32 @@ internal fun ConnectionSheetDialogs(
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = { onConfirmDeleteGroup(); dismissAnimated() }) {
                         Text("Delete", color = Color(0xFFFF4444))
+                    }
+                },
+                dismissButton = {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = dismissAnimated) {
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                    }
+                },
+            )
+        }
+        is ConnectionSheetDialog.RemoveGroupMember -> {
+            GlassAlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Remove from group?") },
+                text = {
+                    Text(
+                        "${d.memberName} will be removed from this verified click and lose access to its messages.",
+                    )
+                },
+                confirmButton = {
+                    val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
+                    TextButton(onClick = {
+                        onConfirmRemoveGroupMember(d.memberUserId)
+                        dismissAnimated()
+                    }) {
+                        Text("Remove", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {

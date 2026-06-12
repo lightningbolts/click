@@ -3,6 +3,7 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.collaboration.computeClickDropRevealTtlIso
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -3436,6 +3437,7 @@ class ChatViewModel(
                         chatRepository.cacheGroupMasterKey(chatId, payload.masterKey32)
                     }
                     loadChats(isForced = true)
+                    PlatformHapticsPolicy.successNotification()
                 }
                 onResult(rpc.map { it.groupId })
             } catch (e: Exception) {
@@ -3713,13 +3715,31 @@ class ChatViewModel(
         newMemberUserId: String,
         onComplete: (Boolean) -> Unit = {},
     ) {
+        addMembersToVerifiedClique(groupId, listOf(newMemberUserId), onComplete = { ok, _ -> onComplete(ok) })
+    }
+
+    fun addMembersToVerifiedClique(
+        groupId: String,
+        newMemberUserIds: List<String>,
+        onComplete: (Boolean, Int) -> Unit = { _, _ -> },
+    ) {
         viewModelScope.launch {
-            if (groupId.isBlank() || newMemberUserId.isBlank()) {
-                onComplete(false)
+            if (groupId.isBlank() || newMemberUserIds.isEmpty()) {
+                onComplete(false, 0)
                 return@launch
             }
-            val result = chatRepository.addCliqueMember(groupId, newMemberUserId)
-            if (result.isSuccess) {
+            var added = 0
+            var lastError: String? = null
+            for (memberId in newMemberUserIds.distinct().filter { it.isNotBlank() }) {
+                val result = chatRepository.addCliqueMember(groupId, memberId)
+                if (result.isSuccess) {
+                    added++
+                } else {
+                    lastError = formatAddCliqueMemberError(result.exceptionOrNull()?.message)
+                }
+            }
+            if (added > 0) {
+                PlatformHapticsPolicy.successNotification()
                 chatRepository.clearChatListLocalCaches()
                 loadChats(isForced = true)
                 val state = _chatMessagesState.value as? ChatMessagesState.Success
@@ -3728,11 +3748,16 @@ class ChatViewModel(
                     ?.let { state.chatDetails.connection.id }
                     ?: groupId
                 loadChatMessages(connectionId)
-                _nudgeResult.value = "Member added"
-                onComplete(true)
+                _nudgeResult.value = when {
+                    added == 1 && newMemberUserIds.size == 1 -> "Member added"
+                    lastError != null -> "Added $added member(s); some could not be added"
+                    added == 1 -> "Member added"
+                    else -> "Added $added members"
+                }
+                onComplete(true, added)
             } else {
-                _nudgeResult.value = formatAddCliqueMemberError(result.exceptionOrNull()?.message)
-                onComplete(false)
+                _nudgeResult.value = lastError ?: "Could not add members"
+                onComplete(false, 0)
             }
         }
     }

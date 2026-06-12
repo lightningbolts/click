@@ -169,14 +169,21 @@ internal fun buildDiscoveryFeedItems(
         .filter { b -> b.isActiveForDiscoveryFeed(now) }
         .map { beacon ->
             val exp = beacon.expiresAtEpochMs
-            val ttlLabel = if (exp != null) {
-                val mins = ((exp - now) / 60_000L).coerceAtLeast(0L)
-                when {
-                    mins < 60 -> "Expires in ${mins}m"
-                    else -> "Expires in ${mins / 60}h"
+            val ttlLabel = when (beacon.kind) {
+                MapBeaconKind.EVENT -> {
+                    beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }?.let { desc ->
+                        if (desc.length > 56) desc.take(55) + "…" else desc
+                    } ?: "Scheduled event"
                 }
-            } else {
-                "Active beacon"
+                else -> if (exp != null) {
+                    val mins = ((exp - now) / 60_000L).coerceAtLeast(0L)
+                    when {
+                        mins < 60 -> "Expires in ${mins}m"
+                        else -> "Expires in ${mins / 60}h"
+                    }
+                } else {
+                    "Active beacon"
+                }
             }
             DiscoveryFeedItem.Beacon(
                 beacon = beacon,

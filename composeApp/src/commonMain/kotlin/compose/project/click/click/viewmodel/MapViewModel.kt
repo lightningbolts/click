@@ -919,6 +919,7 @@ class MapViewModel : ViewModel() {
         showCreatorName: Boolean = false,
         visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
         eventSchedule: EventSchedule? = null,
+        eventTitle: String? = null,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -929,9 +930,17 @@ class MapViewModel : ViewModel() {
             try {
             _beaconInsertError.value = null
             _beaconDropFailureToast.value = null
+            if (!locationService.hasLocationPermission()) {
+                _beaconInsertError.value =
+                    "Location is required to drop a community beacon. Enable location in Settings and try again."
+                onRejectedEarly()
+                onRemoteFinished(false)
+                return@launch
+            }
             val loc = locationService.getHighAccuracyLocation(6000L)
                 ?: run {
-                    _beaconInsertError.value = "Could not read GPS. Enable location and try again."
+                    _beaconInsertError.value =
+                        "Could not read GPS. Enable location and try again."
                     onRejectedEarly()
                     onRemoteFinished(false)
                     return@launch
@@ -950,6 +959,19 @@ class MapViewModel : ViewModel() {
                     }
                 }
                 MapBeaconKind.EVENT -> {
+                    val title = eventTitle?.trim().orEmpty()
+                    if (title.isEmpty()) {
+                        _beaconInsertError.value = "Please add an event title."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    if (title.length > 80) {
+                        _beaconInsertError.value = "Event title must be 80 characters or less."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
                     if (trimmed.isEmpty()) {
                         _beaconInsertError.value = "Please add a description."
                         onRejectedEarly()
@@ -982,6 +1004,7 @@ class MapViewModel : ViewModel() {
                         return@launch
                     }
                     buildJsonObject {
+                        put("title", title)
                         put("description", trimmed)
                         eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
                     }

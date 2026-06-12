@@ -178,9 +178,7 @@ import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist 
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.matchesConnectionPickerSearch // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionPickerListAvatar // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionPickerSearchBar // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
@@ -317,7 +315,6 @@ fun ConnectionsListView(
 
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
-    var cliqueSearchQuery by remember { mutableStateOf("") }
     val listScope = rememberCoroutineScope()
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
@@ -353,7 +350,6 @@ fun ConnectionsListView(
 
     fun dismissVerifiedCliqueSheet(onAfterHide: () -> Unit = {}) {
         cliqueSheetVisible = false
-        cliqueSearchQuery = ""
         proximityCliqueHintUsers = emptyList()
         onAfterHide()
     }
@@ -807,88 +803,62 @@ fun ConnectionsListView(
         }
     }
 
-    val uidForClique = currentUserId
-    if (cliqueSheetVisible && uidForClique != null) {
-        ClickFormBottomSheet(
+    val cliquePickerCandidates = remember(verifiedCliquePickableOneToOneChats) {
+        verifiedCliquePickableOneToOneChats.map { it.otherUser }
+    }
+    val canCreateVerifiedClique = cliqueSheetEligibilityReady &&
+        selectedCliqueFriendIds.isNotEmpty() &&
+        cliqueCreateGraphOk &&
+        !memberSetDuplicatesExistingClick
+
+    if (cliqueSheetVisible && currentUserId != null) {
+        ConnectionMemberPickerSheet(
             onDismissRequest = { dismissVerifiedCliqueSheet() },
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .background(GlassSheetTokens.OledBlack),
-            ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-            ) {
-                Text(
-                    text = "Create verified click",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = GlassSheetTokens.OnOled,
+            title = "Create verified click",
+            subtitle = "Pick friends who are pairwise connected (pending, active, kept, or archived 1:1). Friend–friend edges are checked on the server.",
+            candidates = cliquePickerCandidates,
+            selectedIds = selectedCliqueFriendIds,
+            onSelectedIdsChange = { selectedCliqueFriendIds = it },
+            eligibilityMask = cliqueAddableMask,
+            eligibilityReady = cliqueSheetEligibilityReady,
+            eligibilityCheckingLabel = "Checking who can join…",
+            errorMessage = if (memberSetDuplicatesExistingClick) {
+                "You already have a verified click with this group."
+            } else {
+                null
+            },
+            onSelectionBlocked = {
+                toastState.show(
+                    listScope,
+                    "That friend isn’t connected to everyone already selected.",
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Pick friends who are pairwise connected (pending, active, kept, or archived 1:1). Friend–friend edges are checked on the server.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = GlassSheetTokens.OnOledMuted,
-                )
-                ConnectionPickerSearchBar(
-                    query = cliqueSearchQuery,
-                    onQueryChange = { cliqueSearchQuery = it },
-                    placeholder = "Search connections",
-                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
-                )
-                if (selectedCliqueFriendIds.isNotEmpty()) {
-                    val selectedCliqueUsers = remember(
-                        verifiedCliquePickableOneToOneChats,
-                        selectedCliqueFriendIds,
-                    ) {
-                        verifiedCliquePickableOneToOneChats
-                            .filter { it.otherUser.id in selectedCliqueFriendIds }
-                            .map { it.otherUser }
+            },
+            primaryButtonLabel = "Create",
+            primaryEnabled = canCreateVerifiedClique,
+            onPrimaryClick = {
+                viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
+                    result.onSuccess {
+                        dismissVerifiedCliqueSheet {
+                            toastState.show(listScope, "Click created")
+                        }
                     }
+                    result.onFailure { e ->
+                        val raw = e.message?.takeIf { it.isNotBlank() }.orEmpty()
+                        val msg = when {
+                            raw.contains("verified click already exists", ignoreCase = true) ->
+                                "You already have a verified click with this group."
+                            else -> raw.ifBlank { "Couldn’t create click" }
+                        }
+                        toastState.show(listScope, msg)
+                    }
+                }
+            },
+            headerContent = {
+                if (cliqueProximityAutofillLoading) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        selectedCliqueUsers.forEach { user ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .width(56.dp)
-                                    .clickable {
-                                        selectedCliqueFriendIds = selectedCliqueFriendIds - user.id
-                                    },
-                            ) {
-                                ConnectionPickerListAvatar(
-                                    displayName = user.name,
-                                    email = user.email,
-                                    avatarUrl = user.image,
-                                    userId = user.id,
-                                    selected = true,
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = user.name?.trim()?.ifBlank { null } ?: "Friend",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = GlassSheetTokens.OnOledMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-                if (cliqueProximityAutofillLoading) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
+                            .padding(top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -902,7 +872,6 @@ fun ConnectionsListView(
                             color = GlassSheetTokens.OnOledMuted,
                         )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
                 val pickableIdsForHint =
                     remember(verifiedCliquePickableOneToOneChats) {
@@ -916,12 +885,13 @@ fun ConnectionsListView(
                         text = "People from your tap (profiles may still sync)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp),
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         supplementalHintUsers.forEach { u ->
@@ -940,152 +910,9 @@ fun ConnectionsListView(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 28.dp),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    val checkingVisible =
-                        !cliqueSheetEligibilityReady && verifiedCliquePickableOneToOneChats.isNotEmpty()
-                    Text(
-                        text = "Checking who can join…",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.alpha(if (checkingVisible) 1f else 0f),
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                if (memberSetDuplicatesExistingClick) {
-                    Text(
-                        text = "You already have a verified click with this group.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-                if (verifiedCliquePickableOneToOneChats.isEmpty()) {
-                    Text(
-                        text = "No eligible 1:1 connections yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GlassSheetTokens.OnOledMuted,
-                    )
-                } else {
-                    val filteredCliquePickableChats = remember(
-                        verifiedCliquePickableOneToOneChats,
-                        cliqueSearchQuery,
-                    ) {
-                        verifiedCliquePickableOneToOneChats.filter {
-                            matchesConnectionPickerSearch(it.otherUser, cliqueSearchQuery)
-                        }
-                    }
-                    if (filteredCliquePickableChats.isEmpty()) {
-                        Text(
-                            text = "No matches for \"$cliqueSearchQuery\".",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = GlassSheetTokens.OnOledMuted,
-                        )
-                    } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = true),
-                    ) {
-                        items(filteredCliquePickableChats, key = { it.connection.id }) { chatDetails ->
-                            val friendId = chatDetails.otherUser.id
-                            val checked = friendId in selectedCliqueFriendIds
-                            val canSelect =
-                                checked || (cliqueSheetEligibilityReady && cliqueAddableMask[friendId] == true)
-                            val label = chatDetails.otherUser.name?.trim()?.ifBlank { null } ?: "Friend"
-                            ListItem(
-                                headlineContent = {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = if (canSelect) {
-                                            GlassSheetTokens.OnOled
-                                        } else {
-                                            GlassSheetTokens.OnOledMuted
-                                        },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                },
-                                leadingContent = {
-                                    ConnectionPickerListAvatar(
-                                        displayName = chatDetails.otherUser.name,
-                                        email = chatDetails.otherUser.email,
-                                        avatarUrl = chatDetails.otherUser.image,
-                                        userId = chatDetails.otherUser.id,
-                                        selected = checked,
-                                        enabled = canSelect,
-                                    )
-                                },
-                                modifier = Modifier.clickable(enabled = canSelect) {
-                                    if (checked) {
-                                        selectedCliqueFriendIds = selectedCliqueFriendIds - friendId
-                                    } else if (canSelect) {
-                                        selectedCliqueFriendIds = selectedCliqueFriendIds + friendId
-                                    } else {
-                                        toastState.show(
-                                            listScope,
-                                            "That friend isn’t connected to everyone already selected.",
-                                        )
-                                    }
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            )
-                        }
-                    }
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                val canCreate = cliqueSheetEligibilityReady &&
-                    selectedCliqueFriendIds.isNotEmpty() &&
-                    cliqueCreateGraphOk &&
-                    !memberSetDuplicatesExistingClick
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = { dismissVerifiedCliqueSheet() },
-                    ) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            viewModel.createVerifiedClique(selectedCliqueFriendIds.toList()) { result ->
-                                result.onSuccess {
-                                    dismissVerifiedCliqueSheet {
-                                        toastState.show(listScope, "Click created")
-                                    }
-                                }
-                                result.onFailure { e ->
-                                    val raw = e.message?.takeIf { it.isNotBlank() }.orEmpty()
-                                    val msg = when {
-                                        raw.contains("verified click already exists", ignoreCase = true) ->
-                                            "You already have a verified click with this group."
-                                        else -> raw.ifBlank { "Couldn’t create click" }
-                                    }
-                                    toastState.show(listScope, msg)
-                                }
-                            }
-                        },
-                        enabled = canCreate,
-                    ) {
-                        Text("Create")
-                    }
-                }
-            }
-            }
-        }
+            },
+        )
     }
 
     var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }

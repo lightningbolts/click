@@ -8,6 +8,7 @@ import kotlinx.datetime.Clock
 data class HomeEventReminder(
     val beaconId: String,
     val description: String,
+    val title: String? = null,
     val kind: EventReminderKind,
     val startEpochMs: Long,
 )
@@ -41,12 +42,14 @@ object EventReminderCoordinator {
             val interested = id in rsvpBeaconIds || beacon.createdByUserId == userId
             if (!interested) continue
             val description = beacon.metadata.description.orEmpty()
+            val title = beacon.metadata.title?.trim()?.takeIf { it.isNotEmpty() }
             for (kind in eventReminderKindsDue(schedule, nowEpochMs)) {
                 val key = "$id:${kind.name}"
                 if (key in dismissedKeys) continue
                 reminders += HomeEventReminder(
                     beaconId = id,
                     description = description,
+                    title = title,
                     kind = kind,
                     startEpochMs = schedule.startEpochMs,
                 )

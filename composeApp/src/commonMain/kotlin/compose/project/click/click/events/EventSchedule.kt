@@ -105,8 +105,9 @@ fun eventReminderTitle(kind: EventReminderKind, eventDescription: String): Strin
         EventReminderKind.OneHourBefore -> "Event starting soon"
     }
 
-fun eventReminderBody(kind: EventReminderKind, eventDescription: String): String {
-    val label = eventDescription.trim().take(80).ifEmpty { "Your event" }
+fun eventReminderBody(kind: EventReminderKind, eventDescription: String, eventTitle: String? = null): String {
+    val label = eventTitle?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
+        ?: eventDescription.trim().take(80).ifEmpty { "Your event" }
     return when (kind) {
         EventReminderKind.DayOf -> "$label starts today — tap to view on the map."
         EventReminderKind.OneHourBefore -> "$label starts in about an hour."

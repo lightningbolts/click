@@ -802,7 +802,7 @@ fun HomeEventReminderCard(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = eventReminderBody(reminder.kind, reminder.description),
+                text = eventReminderBody(reminder.kind, reminder.description, reminder.title),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )

@@ -754,7 +754,7 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
         return null
     }
     return MapBeaconMetadata(
-        title = str("title", "track_title", "name", "track", "track_name"),
+        title = str("title", "event_title", "track_title", "name", "track", "track_name"),
         artist = str("artist", "track_artist", "artist_name"),
         album = str("album"),
         musicUrl = str("music_url", "url", "link", "spotify_url", "apple_music_url", "original_url"),

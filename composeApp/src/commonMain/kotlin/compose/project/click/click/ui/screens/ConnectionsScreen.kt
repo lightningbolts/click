@@ -40,6 +40,8 @@ import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.chat.GroupAddMemberPickerSheet
 import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.chat.GroupMembersPickerSheet
+import compose.project.click.click.ui.chat.ConnectionSheetDialog
+import compose.project.click.click.ui.chat.ConnectionSheetDialogs
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
@@ -81,6 +83,7 @@ fun ConnectionsScreen(
     var groupMembersPickerContext by remember { mutableStateOf<GroupMembersPickerContext?>(null) }
     var showGroupMembersSheet by remember { mutableStateOf(false) }
     var showGroupAddMemberPicker by remember { mutableStateOf(false) }
+    var pendingRemoveGroupMember by remember { mutableStateOf<ConnectionSheetDialog.RemoveGroupMember?>(null) }
     /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
     var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
     val focusManager = LocalFocusManager.current
@@ -395,13 +398,39 @@ fun ConnectionsScreen(
             },
             onRemoveMember = if (isGroupCreator) {
                 { memberId ->
-                    viewModel.removeMemberFromVerifiedClique(groupPickerContext.groupId, memberId)
+                    val memberName = groupPickerContext.members
+                        .find { it.id == memberId }
+                        ?.name
+                        ?.trim()
+                        ?.ifBlank { null }
+                        ?: "This member"
+                    pendingRemoveGroupMember = ConnectionSheetDialog.RemoveGroupMember(
+                        memberUserId = memberId,
+                        memberName = memberName,
+                    )
                 }
             } else {
                 null
             },
         )
     }
+    val removeMemberContext = groupPickerContext
+    ConnectionSheetDialogs(
+        dialog = pendingRemoveGroupMember,
+        onDismiss = { pendingRemoveGroupMember = null },
+        onConfirmRemove = { },
+        onConfirmBlock = { },
+        onConfirmReport = { },
+        onConfirmLeaveGroup = { },
+        onConfirmDeleteGroup = { },
+        onConfirmRemoveGroupMember = { memberId ->
+            val groupId = removeMemberContext?.groupId
+            if (groupId != null) {
+                viewModel.removeMemberFromVerifiedClique(groupId, memberId)
+            }
+            pendingRemoveGroupMember = null
+        },
+    )
     if (showGroupAddMemberPicker && groupPickerContext != null) {
         val memberIds = groupPickerContext.memberUserIds.toSet()
         val candidates = AppDataManager.connectedUsers.value.values
@@ -418,11 +447,11 @@ fun ConnectionsScreen(
         GroupAddMemberPickerSheet(
             candidates = candidates,
             onDismiss = { showGroupAddMemberPicker = false },
-            onSelect = { newMemberId ->
+            onAddMembers = { memberIds ->
                 showGroupAddMemberPicker = false
-                viewModel.addMemberToVerifiedClique(
+                viewModel.addMembersToVerifiedClique(
                     groupId = groupPickerContext.groupId,
-                    newMemberUserId = newMemberId,
+                    newMemberUserIds = memberIds,
                 )
             },
         )
