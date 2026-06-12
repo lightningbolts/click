@@ -281,7 +281,7 @@ fun HomeScreen(
                                 )
                             }
 
-                            items(reconnectReminders) { reminder ->
+                            items(reconnectReminders, key = { it.connectionId }) { reminder ->
                                 ReconnectReminderCard(
                                     reminder = reminder,
                                     onReconnect = { onNavigateToChat(reminder.connectionId) },
@@ -308,7 +308,7 @@ fun HomeScreen(
                             item {
                                 GradientSectionHeader(text = "Recent Connections")
                             }
-                            items(locationGroupedConnections.entries.toList()) { (location, connections) ->
+                            items(locationGroupedConnections.entries.toList(), key = { it.key }) { (location, connections) ->
                                 val isExpanded = location in expandedLocations
                                 LocationGroupCard(
                                     location = location,

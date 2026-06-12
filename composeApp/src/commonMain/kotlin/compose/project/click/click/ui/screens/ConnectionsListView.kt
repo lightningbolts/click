@@ -463,17 +463,25 @@ fun ConnectionsListView(
         toastState.show(listScope, result)
     }
 
-    val activeCount = effectiveChats.count {
-        it.groupClique == null &&
-            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+    // Tab counts derive purely from list inputs; memoize so presence heartbeats and
+    // animation frames don't re-scan the full chat list every recomposition.
+    val activeCount = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.count {
+            it.groupClique == null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
     }
-    val groupCount = effectiveChats.count {
-        it.groupClique != null &&
-            it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-    } + activeHubs.size
-    val archivedCount = effectiveChats.count {
-        it.groupClique == null &&
-            it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+    val groupCount = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds, activeHubs) {
+        effectiveChats.count {
+            it.groupClique != null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        } + activeHubs.size
+    }
+    val archivedCount = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.count {
+            it.groupClique == null &&
+                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
     }
     val headerSubtitle = remember(
         effectiveChats,
@@ -576,43 +584,53 @@ fun ConnectionsListView(
                     }
                 }
             } else {
-                val activeChats = effectiveChats.filter {
-                    it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val groupChats = effectiveChats.filter {
-                    it.groupClique != null &&
-                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val archivedChats = effectiveChats.filter {
-                    it.groupClique == null &&
-                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-                }
-                val tabChats = when (selectedTabIndex) {
-                    0 -> activeChats
-                    1 -> groupChats
-                    else -> archivedChats
-                }
-
-                val sortedTabChats = tabChats
-                    .sortedWith(
-                        compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
-                            .thenByDescending { connectionListActivityTs(it) },
-                    )
-                val filteredChats = if (searchQuery.isBlank()) {
-                    sortedTabChats
-                } else {
-                    sortedTabChats.filter { chat ->
-                        val groupHit =
-                            chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
-                        val userHit =
-                            chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
-                        groupHit || userHit
+                // Filtering + sorting the full inbox is O(n log n); memoize on the actual
+                // inputs so unrelated recompositions (tab slide animation frames, presence
+                // ticks) reuse the previous list instead of recomputing it every frame.
+                val filteredChats = remember(
+                    effectiveChats,
+                    archivedConnectionIds,
+                    hiddenConnectionIds,
+                    selectedTabIndex,
+                    searchQuery,
+                    coreConnectionIds,
+                ) {
+                    val tabChats = when (selectedTabIndex) {
+                        0 -> effectiveChats.filter {
+                            it.groupClique == null &&
+                                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+                        }
+                        1 -> effectiveChats.filter {
+                            it.groupClique != null &&
+                                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+                        }
+                        else -> effectiveChats.filter {
+                            it.groupClique == null &&
+                                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+                        }
+                    }
+                    val sortedTabChats = tabChats
+                        .sortedWith(
+                            compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
+                                .thenByDescending { connectionListActivityTs(it) },
+                        )
+                    if (searchQuery.isBlank()) {
+                        sortedTabChats
+                    } else {
+                        sortedTabChats.filter { chat ->
+                            val groupHit =
+                                chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
+                            val userHit =
+                                chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
+                            groupHit || userHit
+                        }
                     }
                 }
 
-                val clicksListOrderSignature = filteredChats.joinToString("\u0000") {
-                    "${it.connection.id}\t${connectionListActivityTs(it)}"
+                val clicksListOrderSignature = remember(filteredChats) {
+                    filteredChats.joinToString("\u0000") {
+                        "${it.connection.id}\t${connectionListActivityTs(it)}"
+                    }
                 }
                 LaunchedEffect(clicksListOrderSignature) {
                     if (filteredChats.isEmpty()) return@LaunchedEffect
