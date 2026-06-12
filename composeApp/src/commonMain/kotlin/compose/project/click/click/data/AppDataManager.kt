@@ -123,6 +123,10 @@ object AppDataManager {
     private val _discoveryMapPrefetchComplete = MutableStateFlow(false)
     val discoveryMapPrefetchComplete: StateFlow<Boolean> = _discoveryMapPrefetchComplete.asStateFlow()
 
+    /** Last GPS fix from startup beacon prefetch — used to seed map discovery before the map tab opens. */
+    private val _lastKnownDeviceLocation = MutableStateFlow<Pair<Double, Double>?>(null)
+    val lastKnownDeviceLocation: StateFlow<Pair<Double, Double>?> = _lastKnownDeviceLocation.asStateFlow()
+
     /** Radius (meters) for the eager beacon prefetch — matches the map discovery feed radius. */
     private const val BEACON_PREFETCH_RADIUS_METERS = 30_000.0
 
@@ -845,6 +849,7 @@ object AppDataManager {
                     }
                 }
                 val resolved = loc ?: return@runCatching
+                _lastKnownDeviceLocation.value = resolved.latitude to resolved.longitude
                 val latDelta = BEACON_PREFETCH_RADIUS_METERS / 111_320.0
                 val lonScale = kotlin.math.cos(resolved.latitude * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
                 val lonDelta = BEACON_PREFETCH_RADIUS_METERS / (111_320.0 * lonScale)
@@ -913,6 +918,7 @@ object AppDataManager {
         _prefetchedMapBeacons.value = emptyList()
         _prefetchedCommunityHubs.value = emptyList()
         _discoveryMapPrefetchComplete.value = false
+        _lastKnownDeviceLocation.value = null
         queuedProfilePrefetchIds = emptySet()
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call

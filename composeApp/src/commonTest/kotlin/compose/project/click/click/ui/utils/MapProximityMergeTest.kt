@@ -3,6 +3,10 @@ package compose.project.click.click.ui.utils // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.parseMapBeaconMetadata
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.eventScheduleMetadata
+import compose.project.click.click.events.isActiveForDiscoveryFeed
 import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,6 +47,24 @@ class MapProximityMergeTest {
         val merged = mergeMapBeaconLists(existing, incoming)
         assertEquals(1, merged.size)
         assertEquals("fresh", merged.single().id)
+    }
+
+    @Test
+    fun mergeMapBeaconLists_keepsScheduledEventWhenExpiresAtColumnIsStale() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val schedule = EventSchedule(startEpochMs = now + 3_600_000L, endEpochMs = now + 7_200_000L)
+        val event = MapBeacon(
+            id = "event-1",
+            kind = MapBeaconKind.EVENT,
+            latitude = 1.0,
+            longitude = 2.0,
+            metadata = parseMapBeaconMetadata(eventScheduleMetadata(schedule)),
+            expiresAtEpochMs = now - 60_000L,
+            sourceBeaconType = "event",
+        )
+        val merged = mergeMapBeaconLists(emptyList(), listOf(event))
+        assertEquals(1, merged.size)
+        assertTrue(merged.single().isActiveForDiscoveryFeed(now))
     }
 
     private fun hub(id: String, active: Int = 0) = CommunityHubPin(

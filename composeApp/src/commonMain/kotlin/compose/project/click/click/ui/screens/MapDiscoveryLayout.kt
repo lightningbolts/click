@@ -91,7 +91,7 @@ import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
-import compose.project.click.click.events.isVisibleEventBeacon
+import compose.project.click.click.events.isActiveForDiscoveryFeed
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.utils.haversineDistance
 import kotlinx.datetime.Clock
@@ -160,11 +160,7 @@ internal fun buildDiscoveryFeedItems(
     }
 
     val beaconRows = beacons
-        .filter { b ->
-            if (!b.isVisibleEventBeacon(now)) return@filter false
-            val exp = b.expiresAtEpochMs
-            exp == null || exp > now
-        }
+        .filter { b -> b.isActiveForDiscoveryFeed(now) }
         .map { beacon ->
             val exp = beacon.expiresAtEpochMs
             val ttlLabel = if (exp != null) {

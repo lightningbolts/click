@@ -8,7 +8,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator
-import compose.project.click.click.events.isVisibleEventBeacon
+import compose.project.click.click.events.isActiveForDiscoveryFeed
 import kotlinx.datetime.Clock
 import kotlin.math.*
 
@@ -155,11 +155,7 @@ internal fun mergeMapBeaconLists(
         byId[beacon.id] = beacon
     }
     val now = Clock.System.now().toEpochMilliseconds()
-    val merged = byId.values.filter { beacon ->
-        if (!beacon.isVisibleEventBeacon(now)) return@filter false
-        val exp = beacon.expiresAtEpochMs
-        exp == null || exp > now
-    }
+    val merged = byId.values.filter { beacon -> beacon.isActiveForDiscoveryFeed(now) }
     EventReminderCoordinator.syncBeacons(merged)
     return merged
 }

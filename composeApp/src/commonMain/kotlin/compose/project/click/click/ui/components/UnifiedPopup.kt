@@ -341,6 +341,7 @@ fun UnifiedPopupFormDialog(
     ) {
         Surface(
             modifier = modifier
+                .fillMaxWidth()
                 .padding(horizontal = 28.dp)
                 .widthIn(max = 360.dp),
             shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),

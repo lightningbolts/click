@@ -23,3 +23,13 @@ fun defaultMapLayerFilters(): Set<MapLayerFilter> =
         MapLayerFilter.SOCIAL_VIBES,
         MapLayerFilter.COMMUNITY_HUBS,
     )
+
+fun layersWantHubFetch(layers: Set<MapLayerFilter>): Boolean =
+    layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
+
+fun layersWantBeaconFetch(layers: Set<MapLayerFilter>): Boolean =
+    layers.contains(MapLayerFilter.ALL) ||
+        layers.contains(MapLayerFilter.SOUNDTRACKS) ||
+        layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
+        layers.contains(MapLayerFilter.SOCIAL_VIBES) ||
+        layers.contains(MapLayerFilter.EVENTS)

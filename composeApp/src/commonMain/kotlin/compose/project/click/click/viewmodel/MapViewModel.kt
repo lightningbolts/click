@@ -217,10 +217,22 @@ class MapViewModel : ViewModel() {
     private val _discoveryFeedLoading = MutableStateFlow(false)
     val discoveryFeedLoading: StateFlow<Boolean> = _discoveryFeedLoading.asStateFlow()
 
-    val discoveryFeedPending: StateFlow<Boolean> = _discoveryFeedLoading
+    val discoveryFeedPending: StateFlow<Boolean> = combine(
+        _discoveryFeedLoading,
+        _discoveryProximityFetchCompleted,
+        discoveryFeedBeacons,
+        discoveryFeedHubs,
+    ) { loading, completed, beacons, hubs ->
+        loading || (!completed && beacons.isEmpty() && hubs.isEmpty())
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = true,
+    )
 
     private var beaconPollJob: Job? = null
     private var discoveryProximityJob: Job? = null
+    private var discoveryPrefetchRetryJob: Job? = null
     private var beaconFetchSeq: Long = 0L
     private var discoveryFetchSeq: Long = 0L
 
@@ -289,14 +301,37 @@ class MapViewModel : ViewModel() {
         }
         viewModelScope.launch {
             AppDataManager.currentUser.collect { user ->
-                if (user != null) hydrateBeaconRsvpFromDisk(user.id)
+                if (user != null) {
+                    hydrateBeaconRsvpFromDisk(user.id)
+                    warmDiscoveryFeed()
+                }
+            }
+        }
+        viewModelScope.launch {
+            AppDataManager.isDataLoaded.collect { loaded ->
+                if (loaded) warmDiscoveryFeed()
             }
         }
         viewModelScope.launch {
             AppDataManager.discoveryMapPrefetchComplete.collect { done ->
-                if (done) {
-                    markDiscoveryProximityFetchCompleted()
-                }
+                if (done) warmDiscoveryFeed()
+            }
+        }
+    }
+
+    /** Starts (or retries) discovery hub/beacon loading without waiting for the map tab. */
+    fun warmDiscoveryFeed() {
+        if (AppDataManager.currentUser.value == null) return
+        prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = true)
+    }
+
+    private fun scheduleDiscoveryPrefetchRetry(delayMs: Long = 2_000L) {
+        if (_discoveryProximityFetchCompleted.value) return
+        discoveryPrefetchRetryJob?.cancel()
+        discoveryPrefetchRetryJob = viewModelScope.launch {
+            delay(delayMs)
+            if (!_discoveryProximityFetchCompleted.value) {
+                warmDiscoveryFeed()
             }
         }
     }
@@ -347,6 +382,7 @@ class MapViewModel : ViewModel() {
     private fun applyPrefetchedBeacons(list: List<MapBeacon>) {
         if (list.isEmpty()) return
         _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+        markDiscoveryProximityFetchCompleted()
     }
 
     private fun applyPrefetchedHubs(rows: List<compose.project.click.click.data.api.CommunityHubNearbyDto>) {
@@ -362,6 +398,7 @@ class MapViewModel : ViewModel() {
             )
         }
         _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
+        markDiscoveryProximityFetchCompleted()
     }
 
     private fun observeAppData() {
@@ -990,30 +1027,22 @@ class MapViewModel : ViewModel() {
             PlatformHapticsPolicy.successNotification()
             onAcceptedLocally()
 
-            mapBeaconRepository.insertBeacon(insert).fold(
-                onSuccess = {
-                    _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
-                    _visibleBounds.value?.let { b ->
-                        mapBeaconRepository.fetchLocalBeacons(
-                            minLat = b.minLat,
-                            maxLat = b.maxLat,
-                            minLon = b.minLon,
-                            maxLon = b.maxLon,
-                            beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
-                        ).onSuccess { list ->
-                            _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
-                        }
-                    }
-                    onRemoteFinished(true)
-                    PlatformHapticsPolicy.heavyImpact()
-                    PlatformHapticsPolicy.successNotification()
-                },
-                onFailure = { e ->
-                    _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
-                    _beaconDropFailureToast.value = e.message ?: "Could not drop beacon"
-                    onRemoteFinished(false)
-                },
-            )
+            val insertResult = mapBeaconRepository.insertBeacon(insert)
+            if (insertResult.isSuccess) {
+                refreshBeaconsAfterDrop(
+                    latitude = loc.latitude,
+                    longitude = loc.longitude,
+                    optimisticId = optimisticId,
+                )
+                onRemoteFinished(true)
+                PlatformHapticsPolicy.heavyImpact()
+                PlatformHapticsPolicy.successNotification()
+            } else {
+                val e = insertResult.exceptionOrNull()
+                _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
+                _beaconDropFailureToast.value = e?.message ?: "Could not drop beacon"
+                onRemoteFinished(false)
+            }
             } finally {
                 _beaconSubmitInFlight.value = false
                 beaconSubmitMutex.unlock()
@@ -1402,18 +1431,17 @@ class MapViewModel : ViewModel() {
         val seq = ++discoveryFetchSeq
         if (showPulse) _discoveryFeedLoading.value = true
         discoveryProximityJob = viewModelScope.launch {
+            var fetchRan = false
             try {
             val centers = resolveDiscoveryProximityCenters()
             if (centers.isEmpty()) return@launch
             if (seq != discoveryFetchSeq) return@launch
 
             val layers = _selectedLayerFilters.value
-            val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
-            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
-                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
-                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
-                layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            val wantHubs = layersWantHubFetch(layers)
+            val wantBeacons = layersWantBeaconFetch(layers)
             if (!wantHubs && !wantBeacons) return@launch
+            fetchRan = true
 
             coroutineScope {
                 if (wantHubs) {
@@ -1463,7 +1491,14 @@ class MapViewModel : ViewModel() {
             } finally {
                 if (seq == discoveryFetchSeq) {
                     if (showPulse) _discoveryFeedLoading.value = false
-                    if (markInitialComplete) markDiscoveryProximityFetchCompleted()
+                    if (markInitialComplete) {
+                        val hasFeedData = _mapBeacons.value.isNotEmpty() || _communityHubs.value.isNotEmpty()
+                        if (fetchRan || hasFeedData) {
+                            markDiscoveryProximityFetchCompleted()
+                        } else {
+                            scheduleDiscoveryPrefetchRetry()
+                        }
+                    }
                 }
             }
         }
@@ -1481,6 +1516,15 @@ class MapViewModel : ViewModel() {
             ?: locationService.getHighAccuracyLocation(3_500L)
         if (gps != null) {
             raw += gps.latitude to gps.longitude
+        }
+
+        AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+            raw += lat to lon
+        }
+
+        val connectionGeos = AppDataManager.connections.value.mapNotNull { it.connectionMapGeo() }
+        if (connectionGeos.isNotEmpty()) {
+            raw += connectionGeos.map { it.lat }.average() to connectionGeos.map { it.lon }.average()
         }
 
         listOfNotNull(
@@ -1516,6 +1560,26 @@ class MapViewModel : ViewModel() {
             if (!duplicate) out += lat to lon
         }
         return out
+    }
+
+    private suspend fun refreshBeaconsAfterDrop(
+        latitude: Double,
+        longitude: Double,
+        optimisticId: String,
+    ) {
+        val bounds = _visibleBounds.value
+            ?: boundsAroundPoint(latitude, longitude, discoveryProximityRadiusMeters)
+        mapBeaconRepository.fetchLocalBeacons(
+            minLat = bounds.minLat,
+            maxLat = bounds.maxLat,
+            minLon = bounds.minLon,
+            maxLon = bounds.maxLon,
+            beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
+        ).onSuccess { list ->
+            _mapBeacons.update { current ->
+                mergeMapBeaconLists(current.filter { it.id != optimisticId }, list)
+            }
+        }
     }
 
     private fun boundsAroundPoint(lat: Double, lon: Double, radiusMeters: Double): BoundingBox {
@@ -1554,11 +1618,8 @@ class MapViewModel : ViewModel() {
                 DiscoveryFetchSlot.Discovery -> if (seq != discoveryFetchSeq) return@launch
             }
             val layers = _selectedLayerFilters.value
-            val wantHubs = layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)
-            val wantBeacons = layers.contains(MapLayerFilter.ALL) ||
-                layers.contains(MapLayerFilter.SOUNDTRACKS) ||
-                layers.contains(MapLayerFilter.ALERTS_UTILITIES) ||
-                layers.contains(MapLayerFilter.SOCIAL_VIBES)
+            val wantHubs = layersWantHubFetch(layers)
+            val wantBeacons = layersWantBeaconFetch(layers)
             if (!wantHubs && !wantBeacons) return@launch
 
             coroutineScope {

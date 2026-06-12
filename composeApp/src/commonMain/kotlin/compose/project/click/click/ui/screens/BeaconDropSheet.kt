@@ -54,7 +54,7 @@ import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.EventScheduleValidationError
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
-import compose.project.click.click.ui.components.defaultEventSchedule
+import compose.project.click.click.events.defaultEventSchedule
 
 /**
  * Beacon drop types exposed in the map FAB flow.

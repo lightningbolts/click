@@ -1,7 +1,13 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package compose.project.click.click.events
 
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -105,4 +111,39 @@ fun eventReminderBody(kind: EventReminderKind, eventDescription: String): String
         EventReminderKind.DayOf -> "$label starts today — tap to view on the map."
         EventReminderKind.OneHourBefore -> "$label starts in about an hour."
     }
+}
+
+/** Rounds up to the next whole hour in [timeZone] (e.g. 2:37 → 3:00). */
+fun roundEpochToNextWholeHour(
+    epochMs: Long,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): Long {
+    val local = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(timeZone)
+    val dayStartMs = local.date.atStartOfDayIn(timeZone).toEpochMilliseconds()
+    val hourMs = 60L * 60_000L
+    val msIntoDay = (epochMs - dayStartMs).coerceAtLeast(0L)
+    val hourIndex = ((msIntoDay + hourMs - 1) / hourMs).toInt()
+    if (hourIndex >= 24) {
+        val nextDayStart = local.date.plus(kotlinx.datetime.DatePeriod(days = 1)).atStartOfDayIn(timeZone)
+        return nextDayStart.toEpochMilliseconds()
+    }
+    var candidate = dayStartMs + hourIndex * hourMs
+    if (candidate <= epochMs) {
+        candidate += hourMs
+    }
+    return candidate
+}
+
+/**
+ * Default event window: next nice on-the-hour start (≥45 min lead time) and a 2-hour block
+ * ending on the hour (e.g. 7:00 PM – 9:00 PM).
+ */
+fun defaultEventSchedule(
+    nowEpochMs: Long = Clock.System.now().toEpochMilliseconds(),
+    durationHours: Int = 2,
+): EventSchedule {
+    val minLeadMs = 45L * 60_000L
+    val start = roundEpochToNextWholeHour(nowEpochMs + minLeadMs)
+    val end = start + durationHours.coerceAtLeast(1).coerceAtMost(24) * 60L * 60_000L
+    return EventSchedule(startEpochMs = start, endEpochMs = end)
 }

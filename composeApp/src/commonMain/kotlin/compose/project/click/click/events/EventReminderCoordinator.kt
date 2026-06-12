@@ -65,3 +65,14 @@ fun MapBeacon.isVisibleEventBeacon(nowEpochMs: Long = Clock.System.now().toEpoch
     val exp = expiresAtEpochMs ?: return true
     return exp > nowEpochMs
 }
+
+/** Discovery feed + map merge visibility (events use schedule end, not raw TTL alone). */
+fun MapBeacon.isActiveForDiscoveryFeed(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
+    return when (kind) {
+        MapBeaconKind.EVENT -> isVisibleEventBeacon(nowEpochMs)
+        else -> {
+            val exp = expiresAtEpochMs
+            exp == null || exp > nowEpochMs
+        }
+    }
+}
