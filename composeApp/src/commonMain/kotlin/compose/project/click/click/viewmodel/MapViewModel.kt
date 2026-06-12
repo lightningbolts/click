@@ -20,6 +20,11 @@ import compose.project.click.click.data.repository.ChatRepository // pragma: all
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.eventScheduleMetadata
+import compose.project.click.click.events.isVisibleEventBeacon
+import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
@@ -570,7 +575,7 @@ class MapViewModel : ViewModel() {
                 MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER ->
                     layers.contains(MapLayerFilter.SOCIAL_VIBES)
             }
-            if (include) out.add(b)
+            if (include && b.isVisibleEventBeacon()) out.add(b)
         }
         return out
     }
@@ -844,6 +849,7 @@ class MapViewModel : ViewModel() {
         ttlMs: Long? = null,
         showCreatorName: Boolean = false,
         visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
+        eventSchedule: EventSchedule? = null,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -874,8 +880,44 @@ class MapViewModel : ViewModel() {
                         put("music_url", trimmed)
                     }
                 }
-                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY,
                 MapBeaconKind.EVENT -> {
+                    if (trimmed.isEmpty()) {
+                        _beaconInsertError.value = "Please add a description."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    if (trimmed.length > 140) {
+                        _beaconInsertError.value = "Description must be 140 characters or less."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    val schedule = eventSchedule ?: run {
+                        _beaconInsertError.value = "Pick event start and end times."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    validateEventSchedule(schedule.startEpochMs, schedule.endEpochMs)?.let { err ->
+                        _beaconInsertError.value = when (err) {
+                            compose.project.click.click.events.EventScheduleValidationError.EndBeforeStart ->
+                                "Event end must be after start."
+                            compose.project.click.click.events.EventScheduleValidationError.StartInPast ->
+                                "Event start must be in the future."
+                            compose.project.click.click.events.EventScheduleValidationError.DurationExceedsOneMonth ->
+                                "Events can last at most 1 month."
+                        }
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    buildJsonObject {
+                        put("description", trimmed)
+                        eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+                    }
+                }
+                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
                     if (trimmed.isEmpty()) {
                         _beaconInsertError.value = "Please add a description."
                         onRejectedEarly()
@@ -911,12 +953,20 @@ class MapViewModel : ViewModel() {
                 }
             }
             val squadSession = CollaborationSessionManager.activeMapDropSession()
+            val eventExpiresIso = eventSchedule?.endEpochMs?.let {
+                kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
+            }
             val insert = MapBeaconInsert(
                 kind = kind.apiValue,
                 lat = loc.latitude,
                 lon = loc.longitude,
                 metadata = metadata,
-                ttlMs = if (kind == MapBeaconKind.SOUNDTRACK) null else (ttlMs ?: (6L * 60L * 60_000L)),
+                ttlMs = when {
+                    kind == MapBeaconKind.SOUNDTRACK -> null
+                    kind == MapBeaconKind.EVENT -> null
+                    else -> ttlMs ?: (6L * 60L * 60_000L)
+                },
+                expiresAtIso = eventExpiresIso,
                 showCreatorName = showCreatorName,
                 visibilityAudience = visibilityAudience.apiValue,
                 encounterId = squadSession?.encounterId,
@@ -930,11 +980,12 @@ class MapViewModel : ViewModel() {
                 metadata = parseMapBeaconMetadata(metadata),
                 createdByUserId = AppDataManager.currentUser.value?.id,
                 createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
-                expiresAtEpochMs = null,
+                expiresAtEpochMs = eventSchedule?.endEpochMs,
                 sourceBeaconType = insert.kind,
                 showCreatorName = showCreatorName,
             )
             _mapBeacons.value = _mapBeacons.value + optimisticBeacon
+            EventReminderCoordinator.rememberBeacon(optimisticBeacon)
             PlatformHapticsPolicy.heavyImpact()
             PlatformHapticsPolicy.successNotification()
             onAcceptedLocally()

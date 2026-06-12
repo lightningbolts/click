@@ -38,6 +38,7 @@ import compose.project.click.click.data.models.isDisposableRollLocked
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.UnifiedPopupTokens
 import compose.project.click.click.utils.toImageBitmap
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.delay
@@ -59,7 +60,7 @@ fun ChatExpandedPhotoPreview(
             null -> {
                 if (model != null) {
                     visible = false
-                    delay(320)
+                    delay(UnifiedPopupTokens.ContentClearDelayMillis.toLong())
                     if (target == null) {
                         model = null
                     }
@@ -90,12 +91,12 @@ fun ChatExpandedPhotoPreview(
 
     LaunchedEffect(visible, message.id, bitmap, mediaUrl, isEncrypted) {
         if (!visible) {
-            previewImageFade.animateTo(0f, tween(280, easing = FastOutSlowInEasing))
+            previewImageFade.animateTo(0f, tween(UnifiedPopupTokens.FadeOutMillis, easing = FastOutSlowInEasing))
             return@LaunchedEffect
         }
         previewImageFade.snapTo(0f)
         if ((isEncrypted && bitmap != null) || (!isEncrypted && mediaUrl.isNotBlank())) {
-            previewImageFade.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+            previewImageFade.animateTo(1f, tween(UnifiedPopupTokens.FadeInMillis, easing = FastOutSlowInEasing))
         }
     }
 

@@ -48,8 +48,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
-import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.BeaconVisibilityAudience
+import compose.project.click.click.data.models.MapBeaconKind
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.EventScheduleValidationError
+import compose.project.click.click.events.validateEventSchedule
+import compose.project.click.click.ui.components.EventDateTimePicker
+import compose.project.click.click.ui.components.defaultEventSchedule
 
 /**
  * Beacon drop types exposed in the map FAB flow.
@@ -106,6 +111,7 @@ fun BeaconDropSheetContent(
         ttlMs: Long?,
         showCreatorName: Boolean,
         visibilityAudience: BeaconVisibilityAudience,
+        eventSchedule: compose.project.click.click.events.EventSchedule?,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -121,6 +127,8 @@ fun BeaconDropSheetContent(
     val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
     val text = remember { mutableStateOf("") }
     val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
+    var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
+    var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
@@ -248,6 +256,17 @@ fun BeaconDropSheetContent(
             }
         } else {
             if (category.value != BeaconDropCategory.SOUNDTRACK) {
+                if (category.value == BeaconDropCategory.EVENT) {
+                    EventDateTimePicker(
+                        schedule = eventSchedule,
+                        onScheduleChange = { next ->
+                            eventSchedule = next
+                            eventScheduleError = validateEventSchedule(next.startEpochMs, next.endEpochMs)
+                            onDismissError()
+                        },
+                        validationError = eventScheduleError,
+                    )
+                } else {
                 Text(
                     text = "Visible for",
                     style = MaterialTheme.typography.titleSmall,
@@ -277,6 +296,7 @@ fun BeaconDropSheetContent(
                             ),
                         )
                     }
+                }
                 }
             }
 
@@ -392,12 +412,27 @@ fun BeaconDropSheetContent(
                     onCreateHub(hubNameDraft.trim(), hubCategory)
                     isSubmitting = false
                 } else {
-                    val ttl = if (category.value == BeaconDropCategory.SOUNDTRACK) {
+                    val ttl = if (category.value == BeaconDropCategory.SOUNDTRACK ||
+                        category.value == BeaconDropCategory.EVENT
+                    ) {
                         null
                     } else {
                         expiration.value.durationMs
                     }
-                    onSubmit(kind, text.value, ttl, showCreatorName, visibilityAudience) {
+                    val schedule = if (category.value == BeaconDropCategory.EVENT) {
+                        eventScheduleError = validateEventSchedule(
+                            eventSchedule.startEpochMs,
+                            eventSchedule.endEpochMs,
+                        )
+                        if (eventScheduleError != null) {
+                            isSubmitting = false
+                            return@Button
+                        }
+                        eventSchedule
+                    } else {
+                        null
+                    }
+                    onSubmit(kind, text.value, ttl, showCreatorName, visibilityAudience, schedule) {
                         isSubmitting = false
                     }
                 }

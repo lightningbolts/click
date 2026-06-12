@@ -3,6 +3,7 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.collaboration.computeClickDropRevealTtlIso
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
@@ -2553,8 +2554,8 @@ class ChatViewModel(
     }
 
     /**
-     * Encrypts and uploads a Disposable Roll frame tagged with the active [encounterId].
-     * Clears [bytes] from caller responsibility after upload begins.
+     * Encrypts and uploads a Click Drop frame tagged with the active [encounterId].
+     * Reveal TTL is always 24 hours after send (not the session's fixed collaboration TTL).
      */
     fun sendDisposableRollPhoto(
         bytes: ByteArray,
@@ -2565,6 +2566,7 @@ class ChatViewModel(
         if (bytes.isEmpty() || encounterId.isBlank()) return
         val connectionId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
+        val revealTtlIso = computeClickDropRevealTtlIso()
         _messageSendError.value = null
         viewModelScope.launch {
             outboundChatMessageMutex.withLock {
@@ -2587,7 +2589,7 @@ class ChatViewModel(
                             put("original_mime_type", mimeType)
                             put("disposable_roll", true)
                             put("encounter_id", encounterId)
-                            put("collaboration_ttl", collaborationTtlIso)
+                            put("collaboration_ttl", revealTtlIso)
                         },
                         localSentAt = localMs,
                         deliveryState = MessageDeliveryState.PENDING,
@@ -2614,7 +2616,7 @@ class ChatViewModel(
                         markOptimisticSendFailed(tempId)
                         secureImageBytesCache.remove(tempId)
                         _secureChatMediaLoadState.update { m -> m - tempId }
-                        _messageSendError.value = "Failed to upload Disposable Roll photo"
+                        _messageSendError.value = "Failed to upload Click Drop photo"
                         return@withLock
                     }
                     _secureChatMediaLoadState.update { m ->
@@ -2634,7 +2636,7 @@ class ChatViewModel(
                         put("is_encrypted_media", true)
                         put("disposable_roll", true)
                         put("encounter_id", encounterId)
-                        put("collaboration_ttl", collaborationTtlIso)
+                        put("collaboration_ttl", revealTtlIso)
                     }
                     val message = chatRepository.sendMessage(
                         chatId = apiChatId,
@@ -2649,10 +2651,10 @@ class ChatViewModel(
                         activateConnectionIfPending(connectionId)
                     } else {
                         markOptimisticSendFailed(tempId)
-                        _messageSendError.value = "Failed to send Disposable Roll photo"
+                        _messageSendError.value = "Failed to send Click Drop photo"
                     }
                 } catch (e: Exception) {
-                    _messageSendError.value = "Failed to send Disposable Roll — ${e.message ?: "error"}"
+                    _messageSendError.value = "Failed to send Click Drop — ${e.message ?: "error"}"
                 } finally {
                     _isMessageSubmitInProgress.value = false
                 }

@@ -91,6 +91,7 @@ import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
+import compose.project.click.click.events.isVisibleEventBeacon
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.utils.haversineDistance
 import kotlinx.datetime.Clock
@@ -160,6 +161,7 @@ internal fun buildDiscoveryFeedItems(
 
     val beaconRows = beacons
         .filter { b ->
+            if (!b.isVisibleEventBeacon(now)) return@filter false
             val exp = b.expiresAtEpochMs
             exp == null || exp > now
         }
@@ -203,10 +205,11 @@ internal data class DiscoveryFeedSection(
 internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): List<DiscoveryFeedSection> {
     if (items.isEmpty()) return emptyList()
     val sections = mutableListOf<DiscoveryFeedSection>()
-    val connections = items.filterIsInstance<DiscoveryFeedItem.Connection>()
-    if (connections.isNotEmpty()) {
-        sections += DiscoveryFeedSection(title = "Connections", items = connections)
-    }
+    // Connections section hidden — surfaced on the Clicks tab instead.
+    // val connections = items.filterIsInstance<DiscoveryFeedItem.Connection>()
+    // if (connections.isNotEmpty()) {
+    //     sections += DiscoveryFeedSection(title = "Connections", items = connections)
+    // }
     val hubs = items.filterIsInstance<DiscoveryFeedItem.Hub>()
     if (hubs.isNotEmpty()) {
         sections += DiscoveryFeedSection(title = "Community hubs", items = hubs)

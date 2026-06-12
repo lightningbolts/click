@@ -33,6 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.events.HomeEventReminder
+import compose.project.click.click.events.eventReminderBody
+import compose.project.click.click.events.eventReminderTitle
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
@@ -95,6 +98,7 @@ fun HomeScreen(
 ) {
     val homeState by viewModel.homeState.collectAsState()
     val reconnectReminders by viewModel.reconnectReminders.collectAsState()
+    val homeEventReminders by viewModel.homeEventReminders.collectAsState()
     val connectionInsights by viewModel.connectionInsights.collectAsState()
     val showInsightsPanel by viewModel.showInsightsPanel.collectAsState()
     val locationGroupedConnections by viewModel.locationGroupedConnections.collectAsState()
@@ -265,7 +269,41 @@ fun HomeScreen(
                             }
                         }
 
-                        // Recent Connections Section — grouped by location
+                        // Reconnect Reminders Section — directly after "I'm down for…"
+                        if (reconnectReminders.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                GradientSectionHeader(text = "Reconnect")
+                                Text(
+                                    "Connections you haven't talked to in a while",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+
+                            items(reconnectReminders) { reminder ->
+                                ReconnectReminderCard(
+                                    reminder = reminder,
+                                    onReconnect = { onNavigateToChat(reminder.connectionId) },
+                                    onDismiss = { viewModel.dismissReminder(reminder.connectionId) }
+                                )
+                            }
+                        }
+
+                        if (homeEventReminders.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                GradientSectionHeader(text = "Event reminders")
+                            }
+                            items(homeEventReminders, key = { "${it.beaconId}:${it.kind.name}" }) { reminder ->
+                                HomeEventReminderCard(
+                                    reminder = reminder,
+                                    onDismiss = { viewModel.dismissEventReminder(reminder.beaconId, reminder.kind) },
+                                )
+                            }
+                        }
+
+                        // Recent Connections Section — grouped by location (5 most recent)
                         if (locationGroupedConnections.isNotEmpty()) {
                             item {
                                 GradientSectionHeader(text = "Recent Connections")
@@ -313,27 +351,6 @@ fun HomeScreen(
                                         )
                                     }
                                 }
-                            }
-                        }
-                        
-                        // Reconnect Reminders Section
-                        if (reconnectReminders.isNotEmpty()) {
-                            item {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                GradientSectionHeader(text = "Reconnect")
-                                Text(
-                                    "Connections you haven't talked to in a while",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-                            
-                            items(reconnectReminders) { reminder ->
-                                ReconnectReminderCard(
-                                    reminder = reminder,
-                                    onReconnect = { onNavigateToChat(reminder.connectionId) },
-                                    onDismiss = { viewModel.dismissReminder(reminder.connectionId) }
-                                )
                             }
                         }
                         
@@ -757,6 +774,46 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                 contentDescription = "View details",
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
+        }
+    }
+}
+
+/**
+ * In-app event reminder surfaced on Home (day-of + one hour before start).
+ */
+@Composable
+fun HomeEventReminderCard(
+    reminder: HomeEventReminder,
+    onDismiss: () -> Unit,
+) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        usePrimaryBorder = true,
+        contentPadding = 14.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = eventReminderTitle(reminder.kind, reminder.description),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = eventReminderBody(reminder.kind, reminder.description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("Dismiss")
+                }
+            }
         }
     }
 }

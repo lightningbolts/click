@@ -448,10 +448,11 @@ internal fun ConnectionChatMessageComposer(
                     menuContent = {
                         Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                             ChatAttachmentMenuRow(
-                                label = "Roll",
+                                label = "Click Drops",
                                 icon = Icons.Filled.PhotoCamera,
                                 onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
+                                    PlatformHapticsPolicy.heavyImpact()
+                                    PlatformHapticsPolicy.successNotification()
                                     attachmentMenuExpanded = false
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
@@ -475,7 +476,7 @@ internal fun ConnectionChatMessageComposer(
                                 label = "Photo library",
                                 icon = Icons.Outlined.Image,
                                 onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
+                                    PlatformHapticsPolicy.heavyImpact()
                                     attachmentMenuExpanded = false
                                     mediaPickers.openPhotoLibrary()
                                 },
@@ -484,7 +485,7 @@ internal fun ConnectionChatMessageComposer(
                                 label = "Take photo",
                                 icon = Icons.Outlined.PhotoCamera,
                                 onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
+                                    PlatformHapticsPolicy.heavyImpact()
                                     attachmentMenuExpanded = false
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
@@ -495,7 +496,7 @@ internal fun ConnectionChatMessageComposer(
                                 label = "Voice message",
                                 icon = Icons.Outlined.Mic,
                                 onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
+                                    PlatformHapticsPolicy.heavyImpact()
                                     attachmentMenuExpanded = false
                                     mediaPickers.openVoiceRecorder()
                                 },
@@ -504,7 +505,7 @@ internal fun ConnectionChatMessageComposer(
                                 label = "File",
                                 icon = Icons.Outlined.AttachFile,
                                 onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
+                                    PlatformHapticsPolicy.heavyImpact()
                                     attachmentMenuExpanded = false
                                     mediaPickers.openFilePicker()
                                 },

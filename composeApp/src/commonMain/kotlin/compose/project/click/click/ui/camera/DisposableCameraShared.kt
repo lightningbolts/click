@@ -166,7 +166,7 @@ internal fun DisposableCameraChrome(
             ),
         ) {
             Text(
-                text = "Disposable Roll",
+                text = "Click Drops",
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.labelLarge,
                 color = Color.White,
@@ -534,7 +534,7 @@ private fun SendRollButton(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = "Send to Disposable Roll",
+                contentDescription = "Send to Click Drops",
                 tint = Color.White,
                 modifier = Modifier.size(30.dp),
             )

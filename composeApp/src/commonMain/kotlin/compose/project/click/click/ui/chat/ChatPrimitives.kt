@@ -202,7 +202,7 @@ internal fun ChatAttachmentMenuAnchorHost(
                     indication = null,
                     enabled = anchorEnabled,
                     onClick = {
-                        PlatformHapticsPolicy.lightImpact()
+                        PlatformHapticsPolicy.heavyImpact()
                         onExpandedChange(!expanded)
                     },
                 ),

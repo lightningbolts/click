@@ -1073,7 +1073,7 @@ fun App() {
                             .onFailure { error ->
                                 val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
                                     ?.take(160)
-                                    ?: "Couldn't open Disposable Roll"
+                                    ?: "Couldn't open Click Drops"
                                 snackbarHostState.showSnackbar(message)
                             }
                     } finally {
@@ -1168,6 +1168,10 @@ fun App() {
                         currentRoute = currentRoute,
                         visible = !hideMainBottomBar,
                         onItemSelected = { item ->
+                            if (item.route == NavigationItem.AddClick.route) {
+                                PlatformHapticsPolicy.heavyImpact()
+                                PlatformHapticsPolicy.successNotification()
+                            }
                             navigateTo(item.route)
                             hubChatArgs = null
                             showMyQRCode = false

@@ -1071,7 +1071,7 @@ private fun ProfileActionGrid(
 
         if (showDisposableRoll && onOpenDisposableRoll != null) {
             ProfileActionCard(
-                label = "Disposable Roll",
+                label = "Click Drops",
                 icon = Icons.Filled.PhotoCamera,
                 onClick = onOpenDisposableRoll,
                 usePrimaryBorder = true,

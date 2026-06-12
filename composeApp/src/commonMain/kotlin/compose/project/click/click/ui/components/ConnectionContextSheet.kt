@@ -261,7 +261,7 @@ private fun DisposableRollActionCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Disposable Roll",
+                    text = "Click Drops",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = GlassSheetTokens.OnOled,

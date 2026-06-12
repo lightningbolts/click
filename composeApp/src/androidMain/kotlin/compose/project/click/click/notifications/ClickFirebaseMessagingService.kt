@@ -50,9 +50,9 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             val connectionId = message.data["connection_id"] ?: ""
             val chatId = message.data["chat_id"] ?: ""
             val deepLinkId = connectionId.ifBlank { chatId }
-            val title = message.notification?.title ?: "Disposable Roll"
+            val title = message.notification?.title ?: "Click Drops"
             val body = message.notification?.body
-                ?: "📸 Your Disposable Roll from last night has been revealed!"
+                ?: "📸 Your Click Drop has been revealed!"
             val launchIntent = if (deepLinkId.isNotBlank()) {
                 MainActivity.createChatDeepLinkIntent(
                     context = this,

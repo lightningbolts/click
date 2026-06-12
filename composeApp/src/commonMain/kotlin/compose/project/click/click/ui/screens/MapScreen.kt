@@ -408,7 +408,7 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, text, ttlMs, showCreatorName, visibilityAudience, onRejectedEarly ->
+                    onSubmit = { kind, text, ttlMs, showCreatorName, visibilityAudience, eventSchedule, onRejectedEarly ->
                         showBeaconDropSheet = false
                         viewModel.submitBeaconDrop(
                             kind = kind,
@@ -416,6 +416,7 @@ fun MapScreen(
                             ttlMs = ttlMs,
                             showCreatorName = showCreatorName,
                             visibilityAudience = visibilityAudience,
+                            eventSchedule = eventSchedule,
                             onAcceptedLocally = { },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },

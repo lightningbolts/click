@@ -48,7 +48,7 @@ fun TetherCompassToast(
         visible = true
         delay(visibleDurationMs)
         visible = false
-        delay(220)
+        delay(UnifiedToastTokens.ExitMillis.toLong())
         onDismissed()
     }
 
@@ -57,8 +57,8 @@ fun TetherCompassToast(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        enter = fadeIn(animationSpec = tween(220)),
-        exit = fadeOut(animationSpec = tween(200)),
+        enter = fadeIn(animationSpec = tween(UnifiedToastTokens.EnterMillis)),
+        exit = fadeOut(animationSpec = tween(UnifiedToastTokens.ExitMillis)),
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),

@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.PlatformHapticsPolicy
+
 enum class HeaderDisplayMode {
     Large,
     Inline
@@ -202,7 +204,13 @@ fun HeaderSearchIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onClick, modifier = modifier) {
+    IconButton(
+        onClick = {
+            PlatformHapticsPolicy.heavyImpact()
+            onClick()
+        },
+        modifier = modifier,
+    ) {
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = "Search",
@@ -218,7 +226,14 @@ fun HeaderRefreshIconButton(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = modifier) {
+    IconButton(
+        onClick = {
+            if (enabled) PlatformHapticsPolicy.heavyImpact()
+            onClick()
+        },
+        enabled = enabled,
+        modifier = modifier,
+    ) {
         Icon(
             imageVector = Icons.Filled.Refresh,
             contentDescription = "Refresh feed",

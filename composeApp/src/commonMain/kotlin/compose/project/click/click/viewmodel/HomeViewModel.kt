@@ -18,7 +18,10 @@ import compose.project.click.click.data.repository.ChatRepository // pragma: all
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.BeaconRsvpPersistence
+import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.events.EventReminderCoordinator
+import compose.project.click.click.events.HomeEventReminder
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -67,6 +70,11 @@ class HomeViewModel(
     // Reconnect Reminders
     private val _reconnectReminders = MutableStateFlow<List<ReconnectReminder>>(emptyList())
     val reconnectReminders: StateFlow<List<ReconnectReminder>> = _reconnectReminders.asStateFlow()
+
+    private val _homeEventReminders = MutableStateFlow<List<HomeEventReminder>>(emptyList())
+    val homeEventReminders: StateFlow<List<HomeEventReminder>> = _homeEventReminders.asStateFlow()
+
+    private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
     
     // Connection Insights
     private val _connectionInsights = MutableStateFlow<ConnectionInsights?>(null)
@@ -255,7 +263,7 @@ class HomeViewModel(
                         }
                         val recentConnections = activeConnections
                             .sortedByDescending { it.created }
-                            .take(3)
+                            .take(5)
                         
                         val uniqueLocations = activeConnections
                             .mapNotNull { it.semanticLocation }
@@ -270,6 +278,7 @@ class HomeViewModel(
 
                         val grouped = activeConnections
                             .sortedByDescending { it.created }
+                            .take(5)
                             .groupBy { it.semanticLocation ?: "Somewhere New" }
                         _locationGroupedConnections.value = grouped
 
@@ -339,10 +348,12 @@ class HomeViewModel(
             }
 
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
+            loadHomeEventReminders(userId)
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
             println("Error preloading home derived data: ${e.redactedRestMessage()}")
             _reconnectReminders.value = emptyList()
+            _homeEventReminders.value = emptyList()
             _connectionInsights.value = null
         }
     }
@@ -375,6 +386,30 @@ class HomeViewModel(
         } catch (e: Exception) {
             println("Error loading reconnect reminders: ${e.redactedRestMessage()}")
             _reconnectReminders.value = emptyList()
+        }
+    }
+
+    private suspend fun loadHomeEventReminders(userId: String) {
+        try {
+            val tokenStorage = createTokenStorage()
+            val rsvpCache = BeaconRsvpPersistence.load(tokenStorage, userId)
+            val signedUpIds = rsvpCache.filterValues { it.currentUserSignedUp }.keys
+            _homeEventReminders.value = EventReminderCoordinator.homeReminders(
+                rsvpBeaconIds = signedUpIds,
+                userId = userId,
+                dismissedKeys = _dismissedEventReminderKeys.value,
+            )
+        } catch (e: Exception) {
+            println("Error loading home event reminders: ${e.redactedRestMessage()}")
+            _homeEventReminders.value = emptyList()
+        }
+    }
+
+    fun dismissEventReminder(beaconId: String, kind: compose.project.click.click.events.EventReminderKind) {
+        val key = "$beaconId:${kind.name}"
+        _dismissedEventReminderKeys.value = _dismissedEventReminderKeys.value + key
+        _homeEventReminders.value = _homeEventReminders.value.filterNot {
+            it.beaconId == beaconId && it.kind == kind
         }
     }
     

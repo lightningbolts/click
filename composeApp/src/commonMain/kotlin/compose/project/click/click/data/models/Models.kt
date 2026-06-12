@@ -794,6 +794,8 @@ data class MapBeaconInsert(
     val metadata: JsonObject? = null,
     /** For non-soundtrack beacons: TTL from creation; omit for soundtrack (server default 7 days). */
     @SerialName("ttl_ms") val ttlMs: Long? = null,
+    /** Explicit expiry ISO-8601 (event beacons use scheduled end time). */
+    @SerialName("expires_at") val expiresAtIso: String? = null,
     @SerialName("show_creator_name") val showCreatorName: Boolean = false,
     @SerialName("visibility_audience") val visibilityAudience: String = BeaconVisibilityAudience.EVERYONE.apiValue,
     /** Active collaboration session — server applies Squad pin 2× radius/TTL when valid. */
