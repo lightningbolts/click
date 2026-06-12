@@ -51,6 +51,7 @@ import platform.CoreBluetooth.CBService
 import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.Foundation.NSData
 import platform.Foundation.NSError
+import platform.Foundation.NSFileManager
 import platform.Foundation.NSMutableData
 import platform.Foundation.NSMutableDictionary
 import platform.Foundation.NSNumber
@@ -261,14 +262,18 @@ class IosProximityManager : ProximityManager {
             val path = NSTemporaryDirectory().trimEnd('/') + "/click_proximity_${kotlin.random.Random.nextLong()}.wav"
             writeBytesToPath(path, wav)
             val url = NSURL.fileURLWithPath(path)
-            val player = AVAudioPlayer(contentsOfURL = url, error = null)
-            audioPlayer = player
-            player?.prepareToPlay()
-            player?.play()
-            val ms = (pcm.size * 1000L / 44_100L) + 120L
-            delay(ms)
-            player?.stop()
-            audioPlayer = null
+            try {
+                val player = AVAudioPlayer(contentsOfURL = url, error = null)
+                audioPlayer = player
+                player?.prepareToPlay()
+                player?.play()
+                val ms = (pcm.size * 1000L / 44_100L) + 120L
+                delay(ms)
+                player?.stop()
+                audioPlayer = null
+            } finally {
+                NSFileManager.defaultManager.removeItemAtPath(path, error = null)
+            }
         }
     }
 
@@ -405,19 +410,27 @@ class IosProximityManager : ProximityManager {
         )
         val recorder = AVAudioRecorder(uRL = url, settings = settings as Map<Any?, *>, error = null)
         audioRecorder = recorder
-        if (!recorder.prepareToRecord()) return
-        recorder.record()
-        delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
-        recorder.stop()
-        audioRecorder = null
-        val bytes = readBytesFromPath(path) ?: return
-        if (bytes.size < 1000) return
-        val pcm = extractPcm16MonoFromWav(bytes) ?: return
-        if (pcmRms(pcm) < 0.002) return
-        val decoded = decodeAllHandshakeTokensFromPcmMono(pcm)
-        if (decoded.isEmpty()) return
-        withContext(Dispatchers.Main) {
-            decoded.forEach { heardTokens.add(it) }
+        try {
+            if (!recorder.prepareToRecord()) {
+                recorder.stop()
+                audioRecorder = null
+                return
+            }
+            recorder.record()
+            delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
+            recorder.stop()
+            audioRecorder = null
+            val bytes = readBytesFromPath(path) ?: return
+            if (bytes.size < 1000) return
+            val pcm = extractPcm16MonoFromWav(bytes) ?: return
+            if (pcmRms(pcm) < 0.002) return
+            val decoded = decodeAllHandshakeTokensFromPcmMono(pcm)
+            if (decoded.isEmpty()) return
+            withContext(Dispatchers.Main) {
+                decoded.forEach { heardTokens.add(it) }
+            }
+        } finally {
+            NSFileManager.defaultManager.removeItemAtPath(path, error = null)
         }
     }
 

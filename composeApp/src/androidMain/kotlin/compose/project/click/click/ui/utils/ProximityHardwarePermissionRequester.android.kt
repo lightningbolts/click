@@ -33,7 +33,12 @@ actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean)
 
     fun hasAllPermissions(): Boolean {
         val context = activity ?: return false
-        return ContextCompat.checkSelfPermission(context, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
+        // Check every proximity permission (including Android 12+ Bluetooth grants),
+        // not just the microphone — otherwise the BLE permission dialog is never
+        // shown once audio has been granted and BLE silently degrades.
+        return requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
     }
 
     val launcher = rememberLauncherForActivityResult(

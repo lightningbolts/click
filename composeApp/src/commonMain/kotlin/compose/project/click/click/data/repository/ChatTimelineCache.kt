@@ -37,7 +37,8 @@ class ChatTimelineCache(
                 idx >= 0 -> existing.toMutableList().apply { this[idx] = message }
                 else -> existing + message
             }.sortedBy { it.timeCreated }
-            current + (connectionId to merged)
+            val next = current + (connectionId to merged)
+            if (next.size <= maxConnections) next else pruneToMax(next)
         }
     }
 

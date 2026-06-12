@@ -47,6 +47,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock
@@ -1384,7 +1385,8 @@ class ChatViewModel(
                 if (sameChatStillVisible) {
                     _chatMessagesState.value = latestState.copy(isLoadingMessages = false)
                 } else {
-                    _chatMessagesState.value = ChatMessagesState.Error(e.message ?: "Failed to load messages")
+                    _chatMessagesState.value =
+                        ChatMessagesState.Error(e.redactedRestMessage().ifBlank { "Failed to load messages" })
                 }
             }
         }
@@ -2377,7 +2379,8 @@ class ChatViewModel(
                     }
                 } catch (e: Exception) {
                     markOptimisticSendFailed(tempId)
-                    _messageSendError.value = "Failed to send — ${e.message ?: "encryption or network error"}"
+                    _messageSendError.value =
+                        "Failed to send — ${e.redactedRestMessage().ifBlank { "encryption or network error" }}"
                     _messageInput.value = content
                     updateMessageInput(content)
                     println("Error sending message: ${e.redactedRestMessage()}")
@@ -2543,7 +2546,7 @@ class ChatViewModel(
                             markOptimisticSendFailed(tempId)
                             secureImageBytesCache.remove(tempId)
                             _secureChatMediaLoadState.update { m -> m - tempId }
-                            _messageSendError.value = "Failed to send photo — ${e.message ?: "error"}"
+                            _messageSendError.value = "Failed to send photo — ${e.redactedRestMessage().ifBlank { "error" }}"
                         }
                     } finally {
                         progressJob?.cancel()
@@ -2655,7 +2658,7 @@ class ChatViewModel(
                         _messageSendError.value = "Failed to send Click Drop photo"
                     }
                 } catch (e: Exception) {
-                    _messageSendError.value = "Failed to send Click Drop — ${e.message ?: "error"}"
+                    _messageSendError.value = "Failed to send Click Drop — ${e.redactedRestMessage().ifBlank { "error" }}"
                 } finally {
                     _isMessageSubmitInProgress.value = false
                 }
@@ -2722,7 +2725,7 @@ class ChatViewModel(
                     _messageSendError.value = "Failed to send voice message"
                 }
                 } catch (e: Exception) {
-                    _messageSendError.value = "Failed to send audio — ${e.message ?: "error"}"
+                    _messageSendError.value = "Failed to send audio — ${e.redactedRestMessage().ifBlank { "error" }}"
                 } finally {
                     _isMessageSubmitInProgress.value = false
                 }
@@ -2814,7 +2817,7 @@ class ChatViewModel(
                     _messageSendError.value = "Failed to send attachment"
                 }
                 } catch (e: Exception) {
-                    _messageSendError.value = "Failed to send attachment — ${e.message ?: "error"}"
+                    _messageSendError.value = "Failed to send attachment — ${e.redactedRestMessage().ifBlank { "error" }}"
                     println("Error sending attachment: ${e.redactedRestMessage()}")
                 } finally {
                     _isMessageSubmitInProgress.value = false
@@ -2933,13 +2936,19 @@ class ChatViewModel(
         clearSecureChatMediaCache()
         realtimeJob?.cancel()
         realtimeJob = null
-        // Remove the realtime channels from Supabase
-        activeMessageSubscription?.let { sub ->
-            viewModelScope.launch {
-                try { sub.detach() } catch (_: Exception) {}
+        // Remove the realtime channels from Supabase. Track the detach as the
+        // current realtimeJob so a quick re-entry (subscribeToNewMessages joins
+        // the previous job) can't open a duplicate channel while detach is in
+        // flight. NonCancellable keeps the teardown running through that join.
+        val departingSubscription = activeMessageSubscription
+        activeMessageSubscription = null
+        if (departingSubscription != null) {
+            realtimeJob = viewModelScope.launch {
+                withContext(NonCancellable) {
+                    try { departingSubscription.detach() } catch (_: Exception) {}
+                }
             }
         }
-        activeMessageSubscription = null
         activeChatSyncJob?.cancel()
         activeChatSyncJob = null
         _messageReactions.value = emptyMap()
@@ -4134,7 +4143,10 @@ internal fun formatAddCliqueMemberError(raw: String?): String {
 private const val CHAT_MESSAGE_INPUT_MAX_LENGTH = 1000
 private const val MESSAGE_SUBSCRIPTION_MAX_ATTEMPTS = 3
 private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
-private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 800L
+// Polling is a degraded-mode safety net behind the merged message+reaction Realtime
+// channel, not the primary delivery path. 800ms refetched the full thread ~75x/min
+// per open chat; 12s keeps reaction recovery snappy without hammering the API.
+private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 12_000L
 private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L
 private const val SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES = 160
 private const val SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY = 4

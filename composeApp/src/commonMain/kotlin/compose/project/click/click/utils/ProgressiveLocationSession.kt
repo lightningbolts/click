@@ -34,14 +34,15 @@ class ProgressiveLocationSession private constructor(
         )
         buffer.add(result)
 
-        // Mutually exclusive windows: before 1.5s only the 10m rule applies, etc.
+        // Mutually exclusive windows: before 1.5s only the 15m rule applies, etc.
+        // Thresholds follow the tri-factor proximity spec (15m → 35m → 65m).
         return when {
             elapsedMs < BUCKET1_END_MS ->
-                if (accuracyMeters < 10.0) result else null
+                if (accuracyMeters < BUCKET1_ACCURACY_METERS) result else null
             elapsedMs < BUCKET2_END_MS ->
-                if (accuracyMeters < 30.0) result else null
+                if (accuracyMeters < BUCKET2_ACCURACY_METERS) result else null
             elapsedMs < BUCKET3_END_MS ->
-                if (accuracyMeters < 60.0) result else null
+                if (accuracyMeters < BUCKET3_ACCURACY_METERS) result else null
             else -> null
         }
     }
@@ -54,6 +55,10 @@ class ProgressiveLocationSession private constructor(
 
     companion object {
         const val FINAL_ACCURACY_THRESHOLD_METERS = 65.0
+
+        private const val BUCKET1_ACCURACY_METERS = 15.0
+        private const val BUCKET2_ACCURACY_METERS = 35.0
+        private const val BUCKET3_ACCURACY_METERS = 65.0
 
         private const val BUCKET1_END_MS = 1500L
         private const val BUCKET2_END_MS = 3000L

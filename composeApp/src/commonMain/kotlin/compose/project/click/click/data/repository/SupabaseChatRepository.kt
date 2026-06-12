@@ -10,6 +10,7 @@ import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.*
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.notifications.ChatPushNotifier
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
@@ -1346,8 +1347,12 @@ class SupabaseChatRepository(
                 } ?: return@collect
                 val listKey = resolveListKeyForChat(row.chatId) ?: return@collect
                 val cached = chatCryptoMutex.withLock { chatCryptoCache[row.chatId] }
+                // For group cliques listKey is a groupId, so pairwise key derivation
+                // can never succeed — fall back to resolveChatCrypto, which routes
+                // group chats through the wrapped master key and caches the result.
                 val crypto = cached
                     ?: getEncryptionKeysForConnection(listKey)?.let { ResolvedChatCrypto.Pairwise(it) }
+                    ?: resolveChatCrypto(row.chatId, supabase.auth.currentUserOrNull()?.id)
                 val rawMessage = row.toMessage()
                 val message = when {
                     crypto != null -> decryptMessage(rawMessage, crypto)

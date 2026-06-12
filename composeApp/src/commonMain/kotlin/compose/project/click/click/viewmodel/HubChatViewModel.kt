@@ -511,7 +511,7 @@ class HubChatViewModel(
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
-                    _sendError.value = e.message ?: "Could not send"
+                    _sendError.value = e.redactedRestMessage().ifBlank { "Could not send" }
                 }
             } finally {
                 _isSending.value = false
@@ -564,7 +564,7 @@ class HubChatViewModel(
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
-                    _sendError.value = e.message ?: "Could not send image"
+                    _sendError.value = e.redactedRestMessage().ifBlank { "Could not send image" }
                 }
             } finally {
                 _isSending.value = false
@@ -700,7 +700,7 @@ class HubChatViewModel(
                 _hubDetails.update { it.copy(name = nextName, category = nextCategory) }
                 onResult(true)
             } catch (e: Exception) {
-                _sendError.value = e.message ?: "Could not update hub"
+                _sendError.value = e.redactedRestMessage().ifBlank { "Could not update hub" }
                 onResult(false)
             }
         }
@@ -719,7 +719,7 @@ class HubChatViewModel(
                 navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
                 onResult(true)
             } catch (e: Exception) {
-                _sendError.value = e.message ?: "Could not leave hub"
+                _sendError.value = e.redactedRestMessage().ifBlank { "Could not leave hub" }
                 onResult(false)
             }
         }
@@ -738,7 +738,7 @@ class HubChatViewModel(
                 navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
                 onResult(true)
             } catch (e: Exception) {
-                _sendError.value = e.message ?: "Could not delete hub"
+                _sendError.value = e.redactedRestMessage().ifBlank { "Could not delete hub" }
                 onResult(false)
             }
         }

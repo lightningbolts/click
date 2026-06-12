@@ -311,15 +311,19 @@ class ConnectionViewModel : ViewModel() {
                     delay(2_000L)
                     SIMULATOR_MOCK_HEARD_TOKENS
                 } else {
-                    coroutineScope {
-                        val listen = async { proximityManager.startHandshakeListening() }
-                        delay(120L)
-                        // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
-                        delay(Random.nextLong(0, 400))
-                        proximityManager.startHandshakeBroadcast(myToken)
-                        val heard = listen.await()
-                        proximityManager.stopAll()
-                        heard
+                    try {
+                        coroutineScope {
+                            val listen = async { proximityManager.startHandshakeListening() }
+                            delay(120L)
+                            // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
+                            delay(Random.nextLong(0, 400))
+                            proximityManager.startHandshakeBroadcast(myToken)
+                            listen.await()
+                        }
+                    } finally {
+                        // Broadcast/permission failures and cancellation must still release
+                        // BLE advertise/scan and the microphone, not just the happy path.
+                        runCatching { proximityManager.stopAll() }
                     }
                 }
 
