@@ -42,6 +42,7 @@ import compose.project.click.click.ui.components.MapPin // pragma: allowlist sec
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
 import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
@@ -1009,11 +1010,12 @@ private fun EventBeaconDetail(
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
     val rsvpLoadingIds by viewModel.beaconRsvpLoadingIds.collectAsState()
+    val rsvpPendingIds by viewModel.beaconRsvpPendingIds.collectAsState()
     val entry = rsvpCache[beacon.id]
     val attendees = entry?.attendees.orEmpty()
     val currentUserSignedUp = entry?.currentUserSignedUp == true
     val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
-    var rsvpSubmitting by remember { mutableStateOf(false) }
+    val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
 
     // Always refresh from server when the sheet opens (disk cache may already be visible).
@@ -1076,10 +1078,11 @@ private fun EventBeaconDetail(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(attendees, key = { it.userId }) { attendee ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        AsyncImage(
-                            model = attendee.avatarUrl,
-                            contentDescription = attendee.name,
-                            contentScale = ContentScale.Crop,
+                        ConnectionListUserAvatarFace(
+                            displayName = attendee.name,
+                            email = null,
+                            avatarUrl = attendee.avatarUrl,
+                            userId = attendee.userId,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape),
@@ -1096,11 +1099,9 @@ private fun EventBeaconDetail(
         }
         Button(
             onClick = {
-                if (rsvpSubmitting) return@Button
-                rsvpSubmitting = true
+                if (rsvpPending) return@Button
                 rsvpError = null
                 val onFinished: (Boolean) -> Unit = { ok ->
-                    rsvpSubmitting = false
                     if (!ok) {
                         rsvpError = "Could not update RSVP. Please try again."
                     }
@@ -1111,7 +1112,7 @@ private fun EventBeaconDetail(
                     viewModel.rsvpToBeacon(beacon.id, onFinished)
                 }
             },
-            enabled = !rsvpSubmitting,
+            enabled = !rsvpPending,
             colors = if (currentUserSignedUp) {
                 ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
@@ -1122,11 +1123,14 @@ private fun EventBeaconDetail(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            if (rsvpSubmitting) {
-                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-            } else {
-                Text(if (currentUserSignedUp) "Cancel RSVP" else "RSVP / Sign Up")
-            }
+            Text(if (currentUserSignedUp) "Cancel RSVP" else "RSVP / Sign Up")
+        }
+        if (rsvpPending) {
+            Text(
+                text = "Saving in the background...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         rsvpError?.let { msg ->
             Text(

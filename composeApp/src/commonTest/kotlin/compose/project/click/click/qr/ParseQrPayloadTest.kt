@@ -43,6 +43,26 @@ class ParseQrPayloadTest {
     }
 
     @Test
+    fun tokenUniversalLink_routesThroughTokenFlow() {
+        val url = "https://click-us.vercel.app/c/$fixtureUuid?token=abc123&exp=9999999999999&iat=123"
+        assertNull(parseQrPayload(url))
+        val parsed = parseQrCode(url) as QrParseResult.TokenBased
+        assertEquals(fixtureUuid, parsed.payload.userId)
+        assertEquals("abc123", parsed.payload.token)
+        assertEquals(9999999999999L, parsed.payload.exp)
+        assertEquals(123L, parsed.payload.issuedAt)
+    }
+
+    @Test
+    fun tokenUniversalLink_supportsAppClipAliasesAndVenue() {
+        val url = "https://click-us.vercel.app/c/$fixtureUuid?qt=abc123&expires_at=9999999999999&venue_id=hub-1"
+        val parsed = parseQrCode(url) as QrParseResult.TokenBased
+        assertEquals(fixtureUuid, parsed.payload.userId)
+        assertEquals("abc123", parsed.payload.token)
+        assertEquals("hub-1", parsed.payload.venueId)
+    }
+
+    @Test
     fun garbage_returnsNull() {
         assertNull(parseQrPayload("not-a-valid-code"))
         assertNull(parseQrPayload(""))

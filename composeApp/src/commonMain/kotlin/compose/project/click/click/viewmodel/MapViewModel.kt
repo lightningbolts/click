@@ -206,6 +206,10 @@ class MapViewModel : ViewModel() {
     private val _beaconRsvpLoadingIds = MutableStateFlow<Set<String>>(emptySet())
     val beaconRsvpLoadingIds: StateFlow<Set<String>> = _beaconRsvpLoadingIds.asStateFlow()
 
+    /** Beacon ids with an optimistic POST/DELETE awaiting server confirmation. */
+    private val _beaconRsvpPendingIds = MutableStateFlow<Set<String>>(emptySet())
+    val beaconRsvpPendingIds: StateFlow<Set<String>> = _beaconRsvpPendingIds.asStateFlow()
+
     /**
      * False until startup prefetch or the first map-tab proximity fetch finishes.
      * Silent map refreshes do not reset this.
@@ -750,11 +754,13 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) {
             if (!ensureClickWebAuthReady()) return@launch
             if (!forceRefresh && _beaconRsvpById.value.containsKey(id)) return@launch
+            if (id in _beaconRsvpPendingIds.value) return@launch
 
             _beaconRsvpLoadingIds.update { it + id }
             try {
                 mapBeaconRepository.fetchBeaconRsvp(id).fold(
                     onSuccess = { payload ->
+                        if (id in _beaconRsvpPendingIds.value) return@fold
                         updateBeaconRsvpCache { current ->
                             current + (id to BeaconRsvpCacheEntry(
                                 attendees = payload.attendees,
@@ -850,37 +856,47 @@ class MapViewModel : ViewModel() {
     }
 
     fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
-        val previous = _beaconRsvpById.value[beaconId]
-        applyOptimisticRsvp(beaconId, signedUp = true)
+        val id = beaconId.trim()
+        if (id.isEmpty() || id in _beaconRsvpPendingIds.value) return
+        val previous = _beaconRsvpById.value[id]
+        _beaconRsvpPendingIds.update { it + id }
+        applyOptimisticRsvp(id, signedUp = true)
+        PlatformHapticsPolicy.successNotification()
         viewModelScope.launch {
             if (!ensureClickWebAuthReady()) {
-                restoreRsvpSnapshot(beaconId, previous)
+                restoreRsvpSnapshot(id, previous)
+                _beaconRsvpPendingIds.update { it - id }
                 onFinished(false)
                 return@launch
             }
-            // Location is best-effort for RSVP — do not block the POST on a long GPS wait.
-            val loc = locationService.getHighAccuracyLocation(1_500L)
+            val cachedLoc = AppDataManager.lastKnownDeviceLocation.value
             mapBeaconRepository.rsvpBeacon(
-                beaconId = beaconId,
-                latitude = loc?.latitude,
-                longitude = loc?.longitude,
+                beaconId = id,
+                latitude = cachedLoc?.first,
+                longitude = cachedLoc?.second,
             ).fold(
                 onSuccess = { attendee ->
                     updateBeaconRsvpCache { current ->
-                        val prev = current[beaconId]
+                        val prev = current[id]
+                        val localAttendee = currentUserAsAttendee()
+                        val confirmedAttendee = attendee.copy(
+                            name = attendee.name.takeIf { it.isNotBlank() } ?: localAttendee?.name ?: "You",
+                            avatarUrl = localAttendee?.avatarUrl ?: attendee.avatarUrl,
+                        )
                         val mergedAttendees = ((prev?.attendees.orEmpty())
-                            .filterNot { it.userId == attendee.userId } + attendee)
+                            .filterNot { it.userId == confirmedAttendee.userId } + confirmedAttendee)
                             .distinctBy { it.userId }
-                        current + (beaconId to BeaconRsvpCacheEntry(
+                        current + (id to BeaconRsvpCacheEntry(
                             attendees = mergedAttendees,
                             currentUserSignedUp = true,
                         ))
                     }
-                    PlatformHapticsPolicy.successNotification()
+                    _beaconRsvpPendingIds.update { it - id }
                     onFinished(true)
                 },
                 onFailure = {
-                    restoreRsvpSnapshot(beaconId, previous)
+                    restoreRsvpSnapshot(id, previous)
+                    _beaconRsvpPendingIds.update { it - id }
                     onFinished(false)
                 },
             )
@@ -889,31 +905,37 @@ class MapViewModel : ViewModel() {
 
     /** Cancels the current user's RSVP and removes them from the cached attendee list. */
     fun cancelRsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
-        val previous = _beaconRsvpById.value[beaconId]
-        applyOptimisticRsvp(beaconId, signedUp = false)
+        val id = beaconId.trim()
+        if (id.isEmpty() || id in _beaconRsvpPendingIds.value) return
+        val previous = _beaconRsvpById.value[id]
+        _beaconRsvpPendingIds.update { it + id }
+        applyOptimisticRsvp(id, signedUp = false)
+        PlatformHapticsPolicy.successNotification()
         viewModelScope.launch {
             if (!ensureClickWebAuthReady()) {
-                restoreRsvpSnapshot(beaconId, previous)
+                restoreRsvpSnapshot(id, previous)
+                _beaconRsvpPendingIds.update { it - id }
                 onFinished(false)
                 return@launch
             }
             val currentUserId = AppDataManager.currentUser.value?.id
-            mapBeaconRepository.cancelRsvp(beaconId).fold(
+            mapBeaconRepository.cancelRsvp(id).fold(
                 onSuccess = {
                     updateBeaconRsvpCache { current ->
-                        val prev = current[beaconId]
+                        val prev = current[id]
                         val remaining = prev?.attendees.orEmpty()
                             .filterNot { it.userId == currentUserId }
-                        current + (beaconId to BeaconRsvpCacheEntry(
+                        current + (id to BeaconRsvpCacheEntry(
                             attendees = remaining,
                             currentUserSignedUp = false,
                         ))
                     }
-                    PlatformHapticsPolicy.successNotification()
+                    _beaconRsvpPendingIds.update { it - id }
                     onFinished(true)
                 },
                 onFailure = {
-                    restoreRsvpSnapshot(beaconId, previous)
+                    restoreRsvpSnapshot(id, previous)
+                    _beaconRsvpPendingIds.update { it - id }
                     onFinished(false)
                 },
             )

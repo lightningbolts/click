@@ -2131,38 +2131,68 @@ fun TabbedUserProfileSheet(
 
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val connections by AppDataManager.connections.collectAsState()
+    val inboxRows by AppDataManager.inboxFeedChats.collectAsState()
     val cached: User? = connectedUsers[userId]
-    val profileConnectionId = remember(connections, userId, viewerUserId) {
+    val inboxHint = remember(inboxRows, userId) {
+        inboxRows.firstOrNull { row ->
+            row.otherUser.id == userId || row.groupMemberUsers.any { member -> member.id == userId }
+        }
+    }
+    val hintedUser = remember(inboxHint, userId) {
+        when {
+            inboxHint?.otherUser?.id == userId -> inboxHint.otherUser
+            else -> inboxHint?.groupMemberUsers?.firstOrNull { member -> member.id == userId }
+        }
+    }
+    val profileConnectionId = remember(connections, inboxHint, userId, viewerUserId) {
         connections.firstOrNull { conn ->
             userId in conn.user_ids &&
                 (viewerUserId.isNullOrBlank() || viewerUserId in conn.user_ids)
-        }?.id
+        }?.id ?: inboxHint?.connection?.id?.takeIf { it.isNotBlank() }
     }
 
-    var resolved by remember(userId) { mutableStateOf<User?>(cached) }
-    LaunchedEffect(userId, cached) {
+    var resolved by remember(userId) { mutableStateOf<User?>(cached ?: hintedUser) }
+    LaunchedEffect(userId, cached, hintedUser) {
+        val local = AppDataManager.connectedUsers.value[userId] ?: cached ?: hintedUser
+        val currentName = resolved?.name?.trim().orEmpty()
+        val shouldUseLocal = resolved == null ||
+            currentName.isBlank() ||
+            currentName.equals("Member", ignoreCase = true) ||
+            currentName.equals("Connection", ignoreCase = true)
+        if (local != null && shouldUseLocal) {
+            resolved = local
+            return@LaunchedEffect
+        }
         if (resolved == null) {
-            val fromCache = AppDataManager.connectedUsers.value[userId]
-            if (fromCache != null) {
-                resolved = fromCache
-            } else {
-                runCatching {
-                    withContext(Dispatchers.Default) {
-                        SupabaseRepository().fetchUserPublicProfile(viewerUserId, userId)?.user
-                    }
-                }.getOrNull()?.let { resolved = it }
-            }
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    SupabaseRepository().fetchUserPublicProfile(viewerUserId, userId)?.user
+                }
+            }.getOrNull()?.let { resolved = it }
         }
     }
 
     val displayName = resolved?.name?.takeIf { it.isNotBlank() }
         ?: cached?.name?.takeIf { it.isNotBlank() }
-        ?: "Member"
-    val state = remember(userId, viewerUserId, displayName, resolved?.image, resolved?.email, localMessages) {
+        ?: hintedUser?.name?.takeIf { it.isNotBlank() }
+        ?: "Connection"
+    val state = remember(
+        userId,
+        viewerUserId,
+        displayName,
+        resolved?.image,
+        resolved?.email,
+        hintedUser?.image,
+        hintedUser?.email,
+        localMessages,
+        profileConnectionId,
+        onMessage,
+    ) {
         ProfileSheetState(
             displayName = displayName,
-            subtitle = resolved?.email?.takeIf { it.isNotBlank() },
-            avatarUrl = resolved?.image,
+            subtitle = resolved?.email?.takeIf { it.isNotBlank() }
+                ?: hintedUser?.email?.takeIf { it.isNotBlank() },
+            avatarUrl = resolved?.image ?: hintedUser?.image,
             statusBadge = null,
             canNudge = onMessage != null && !profileConnectionId.isNullOrBlank(),
             timeline = emptyList(),

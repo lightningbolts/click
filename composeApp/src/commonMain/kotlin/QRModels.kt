@@ -114,6 +114,36 @@ private val UNIVERSAL_LINK_C_UUID = Regex(
     """/c/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})""",
     RegexOption.IGNORE_CASE,
 )
+private val TOKEN_QUERY_PARAM = Regex("""(?:[?&])(?:token|qr_token|qt)=([^&#]+)""", RegexOption.IGNORE_CASE)
+private val EXP_QUERY_PARAM = Regex("""(?:[?&])(?:exp|expires_at)=([0-9]+)""", RegexOption.IGNORE_CASE)
+private val ISSUED_AT_QUERY_PARAM = Regex("""(?:[?&])(?:iat|issued_at)=([0-9]+)""", RegexOption.IGNORE_CASE)
+private val VENUE_QUERY_PARAM = Regex("""(?:[?&])venue_id=([^&#]+)""", RegexOption.IGNORE_CASE)
+
+private fun String.queryValue(pattern: Regex): String? =
+    pattern.find(this)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+
+private fun String.hasTokenQueryParam(): Boolean = queryValue(TOKEN_QUERY_PARAM) != null
+
+/**
+ * Token-bearing Universal/App Clip link.
+ *
+ * The QR must stay link-shaped for OS camera and App Clip routing, but the scanner still needs
+ * the short-lived token so it can redeem proximity/GPS server-side instead of using legacy flow.
+ */
+fun String.toTokenQrPayloadFromClickLinkOrNull(): TokenQrPayload? {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) return null
+    val token = trimmed.queryValue(TOKEN_QUERY_PARAM) ?: return null
+    val userId = trimmed.toUserIdFromClickUrl() ?: return null
+    val exp = trimmed.queryValue(EXP_QUERY_PARAM)?.toLongOrNull() ?: return null
+    return TokenQrPayload(
+        token = token,
+        userId = userId,
+        exp = exp,
+        issuedAt = trimmed.queryValue(ISSUED_AT_QUERY_PARAM)?.toLongOrNull(),
+        venueId = trimmed.queryValue(VENUE_QUERY_PARAM),
+    )
+}
 
 /**
  * Polyglot QR payload parser — extracts a connection [userId] UUID from either:
@@ -127,6 +157,7 @@ fun parseQrPayload(rawPayload: String): String? {
     if (trimmed.isEmpty()) return null
 
     if (trimmed.startsWith("http", ignoreCase = true) && trimmed.contains("/c/")) {
+        if (trimmed.hasTokenQueryParam()) return null
         UNIVERSAL_LINK_C_UUID.find(trimmed)?.groupValues?.getOrNull(1)?.let { return it }
         trimmed.toUserIdFromClickUrl()?.let { return it }
     }
@@ -175,21 +206,26 @@ fun parseQrCode(rawData: String): QrParseResult {
         return QrParseResult.TokenBased(it)
     }
 
-    // 2. Community hub
+    // 2. Try token-bearing Universal/App Clip link
+    trimmed.toTokenQrPayloadFromClickLinkOrNull()?.let {
+        return QrParseResult.TokenBased(it)
+    }
+
+    // 3. Community hub
     trimmed.toHubIdFromClickHubUrl()?.let { hubId ->
         return QrParseResult.CommunityHub(hubId)
     }
 
-    // 3. Polyglot parser — Universal Link `/c/{uuid}` or legacy JSON `{"userId":…}`
+    // 4. Polyglot parser — Universal Link `/c/{uuid}` or legacy JSON `{"userId":…}`
     parseQrPayload(trimmed)?.let {
         return QrParseResult.Legacy(it)
     }
 
-    // 4. Legacy connect URLs (`/connect/{uuid}`, `click://connect/{uuid}`)
+    // 5. Legacy connect URLs (`/connect/{uuid}`, `click://connect/{uuid}`)
     trimmed.toUserIdFromClickUrl()?.let {
         return QrParseResult.Legacy(it)
     }
 
-    // 5. Invalid
+    // 6. Invalid
     return QrParseResult.Invalid
 }

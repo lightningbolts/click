@@ -107,8 +107,10 @@ class FakeChatRepository(
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? =
-        onFetchMessagesForChat(chatId, viewerUserId)
+    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?, limit: Int?): List<Message>? =
+        onFetchMessagesForChat(chatId, viewerUserId)?.let { messages ->
+            limit?.takeIf { it > 0 }?.let { messages.takeLast(it) } ?: messages
+        }
 
     override suspend fun sendMessage(
         chatId: String,

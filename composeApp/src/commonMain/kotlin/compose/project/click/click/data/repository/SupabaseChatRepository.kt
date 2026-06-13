@@ -92,6 +92,8 @@ class SupabaseChatRepository(
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
     private val chatPushNotifier = ChatPushNotifier(tokenStorage)
+    private val connectionEncountersPerConnection = 25L
+    private val connectionEncountersTable = "connection_encounters"
     private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
 
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
@@ -997,7 +999,7 @@ class SupabaseChatRepository(
     private var cachedJunctionData: Triple<List<Connection>, Set<String>, Set<String>>? = null
     private var cachedJunctionUserId: String? = null
     private var cachedJunctionTimestamp: Long = 0L
-    private val junctionCacheTtlMs = 5_000L // 5 seconds
+    private val junctionCacheTtlMs = 60_000L
 
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
@@ -1071,7 +1073,7 @@ class SupabaseChatRepository(
         return Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
     }
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?): List<Message>? {
+    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?, limit: Int?): List<Message>? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId)
             val rows = supabase.from("messages")
@@ -1079,9 +1081,17 @@ class SupabaseChatRepository(
                     filter {
                         eq("chat_id", chatId)
                     }
-                    order("time_created", Order.ASCENDING)
+                    if (limit != null && limit > 0) {
+                        order("time_created", Order.DESCENDING)
+                        limit(limit.toLong())
+                    } else {
+                        order("time_created", Order.ASCENDING)
+                    }
                 }
                 .decodeList<Message>()
+                .let { fetched ->
+                    if (limit != null && limit > 0) fetched.asReversed() else fetched
+                }
             val decrypted = withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
             }
@@ -1444,6 +1454,8 @@ class SupabaseChatRepository(
         val conn = supabase.from("connections")
             .select(columns = connectionsSelectWithEncounters) {
                 filter { eq("id", connectionId) }
+                order("encountered_at", Order.DESCENDING, referencedTable = connectionEncountersTable)
+                limit(connectionEncountersPerConnection, referencedTable = connectionEncountersTable)
                 limit(1)
             }
             .decodeList<Connection>()
@@ -1479,6 +1491,8 @@ class SupabaseChatRepository(
                 val conn = supabase.from("connections")
                     .select(columns = connectionsSelectWithEncounters) {
                         filter { eq("id", row.connectionId) }
+                        order("encountered_at", Order.DESCENDING, referencedTable = connectionEncountersTable)
+                        limit(connectionEncountersPerConnection, referencedTable = connectionEncountersTable)
                         limit(1)
                     }
                     .decodeList<Connection>()
@@ -1520,6 +1534,8 @@ class SupabaseChatRepository(
                             filter {
                                 eq("id", chat.connectionId)
                             }
+                            order("encountered_at", Order.DESCENDING, referencedTable = connectionEncountersTable)
+                            limit(connectionEncountersPerConnection, referencedTable = connectionEncountersTable)
                             limit(1)
                         }
                         .decodeList<Connection>()

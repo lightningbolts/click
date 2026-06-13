@@ -326,11 +326,31 @@ fun App() {
         if (hasUsableLocation(initialLocation)) return initialLocation
 
         return try {
-            val refreshed = locationService.getHighAccuracyLocation(4000L)
-            if (hasUsableLocation(refreshed)) refreshed else initialLocation.takeIf(::hasUsableLocation)
+            if (!locationService.hasLocationPermission()) {
+                requestLocationPermissionIfNeeded(shouldRequest = true)
+                delay(500L)
+            }
+            if (!locationService.hasLocationPermission()) {
+                return AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+                    compose.project.click.click.utils.LocationResult(latitude = lat, longitude = lon)
+                }?.takeIf(::hasUsableLocation)
+            }
+
+            val refreshed = locationService.getHighAccuracyLocation(6_500L)
+            if (hasUsableLocation(refreshed)) return refreshed
+
+            val current = locationService.getCurrentLocation()
+            if (hasUsableLocation(current)) return current
+
+            AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+                compose.project.click.click.utils.LocationResult(latitude = lat, longitude = lon)
+            }?.takeIf(::hasUsableLocation)
         } catch (e: Exception) {
             println("App: Failed to get high-accuracy location: ${e.redactedRestMessage()}")
             initialLocation.takeIf(::hasUsableLocation)
+                ?: AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+                    compose.project.click.click.utils.LocationResult(latitude = lat, longitude = lon)
+                }?.takeIf(::hasUsableLocation)
         }
     }
 

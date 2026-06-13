@@ -38,6 +38,8 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+private const val CONNECTION_ENCOUNTERS_PER_CONNECTION = 25L
+private const val CONNECTION_ENCOUNTERS_TABLE = "connection_encounters"
 private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
 
 private fun Connection.withEncountersSortedNewestFirst(): Connection =
@@ -95,6 +97,7 @@ class SupabaseRepository {
     companion object {
         private val userPublicProfileCache =
             MutableStateFlow<Map<String, UserPublicProfile>>(emptyMap())
+        private val sweptStaleConnectionUserIds = mutableSetOf<String>()
     }
 
     fun getCachedUserPublicProfile(targetUserId: String): UserPublicProfile? {
@@ -409,7 +412,7 @@ class SupabaseRepository {
         if (userId.isBlank()) {
             return UserConnectionsSnapshot(emptyList(), emptySet(), emptySet(), emptySet())
         }
-        sweepStaleConnectionsForUser(userId)
+        sweepStaleConnectionsForUserOnce(userId)
         val archivedIds = getArchivedConnectionIds(userId)
         val hiddenIds = getHiddenConnectionIds(userId)
         val coreFetch = fetchCoreConnectionIds(userId)
@@ -435,6 +438,13 @@ class SupabaseRepository {
             coreConnectionIds = coreFetch.ids,
             coreConnectionIdsAuthoritative = coreFetch.authoritative,
         )
+    }
+
+    private suspend fun sweepStaleConnectionsForUserOnce(userId: String) {
+        val key = userId.trim()
+        if (key.isEmpty() || key in sweptStaleConnectionUserIds) return
+        sweepStaleConnectionsForUser(key)
+        sweptStaleConnectionUserIds += key
     }
 
     private suspend fun sweepStaleConnectionsForUser(userId: String) {
@@ -465,6 +475,8 @@ class SupabaseRepository {
                         }
                     }
                     order("created", Order.DESCENDING)
+                    order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
+                    limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                 }
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
@@ -489,6 +501,8 @@ class SupabaseRepository {
                         isIn("id", ids)
                     }
                     order("created", Order.DESCENDING)
+                    order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
+                    limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                 }
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
@@ -518,6 +532,8 @@ class SupabaseRepository {
                         }
                     }
                     order("created", Order.DESCENDING)
+                    order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
+                    limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                 }
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
@@ -550,6 +566,8 @@ class SupabaseRepository {
                     filter {
                         eq("id", connectionId)
                     }
+                    order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
+                    limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                 }
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
@@ -1476,7 +1494,15 @@ class SupabaseRepository {
         if (userId.isBlank()) return CoreConnectionIdsFetch(emptySet(), authoritative = true)
         val api = clickWebApi.fetchConnectionCoreIds()
         if (api.isSuccess) {
-            return CoreConnectionIdsFetch(api.getOrThrow(), authoritative = true)
+            val apiIds = api.getOrThrow()
+            if (apiIds.isNotEmpty()) {
+                return CoreConnectionIdsFetch(apiIds, authoritative = true)
+            }
+            val directIds = getCoreConnectionIdsFromSupabase(userId)
+            return CoreConnectionIdsFetch(
+                ids = directIds,
+                authoritative = directIds.isEmpty(),
+            )
         }
         return CoreConnectionIdsFetch(
             ids = getCoreConnectionIdsFromSupabase(userId),

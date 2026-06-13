@@ -452,7 +452,7 @@ object AppDataManager {
                     } else {
                         CHAT_PREFETCH_MAX_MESSAGES
                     }
-                    val decryptedMessages = chatRepository.fetchMessagesForChat(chatId, userId)?.takeLast(limit)
+                    val decryptedMessages = chatRepository.fetchMessagesForChat(chatId, userId, limit)
                         ?: continue
                     val messages = chatRepository.vaultEncryptedMediaMessages(chatId, userId, decryptedMessages)
                     val participants = chatRepository.fetchChatParticipants(chatId)
@@ -1293,7 +1293,6 @@ object AppDataManager {
                 if (!_ghostModeEnabled.value) {
                     val now = Clock.System.now().toEpochMilliseconds()
                     supabaseRepository.updateUserLastPolled(userId, now)
-                    refreshConnectedUsers(_connections.value, userId)
                     _currentUser.value = _currentUser.value?.copy(lastPolled = now)
                 }
                 delay(PRESENCE_HEARTBEAT_MS)
@@ -1623,6 +1622,8 @@ object AppDataManager {
         _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
         val serverCore = snapshot.coreConnectionIds
         _coreConnectionIds.value = when {
+            snapshot.coreConnectionIdsAuthoritative && serverCore.isEmpty() && _coreConnectionIds.value.isNotEmpty() ->
+                _coreConnectionIds.value
             snapshot.coreConnectionIdsAuthoritative -> serverCore
             serverCore.isNotEmpty() -> serverCore
             else -> _coreConnectionIds.value

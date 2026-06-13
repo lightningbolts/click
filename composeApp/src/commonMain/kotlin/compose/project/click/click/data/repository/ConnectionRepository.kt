@@ -422,6 +422,8 @@ class ConnectionRepository(
         }
     }
     private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
+    private val connectionEncountersPerConnection = 25L
+    private val connectionEncountersTable = "connection_encounters"
 
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 15_000L
@@ -1623,6 +1625,8 @@ class ConnectionRepository(
                     filter {
                         contains("user_ids", listOf(userId1, userId2))
                     }
+                    order("encountered_at", Order.DESCENDING, referencedTable = connectionEncountersTable)
+                    limit(connectionEncountersPerConnection, referencedTable = connectionEncountersTable)
                 }
                 .decodeList<Connection>()
                 .map { it.withEncountersSortedNewestFirst() }
@@ -1643,6 +1647,8 @@ class ConnectionRepository(
                     filter {
                         eq("id", connectionId)
                     }
+                    order("encountered_at", Order.DESCENDING, referencedTable = connectionEncountersTable)
+                    limit(connectionEncountersPerConnection, referencedTable = connectionEncountersTable)
                     limit(1)
                 }
                 .decodeList<Connection>()
