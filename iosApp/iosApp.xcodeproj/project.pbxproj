@@ -43,7 +43,7 @@
 		A1B2C3CC2F760001006AD3B5 /* Embed App Clips */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "$(CONTENTS_FOLDER_PATH)/AppClips";
-			dstSubfolderSpec = 16;
+			dstSubfolder = Product;
 			files = (
 				A1B2C3CD2F760001006AD3B5 /* ClickClip.app in Embed App Clips */,
 			);
@@ -182,28 +182,6 @@
 			productReference = 008D49CD2F75AFAE006AD3B5 /* NotificationService.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		A1B2C3D32F760001006AD3B5 /* ClickClip */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A1B2C3D22F760001006AD3B5 /* Build configuration list for PBXNativeTarget "ClickClip" */;
-			buildPhases = (
-				26BA05D700DD77FFB2EEDF56 /* Compile Kotlin Framework */,
-				A1B2C3C92F760001006AD3B5 /* Sources */,
-				A1B2C3CA2F760001006AD3B5 /* Frameworks */,
-				A1B2C3CB2F760001006AD3B5 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				A1B2C3D52F760001006AD3B5 /* ClickClip */,
-				C0D1E2F312345678901ABCD /* SharedNative */,
-			);
-			name = ClickClip;
-			productName = ClickClip;
-			productReference = A1B2C3D42F760001006AD3B5 /* ClickClip.app */;
-			productType = "com.apple.product-type.application.on-demand-install-capable";
-		};
 		8731910DD8E1D0F2B5BFC353 /* iosApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 17D9E80FD5D1FB0E1ECCFD6E /* Build configuration list for PBXNativeTarget "iosApp" */;
@@ -234,6 +212,26 @@
 			productName = iosApp;
 			productReference = 5C5F0582113B3BBBAE701F1D /* click.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A1B2C3D32F760001006AD3B5 /* ClickClip */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D22F760001006AD3B5 /* Build configuration list for PBXNativeTarget "ClickClip" */;
+			buildPhases = (
+				26BA05D700DD77FFB2EEDF56 /* Compile Kotlin Framework */,
+				A1B2C3C92F760001006AD3B5 /* Sources */,
+				A1B2C3CA2F760001006AD3B5 /* Frameworks */,
+				A1B2C3CB2F760001006AD3B5 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C3D52F760001006AD3B5 /* ClickClip */,
+				C0D1E2F312345678901ABCD /* SharedNative */,
+			);
+			name = ClickClip;
+			productName = ClickClip;
+			productReference = A1B2C3D42F760001006AD3B5 /* ClickClip.app */;
+			productType = "com.apple.product-type.application.on-demand-install-capable";
 		};
 /* End PBXNativeTarget section */
 
@@ -317,7 +315,6 @@
 		};
 		B2C3D4E52F760001006AD3B6 /* Generate LiveKitWebRTC dSYM */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 0;
 			name = "Generate LiveKitWebRTC dSYM";
 			shellPath = /bin/sh;
 			shellScript = (
@@ -333,12 +330,12 @@
 			files = (
 			);
 		};
-		A1B2C3C92F760001006AD3B5 /* Sources */ = {
+		2625563A87CFFCAD009D948F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 			);
 		};
-		2625563A87CFFCAD009D948F /* Sources */ = {
+		A1B2C3C92F760001006AD3B5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
 			);
@@ -359,88 +356,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		A1B2C3D02F760001006AD3B5 /* Debug configuration for PBXNativeTarget "ClickClip" */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
-			baseConfigurationReferenceRelativePath = Config.xcconfig;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = ClickClip/ClickClip.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = W4C3V9Z2N4;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ClickClip/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Click;
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Click uses your photo library to share images in chat.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click.Clip;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		A1B2C3D12F760001006AD3B5 /* Release configuration for PBXNativeTarget "ClickClip" */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
-			baseConfigurationReferenceRelativePath = Config.xcconfig;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = ClickClip/ClickClip.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = W4C3V9Z2N4;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ClickClip/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Click;
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Click uses your photo library to share images in chat.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click.Clip;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 		008D49D62F75AFAE006AD3B5 /* Debug configuration for PBXNativeTarget "NotificationService" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
@@ -614,6 +529,88 @@
 			};
 			name = Debug;
 		};
+		A1B2C3D02F760001006AD3B5 /* Debug configuration for PBXNativeTarget "ClickClip" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ClickClip/ClickClip.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = W4C3V9Z2N4;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClickClip/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Click;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Click uses your photo library to share images in chat.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click.Clip;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1B2C3D12F760001006AD3B5 /* Release configuration for PBXNativeTarget "ClickClip" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ClickClip/ClickClip.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = W4C3V9Z2N4;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClickClip/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Click;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Click uses Bluetooth for Tap to Connect when you meet someone nearby.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Click uses your camera to scan QR codes and connect with others.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Click uses your location to show where you connected with others and display nearby connections on the map.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Click uses your microphone for voice and video calls.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Click uses motion sensors to estimate relative height during nearby connections.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Click saves photos you download from chat to your library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Click uses your photo library to share images in chat.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = compose.project.click.click.Clip;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		C36A449234A2EEB8C24C65F8 /* Release configuration for PBXNativeTarget "iosApp" */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReferenceAnchor = 7E395A86858E543D5F52EA70 /* Configuration */;
@@ -718,14 +715,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A1B2C3D22F760001006AD3B5 /* Build configuration list for PBXNativeTarget "ClickClip" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A1B2C3D02F760001006AD3B5 /* Debug configuration for PBXNativeTarget "ClickClip" */,
-				A1B2C3D12F760001006AD3B5 /* Release configuration for PBXNativeTarget "ClickClip" */,
-			);
-			defaultConfigurationName = Release;
-		};
 		008D49D82F75AFAE006AD3B5 /* Build configuration list for PBXNativeTarget "NotificationService" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -739,6 +728,14 @@
 			buildConfigurations = (
 				88D962984758A3E274BC423A /* Debug configuration for PBXNativeTarget "iosApp" */,
 				C36A449234A2EEB8C24C65F8 /* Release configuration for PBXNativeTarget "iosApp" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D22F760001006AD3B5 /* Build configuration list for PBXNativeTarget "ClickClip" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D02F760001006AD3B5 /* Debug configuration for PBXNativeTarget "ClickClip" */,
+				A1B2C3D12F760001006AD3B5 /* Release configuration for PBXNativeTarget "ClickClip" */,
 			);
 			defaultConfigurationName = Release;
 		};

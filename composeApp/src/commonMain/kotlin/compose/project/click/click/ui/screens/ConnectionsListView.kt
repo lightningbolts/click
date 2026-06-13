@@ -826,7 +826,7 @@ fun ConnectionsListView(
         ConnectionMemberPickerSheet(
             onDismissRequest = { dismissVerifiedCliqueSheet() },
             title = "Create verified click",
-            subtitle = "Pick friends who are pairwise connected (pending, active, kept, or archived 1:1). Friend–friend edges are checked on the server.",
+            subtitle = "Pick friends who are all connected to each other. Eligibility is verified on the server.",
             candidates = cliquePickerCandidates,
             selectedIds = selectedCliqueFriendIds,
             onSelectedIdsChange = { selectedCliqueFriendIds = it },

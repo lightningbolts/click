@@ -15,6 +15,8 @@ import platform.UIKit.UIDatePicker
 import platform.UIKit.UIDatePickerMode
 import platform.UIKit.UIDatePickerStyle
 
+private val EventTimeWheelHeight = 180.dp
+
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun PlatformEventTimePickerBody(
@@ -27,19 +29,17 @@ actual fun PlatformEventTimePickerBody(
         UIKitView(
             modifier = modifier
                 .fillMaxWidth()
-                .height(216.dp),
+                .height(EventTimeWheelHeight),
             factory = {
                 UIDatePicker().apply {
                     datePickerMode = UIDatePickerMode.UIDatePickerModeTime
                     preferredDatePickerStyle = UIDatePickerStyle.UIDatePickerStyleWheels
                     setInitialTime(initialHour, initialMinute)
+                    configureIosTimePicker(this)
                 }
             },
-            update = { picker ->
-                picker.setInitialTime(initialHour, initialMinute)
-            },
+            update = { },
         )
-        onSelectionChange(initialHour, initialMinute)
     }
 }
 
@@ -69,18 +69,23 @@ internal fun BindIosEventTimePickerRef(
         UIKitView(
             modifier = modifier
                 .fillMaxWidth()
-                .height(216.dp),
+                .height(EventTimeWheelHeight),
             factory = {
                 UIDatePicker().apply {
                     datePickerMode = UIDatePickerMode.UIDatePickerModeTime
                     preferredDatePickerStyle = UIDatePickerStyle.UIDatePickerStyleWheels
                     setInitialTime(initialHour, initialMinute)
+                    configureIosTimePicker(this)
                     pickerRef.value = this
                 }
             },
             update = { picker ->
-                picker.setInitialTime(initialHour, initialMinute)
                 pickerRef.value = picker
+            },
+            onRelease = {
+                if (pickerRef.value === it) {
+                    pickerRef.value = null
+                }
             },
         )
     }

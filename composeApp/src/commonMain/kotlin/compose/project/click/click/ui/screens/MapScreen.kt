@@ -76,6 +76,8 @@ import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.components.AdaptiveBackground
@@ -408,15 +410,16 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, text, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventTitle, onRejectedEarly ->
+                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, onRejectedEarly ->
                         viewModel.submitBeaconDrop(
                             kind = kind,
-                            text = text,
+                            title = title,
+                            description = description,
+                            soundtrackUrl = soundtrackUrl,
                             ttlMs = ttlMs,
                             showCreatorName = showCreatorName,
                             visibilityAudience = visibilityAudience,
                             eventSchedule = eventSchedule,
-                            eventTitle = eventTitle,
                             onAcceptedLocally = { showBeaconDropSheet = false },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -1033,6 +1036,14 @@ private fun EventBeaconDetail(
                 text = "Hosted by ${beacon.creatorDisplayName}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        beacon.eventSchedule()?.let { schedule ->
+            Text(
+                text = formatEventScheduleRange(schedule),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         Text(

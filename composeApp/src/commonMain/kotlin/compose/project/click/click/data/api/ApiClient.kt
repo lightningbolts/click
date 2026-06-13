@@ -881,17 +881,24 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
     }
 
     /** `POST /api/beacons` — insert a map beacon (soundtrack rows enriched server-side). */
-    suspend fun postMapBeacon(insert: MapBeaconInsert): Result<Unit> {
+    suspend fun postMapBeacon(insert: MapBeaconInsert): Result<MapBeacon> {
         return try {
             val response = clickWebClient.post("$clickWebAuthOrigin/api/beacons") {
                 contentType(ContentType.Application.Json)
                 setBody(insert)
             }
             if (response.status.value in 200..299) {
-                Result.success(Unit)
+                val payload = response.body<MapBeaconPostResponseDto>()
+                val beaconObj = payload.beacon
+                    ?: return Result.failure(Exception("Insert succeeded but beacon payload was missing"))
+                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
+                    ?: return Result.failure(Exception("Insert succeeded but beacon payload was malformed"))
+                Result.success(beacon)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1206,6 +1213,12 @@ data class MapBeaconPatchBody(
 @Serializable
 data class MapBeaconPatchResponseDto(
     val beacon: JsonObject? = null,
+)
+
+@Serializable
+data class MapBeaconPostResponseDto(
+    val beacon: JsonObject? = null,
+    val deduplicated: Boolean = false,
 )
 
 @Serializable

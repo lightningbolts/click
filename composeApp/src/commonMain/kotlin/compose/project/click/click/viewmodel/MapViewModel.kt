@@ -36,6 +36,7 @@ import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
+import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
@@ -773,6 +774,8 @@ class MapViewModel : ViewModel() {
 
     /** Restores/refreshes Supabase session before click-web bearer calls (cold start). */
     private suspend fun ensureClickWebAuthReady(): Boolean {
+        val existingToken = SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken?.trim()
+        if (!existingToken.isNullOrEmpty()) return true
         if (SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken.isNullOrBlank()) {
             authRepository.restoreSession()
         }
@@ -797,15 +800,66 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    private fun currentUserAsAttendee(): BeaconAttendeeDto? {
+        val user = AppDataManager.currentUser.value ?: return null
+        return BeaconAttendeeDto(
+            userId = user.id,
+            name = user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "You",
+            avatarUrl = user.image,
+        )
+    }
+
+    private fun applyOptimisticRsvp(beaconId: String, signedUp: Boolean) {
+        val userId = AppDataManager.currentUser.value?.id ?: return
+        updateBeaconRsvpCache { current ->
+            val prev = current[beaconId]
+            if (signedUp) {
+                val attendee = currentUserAsAttendee() ?: return@updateBeaconRsvpCache current
+                val mergedAttendees = (prev?.attendees.orEmpty()
+                    .filterNot { it.userId == attendee.userId } + attendee)
+                    .distinctBy { it.userId }
+                current + (beaconId to BeaconRsvpCacheEntry(
+                    attendees = mergedAttendees,
+                    currentUserSignedUp = true,
+                ))
+            } else {
+                val remaining = prev?.attendees.orEmpty().filterNot { it.userId == userId }
+                current + (beaconId to BeaconRsvpCacheEntry(
+                    attendees = remaining,
+                    currentUserSignedUp = false,
+                ))
+            }
+        }
+    }
+
+    private fun restoreRsvpSnapshot(beaconId: String, previous: BeaconRsvpCacheEntry?) {
+        updateBeaconRsvpCache { current ->
+            when (previous) {
+                null -> current - beaconId
+                else -> current + (beaconId to previous)
+            }
+        }
+    }
+
+    private suspend fun resolveBeaconDropLocation(): LocationResult? {
+        return locationService.getHighAccuracyLocation(4_500L)
+            ?: locationService.getCurrentLocation()
+            ?: AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+                LocationResult(latitude = lat, longitude = lon)
+            }
+    }
+
     fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+        val previous = _beaconRsvpById.value[beaconId]
+        applyOptimisticRsvp(beaconId, signedUp = true)
         viewModelScope.launch {
             if (!ensureClickWebAuthReady()) {
+                restoreRsvpSnapshot(beaconId, previous)
                 onFinished(false)
                 return@launch
             }
-            // Capture the attendee's current GPS so the server can persist granular RSVP location.
-            // Location is best-effort: a null reading still RSVPs (the column is nullable server-side).
-            val loc = locationService.getHighAccuracyLocation(3500L)
+            // Location is best-effort for RSVP — do not block the POST on a long GPS wait.
+            val loc = locationService.getHighAccuracyLocation(1_500L)
             mapBeaconRepository.rsvpBeacon(
                 beaconId = beaconId,
                 latitude = loc?.latitude,
@@ -826,6 +880,7 @@ class MapViewModel : ViewModel() {
                     onFinished(true)
                 },
                 onFailure = {
+                    restoreRsvpSnapshot(beaconId, previous)
                     onFinished(false)
                 },
             )
@@ -834,8 +889,11 @@ class MapViewModel : ViewModel() {
 
     /** Cancels the current user's RSVP and removes them from the cached attendee list. */
     fun cancelRsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+        val previous = _beaconRsvpById.value[beaconId]
+        applyOptimisticRsvp(beaconId, signedUp = false)
         viewModelScope.launch {
             if (!ensureClickWebAuthReady()) {
+                restoreRsvpSnapshot(beaconId, previous)
                 onFinished(false)
                 return@launch
             }
@@ -855,6 +913,7 @@ class MapViewModel : ViewModel() {
                     onFinished(true)
                 },
                 onFailure = {
+                    restoreRsvpSnapshot(beaconId, previous)
                     onFinished(false)
                 },
             )
@@ -914,12 +973,13 @@ class MapViewModel : ViewModel() {
 
     fun submitBeaconDrop(
         kind: MapBeaconKind,
-        text: String,
+        title: String,
+        description: String? = null,
+        soundtrackUrl: String? = null,
         ttlMs: Long? = null,
         showCreatorName: Boolean = false,
         visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
         eventSchedule: EventSchedule? = null,
-        eventTitle: String? = null,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -937,49 +997,37 @@ class MapViewModel : ViewModel() {
                 onRemoteFinished(false)
                 return@launch
             }
-            val loc = locationService.getHighAccuracyLocation(6000L)
-                ?: run {
-                    _beaconInsertError.value =
-                        "Could not read GPS. Enable location and try again."
-                    onRejectedEarly()
-                    onRemoteFinished(false)
-                    return@launch
-                }
-            val trimmed = text.trim()
+            val locationDeferred = async(Dispatchers.Default) { resolveBeaconDropLocation() }
+            val trimmedTitle = title.trim()
+            val trimmedDescription = description?.trim()?.takeIf { it.isNotEmpty() }
             val metadata: JsonObject? = when (kind) {
                 MapBeaconKind.SOUNDTRACK -> {
-                    if (!isValidStreamingUrl(trimmed)) {
+                    val url = soundtrackUrl?.trim().orEmpty()
+                    if (!isValidStreamingUrl(url)) {
                         _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
                     buildJsonObject {
-                        put("music_url", trimmed)
+                        put("music_url", url)
                     }
                 }
                 MapBeaconKind.EVENT -> {
-                    val title = eventTitle?.trim().orEmpty()
-                    if (title.isEmpty()) {
-                        _beaconInsertError.value = "Please add an event title."
+                    if (trimmedTitle.isEmpty()) {
+                        _beaconInsertError.value = "Please add a title."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
-                    if (title.length > 80) {
-                        _beaconInsertError.value = "Event title must be 80 characters or less."
+                    if (trimmedTitle.length > 80) {
+                        _beaconInsertError.value = "Title must be 80 characters or less."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
-                    if (trimmed.isEmpty()) {
-                        _beaconInsertError.value = "Please add a description."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    if (trimmed.length > 140) {
-                        _beaconInsertError.value = "Description must be 140 characters or less."
+                    if (trimmedDescription != null && trimmedDescription.length > 500) {
+                        _beaconInsertError.value = "Description must be 500 characters or less."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
@@ -1004,46 +1052,68 @@ class MapViewModel : ViewModel() {
                         return@launch
                     }
                     buildJsonObject {
-                        put("title", title)
-                        put("description", trimmed)
+                        put("title", trimmedTitle)
+                        trimmedDescription?.let { put("description", it) }
                         eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
                     }
                 }
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
-                    if (trimmed.isEmpty()) {
-                        _beaconInsertError.value = "Please add a description."
+                    if (trimmedTitle.isEmpty()) {
+                        _beaconInsertError.value = "Please add a title."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
-                    if (trimmed.length > 140) {
-                        _beaconInsertError.value = "Description must be 140 characters or less."
+                    if (trimmedTitle.length > 80) {
+                        _beaconInsertError.value = "Title must be 80 characters or less."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    if (trimmedDescription != null && trimmedDescription.length > 500) {
+                        _beaconInsertError.value = "Description must be 500 characters or less."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
                     buildJsonObject {
-                        put("description", trimmed)
+                        put("title", trimmedTitle)
+                        trimmedDescription?.let { put("description", it) }
                     }
                 }
                 else -> {
-                    if (trimmed.isEmpty()) {
-                        _beaconInsertError.value = "Please add a description."
+                    if (trimmedTitle.isEmpty()) {
+                        _beaconInsertError.value = "Please add a title."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
-                    if (trimmed.length > 140) {
-                        _beaconInsertError.value = "Description must be 140 characters or less."
+                    if (trimmedTitle.length > 80) {
+                        _beaconInsertError.value = "Title must be 80 characters or less."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                    if (trimmedDescription != null && trimmedDescription.length > 500) {
+                        _beaconInsertError.value = "Description must be 500 characters or less."
                         onRejectedEarly()
                         onRemoteFinished(false)
                         return@launch
                     }
                     buildJsonObject {
-                        put("description", trimmed)
+                        put("title", trimmedTitle)
+                        trimmedDescription?.let { put("description", it) }
                     }
                 }
             }
+            val loc = locationDeferred.await()
+                ?: run {
+                    _beaconInsertError.value =
+                        "Could not read GPS. Enable location and try again."
+                    onRejectedEarly()
+                    onRemoteFinished(false)
+                    return@launch
+                }
             val squadSession = CollaborationSessionManager.activeMapDropSession()
             val eventExpiresIso = eventSchedule?.endEpochMs?.let {
                 kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
@@ -1083,21 +1153,30 @@ class MapViewModel : ViewModel() {
             onAcceptedLocally()
 
             val insertResult = mapBeaconRepository.insertBeacon(insert)
-            if (insertResult.isSuccess) {
-                refreshBeaconsAfterDrop(
-                    latitude = loc.latitude,
-                    longitude = loc.longitude,
-                    optimisticId = optimisticId,
-                )
-                onRemoteFinished(true)
-                PlatformHapticsPolicy.heavyImpact()
-                PlatformHapticsPolicy.successNotification()
-            } else {
-                val e = insertResult.exceptionOrNull()
-                _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
-                _beaconDropFailureToast.value = e?.message ?: "Could not drop beacon"
-                onRemoteFinished(false)
-            }
+            insertResult.fold(
+                onSuccess = { serverBeacon ->
+                    _mapBeacons.update { current ->
+                        mergeMapBeaconLists(
+                            current.filter { it.id != optimisticId },
+                            listOf(serverBeacon),
+                        )
+                    }
+                    EventReminderCoordinator.rememberBeacon(serverBeacon)
+                    refreshBeaconsAfterDrop(
+                        latitude = loc.latitude,
+                        longitude = loc.longitude,
+                        confirmedBeacon = serverBeacon,
+                    )
+                    onRemoteFinished(true)
+                    PlatformHapticsPolicy.heavyImpact()
+                    PlatformHapticsPolicy.successNotification()
+                },
+                onFailure = { e ->
+                    _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
+                    _beaconDropFailureToast.value = e.message ?: "Could not drop beacon"
+                    onRemoteFinished(false)
+                },
+            )
             } finally {
                 _beaconSubmitInFlight.value = false
                 beaconSubmitMutex.unlock()
@@ -1624,7 +1703,7 @@ class MapViewModel : ViewModel() {
     private suspend fun refreshBeaconsAfterDrop(
         latitude: Double,
         longitude: Double,
-        optimisticId: String,
+        confirmedBeacon: MapBeacon,
     ) {
         val bounds = _visibleBounds.value
             ?: boundsAroundPoint(latitude, longitude, discoveryProximityRadiusMeters)
@@ -1636,7 +1715,10 @@ class MapViewModel : ViewModel() {
             beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
         ).onSuccess { list ->
             _mapBeacons.update { current ->
-                mergeMapBeaconLists(current.filter { it.id != optimisticId }, list)
+                mergeMapBeaconLists(
+                    mergeMapBeaconLists(current, listOf(confirmedBeacon)),
+                    list,
+                )
             }
         }
     }

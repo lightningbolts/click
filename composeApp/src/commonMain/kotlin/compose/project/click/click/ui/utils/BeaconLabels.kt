@@ -81,3 +81,32 @@ fun MapBeacon.displayDynamicTitle(): String {
         }
     }
 }
+
+/** Remaining TTL copy for discovery cards and beacon subtitles. */
+fun formatBeaconExpiresIn(remainingMs: Long): String {
+    val mins = (remainingMs / 60_000L).coerceAtLeast(0L)
+    return when {
+        mins < 60 -> "Expires in $mins min"
+        mins < 24 * 60 -> {
+            val hours = mins / 60
+            if (hours == 1L) "Expires in 1 hour" else "Expires in ${hours} hours"
+        }
+        else -> {
+            val days = mins / (24 * 60)
+            if (days == 1L) "Expires in 1 day" else "Expires in ${days} days"
+        }
+    }
+}
+
+/** Subtitle row for non-event discovery beacons: description plus TTL when available. */
+fun MapBeacon.discoveryFeedSubtitle(nowMs: Long): String {
+    val desc = metadata.description?.trim()?.takeIf { it.isNotEmpty() }
+    val expiry = expiresAtEpochMs?.let { formatBeaconExpiresIn((it - nowMs).coerceAtLeast(0)) }
+    val truncatedDesc = desc?.let { if (it.length > 48) it.take(47) + "…" else it }
+    return when {
+        truncatedDesc != null && expiry != null -> "$truncatedDesc · $expiry"
+        truncatedDesc != null -> truncatedDesc
+        expiry != null -> expiry
+        else -> "Active beacon"
+    }
+}

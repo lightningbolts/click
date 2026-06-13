@@ -19,10 +19,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Surface
@@ -33,6 +36,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -62,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy
@@ -95,6 +101,8 @@ internal fun ConnectionPickerSearchBar(
     placeholder: String,
     modifier: Modifier = Modifier,
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val hideKeyboard = { keyboardController?.hide() }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -133,6 +141,10 @@ internal fun ConnectionPickerSearchBar(
                 unfocusedIndicatorColor = Color.Transparent,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(
+                onSearch = { hideKeyboard() },
+                onDone = { hideKeyboard() },
+            ),
         )
     }
 }
@@ -273,6 +285,13 @@ internal fun ConnectionMemberPickerSheet(
     headerContent: @Composable () -> Unit = {},
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val hideKeyboard = { keyboardController?.hide() }
+    val dismissKeyboard = {
+        hideKeyboard()
+        focusManager.clearFocus()
+    }
     val filteredCandidates = remember(candidates, searchQuery) {
         candidates.filter { matchesConnectionPickerSearch(it, searchQuery) }
     }
@@ -283,6 +302,7 @@ internal fun ConnectionMemberPickerSheet(
     val onVariant = GlassSheetTokens.OnOledMuted
 
     fun toggleUser(userId: String) {
+        hideKeyboard()
         if (userId in selectedIds) {
             PlatformHapticsPolicy.lightImpact()
             onSelectedIdsChange(selectedIds - userId)
@@ -302,8 +322,9 @@ internal fun ConnectionMemberPickerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
+                .imePadding()
                 .background(GlassSheetTokens.OledBlack)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
             Text(
                 text = title,
@@ -311,30 +332,30 @@ internal fun ConnectionMemberPickerSheet(
                 fontWeight = FontWeight.SemiBold,
                 color = onSurface,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = onVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             headerContent()
             ConnectionPickerSearchBar(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
                 placeholder = "Search connections",
-                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(PickerSelectedStripHeight),
-            ) {
-                if (selectedUsers.isNotEmpty()) {
-                    ConnectionPickerSelectedStrip(
-                        selectedUsers = selectedUsers,
-                        onRemove = { userId -> onSelectedIdsChange(selectedIds - userId) },
-                    )
-                }
+            if (selectedUsers.isNotEmpty()) {
+                ConnectionPickerSelectedStrip(
+                    selectedUsers = selectedUsers,
+                    onRemove = { userId ->
+                        hideKeyboard()
+                        onSelectedIdsChange(selectedIds - userId)
+                    },
+                )
+                Spacer(modifier = Modifier.height(4.dp))
             }
             if (!eligibilityCheckingLabel.isNullOrBlank()) {
                 Box(
@@ -368,23 +389,27 @@ internal fun ConnectionMemberPickerSheet(
                     text = "No eligible connections yet.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = onVariant,
-                    modifier = Modifier.padding(vertical = 12.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
+                Spacer(modifier = Modifier.weight(1f))
             } else if (filteredCandidates.isEmpty()) {
                 Text(
                     text = "No matches for \"$searchQuery\".",
                     style = MaterialTheme.typography.bodyMedium,
                     color = onVariant,
-                    modifier = Modifier.padding(vertical = 12.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
+                Spacer(modifier = Modifier.weight(1f))
             } else {
-                Column(
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = true)
-                        .verticalScroll(rememberScrollState()),
+                        .weight(1f, fill = true),
                 ) {
-                    filteredCandidates.forEach { user ->
+                    items(
+                        items = filteredCandidates,
+                        key = { it.id },
+                    ) { user ->
                         val selected = user.id in selectedIds
                         val enabled = selected ||
                             (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
@@ -401,11 +426,14 @@ internal fun ConnectionMemberPickerSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(top = 12.dp),
+                    .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onDismissRequest) {
+                TextButton(onClick = {
+                    dismissKeyboard()
+                    onDismissRequest()
+                }) {
                     Text("Cancel", color = onVariant)
                 }
                 Spacer(modifier = Modifier.width(8.dp))

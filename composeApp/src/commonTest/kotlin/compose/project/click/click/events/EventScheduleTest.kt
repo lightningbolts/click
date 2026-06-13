@@ -76,4 +76,18 @@ class EventScheduleTest {
         val rounded = roundEpochToNextWholeHour(base, tz)
         assertEquals(dayStart + 11 * hourMs, rounded)
     }
+
+    @Test
+    fun formatEventScheduleRange_sameDay_usesCompactEndTime() {
+        val tz = TimeZone.UTC
+        val schedule = EventSchedule(
+            startEpochMs = Instant.parse("2026-06-12T19:00:00Z").toEpochMilliseconds(),
+            endEpochMs = Instant.parse("2026-06-12T21:00:00Z").toEpochMilliseconds(),
+        )
+        val label = formatEventScheduleRange(schedule, tz)
+        assertTrue(label.contains("Jun 12"))
+        assertTrue(label.contains("7:00 PM"))
+        assertTrue(label.contains("9:00 PM"))
+        assertTrue(label.contains("–"))
+    }
 }

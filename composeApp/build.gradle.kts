@@ -79,6 +79,11 @@ kotlin {
                     includeDirs(nativeHeaderDir)
                     compilerOpts("-I${nativeHeaderDir.absolutePath}")
                 }
+                val clickIosPickerLayout by creating {
+                    defFile(project.file("src/nativeInterop/cinterop/click_ios_picker_layout.def"))
+                    includeDirs(nativeHeaderDir)
+                    compilerOpts("-I${nativeHeaderDir.absolutePath}")
+                }
             }
         }
     }

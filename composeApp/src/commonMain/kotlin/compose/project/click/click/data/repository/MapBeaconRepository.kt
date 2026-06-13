@@ -44,7 +44,7 @@ class MapBeaconRepository(
         )
     }
 
-    suspend fun insertBeacon(insert: MapBeaconInsert): Result<Unit> =
+    suspend fun insertBeacon(insert: MapBeaconInsert): Result<MapBeacon> =
         apiClient.postMapBeacon(insert)
 
     suspend fun updateBeacon(beaconId: String, patch: MapBeaconPatchBody): Result<MapBeacon> =

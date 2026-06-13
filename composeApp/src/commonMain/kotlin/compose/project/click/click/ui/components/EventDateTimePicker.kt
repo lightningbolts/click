@@ -2,34 +2,35 @@
 
 package compose.project.click.click.ui.components
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.EventScheduleValidationError
-import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
+
+private val PickerPopupSurfacePadding = 0.dp
+private val PickerPopupChromePadding = 16.dp
+private val PickerPopupInnerVerticalPadding = 12.dp
 
 @Composable
 fun EventDateTimePicker(
@@ -57,7 +58,11 @@ fun EventDateTimePicker(
 
     var pendingHour by remember { mutableIntStateOf(startHour) }
     var pendingMinute by remember { mutableIntStateOf(startMinute) }
+    var pendingDateMs by remember { mutableLongStateOf(schedule.startEpochMs) }
     val iosTimePickerRef = remember { mutableStateOf<Any?>(null) }
+    val iosDatePickerRef = remember { mutableStateOf<Any?>(null) }
+
+    val pickerDialogTitleStyle = MaterialTheme.typography.titleSmall
 
     fun applySchedule(startMs: Long, endMs: Long) {
         onScheduleChange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
@@ -129,45 +134,65 @@ fun EventDateTimePicker(
         }
     }
 
-    if (showDatePicker) {
-        val initialMs = if (pickingStartDate) schedule.startEpochMs else schedule.endEpochMs
-        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMs)
-        UnifiedPopupFormDialog(
-            visible = true,
-            onDismissRequest = { showDatePicker = false },
-            title = if (pickingStartDate) "Start date" else "End date",
-            confirmLabel = "OK",
-            onConfirm = {
-                val selected = pickerState.selectedDateMillis ?: initialMs
-                if (pickingStartDate) {
-                    applySchedule(
-                        mergeDateTime(selected, startHour, startMinute),
-                        schedule.endEpochMs,
-                    )
-                } else {
-                    applySchedule(
-                        schedule.startEpochMs,
-                        mergeDateTime(selected, endHour, endMinute),
-                    )
-                }
-                showDatePicker = false
-            },
-            body = {
-                DatePicker(
-                    state = pickerState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight(),
-                    colors = eventDatePickerColors(),
-                )
-            },
-        )
+    val dateInitialMs = if (pickingStartDate) schedule.startEpochMs else schedule.endEpochMs
+    LaunchedEffect(showDatePicker, dateInitialMs) {
+        if (showDatePicker) {
+            pendingDateMs = dateInitialMs
+        }
     }
+
+    UnifiedPopupFormDialog(
+        visible = showDatePicker,
+        onDismissRequest = { showDatePicker = false },
+        title = if (pickingStartDate) "Start date" else "End date",
+        titleStyle = pickerDialogTitleStyle,
+        contentMaxWidth = null,
+        surfaceHorizontalPadding = PickerPopupSurfacePadding,
+        innerPadding = PickerPopupInnerVerticalPadding,
+        innerHorizontalPadding = PickerPopupChromePadding,
+        bodyHorizontalPadding = 0.dp,
+        motion = UnifiedPopupMotion.Picker,
+        confirmLabel = "OK",
+        onConfirm = {
+            val selected = readPlatformEventDateSelection(
+                pickerRef = iosDatePickerRef.value,
+                fallbackEpochMs = pendingDateMs,
+            )
+            if (pickingStartDate) {
+                applySchedule(
+                    mergeDateTime(selected, startHour, startMinute),
+                    schedule.endEpochMs,
+                )
+            } else {
+                applySchedule(
+                    schedule.startEpochMs,
+                    mergeDateTime(selected, endHour, endMinute),
+                )
+            }
+        },
+        body = {
+            if (showDatePicker) {
+                PlatformEventDatePickerBody(
+                    initialEpochMs = dateInitialMs,
+                    pickerRef = iosDatePickerRef,
+                    modifier = Modifier.fillMaxWidth(),
+                    onSelectionChange = { pendingDateMs = it },
+                )
+            }
+        },
+    )
 
     UnifiedPopupFormDialog(
         visible = showTimePicker,
         onDismissRequest = { showTimePicker = false },
         title = if (pickingStartTime) "Start time" else "End time",
+        titleStyle = pickerDialogTitleStyle,
+        contentMaxWidth = null,
+        surfaceHorizontalPadding = PickerPopupSurfacePadding,
+        innerPadding = PickerPopupInnerVerticalPadding,
+        innerHorizontalPadding = PickerPopupChromePadding,
+        bodyHorizontalPadding = 0.dp,
+        motion = UnifiedPopupMotion.Picker,
         confirmLabel = "OK",
         onConfirm = {
             val (hour, minute) = readPlatformEventTimeSelection(
@@ -190,42 +215,23 @@ fun EventDateTimePicker(
                     mergeDateTime(schedule.endEpochMs, hour, minute),
                 )
             }
-            showTimePicker = false
         },
         body = {
-            EventTimePickerPopupBody(
-                initialHour = pendingHour,
-                initialMinute = pendingMinute,
-                pickerRef = iosTimePickerRef,
-                modifier = Modifier.fillMaxWidth(),
-                onSelectionChange = { hour, minute ->
-                    pendingHour = hour
-                    pendingMinute = minute
-                },
-            )
+            if (showTimePicker) {
+                EventTimePickerPopupBody(
+                    initialHour = pendingHour,
+                    initialMinute = pendingMinute,
+                    pickerRef = iosTimePickerRef,
+                    modifier = Modifier.fillMaxWidth(),
+                    onSelectionChange = { hour, minute ->
+                        pendingHour = hour
+                        pendingMinute = minute
+                    },
+                )
+            }
         },
     )
 }
-
-@Composable
-private fun eventDatePickerColors() = DatePickerDefaults.colors(
-    containerColor = GlassSheetTokens.OledBlack,
-    titleContentColor = GlassSheetTokens.OnOled,
-    headlineContentColor = GlassSheetTokens.OnOled,
-    weekdayContentColor = GlassSheetTokens.OnOledMuted,
-    subheadContentColor = GlassSheetTokens.OnOledMuted,
-    navigationContentColor = GlassSheetTokens.OnOled,
-    yearContentColor = GlassSheetTokens.OnOled,
-    currentYearContentColor = GlassSheetTokens.OnOled,
-    selectedYearContentColor = GlassSheetTokens.OnOled,
-    selectedYearContainerColor = PrimaryBlue,
-    dayContentColor = GlassSheetTokens.OnOled,
-    selectedDayContainerColor = PrimaryBlue,
-    selectedDayContentColor = GlassSheetTokens.OnOled,
-    todayDateBorderColor = PrimaryBlue,
-    todayContentColor = PrimaryBlue,
-    dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface,
-)
 
 private fun formatEventTime(hour: Int, minute: Int): String {
     val h = hour.coerceIn(0, 23)

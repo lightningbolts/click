@@ -97,8 +97,11 @@ import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
+import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.events.isActiveForDiscoveryFeed
 import compose.project.click.click.ui.utils.displayDynamicTitle
+import compose.project.click.click.ui.utils.discoveryFeedSubtitle
 import compose.project.click.click.ui.utils.haversineDistance
 import kotlinx.datetime.Clock
 
@@ -168,22 +171,17 @@ internal fun buildDiscoveryFeedItems(
     val beaconRows = beacons
         .filter { b -> b.isActiveForDiscoveryFeed(now) }
         .map { beacon ->
-            val exp = beacon.expiresAtEpochMs
             val ttlLabel = when (beacon.kind) {
                 MapBeaconKind.EVENT -> {
-                    beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }?.let { desc ->
-                        if (desc.length > 56) desc.take(55) + "…" else desc
-                    } ?: "Scheduled event"
-                }
-                else -> if (exp != null) {
-                    val mins = ((exp - now) / 60_000L).coerceAtLeast(0L)
+                    val scheduleLabel = beacon.eventSchedule()?.let { formatEventScheduleRange(it) }
+                    val desc = beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }
                     when {
-                        mins < 60 -> "Expires in ${mins}m"
-                        else -> "Expires in ${mins / 60}h"
+                        scheduleLabel != null -> scheduleLabel
+                        desc != null -> if (desc.length > 56) desc.take(55) + "…" else desc
+                        else -> "Scheduled event"
                     }
-                } else {
-                    "Active beacon"
                 }
+                else -> beacon.discoveryFeedSubtitle(now)
             }
             DiscoveryFeedItem.Beacon(
                 beacon = beacon,

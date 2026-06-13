@@ -106,13 +106,14 @@ fun BeaconDropSheetContent(
     errorMessage: String?,
     onDismissError: () -> Unit,
     onSubmit: (
-        MapBeaconKind,
-        String,
+        kind: MapBeaconKind,
+        title: String,
+        description: String?,
+        soundtrackUrl: String?,
         ttlMs: Long?,
         showCreatorName: Boolean,
         visibilityAudience: BeaconVisibilityAudience,
         eventSchedule: compose.project.click.click.events.EventSchedule?,
-        eventTitle: String?,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -126,17 +127,21 @@ fun BeaconDropSheetContent(
     }
     var isSubmitting by remember { mutableStateOf(false) }
     val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
-    val text = remember { mutableStateOf("") }
+    var beaconTitleDraft by remember { mutableStateOf("") }
+    var beaconDescriptionDraft by remember { mutableStateOf("") }
+    var soundtrackUrlDraft by remember { mutableStateOf("") }
     val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
     var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
     var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
-    var eventTitleDraft by remember { mutableStateOf("") }
     var submitValidationError by remember { mutableStateOf<String?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
     var showCreatorName by remember { mutableStateOf(false) }
     var visibilityAudience by remember { mutableStateOf(BeaconVisibilityAudience.EVERYONE) }
+
+    val isSoundtrack = category.value == BeaconDropCategory.SOUNDTRACK
+    val isEvent = category.value == BeaconDropCategory.EVENT
 
     val isHubMode = category.value == BeaconDropCategory.COMMUNITY_HUB
 
@@ -149,16 +154,6 @@ fun BeaconDropSheetContent(
         BeaconDropCategory.EVENT -> MapBeaconKind.EVENT
         BeaconDropCategory.COMMUNITY_HUB -> MapBeaconKind.OTHER
     }
-    val beaconLabel = when (category.value) {
-        BeaconDropCategory.SOUNDTRACK -> "Spotify, Apple Music, or YouTube link"
-        BeaconDropCategory.HAZARD -> "Hazard note (max 140)"
-        BeaconDropCategory.UTILITY -> "What's here? (max 140)"
-        BeaconDropCategory.SOS -> "SOS message (max 140)"
-        BeaconDropCategory.STUDY -> "Study spot note (max 140)"
-        BeaconDropCategory.EVENT -> "Event description (max 140)"
-        BeaconDropCategory.COMMUNITY_HUB -> ""
-    }
-    val maxLen = if (category.value == BeaconDropCategory.SOUNDTRACK) 2000 else 140
     val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
     val chipSelected = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
     val scroll = rememberScrollState()
@@ -196,9 +191,6 @@ fun BeaconDropSheetContent(
                     selected = category.value == cat,
                         onClick = {
                         category.value = cat
-                        val newMaxLen = if (cat == BeaconDropCategory.SOUNDTRACK) 2000 else 140
-                        if (text.value.length > newMaxLen) text.value = text.value.take(newMaxLen)
-                        if (cat != BeaconDropCategory.EVENT) eventTitleDraft = ""
                         submitValidationError = null
                         onDismissError()
                     },
@@ -259,33 +251,62 @@ fun BeaconDropSheetContent(
                     )
                 }
             }
-        } else {
-            if (category.value != BeaconDropCategory.SOUNDTRACK) {
-                if (category.value == BeaconDropCategory.EVENT) {
-                    EventDateTimePicker(
-                        schedule = eventSchedule,
-                        onScheduleChange = { next ->
-                            eventSchedule = next
-                            eventScheduleError = validateEventSchedule(next.startEpochMs, next.endEpochMs)
-                            onDismissError()
-                        },
-                        validationError = eventScheduleError,
-                    )
-                    BeaconDropOutlinedField(
-                        value = eventTitleDraft,
-                        onValueChange = {
-                            if (it.length <= 80) {
-                                eventTitleDraft = it
+        } else if (isSoundtrack) {
+            BeaconDropOutlinedField(
+                value = soundtrackUrlDraft,
+                onValueChange = {
+                    if (it.length <= 2000) {
+                        soundtrackUrlDraft = it
+                        onDismissError()
+                    }
+                },
+                placeholder = "Spotify, Apple Music, or YouTube link",
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            clipboardManager.getText()?.text?.let { pasted ->
+                                soundtrackUrlDraft = pasted.trim()
                                 onDismissError()
                             }
                         },
-                        placeholder = "Event title (max 80)",
-                        singleLine = true,
-                        trailingIcon = null,
-                        colors = fieldColors,
-                        onDismissKeyboard = dismissKeyboard,
-                    )
-                } else {
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentPaste,
+                            contentDescription = "Paste link",
+                        )
+                    }
+                },
+                colors = fieldColors,
+                onDismissKeyboard = dismissKeyboard,
+                keyboardType = KeyboardType.Uri,
+            )
+        } else {
+            BeaconDropOutlinedField(
+                value = beaconTitleDraft,
+                onValueChange = {
+                    if (it.length <= 80) {
+                        beaconTitleDraft = it
+                        onDismissError()
+                    }
+                },
+                placeholder = "Title (max 80)",
+                singleLine = true,
+                trailingIcon = null,
+                colors = fieldColors,
+                onDismissKeyboard = dismissKeyboard,
+            )
+            if (isEvent) {
+                EventDateTimePicker(
+                    schedule = eventSchedule,
+                    onScheduleChange = { next ->
+                        eventSchedule = next
+                        eventScheduleError = validateEventSchedule(next.startEpochMs, next.endEpochMs)
+                        onDismissError()
+                    },
+                    validationError = eventScheduleError,
+                )
+            } else {
                 Text(
                     text = "Visible for",
                     style = MaterialTheme.typography.titleSmall,
@@ -316,39 +337,18 @@ fun BeaconDropSheetContent(
                         )
                     }
                 }
-                }
             }
-
-            val isUrlField = category.value == BeaconDropCategory.SOUNDTRACK
             BeaconDropOutlinedField(
-                value = text.value,
+                value = beaconDescriptionDraft,
                 onValueChange = {
-                    if (it.length <= maxLen) {
-                        text.value = it
+                    if (it.length <= 500) {
+                        beaconDescriptionDraft = it
                         onDismissError()
                     }
                 },
-                placeholder = beaconLabel,
-                singleLine = isUrlField,
-                trailingIcon = if (isUrlField) {
-                    {
-                        IconButton(
-                            onClick = {
-                                clipboardManager.getText()?.text?.let { pasted ->
-                                    text.value = pasted.trim()
-                                    onDismissError()
-                                }
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.ContentPaste,
-                                contentDescription = "Paste link",
-                            )
-                        }
-                    }
-                } else {
-                    null
-                },
+                placeholder = "Description (optional, max 500)",
+                singleLine = false,
+                trailingIcon = null,
                 colors = fieldColors,
                 onDismissKeyboard = dismissKeyboard,
             )
@@ -435,19 +435,19 @@ fun BeaconDropSheetContent(
                     onCreateHub(hubNameDraft.trim(), hubCategory)
                     isSubmitting = false
                 } else {
-                    val ttl = if (category.value == BeaconDropCategory.SOUNDTRACK ||
-                        category.value == BeaconDropCategory.EVENT
-                    ) {
+                    val ttl = if (isSoundtrack || isEvent) {
                         null
                     } else {
                         expiration.value.durationMs
                     }
-                    val schedule = if (category.value == BeaconDropCategory.EVENT) {
-                        if (eventTitleDraft.trim().isEmpty()) {
-                            submitValidationError = "Please add an event title."
-                            isSubmitting = false
-                            return@Button
-                        }
+                    val title = beaconTitleDraft.trim()
+                    if (!isSoundtrack && title.isEmpty()) {
+                        submitValidationError = "Please add a title."
+                        isSubmitting = false
+                        return@Button
+                    }
+                    val description = beaconDescriptionDraft.trim().ifBlank { null }
+                    val schedule = if (isEvent) {
                         eventScheduleError = validateEventSchedule(
                             eventSchedule.startEpochMs,
                             eventSchedule.endEpochMs,
@@ -460,19 +460,21 @@ fun BeaconDropSheetContent(
                     } else {
                         null
                     }
-                    val titleForEvent = if (category.value == BeaconDropCategory.EVENT) {
-                        eventTitleDraft.trim()
-                    } else {
-                        null
+                    val url = if (isSoundtrack) soundtrackUrlDraft.trim().ifBlank { null } else null
+                    if (isSoundtrack && url.isNullOrEmpty()) {
+                        submitValidationError = "Please add a music link."
+                        isSubmitting = false
+                        return@Button
                     }
                     onSubmit(
                         kind,
-                        text.value,
+                        title,
+                        description,
+                        url,
                         ttl,
                         showCreatorName,
                         visibilityAudience,
                         schedule,
-                        titleForEvent,
                     ) {
                         isSubmitting = false
                     }
@@ -508,6 +510,7 @@ private fun BeaconDropOutlinedField(
     trailingIcon: @Composable (() -> Unit)?,
     colors: androidx.compose.material3.TextFieldColors,
     onDismissKeyboard: () -> Unit,
+    keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     val fieldHeight = if (singleLine) BeaconSingleLineFieldHeight else BeaconMultilineFieldHeight
     val lineCount = if (singleLine) 1 else 3
@@ -526,7 +529,7 @@ private fun BeaconDropOutlinedField(
             maxLines = lineCount,
             keyboardOptions = if (singleLine) {
                 KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
+                    keyboardType = keyboardType,
                     imeAction = ImeAction.Done,
                 )
             } else {

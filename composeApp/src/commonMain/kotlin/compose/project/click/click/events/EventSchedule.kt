@@ -67,6 +67,34 @@ fun EventSchedule.isEnded(nowEpochMs: Long = Clock.System.now().toEpochMilliseco
 fun EventSchedule.isVisible(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
     !isEnded(nowEpochMs)
 
+/** Compact range for discovery cards and beacon detail sheets, e.g. `Jun 12, 7:00 PM – 9:00 PM`. */
+fun formatEventScheduleRange(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val start = Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(timeZone)
+    val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
+    val startLabel = formatEventDateTimeLabel(start)
+    val endLabel = if (start.date == end.date) {
+        formatEventTimeLabel(end)
+    } else {
+        formatEventDateTimeLabel(end)
+    }
+    return "$startLabel – $endLabel"
+}
+
+private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+    val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+    return "$mon ${dt.dayOfMonth}, ${formatEventTimeLabel(dt)}"
+}
+
+private fun formatEventTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+    val hour24 = dt.hour
+    val h12 = ((hour24 + 11) % 12) + 1
+    val amPm = if (hour24 < 12) "AM" else "PM"
+    return "$h12:${dt.minute.toString().padStart(2, '0')} $amPm"
+}
+
 enum class EventReminderKind {
     DayOf,
     OneHourBefore,
