@@ -552,6 +552,7 @@ Deno.serve(async (req) => {
   };
   try {
     body = await req.json();
+    console.log("INCOMING_HANDSHAKE_PAYLOAD:", JSON.stringify(body, null, 2));
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400,
