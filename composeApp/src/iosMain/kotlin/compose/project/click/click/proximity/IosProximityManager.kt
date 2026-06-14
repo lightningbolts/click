@@ -41,6 +41,11 @@ import platform.CoreBluetooth.CBCharacteristic
 import platform.CoreBluetooth.CBCharacteristicPropertyRead
 import platform.CoreBluetooth.CBUUID
 import platform.CoreBluetooth.CBManagerStatePoweredOn
+import platform.CoreBluetooth.CBManagerStatePoweredOff
+import platform.CoreBluetooth.CBManagerStateResetting
+import platform.CoreBluetooth.CBManagerStateUnauthorized
+import platform.CoreBluetooth.CBManagerStateUnknown
+import platform.CoreBluetooth.CBManagerStateUnsupported
 import platform.CoreBluetooth.CBPeripheral
 import platform.CoreBluetooth.CBPeripheralDelegateProtocol
 import platform.CoreBluetooth.CBPeripheralManager
@@ -51,8 +56,9 @@ import platform.CoreBluetooth.CBService
 import platform.CoreBluetooth.CBAdvertisementDataServiceUUIDsKey
 import platform.Foundation.NSData
 import platform.Foundation.NSError
-import platform.Foundation.NSFileManager
+import platform.Foundation.NSLog
 import platform.Foundation.NSMutableData
+import platform.Foundation.NSFileManager
 import platform.Foundation.NSMutableDictionary
 import platform.Foundation.NSNumber
 import platform.Foundation.NSString
@@ -176,52 +182,126 @@ class IosProximityManager : ProximityManager {
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
-        enforceProximityAudioPermission()
         stopPeripheralOnly()
-        val payload = runCatching { buildGattTokenPayload(ephemeralToken).toNSData() }.getOrElse { return }
-        val serviceUuid = runCatching {
-            CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
-        }.getOrElse { return }
+        coroutineScope {
+            val ble = async {
+                runCatching { startBleHandshakeBroadcast(ephemeralToken) }
+                    .onFailure { NSLog("🔵 BLE broadcast failed: ${it.message}") }
+            }
+            val audio = async {
+                runCatching { playHandshakeAudio(ephemeralToken) }
+                    .onFailure { NSLog("🔊 Audio broadcast failed: ${it.message}") }
+            }
+            ble.await()
+            audio.await()
+        }
+    }
+
+    private suspend fun startBleHandshakeBroadcast(ephemeralToken: String) {
+        val payload = buildGattTokenPayload(ephemeralToken).toNSData()
+        val serviceUuid = CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
         val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
-        prepareProximityAudioSession()
+        val payloadBytes = payload.length.toInt()
 
         withTimeoutOrNull(8_000L) {
             suspendCancellableCoroutine { cont ->
                 var resumed = false
+                var advertiseQueued = true
+                var serviceAdded = false
+                var pendingAdv: NSMutableDictionary? = null
+
                 fun finish() {
                     if (!resumed) {
                         resumed = true
                         cont.resume(Unit)
                     }
                 }
+
+                fun bleStateLabel(state: Long): String = when (state) {
+                    CBManagerStateUnknown -> "Unknown"
+                    CBManagerStateResetting -> "Resetting"
+                    CBManagerStateUnsupported -> "Unsupported"
+                    CBManagerStateUnauthorized -> "Unauthorized"
+                    CBManagerStatePoweredOff -> "PoweredOff"
+                    CBManagerStatePoweredOn -> "PoweredOn"
+                    else -> "Other($state)"
+                }
+
+                fun publishGattAndQueueAdvertising(peripheral: CBPeripheralManager) {
+                    if (!advertiseQueued || serviceAdded) return
+                    advertiseQueued = false
+                    val characteristic = CBMutableCharacteristic(
+                        type = characteristicUuid,
+                        properties = CBCharacteristicPropertyRead,
+                        value = null,
+                        permissions = CBAttributePermissionsReadable,
+                    )
+                    tokenCharacteristic = characteristic
+                    val service = CBMutableService(type = serviceUuid, primary = true)
+                    service.setCharacteristics(listOf(characteristic))
+                    val adv = NSMutableDictionary()
+                    adv.setObject(
+                        listOf(serviceUuid),
+                        forKey = NSString.create(string = CBAdvertisementDataServiceUUIDsKey),
+                    )
+                    pendingAdv = adv
+                    NSLog("🔵 BLE: addService queued — state=${bleStateLabel(peripheral.state)} payloadBytes=$payloadBytes")
+                    peripheral.addService(service)
+                }
+
                 val del = object : NSObject(), CBPeripheralManagerDelegateProtocol {
                     override fun peripheralManagerDidUpdateState(peripheral: CBPeripheralManager) {
-                        if (peripheral.state == CBManagerStatePoweredOn) {
-                            val characteristic = CBMutableCharacteristic(
-                                type = characteristicUuid,
-                                properties = CBCharacteristicPropertyRead,
-                                value = null,
-                                permissions = CBAttributePermissionsReadable,
-                            )
-                            tokenCharacteristic = characteristic
-                            val service = CBMutableService(type = serviceUuid, primary = true)
-                            service.setCharacteristics(listOf(characteristic))
-                            peripheral.addService(service)
-                            val adv = NSMutableDictionary()
-                            adv.setObject(
-                                listOf(serviceUuid),
-                                forKey = NSString.create(string = CBAdvertisementDataServiceUUIDsKey),
-                            )
-                            peripheral.startAdvertising(adv as Map<Any?, *>)
-                        } else {
-                            finish()
+                        val state = peripheral.state
+                        NSLog("🔵 BLE: peripheralManagerDidUpdateState — ${bleStateLabel(state)} advertiseQueued=$advertiseQueued")
+                        when (state) {
+                            CBManagerStatePoweredOn -> {
+                                if (advertiseQueued) {
+                                    publishGattAndQueueAdvertising(peripheral)
+                                }
+                            }
+                            CBManagerStateUnknown, CBManagerStateResetting -> {
+                                // Queue until CoreBluetooth resolves to PoweredOn.
+                            }
+                            else -> {
+                                NSLog("🔵 BLE: terminal state ${bleStateLabel(state)} — aborting broadcast")
+                                finish()
+                            }
                         }
+                    }
+
+                    override fun peripheralManager(
+                        peripheral: CBPeripheralManager,
+                        didAddService: CBService,
+                        error: NSError?,
+                    ) {
+                        if (error != null) {
+                            NSLog("🔵 BLE: addService failed — ${error.localizedDescription}")
+                            finish()
+                            return
+                        }
+                        serviceAdded = true
+                        val adv = pendingAdv
+                        if (adv == null) {
+                            NSLog("🔵 BLE: addService succeeded but no advertisement payload queued")
+                            finish()
+                            return
+                        }
+                        NSLog(
+                            "🔵 BLE: startAdvertising invoked — state=${bleStateLabel(peripheral.state)} " +
+                                "payloadBytes=$payloadBytes serviceUUID=${CLICK_SERVICE_UUID}",
+                        )
+                        peripheral.startAdvertising(adv as Map<Any?, *>)
                     }
 
                     override fun peripheralManagerDidStartAdvertising(
                         peripheral: CBPeripheralManager,
                         error: NSError?,
                     ) {
+                        if (error != null) {
+                            NSLog("🔵 BLE: startAdvertising failed — ${error.localizedDescription}")
+                        } else {
+                            NSLog("🔵 BLE: startAdvertising succeeded — state=${bleStateLabel(peripheral.state)}")
+                        }
                         finish()
                     }
 
@@ -254,7 +334,11 @@ class IosProximityManager : ProximityManager {
                 }
             }
         }
+    }
 
+    private suspend fun playHandshakeAudio(ephemeralToken: String) {
+        enforceProximityAudioPermission()
+        prepareProximityAudioSession()
         val pcm = buildHandshakeAudioPcm(ephemeralToken)
         if (pcm.isEmpty()) return
         val wav = wrapPcmAsWav(pcm)
@@ -265,7 +349,9 @@ class IosProximityManager : ProximityManager {
             try {
                 val player = AVAudioPlayer(contentsOfURL = url, error = null)
                 audioPlayer = player
+                player?.volume = 1.0f
                 player?.prepareToPlay()
+                NSLog("🔊 AUDIBLE TEST: Emitting 440Hz tone now!")
                 player?.play()
                 val ms = (pcm.size * 1000L / 44_100L) + 120L
                 delay(ms)

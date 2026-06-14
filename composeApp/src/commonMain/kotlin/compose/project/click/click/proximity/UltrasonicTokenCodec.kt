@@ -7,7 +7,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Base tone for the mandatory 18.5 kHz proximity chirp. */
-const val HANDSHAKE_CARRIER_HZ: Double = 18_500.0
+// TODO: REVERT TO 18500 BEFORE PRODUCTION
+const val HANDSHAKE_CARRIER_HZ: Double = 440.0
 
 private const val SAMPLE_RATE = 44_100
 private const val DIGIT_STEP_HZ = 120.0
@@ -50,7 +51,7 @@ private fun appendSinePcm(dst: MutableList<Short>, freqHz: Double, durationMs: I
 internal fun buildHandshakeAudioPcm(token: String): ShortArray {
     val n = normalizeHandshakeToken(token) ?: return shortArrayOf()
     val out = ArrayList<Short>(8192)
-    appendSinePcm(out, HANDSHAKE_CARRIER_HZ, CHIRP_MS, amplitude = 0.65)
+    appendSinePcm(out, HANDSHAKE_CARRIER_HZ, CHIRP_MS, amplitude = 0.95)
     appendSilence(out, GAP_MS)
     for (ch in n) {
         val d = ch.digitToInt()
