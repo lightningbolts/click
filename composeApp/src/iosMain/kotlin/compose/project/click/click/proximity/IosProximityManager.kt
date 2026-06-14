@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -81,6 +82,14 @@ import platform.posix.fwrite
 import platform.posix.memcpy
 import kotlin.coroutines.resume
 
+@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+private fun advertisementContainsClickService(advertisementData: Map<Any?, *>): Boolean {
+    val uuids = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? List<*> ?: return false
+    return uuids.any { uuid ->
+        (uuid as? CBUUID)?.UUIDString?.equals(CLICK_SERVICE_UUID, ignoreCase = true) == true
+    }
+}
+
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
 private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
@@ -88,8 +97,8 @@ private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
 private const val BLE_BROADCAST_HOLD_MS: Long = 6_000L
 /** Central scan window — must match [BLE_BROADCAST_HOLD_MS] so we can connect and read GATT before advertising stops. */
 private const val BLE_SCAN_HOLD_MS: Long = BLE_BROADCAST_HOLD_MS
-/** After stopping scan, allow in-flight GATT connects/reads to finish. */
-private const val GATT_READ_GRACE_MS: Long = 2_000L
+/** After stopping scan, wait for in-flight GATT connects/reads (late discoveries at ~5s need this). */
+private const val GATT_READ_GRACE_MS: Long = 5_000L
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun NSData.toByteArray(): ByteArray {
@@ -178,6 +187,8 @@ class IosProximityManager : ProximityManager {
     private var broadcastSessionJob: Job? = null
     private var advertisingHoldJob: Job? = null
     private val connectingPeripheralIds = mutableSetOf<String>()
+    /** Peripheral IDs with an outstanding connect → GATT read chain; drained before HTTP payload. */
+    private val pendingGattReads = mutableMapOf<String, CompletableDeferred<Unit>>()
     private var audioPlayer: AVAudioPlayer? = null
     private var audioRecorder: AVAudioRecorder? = null
 
@@ -194,6 +205,30 @@ class IosProximityManager : ProximityManager {
         // per directive Q4, fall back to the app's own Settings page via the shared
         // helper (which bypasses the `canOpenURL` probe).
         compose.project.click.click.ui.utils.openApplicationSystemSettings()
+    }
+
+    private fun trackGattReadStart(peripheralId: String) {
+        pendingGattReads.getOrPut(peripheralId) { CompletableDeferred() }
+    }
+
+    private fun trackGattReadComplete(peripheralId: String) {
+        pendingGattReads.remove(peripheralId)?.complete(Unit)
+        connectingPeripheralIds.remove(peripheralId)
+    }
+
+    private suspend fun awaitPendingGattReads(timeoutMs: Long) {
+        val pending = pendingGattReads.values.toList()
+        if (pending.isEmpty()) return
+        NSLog("🔵 BLE central: awaiting ${pending.size} in-flight GATT read(s) — timeoutMs=$timeoutMs")
+        withTimeoutOrNull(timeoutMs) {
+            pending.forEach { it.await() }
+        }
+        val remaining = pendingGattReads.size
+        if (remaining > 0) {
+            NSLog("🔵 BLE central: GATT drain timed out — $remaining read(s) still pending")
+            pendingGattReads.values.forEach { it.complete(Unit) }
+            pendingGattReads.clear()
+        }
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
@@ -226,6 +261,7 @@ class IosProximityManager : ProximityManager {
         val serviceUuid = CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
         val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
         val payloadBytes = payload.length.toInt()
+        NSLog("🔵 BLE advertise UUID audit — service=$CLICK_SERVICE_UUID char=$CLICK_TOKEN_CHARACTERISTIC_UUID")
 
         withTimeoutOrNull(BLE_BROADCAST_HOLD_MS + 10_000L) {
             suspendCancellableCoroutine { cont ->
@@ -410,24 +446,31 @@ class IosProximityManager : ProximityManager {
     override suspend fun startHandshakeListening(): List<String> {
         enforceProximityAudioPermission()
         heardTokens.clear()
+        pendingGattReads.clear()
+        connectingPeripheralIds.clear()
         prepareProximityAudioSession()
+        val scanServiceUuid = CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
+        val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
+        NSLog(
+            "🔵 BLE scan UUID audit — service=$CLICK_SERVICE_UUID " +
+                "advertiseMatch=${scanServiceUuid.UUIDString.equals(CLICK_SERVICE_UUID, ignoreCase = true)}",
+        )
         withTimeoutOrNull(BLE_SCAN_HOLD_MS + GATT_READ_GRACE_MS + 4_000L) {
             suspendCancellableCoroutine { cont ->
                 var started = false
-                val serviceUuid = CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
-                val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
                 val peripheralDel = object : NSObject(), CBPeripheralDelegateProtocol {
                     override fun peripheral(
                         peripheral: CBPeripheral,
                         didDiscoverServices: NSError?,
                     ) {
+                        NSLog("BLE_TRACE: 3. Discovered Services")
                         if (didDiscoverServices != null) {
                             NSLog(
                                 "🔵 BLE central: didDiscoverServices failed — " +
                                     "${didDiscoverServices.localizedDescription} id=${peripheral.identifier.UUIDString}",
                             )
                             centralManager?.cancelPeripheralConnection(peripheral)
-                            connectingPeripheralIds.remove(peripheral.identifier.UUIDString)
+                            trackGattReadComplete(peripheral.identifier.UUIDString)
                             return
                         }
                         val services = peripheral.services
@@ -450,18 +493,20 @@ class IosProximityManager : ProximityManager {
                         didDiscoverCharacteristicsForService: CBService,
                         error: NSError?,
                     ) {
+                        NSLog("BLE_TRACE: 4. Discovered Characteristics")
                         if (error != null) {
                             NSLog(
                                 "🔵 BLE central: didDiscoverCharacteristics failed — " +
                                     "${error.localizedDescription} id=${peripheral.identifier.UUIDString}",
                             )
                             centralManager?.cancelPeripheralConnection(peripheral)
-                            connectingPeripheralIds.remove(peripheral.identifier.UUIDString)
+                            trackGattReadComplete(peripheral.identifier.UUIDString)
                             return
                         }
                         val characteristics = didDiscoverCharacteristicsForService.characteristics
                         if (characteristics.isNullOrEmpty()) {
                             NSLog("🔵 BLE central: didDiscoverCharacteristics — none on service ${didDiscoverCharacteristicsForService.UUID.UUIDString}")
+                            trackGattReadComplete(peripheral.identifier.UUIDString)
                             return
                         }
                         NSLog(
@@ -482,15 +527,16 @@ class IosProximityManager : ProximityManager {
                         didUpdateValueForCharacteristic: CBCharacteristic,
                         error: NSError?,
                     ) {
+                        val value = didUpdateValueForCharacteristic.value as? NSData
+                        NSLog("BLE_TRACE: 5. Read Characteristic Value: $value")
                         val id = peripheral.identifier.UUIDString
                         if (error != null) {
                             NSLog("🔵 BLE central: didUpdateValue failed — ${error.localizedDescription} id=$id")
                             centralManager?.cancelPeripheralConnection(peripheral)
-                            connectingPeripheralIds.remove(id)
+                            trackGattReadComplete(id)
                             return
                         }
                         if (didUpdateValueForCharacteristic.UUID.UUIDString.equals(CLICK_TOKEN_CHARACTERISTIC_UUID, ignoreCase = true)) {
-                            val value = didUpdateValueForCharacteristic.value as? NSData
                             val bytes = value?.toByteArray()
                             val token = parseGattTokenPayload(bytes)
                             if (token != null) {
@@ -504,7 +550,7 @@ class IosProximityManager : ProximityManager {
                             }
                         }
                         centralManager?.cancelPeripheralConnection(peripheral)
-                        connectingPeripheralIds.remove(id)
+                        trackGattReadComplete(id)
                     }
                 }
                 discoveredPeripheralDelegate = peripheralDel
@@ -516,10 +562,16 @@ class IosProximityManager : ProximityManager {
                                 CBCentralManagerScanOptionAllowDuplicatesKey to NSNumber(bool = true),
                             )
                             NSLog(
-                                "🔵 BLE central: startScan — service=${CLICK_SERVICE_UUID} " +
+                                "BLE_TRACE: 0. Starting broad scan — filter=$CLICK_SERVICE_UUID in delegate " +
                                     "holdMs=$BLE_SCAN_HOLD_MS",
                             )
-                            central.scanForPeripheralsWithServices(listOf(serviceUuid), options = opts)
+                            NSLog(
+                                "🔵 BLE central: startScan — broadScan serviceFilter=$CLICK_SERVICE_UUID " +
+                                    "cbuuid=${scanServiceUuid.UUIDString} holdMs=$BLE_SCAN_HOLD_MS",
+                            )
+                            // iOS often delivers 0 ads with scanForPeripheralsWithServices([uuid]) even when
+                            // the peer is advertising that UUID; scan broadly and filter in didDiscoverPeripheral.
+                            central.scanForPeripheralsWithServices(null, options = opts)
                             cont.resume(Unit)
                         } else if (central.state != CBManagerStatePoweredOn && !started) {
                             started = true
@@ -534,8 +586,11 @@ class IosProximityManager : ProximityManager {
                         advertisementData: Map<Any?, *>,
                         RSSI: NSNumber,
                     ) {
+                        NSLog("BLE_TRACE: 1. Discovered Peripheral: ${didDiscoverPeripheral.name}")
+                        if (!advertisementContainsClickService(advertisementData)) return
                         val id = didDiscoverPeripheral.identifier.UUIDString
                         if (connectingPeripheralIds.add(id)) {
+                            trackGattReadStart(id)
                             NSLog("🔵 BLE central: didDiscoverPeripheral — connect id=$id rssi=$RSSI")
                             didDiscoverPeripheral.delegate = peripheralDel
                             central.connectPeripheral(didDiscoverPeripheral, options = null)
@@ -546,9 +601,10 @@ class IosProximityManager : ProximityManager {
                         central: CBCentralManager,
                         didConnectPeripheral: CBPeripheral,
                     ) {
+                        NSLog("BLE_TRACE: 2. Connected to Peripheral")
                         val id = didConnectPeripheral.identifier.UUIDString
                         NSLog("🔵 BLE central: didConnectPeripheral — discoverServices id=$id")
-                        didConnectPeripheral.discoverServices(listOf(serviceUuid))
+                        didConnectPeripheral.discoverServices(listOf(scanServiceUuid))
                     }
 
                     @kotlinx.cinterop.ObjCSignatureOverride
@@ -558,11 +614,12 @@ class IosProximityManager : ProximityManager {
                         error: NSError?,
                     ) {
                         val id = didFailToConnectPeripheral.identifier.UUIDString
+                        NSLog("BLE_TRACE: connect failed — ${error?.localizedDescription ?: "unknown"} id=$id")
                         NSLog(
                             "🔵 BLE central: didFailToConnect — " +
                                 "${error?.localizedDescription ?: "unknown"} id=$id",
                         )
-                        connectingPeripheralIds.remove(id)
+                        trackGattReadComplete(id)
                     }
 
                     @kotlinx.cinterop.ObjCSignatureOverride
@@ -571,7 +628,7 @@ class IosProximityManager : ProximityManager {
                         didDisconnectPeripheral: CBPeripheral,
                         error: NSError?,
                     ) {
-                        connectingPeripheralIds.remove(didDisconnectPeripheral.identifier.UUIDString)
+                        trackGattReadComplete(didDisconnectPeripheral.identifier.UUIDString)
                     }
                 }
                 centralDelegate = del
@@ -586,14 +643,16 @@ class IosProximityManager : ProximityManager {
             delay(BLE_SCAN_HOLD_MS)
             NSLog("🔵 BLE central: ${BLE_SCAN_HOLD_MS}ms scan window elapsed — stopping scan")
             centralManager?.stopScan()
-            delay(GATT_READ_GRACE_MS)
+            awaitPendingGattReads(GATT_READ_GRACE_MS)
             audio.await()
         }
         NSLog("🔵 BLE central: listen complete — heardTokens=${heardTokens.sorted()}")
+        centralManager?.stopScan()
         centralManager = null
         centralDelegate = null
         discoveredPeripheralDelegate = null
         connectingPeripheralIds.clear()
+        pendingGattReads.clear()
         return heardTokens.sorted()
     }
 
@@ -643,6 +702,8 @@ class IosProximityManager : ProximityManager {
         centralDelegate = null
         discoveredPeripheralDelegate = null
         connectingPeripheralIds.clear()
+        pendingGattReads.values.forEach { it.complete(Unit) }
+        pendingGattReads.clear()
         stopPeripheralOnly()
     }
 
