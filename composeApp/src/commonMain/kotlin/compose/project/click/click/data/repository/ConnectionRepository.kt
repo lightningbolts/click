@@ -534,6 +534,8 @@ class ConnectionRepository(
                 weatherSnapshot = trimmedWeather,
                 simulatorMock = if (simulatorMock) true else null,
             )
+            val outgoingJson = json.encodeToString(BindProximityRequest.serializer(), request)
+            println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
             val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
                 contentType(ContentType.Application.Json)
                 headers {

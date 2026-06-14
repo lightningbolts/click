@@ -86,6 +86,10 @@ private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
 private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
 /** BLE must stay discoverable long after the short audio chirp so centrals can connect and read GATT. */
 private const val BLE_BROADCAST_HOLD_MS: Long = 6_000L
+/** Central scan window — must match [BLE_BROADCAST_HOLD_MS] so we can connect and read GATT before advertising stops. */
+private const val BLE_SCAN_HOLD_MS: Long = BLE_BROADCAST_HOLD_MS
+/** After stopping scan, allow in-flight GATT connects/reads to finish. */
+private const val GATT_READ_GRACE_MS: Long = 2_000L
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun NSData.toByteArray(): ByteArray {
@@ -407,7 +411,7 @@ class IosProximityManager : ProximityManager {
         enforceProximityAudioPermission()
         heardTokens.clear()
         prepareProximityAudioSession()
-        withTimeoutOrNull(8_000L) {
+        withTimeoutOrNull(BLE_SCAN_HOLD_MS + GATT_READ_GRACE_MS + 4_000L) {
             suspendCancellableCoroutine { cont ->
                 var started = false
                 val serviceUuid = CBUUID.UUIDWithString(CLICK_SERVICE_UUID)
@@ -417,9 +421,25 @@ class IosProximityManager : ProximityManager {
                         peripheral: CBPeripheral,
                         didDiscoverServices: NSError?,
                     ) {
-                        peripheral.services?.forEach { service ->
+                        if (didDiscoverServices != null) {
+                            NSLog(
+                                "🔵 BLE central: didDiscoverServices failed — " +
+                                    "${didDiscoverServices.localizedDescription} id=${peripheral.identifier.UUIDString}",
+                            )
+                            centralManager?.cancelPeripheralConnection(peripheral)
+                            connectingPeripheralIds.remove(peripheral.identifier.UUIDString)
+                            return
+                        }
+                        val services = peripheral.services
+                        if (services.isNullOrEmpty()) {
+                            NSLog("🔵 BLE central: didDiscoverServices — no services on ${peripheral.identifier.UUIDString}")
+                            return
+                        }
+                        NSLog("🔵 BLE central: didDiscoverServices — count=${services.size} id=${peripheral.identifier.UUIDString}")
+                        services.forEach { service ->
                             val svc = service as? CBService ?: return@forEach
-                            if (svc.UUID.UUIDString == CLICK_SERVICE_UUID.uppercase()) {
+                            if (svc.UUID.UUIDString.equals(CLICK_SERVICE_UUID, ignoreCase = true)) {
+                                NSLog("🔵 BLE central: discoverCharacteristics for ${CLICK_TOKEN_CHARACTERISTIC_UUID}")
                                 peripheral.discoverCharacteristics(listOf(characteristicUuid), forService = svc)
                             }
                         }
@@ -430,9 +450,28 @@ class IosProximityManager : ProximityManager {
                         didDiscoverCharacteristicsForService: CBService,
                         error: NSError?,
                     ) {
-                        didDiscoverCharacteristicsForService.characteristics?.forEach { ch ->
+                        if (error != null) {
+                            NSLog(
+                                "🔵 BLE central: didDiscoverCharacteristics failed — " +
+                                    "${error.localizedDescription} id=${peripheral.identifier.UUIDString}",
+                            )
+                            centralManager?.cancelPeripheralConnection(peripheral)
+                            connectingPeripheralIds.remove(peripheral.identifier.UUIDString)
+                            return
+                        }
+                        val characteristics = didDiscoverCharacteristicsForService.characteristics
+                        if (characteristics.isNullOrEmpty()) {
+                            NSLog("🔵 BLE central: didDiscoverCharacteristics — none on service ${didDiscoverCharacteristicsForService.UUID.UUIDString}")
+                            return
+                        }
+                        NSLog(
+                            "🔵 BLE central: didDiscoverCharacteristics — count=${characteristics.size} " +
+                                "id=${peripheral.identifier.UUIDString}",
+                        )
+                        characteristics.forEach { ch ->
                             val characteristic = ch as? CBCharacteristic ?: return@forEach
-                            if (characteristic.UUID.UUIDString == CLICK_TOKEN_CHARACTERISTIC_UUID.uppercase()) {
+                            if (characteristic.UUID.UUIDString.equals(CLICK_TOKEN_CHARACTERISTIC_UUID, ignoreCase = true)) {
+                                NSLog("🔵 BLE central: readValueForCharacteristic id=${peripheral.identifier.UUIDString}")
                                 peripheral.readValueForCharacteristic(characteristic)
                             }
                         }
@@ -443,12 +482,29 @@ class IosProximityManager : ProximityManager {
                         didUpdateValueForCharacteristic: CBCharacteristic,
                         error: NSError?,
                     ) {
-                        if (didUpdateValueForCharacteristic.UUID.UUIDString == CLICK_TOKEN_CHARACTERISTIC_UUID.uppercase()) {
+                        val id = peripheral.identifier.UUIDString
+                        if (error != null) {
+                            NSLog("🔵 BLE central: didUpdateValue failed — ${error.localizedDescription} id=$id")
+                            centralManager?.cancelPeripheralConnection(peripheral)
+                            connectingPeripheralIds.remove(id)
+                            return
+                        }
+                        if (didUpdateValueForCharacteristic.UUID.UUIDString.equals(CLICK_TOKEN_CHARACTERISTIC_UUID, ignoreCase = true)) {
                             val value = didUpdateValueForCharacteristic.value as? NSData
-                            parseGattTokenPayload(value?.toByteArray())?.let { heardTokens.add(it) }
+                            val bytes = value?.toByteArray()
+                            val token = parseGattTokenPayload(bytes)
+                            if (token != null) {
+                                heardTokens.add(token)
+                                NSLog("🔵 BLE central: captured GATT token=$token id=$id heardCount=${heardTokens.size}")
+                            } else {
+                                NSLog(
+                                    "🔵 BLE central: GATT read returned no token — " +
+                                        "bytes=${bytes?.size ?: 0} id=$id",
+                                )
+                            }
                         }
                         centralManager?.cancelPeripheralConnection(peripheral)
-                        connectingPeripheralIds.remove(peripheral.identifier.UUIDString)
+                        connectingPeripheralIds.remove(id)
                     }
                 }
                 discoveredPeripheralDelegate = peripheralDel
@@ -459,10 +515,15 @@ class IosProximityManager : ProximityManager {
                             val opts = mutableMapOf<Any?, Any?>(
                                 CBCentralManagerScanOptionAllowDuplicatesKey to NSNumber(bool = true),
                             )
+                            NSLog(
+                                "🔵 BLE central: startScan — service=${CLICK_SERVICE_UUID} " +
+                                    "holdMs=$BLE_SCAN_HOLD_MS",
+                            )
                             central.scanForPeripheralsWithServices(listOf(serviceUuid), options = opts)
                             cont.resume(Unit)
                         } else if (central.state != CBManagerStatePoweredOn && !started) {
                             started = true
+                            NSLog("🔵 BLE central: Bluetooth not powered on — state=${central.state}")
                             cont.resume(Unit)
                         }
                     }
@@ -475,6 +536,7 @@ class IosProximityManager : ProximityManager {
                     ) {
                         val id = didDiscoverPeripheral.identifier.UUIDString
                         if (connectingPeripheralIds.add(id)) {
+                            NSLog("🔵 BLE central: didDiscoverPeripheral — connect id=$id rssi=$RSSI")
                             didDiscoverPeripheral.delegate = peripheralDel
                             central.connectPeripheral(didDiscoverPeripheral, options = null)
                         }
@@ -484,6 +546,8 @@ class IosProximityManager : ProximityManager {
                         central: CBCentralManager,
                         didConnectPeripheral: CBPeripheral,
                     ) {
+                        val id = didConnectPeripheral.identifier.UUIDString
+                        NSLog("🔵 BLE central: didConnectPeripheral — discoverServices id=$id")
                         didConnectPeripheral.discoverServices(listOf(serviceUuid))
                     }
 
@@ -493,7 +557,12 @@ class IosProximityManager : ProximityManager {
                         didFailToConnectPeripheral: CBPeripheral,
                         error: NSError?,
                     ) {
-                        connectingPeripheralIds.remove(didFailToConnectPeripheral.identifier.UUIDString)
+                        val id = didFailToConnectPeripheral.identifier.UUIDString
+                        NSLog(
+                            "🔵 BLE central: didFailToConnect — " +
+                                "${error?.localizedDescription ?: "unknown"} id=$id",
+                        )
+                        connectingPeripheralIds.remove(id)
                     }
 
                     @kotlinx.cinterop.ObjCSignatureOverride
@@ -514,11 +583,17 @@ class IosProximityManager : ProximityManager {
         }
         coroutineScope {
             val audio = async(Dispatchers.Default) { recordAudioSampleToSink() }
-            delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
+            delay(BLE_SCAN_HOLD_MS)
+            NSLog("🔵 BLE central: ${BLE_SCAN_HOLD_MS}ms scan window elapsed — stopping scan")
             centralManager?.stopScan()
+            delay(GATT_READ_GRACE_MS)
             audio.await()
         }
+        NSLog("🔵 BLE central: listen complete — heardTokens=${heardTokens.sorted()}")
         centralManager = null
+        centralDelegate = null
+        discoveredPeripheralDelegate = null
+        connectingPeripheralIds.clear()
         return heardTokens.sorted()
     }
 
