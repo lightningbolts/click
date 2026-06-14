@@ -8,10 +8,14 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.refTo
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -80,6 +84,8 @@ import kotlin.coroutines.resume
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
 private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
+/** BLE must stay discoverable long after the short audio chirp so centrals can connect and read GATT. */
+private const val BLE_BROADCAST_HOLD_MS: Long = 6_000L
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun NSData.toByteArray(): ByteArray {
@@ -156,12 +162,17 @@ private fun readBytesFromPath(path: String): ByteArray? {
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 class IosProximityManager : ProximityManager {
 
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     private var peripheralManager: CBPeripheralManager? = null
     private var centralManager: CBCentralManager? = null
     private var peripheralDelegate: NSObject? = null
     private var centralDelegate: NSObject? = null
     private var discoveredPeripheralDelegate: NSObject? = null
+    private var gattService: CBMutableService? = null
     private var tokenCharacteristic: CBMutableCharacteristic? = null
+    private var broadcastSessionJob: Job? = null
+    private var advertisingHoldJob: Job? = null
     private val connectingPeripheralIds = mutableSetOf<String>()
     private var audioPlayer: AVAudioPlayer? = null
     private var audioRecorder: AVAudioRecorder? = null
@@ -182,8 +193,11 @@ class IosProximityManager : ProximityManager {
     }
 
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
+        broadcastSessionJob?.cancel()
+        advertisingHoldJob?.cancel()
         stopPeripheralOnly()
         coroutineScope {
+            broadcastSessionJob = coroutineContext[Job]
             val ble = async {
                 runCatching { startBleHandshakeBroadcast(ephemeralToken) }
                     .onFailure { NSLog("🔵 BLE broadcast failed: ${it.message}") }
@@ -192,8 +206,14 @@ class IosProximityManager : ProximityManager {
                 runCatching { playHandshakeAudio(ephemeralToken) }
                     .onFailure { NSLog("🔊 Audio broadcast failed: ${it.message}") }
             }
-            ble.await()
-            audio.await()
+            try {
+                audio.await()
+                ble.await()
+            } finally {
+                if (coroutineContext[Job] === broadcastSessionJob) {
+                    broadcastSessionJob = null
+                }
+            }
         }
     }
 
@@ -203,7 +223,7 @@ class IosProximityManager : ProximityManager {
         val characteristicUuid = CBUUID.UUIDWithString(CLICK_TOKEN_CHARACTERISTIC_UUID)
         val payloadBytes = payload.length.toInt()
 
-        withTimeoutOrNull(8_000L) {
+        withTimeoutOrNull(BLE_BROADCAST_HOLD_MS + 10_000L) {
             suspendCancellableCoroutine { cont ->
                 var resumed = false
                 var advertiseQueued = true
@@ -214,6 +234,16 @@ class IosProximityManager : ProximityManager {
                     if (!resumed) {
                         resumed = true
                         cont.resume(Unit)
+                    }
+                }
+
+                fun scheduleAdvertisingTeardown() {
+                    advertisingHoldJob?.cancel()
+                    advertisingHoldJob = managerScope.launch {
+                        delay(BLE_BROADCAST_HOLD_MS)
+                        NSLog("🔵 BLE: ${BLE_BROADCAST_HOLD_MS}ms hold elapsed — stopping advertising")
+                        stopPeripheralOnly()
+                        finish()
                     }
                 }
 
@@ -238,6 +268,7 @@ class IosProximityManager : ProximityManager {
                     )
                     tokenCharacteristic = characteristic
                     val service = CBMutableService(type = serviceUuid, primary = true)
+                    gattService = service
                     service.setCharacteristics(listOf(characteristic))
                     val adv = NSMutableDictionary()
                     adv.setObject(
@@ -264,6 +295,7 @@ class IosProximityManager : ProximityManager {
                             }
                             else -> {
                                 NSLog("🔵 BLE: terminal state ${bleStateLabel(state)} — aborting broadcast")
+                                stopPeripheralOnly()
                                 finish()
                             }
                         }
@@ -276,6 +308,7 @@ class IosProximityManager : ProximityManager {
                     ) {
                         if (error != null) {
                             NSLog("🔵 BLE: addService failed — ${error.localizedDescription}")
+                            stopPeripheralOnly()
                             finish()
                             return
                         }
@@ -283,6 +316,7 @@ class IosProximityManager : ProximityManager {
                         val adv = pendingAdv
                         if (adv == null) {
                             NSLog("🔵 BLE: addService succeeded but no advertisement payload queued")
+                            stopPeripheralOnly()
                             finish()
                             return
                         }
@@ -299,10 +333,15 @@ class IosProximityManager : ProximityManager {
                     ) {
                         if (error != null) {
                             NSLog("🔵 BLE: startAdvertising failed — ${error.localizedDescription}")
-                        } else {
-                            NSLog("🔵 BLE: startAdvertising succeeded — state=${bleStateLabel(peripheral.state)}")
+                            stopPeripheralOnly()
+                            finish()
+                            return
                         }
-                        finish()
+                        NSLog(
+                            "🔵 BLE: startAdvertising succeeded — holding for ${BLE_BROADCAST_HOLD_MS}ms " +
+                                "(state=${bleStateLabel(peripheral.state)})",
+                        )
+                        scheduleAdvertisingTeardown()
                     }
 
                     override fun peripheralManager(
@@ -330,7 +369,8 @@ class IosProximityManager : ProximityManager {
                 peripheralDelegate = del
                 peripheralManager = CBPeripheralManager(delegate = del, queue = null)
                 cont.invokeOnCancellation {
-                    peripheralManager?.stopAdvertising()
+                    advertisingHoldJob?.cancel()
+                    stopPeripheralOnly()
                 }
             }
         }
@@ -521,6 +561,8 @@ class IosProximityManager : ProximityManager {
     }
 
     override fun stopAll() {
+        broadcastSessionJob?.cancel()
+        broadcastSessionJob = null
         centralManager?.stopScan()
         centralManager = null
         centralDelegate = null
@@ -530,8 +572,12 @@ class IosProximityManager : ProximityManager {
     }
 
     private fun stopPeripheralOnly() {
+        advertisingHoldJob?.cancel()
+        advertisingHoldJob = null
         peripheralManager?.stopAdvertising()
+        peripheralManager?.removeAllServices()
         peripheralManager = null
+        gattService = null
         audioPlayer?.stop()
         audioPlayer = null
         audioRecorder?.stop()
