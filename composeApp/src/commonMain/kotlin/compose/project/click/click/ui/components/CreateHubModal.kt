@@ -48,6 +48,8 @@ import compose.project.click.click.data.api.HubCreateLocationBody
 import compose.project.click.click.data.api.HubCreatePostBody
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.utils.hasUsableHubLocation
+import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
 import compose.project.click.click.utils.LocationService
 import io.ktor.client.plugins.ClientRequestException
 import kotlinx.coroutines.Dispatchers
@@ -202,6 +204,7 @@ private fun CreateHubSheetBody(
     var customCategoryDraft by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     var locationPrimed by remember { mutableStateOf(false) }
+    var primedLocation by remember { mutableStateOf<compose.project.click.click.utils.LocationResult?>(null) }
 
     LaunchedEffect(Unit) {
         nameDraft = initialName.ifBlank { "" }
@@ -214,8 +217,12 @@ private fun CreateHubSheetBody(
         customCategoryDraft = ""
         submitting = false
         locationPrimed = false
-        withContext(Dispatchers.Default) {
-            runCatching { locationService.getHighAccuracyLocation(8000L) }
+        primedLocation = null
+        primedLocation = withContext(Dispatchers.Default) {
+            locationService.getCurrentLocation()
+                ?: runCatching {
+                    locationService.getHighAccuracyLocation(HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS)
+                }.getOrNull()
         }
         locationPrimed = true
     }
@@ -342,7 +349,9 @@ private fun CreateHubSheetBody(
                         submitting = true
                         try {
                             val loc = withContext(Dispatchers.Default) {
-                                locationService.getHighAccuracyLocation(12_000L)
+                                primedLocation?.takeIf(::hasUsableHubLocation)
+                                    ?: locationService.getCurrentLocation()
+                                    ?: locationService.getHighAccuracyLocation(HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS)
                             }
                             if (loc == null) {
                                 onError("Could not read GPS for this hub.")

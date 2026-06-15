@@ -31,6 +31,7 @@ import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.util.teardownBlocking
+import compose.project.click.click.utils.HUB_GATEKEEPER_LOCATION_CACHE_TTL_MS
 import compose.project.click.click.utils.LocationResult
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
@@ -47,6 +48,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -232,6 +235,8 @@ class HubChatViewModel(
     val title: String get() = _hubDetails.value.name
 
     private val senderUiCache = mutableMapOf<String, Pair<String, String?>>()
+    private var cachedGatekeeperLocation: LocationResult? = null
+    private var cachedGatekeeperLocationAtMs: Long = 0L
     private var hubChannel: RealtimeChannel? = null
     private var sessionJob: Job? = null
 
@@ -272,9 +277,12 @@ class HubChatViewModel(
             sessionJob?.cancel()
             sessionJob = viewModelScope.launch {
                 try {
-                    loadInitialMessages()
-                    _channelReady.value = true
-                    runRealtimeSession()
+                    coroutineScope {
+                        val realtimeJob = launch { runRealtimeSession() }
+                        loadInitialMessages()
+                        _channelReady.value = true
+                        realtimeJob.join()
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -299,18 +307,25 @@ class HubChatViewModel(
         return fromObject(nested)
     }
 
-    private suspend fun senderDisplay(userId: String, isMine: Boolean): Pair<String, String?> {
-        if (isMine) return "You" to null
-        senderUiCache[userId]?.let { return it }
-        val user = userRepository.fetchUserById(userId)
-        val label = user?.name?.takeIf { it.isNotBlank() } ?: "Member"
-        val avatar = user?.image?.trim()?.takeIf { it.isNotEmpty() }
-        return (label to avatar).also { senderUiCache[userId] = it }
+    private suspend fun prefetchSenderUi(userIds: Collection<String>) {
+        val missing = userIds
+            .filter { it != currentUserId && !senderUiCache.containsKey(it) }
+            .distinct()
+        if (missing.isEmpty()) return
+        userRepository.fetchUsersByIds(missing).forEach { user ->
+            val label = user.name?.takeIf { it.isNotBlank() } ?: "Member"
+            val avatar = user.image?.trim()?.takeIf { it.isNotEmpty() }
+            senderUiCache[user.id] = label to avatar
+        }
     }
 
-    private suspend fun rowToMessageWithUser(row: HubMessageRow): MessageWithUser {
+    private fun rowToMessageWithUser(row: HubMessageRow): MessageWithUser {
         val mine = row.userId == currentUserId
-        val (label, avatar) = senderDisplay(row.userId, mine)
+        val (label, avatar) = if (mine) {
+            "You" to null
+        } else {
+            senderUiCache[row.userId] ?: ("Member" to null)
+        }
         val message = Message(
             id = row.id,
             user_id = row.userId,
@@ -330,11 +345,11 @@ class HubChatViewModel(
     }
 
     private suspend fun mergeMessages(rows: List<HubMessageRow>) {
-        val ui = rows
+        val filtered = rows
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
-            .map { rowToMessageWithUser(it) }
-        _messages.value = ui
+        prefetchSenderUi(filtered.map { it.userId })
+        _messages.value = filtered.map { rowToMessageWithUser(it) }
     }
 
     private fun clearHubSecureMediaCache(purgePersistentCache: Boolean = false) {
@@ -418,7 +433,10 @@ class HubChatViewModel(
                     is PostgresAction.Insert -> {
                         val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
                         if (row.hubId != hubId) return@collect
-                        val ui = withContext(Dispatchers.Default) { rowToMessageWithUser(row) }
+                        if (row.userId != currentUserId && !senderUiCache.containsKey(row.userId)) {
+                            prefetchSenderUi(listOf(row.userId))
+                        }
+                        val ui = rowToMessageWithUser(row)
                         if (_messages.value.none { it.message.id == ui.message.id }) {
                             _messages.value = _messages.value + ui
                         }
@@ -429,7 +447,7 @@ class HubChatViewModel(
                         val current = _messages.value
                         val idx = current.indexOfFirst { it.message.id == row.id }
                         if (idx >= 0) {
-                            val refreshed = withContext(Dispatchers.Default) { rowToMessageWithUser(row) }
+                            val refreshed = rowToMessageWithUser(row)
                             _messages.value = current.toMutableList().also { it[idx] = refreshed }
                         }
                     }
@@ -478,11 +496,18 @@ class HubChatViewModel(
     }
 
     private suspend fun resolveGatekeeperLocationOrThrow(): LocationResult {
+        val now = Clock.System.now().toEpochMilliseconds()
+        cachedGatekeeperLocation
+            ?.takeIf { now - cachedGatekeeperLocationAtMs < HUB_GATEKEEPER_LOCATION_CACHE_TTL_MS }
+            ?.let { return it }
+
         val loc = hubLocationResolver()
             ?: throw IllegalStateException("Location is required to send hub messages.")
         if (!loc.latitude.isFinite() || !loc.longitude.isFinite()) {
             throw IllegalStateException("Invalid location.")
         }
+        cachedGatekeeperLocation = loc
+        cachedGatekeeperLocationAtMs = now
         return loc
     }
 

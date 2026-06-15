@@ -88,6 +88,9 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
 import compose.project.click.click.ui.screens.*
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
+import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
+import compose.project.click.click.utils.hasUsableHubLocation
+import compose.project.click.click.utils.resolveHubGatekeeperLocation
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.viewmodel.AuthViewModel
@@ -352,6 +355,34 @@ fun App() {
                     compose.project.click.click.utils.LocationResult(latitude = lat, longitude = lon)
                 }?.takeIf(::hasUsableLocation)
         }
+    }
+
+    var lastHubGatekeeperFix by remember {
+        mutableStateOf<compose.project.click.click.utils.LocationResult?>(null)
+    }
+
+    suspend fun resolveHubGatekeeperLocationForChat(
+        seed: compose.project.click.click.utils.LocationResult? = null,
+    ): compose.project.click.click.utils.LocationResult? {
+        lastHubGatekeeperFix?.takeIf(::hasUsableHubLocation)?.let { return it }
+        seed?.takeIf(::hasUsableHubLocation)?.let { return it }
+
+        if (!locationService.hasLocationPermission()) {
+            requestLocationPermissionIfNeeded(shouldRequest = true)
+            delay(250L)
+        }
+
+        val resolved = resolveHubGatekeeperLocation(
+            locationService = locationService,
+            lastKnownLatLon = AppDataManager.lastKnownDeviceLocation.value,
+            seed = seed,
+            highAccuracyTimeoutMs = HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS,
+        )
+        if (resolved != null) {
+            lastHubGatekeeperFix = resolved
+            AppDataManager.noteDeviceLocation(resolved.latitude, resolved.longitude)
+        }
+        return resolved
     }
 
     fun connectWithUser(
@@ -1008,13 +1039,14 @@ fun App() {
                             )
                             return@launch
                         }
-                        val loc = resolveConnectionLocation()
+                        val loc = resolveHubGatekeeperLocationForChat()
                         if (loc == null) {
                             snackbarHostState.showSnackbar(
                                 "Could not read your location. Try again in an open area."
                             )
                             return@launch
                         }
+                        lastHubGatekeeperFix = loc
                         val jwt = tokenStorage.getJwt()
                         if (jwt.isNullOrBlank()) {
                             snackbarHostState.showSnackbar(
@@ -1633,7 +1665,7 @@ fun App() {
                                                     hubChatTransitionMode = NavigationTransitionMode.Tap
                                                     hubChatArgs = null
                                                 },
-                                                resolveHubGatekeeperLocation = { resolveConnectionLocation() },
+                                                resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
                                                 integrateTimestampPeekWithSwipeBackContainer = true,
                                                 onRegisterSwipeBackRightToLeftPeek = {
                                                     hubChatRightToLeftPeek = it
@@ -1649,7 +1681,7 @@ fun App() {
                                             hubChatTransitionMode = NavigationTransitionMode.Tap
                                             hubChatArgs = null
                                         },
-                                        resolveHubGatekeeperLocation = { resolveConnectionLocation() },
+                                        resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
                                         integrateTimestampPeekWithSwipeBackContainer = false,
                                         onRegisterSwipeBackRightToLeftPeek = {},
                                     )

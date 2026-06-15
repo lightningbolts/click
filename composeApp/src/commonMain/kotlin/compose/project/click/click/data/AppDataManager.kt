@@ -127,6 +127,12 @@ object AppDataManager {
     private val _lastKnownDeviceLocation = MutableStateFlow<Pair<Double, Double>?>(null)
     val lastKnownDeviceLocation: StateFlow<Pair<Double, Double>?> = _lastKnownDeviceLocation.asStateFlow()
 
+    fun noteDeviceLocation(latitude: Double, longitude: Double) {
+        if (!latitude.isFinite() || !longitude.isFinite()) return
+        if (latitude == 0.0 && longitude == 0.0) return
+        _lastKnownDeviceLocation.value = latitude to longitude
+    }
+
     /** Radius (meters) for the eager beacon prefetch — matches the map discovery feed radius. */
     private const val BEACON_PREFETCH_RADIUS_METERS = 30_000.0
 
