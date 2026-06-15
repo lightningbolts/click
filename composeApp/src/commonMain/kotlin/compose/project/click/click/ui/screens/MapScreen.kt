@@ -140,9 +140,13 @@ fun MapScreen(
     LaunchedEffect(Unit) {
         viewModel.onMapScreenEntered()
         TelemetryBatcher.beginMapSession()
+        AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+            userLat = lat
+            userLon = lon
+        }
         val loc = locationService.getCurrentLocation()
-        userLat = loc?.latitude
-        userLon = loc?.longitude
+        userLat = loc?.latitude ?: userLat
+        userLon = loc?.longitude ?: userLon
         TelemetryBatcher.updateHexbinFromCoordinates(userLat, userLon)
     }
 
@@ -348,9 +352,9 @@ fun MapScreen(
                                 )
                             }
                         },
-                        onHubClick = { hub ->
+                        onHubClick = { hub, distanceM ->
                             TelemetryBatcher.recordActionTaken()
-                            viewModel.onMapPinTapped(MapPin.fromCommunityHub(hub))
+                            viewModel.onCommunityHubTapped(hub, distanceM)
                         },
                         onBeaconClick = { beacon ->
                             TelemetryBatcher.recordActionTaken()
@@ -1473,7 +1477,7 @@ private fun LiveIndicator(count: Int) {
 private fun CommunityHubBottomSheet(
     hub: CommunityHubPin,
     distanceMeters: Double?,
-    canJoinGeofence: Boolean,
+    canJoinGeofence: Boolean?,
     onJoin: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1497,25 +1501,47 @@ private fun CommunityHubBottomSheet(
             } else {
                 "${d.toInt()} m away"
             }
-        } ?: "Distance unavailable"
+        } ?: if (canJoinGeofence == null) "Checking location…" else "Distance unavailable"
         Text(
             text = distLabel,
             style = MaterialTheme.typography.bodySmall,
             color = GlassSheetTokens.OnOledMuted,
         )
-        if (canJoinGeofence) {
-            Button(
-                onClick = onJoin,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Join Hub")
+        when (canJoinGeofence) {
+            true -> {
+                Button(
+                    onClick = onJoin,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Join Hub")
+                }
             }
-        } else {
-            Text(
-                text = "Move closer to join this hub.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = GlassSheetTokens.OnOledMuted,
-            )
+            false -> {
+                Text(
+                    text = "Move closer to join this hub.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GlassSheetTokens.OnOledMuted,
+                )
+            }
+            null -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = PrimaryBlue,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Verifying your location…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GlassSheetTokens.OnOledMuted,
+                    )
+                }
+            }
         }
         TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
             Text("Close")

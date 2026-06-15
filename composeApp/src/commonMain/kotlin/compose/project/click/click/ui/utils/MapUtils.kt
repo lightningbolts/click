@@ -117,6 +117,8 @@ data class CommunityHubPin(
     val longitude: Double,
     val radiusMeters: Int,
     val activeUserCount: Int,
+    /** Server-reported distance from the last nearby query, when available. */
+    val reportedDistanceMeters: Double? = null,
 )
 
 /**

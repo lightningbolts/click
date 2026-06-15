@@ -3943,7 +3943,7 @@ class ChatViewModel(
             }
             val result = chatApi.deleteHub(hubId = hubId, authToken = jwt)
             if (result.isSuccess) {
-                AppDataManager.removeActiveHub(hubId)
+                AppDataManager.dismissCommunityHub(hubId)
                 _nudgeResult.value = "Hub deleted"
             } else {
                 _nudgeResult.value = result.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }

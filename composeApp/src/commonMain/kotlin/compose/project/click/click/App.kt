@@ -1019,12 +1019,19 @@ fun App() {
                 }
             }
 
-            fun launchCommunityHubJoin(hubId: String) {
+            fun launchCommunityHubJoin(hubId: String, knownCreatorId: String? = null) {
                 if (hubId.isBlank() || currentUser.id.isBlank()) return
                 // If we already have cached args for this hub, skip verification and re-enter.
                 val cached = lastHubChatArgs
                 if (cached != null && cached.hubId == hubId) {
-                    hubChatArgs = cached
+                    hubChatArgs = if (
+                        cached.creatorId == null &&
+                        !knownCreatorId.isNullOrBlank()
+                    ) {
+                        cached.copy(creatorId = knownCreatorId)
+                    } else {
+                        cached
+                    }
                     return
                 }
                 connectionScope.launch {
@@ -1064,10 +1071,12 @@ fun App() {
                             )
                         ) {
                             is HubVerifyResult.Success -> {
+                                val creatorId = outcome.creatorId ?: knownCreatorId
                                 val args = HubChatNavArgs(
                                     hubId = outcome.hubId,
                                     realtimeChannel = outcome.channel,
                                     hubTitle = outcome.name,
+                                    creatorId = creatorId,
                                 )
                                 lastHubChatArgs = args
                                 hubChatArgs = args
@@ -1077,6 +1086,7 @@ fun App() {
                                         name = outcome.name,
                                         realtimeChannel = outcome.channel,
                                         joinedAtMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                                        creatorId = creatorId,
                                     )
                                 )
                             }
@@ -1284,7 +1294,7 @@ fun App() {
                                             launchCommunityHubJoin(hubId)
                                         },
                                         onCommunityHubCreated = { hubId ->
-                                            launchCommunityHubJoin(hubId)
+                                            launchCommunityHubJoin(hubId, knownCreatorId = currentUser.id)
                                         },
                                         onHubCreateError = { msg ->
                                             appScope.launch {

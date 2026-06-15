@@ -102,7 +102,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: venue, error } = await supabase
       .from("hub_venues")
-      .select("id, name, geofence_lat, geofence_long, radius_meters")
+      .select("id, name, geofence_lat, geofence_long, radius_meters, creator_id")
       .eq("id", hubId)
       .maybeSingle();
 
@@ -157,6 +157,7 @@ Deno.serve(async (req: Request) => {
       hub_id: venue.id,
       name: venue.name,
       channel,
+      creator_id: venue.creator_id ?? null,
       distance_meters: Math.round(distanceM * 100) / 100,
       radius_meters: radius,
     }, 200);

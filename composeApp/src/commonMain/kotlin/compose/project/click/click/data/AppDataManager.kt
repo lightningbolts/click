@@ -3,6 +3,7 @@ package compose.project.click.click.data
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.CachedChatThread
+import compose.project.click.click.data.models.CachedHubThread
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.CachedAppSnapshot
 import compose.project.click.click.data.models.MessageReaction
@@ -180,6 +181,9 @@ object AppDataManager {
     private val _cachedChatThreads = MutableStateFlow<Map<String, CachedChatThread>>(emptyMap())
     val cachedChatThreads: StateFlow<Map<String, CachedChatThread>> = _cachedChatThreads.asStateFlow()
 
+    private val _cachedHubThreads = MutableStateFlow<Map<String, CachedHubThread>>(emptyMap())
+    val cachedHubThreads: StateFlow<Map<String, CachedHubThread>> = _cachedHubThreads.asStateFlow()
+
     /**
      * Unified inbox rows persisted in [CachedAppSnapshot] for instant Clicks list on cold start
      * (includes verified group chats, not only [connections]).
@@ -219,6 +223,7 @@ object AppDataManager {
     private const val CHAT_PREFETCH_LIMIT = 12
     private const val CHAT_PREFETCH_MAX_MESSAGES = 80
     private const val GROUP_CHAT_PREFETCH_MAX_MESSAGES = 50
+    private const val HUB_THREAD_CACHE_MAX_MESSAGES = 120
 
     private var loadAllDataJob: Job? = null
     private var lastForegroundRecoveryMs: Long = 0L
@@ -273,6 +278,18 @@ object AppDataManager {
     fun removeActiveHub(hubId: String) {
         _activeHubs.value = _activeHubs.value.filterNot { it.hubId == hubId }
         persistActiveHubs()
+    }
+
+    private val _dismissedCommunityHubIds = MutableStateFlow<Set<String>>(emptySet())
+    val dismissedCommunityHubIds: StateFlow<Set<String>> = _dismissedCommunityHubIds.asStateFlow()
+
+    /** Removes a hub from active groups and map/discovery feeds after delete (not leave). */
+    fun dismissCommunityHub(hubId: String) {
+        val trimmed = hubId.trim()
+        if (trimmed.isEmpty()) return
+        removeActiveHub(trimmed)
+        _prefetchedCommunityHubs.value = _prefetchedCommunityHubs.value.filterNot { it.hubId == trimmed }
+        _dismissedCommunityHubIds.value = _dismissedCommunityHubIds.value + trimmed
     }
 
     fun updateActiveHubDetails(
@@ -401,6 +418,37 @@ object AppDataManager {
         } else {
             scope.launch { persistSnapshot() }
         }
+    }
+
+    fun cachedHubThreadFor(hubId: String): CachedHubThread? {
+        if (hubId.isBlank()) return null
+        return _cachedHubThreads.value[hubId]
+    }
+
+    fun cacheHubThread(
+        hubId: String,
+        realtimeChannel: String,
+        messages: List<Message>,
+        participants: List<User> = emptyList(),
+    ) {
+        if (hubId.isBlank() || realtimeChannel.isBlank()) return
+        val boundedMessages = messages.takeLast(HUB_THREAD_CACHE_MAX_MESSAGES)
+        val thread = CachedHubThread(
+            hubId = hubId,
+            realtimeChannel = realtimeChannel,
+            cachedAtMs = Clock.System.now().toEpochMilliseconds(),
+            messages = boundedMessages,
+            participants = participants.distinctBy { it.id },
+        )
+        _cachedHubThreads.value = _cachedHubThreads.value + (hubId to thread)
+        scope.launch { persistSnapshot() }
+    }
+
+    fun clearHubThreadCache(hubId: String) {
+        if (hubId.isBlank()) return
+        if (!_cachedHubThreads.value.containsKey(hubId)) return
+        _cachedHubThreads.value = _cachedHubThreads.value - hubId
+        scope.launch { persistSnapshot() }
     }
 
     private fun updateInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
@@ -945,6 +993,7 @@ object AppDataManager {
         _coreConnectionIds.value = emptySet()
         _connectedUsers.value = emptyMap()
         _cachedChatThreads.value = emptyMap()
+        _cachedHubThreads.value = emptyMap()
         _inboxFeedChats.value = emptyList()
         supabaseRepository.clearCachedUserPublicProfiles()
         _userAvailability.value = null
@@ -1651,6 +1700,7 @@ object AppDataManager {
             _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
             _coreConnectionIds.value = snapshot.coreConnectionIds
             _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
+            _cachedHubThreads.value = snapshot.cachedHubThreads.associateBy { it.hubId }
             _inboxFeedChats.value = snapshot.inboxFeedChats
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
             _isDataLoaded.value =
@@ -1673,6 +1723,7 @@ object AppDataManager {
             hiddenConnectionIds = _hiddenConnectionIds.value,
             coreConnectionIds = _coreConnectionIds.value,
             cachedChatThreads = _cachedChatThreads.value.values.toList(),
+            cachedHubThreads = _cachedHubThreads.value.values.toList(),
             cachedUserPublicProfiles = supabaseRepository.snapshotCachedUserPublicProfiles(),
             inboxFeedChats = _inboxFeedChats.value,
         )

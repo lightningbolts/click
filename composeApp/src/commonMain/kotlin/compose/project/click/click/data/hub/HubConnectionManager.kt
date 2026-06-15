@@ -22,6 +22,7 @@ sealed class HubVerifyResult {
         val hubId: String,
         val name: String,
         val channel: String,
+        val creatorId: String? = null,
     ) : HubVerifyResult()
 
     data class Failure(val userMessage: String) : HubVerifyResult()
@@ -33,6 +34,7 @@ private data class HubVerifyOkResponse(
     @SerialName("hub_id") val hubId: String? = null,
     val name: String? = null,
     val channel: String? = null,
+    @SerialName("creator_id") val creatorId: String? = null,
 )
 
 @Serializable
@@ -86,6 +88,7 @@ object HubConnectionManager {
                         hubId = dto.hubId,
                         name = dto.name ?: dto.hubId,
                         channel = dto.channel,
+                        creatorId = dto.creatorId?.trim()?.takeIf { it.isNotEmpty() },
                     )
                 } else {
                     HubVerifyResult.Failure("Could not verify hub access.")

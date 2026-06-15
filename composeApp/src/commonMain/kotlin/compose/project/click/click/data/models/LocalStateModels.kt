@@ -54,6 +54,8 @@ data class CachedAppSnapshot(
     val hiddenConnectionIds: Set<String> = emptySet(),
     val coreConnectionIds: Set<String> = emptySet(),
     val cachedChatThreads: List<CachedChatThread> = emptyList(),
+    /** Hub venue chat timelines restored on cold start for instant hub navigation paint. */
+    val cachedHubThreads: List<CachedHubThread> = emptyList(),
     /** Hydrated user profiles restored on cold start so profile sheets can open without a network wait. */
     val cachedUserPublicProfiles: List<UserPublicProfile> = emptyList(),
     /**
@@ -74,6 +76,19 @@ data class CachedChatThread(
     val messages: List<Message> = emptyList(),
     val participants: List<User> = emptyList(),
     val reactions: List<MessageReaction> = emptyList(),
+)
+
+/**
+ * Locally cached hub venue messages persisted inside the encrypted app snapshot so hub
+ * navigation can paint from disk without waiting on network.
+ */
+@Serializable
+data class CachedHubThread(
+    val hubId: String,
+    val realtimeChannel: String,
+    val cachedAtMs: Long,
+    val messages: List<Message> = emptyList(),
+    val participants: List<User> = emptyList(),
 )
 
 @Serializable

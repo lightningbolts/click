@@ -36,8 +36,10 @@ import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
+import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import compose.project.click.click.utils.resolveHubGatekeeperLocation
 import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.put // pragma: allowlist secret
@@ -95,7 +97,8 @@ sealed class MapSelection {
     data class HubSelected(
         val hub: CommunityHubPin,
         val distanceMeters: Double?,
-        val canJoinGeofence: Boolean,
+        /** `null` while proximity is still being resolved. */
+        val canJoinGeofence: Boolean?,
     ) : MapSelection()
 }
 
@@ -325,6 +328,16 @@ class MapViewModel : ViewModel() {
                 if (done) warmDiscoveryFeed()
             }
         }
+        viewModelScope.launch {
+            AppDataManager.dismissedCommunityHubIds.collect { dismissed ->
+                if (dismissed.isEmpty()) return@collect
+                _communityHubs.update { hubs -> hubs.filterNot { it.hubId in dismissed } }
+                val selected = _selection.value as? MapSelection.HubSelected ?: return@collect
+                if (selected.hub.hubId in dismissed) {
+                    _selection.value = MapSelection.None
+                }
+            }
+        }
     }
 
     /** Starts (or retries) discovery hub/beacon loading without waiting for the map tab. */
@@ -432,10 +445,17 @@ class MapViewModel : ViewModel() {
                 longitude = dto.longitude,
                 radiusMeters = dto.radiusMeters,
                 activeUserCount = dto.activeUserCount,
+                reportedDistanceMeters = dto.distanceMeters,
             )
         }
-        _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
+        _communityHubs.update { current -> mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming)) }
         markDiscoveryProximityFetchCompleted()
+    }
+
+    private fun filterDismissedCommunityHubs(hubs: List<CommunityHubPin>): List<CommunityHubPin> {
+        val dismissed = AppDataManager.dismissedCommunityHubIds.value
+        if (dismissed.isEmpty()) return hubs
+        return hubs.filterNot { it.hubId in dismissed }
     }
 
     private fun observeAppData() {
@@ -1442,29 +1462,51 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun onCommunityHubTapped(hub: CommunityHubPin, seedDistanceMeters: Double? = null) {
+        val quickDistance = seedDistanceMeters?.takeIf { it.isFinite() && it < Double.MAX_VALUE }
+            ?: hub.reportedDistanceMeters?.takeIf { it.isFinite() }
+            ?: distanceToHubFromCachedLocation(hub)
+        val quickCanJoin = quickDistance?.let { it <= hubJoinRadiusMeters(hub) }
+
+        _selection.value = MapSelection.HubSelected(
+            hub = hub,
+            distanceMeters = quickDistance,
+            canJoinGeofence = quickCanJoin,
+        )
+
+        viewModelScope.launch(Dispatchers.Default) {
+            val loc = resolveFastMapLocation() ?: return@launch
+            val distance = haversineDistance(loc.latitude, loc.longitude, hub.latitude, hub.longitude)
+            val canJoin = distance <= hubJoinRadiusMeters(hub)
+            val current = _selection.value as? MapSelection.HubSelected ?: return@launch
+            if (current.hub.hubId != hub.hubId) return@launch
+            _selection.value = current.copy(
+                distanceMeters = distance,
+                canJoinGeofence = canJoin,
+            )
+        }
+    }
+
+    private fun hubJoinRadiusMeters(hub: CommunityHubPin): Double =
+        hub.radiusMeters.coerceAtLeast(1).toDouble()
+
+    private fun distanceToHubFromCachedLocation(hub: CommunityHubPin): Double? {
+        val cached = AppDataManager.lastKnownDeviceLocation.value ?: return null
+        return haversineDistance(cached.first, cached.second, hub.latitude, hub.longitude)
+    }
+
+    private suspend fun resolveFastMapLocation(): LocationResult? =
+        resolveHubGatekeeperLocation(
+            locationService = locationService,
+            lastKnownLatLon = AppDataManager.lastKnownDeviceLocation.value,
+            highAccuracyTimeoutMs = HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS,
+        )
+
     fun onMapPinTapped(pin: MapPin) {
         if (pin.kind == MapPinKind.COMMUNITY_HUB || pin.id.startsWith("hub:")) {
             val raw = pin.id.removePrefix("hub:")
-            val hub = _communityHubs.value.firstOrNull { it.hubId == raw }
-                ?: return
-            _selection.value = MapSelection.HubSelected(
-                hub = hub,
-                distanceMeters = null,
-                canJoinGeofence = false,
-            )
-            viewModelScope.launch(Dispatchers.Default) {
-                val distance = locationService.getHighAccuracyLocation(4500L)?.let { loc ->
-                    haversineDistance(loc.latitude, loc.longitude, hub.latitude, hub.longitude)
-                }
-                val canJoin = distance != null && distance <= 200.0
-                val current = _selection.value as? MapSelection.HubSelected ?: return@launch
-                if (current.hub.hubId == raw) {
-                    _selection.value = current.copy(
-                        distanceMeters = distance,
-                        canJoinGeofence = canJoin,
-                    )
-                }
-            }
+            val hub = _communityHubs.value.firstOrNull { it.hubId == raw } ?: return
+            onCommunityHubTapped(hub)
             return
         }
         if (pin.id.startsWith("beacon:")) {
@@ -1620,10 +1662,13 @@ class MapViewModel : ViewModel() {
                             longitude = dto.longitude,
                             radiusMeters = dto.radiusMeters,
                             activeUserCount = dto.activeUserCount,
+                            reportedDistanceMeters = dto.distanceMeters,
                         )
                     }
                     if (incoming.isNotEmpty()) {
-                        _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
+                        _communityHubs.update { current ->
+                            mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
+                        }
                     }
                 }
                 if (wantBeacons) {
@@ -1824,9 +1869,12 @@ class MapViewModel : ViewModel() {
                             longitude = dto.longitude,
                             radiusMeters = dto.radiusMeters,
                             activeUserCount = dto.activeUserCount,
+                            reportedDistanceMeters = dto.distanceMeters,
                         )
                     }
-                    _communityHubs.update { current -> mergeCommunityHubLists(current, incoming) }
+                    _communityHubs.update { current ->
+                        mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
+                    }
                 }
                 beaconsDeferred?.await()?.onSuccess { list ->
                     _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }

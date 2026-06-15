@@ -155,7 +155,7 @@ fun HubChatScreen(
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
 
     val isCreator by viewModel.isCreator.collectAsState()
-    val isCreatorResolved by viewModel.isCreatorResolved.collectAsState()
+    val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -197,19 +197,31 @@ fun HubChatScreen(
         }
     }
 
-    val scrollAnchor = messages.lastOrNull()?.message?.id to messages.size
-    LaunchedEffect(args.realtimeChannel, scrollAnchor) {
-        if (messages.isEmpty()) return@LaunchedEffect
+    val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }
+    val peerNewestMessageId = messages.lastOrNull()?.takeIf { !it.isSent }?.message?.id
+
+    suspend fun scrollHubTimelineToLatest() {
         repeat(50) {
             if (hubListState.layoutInfo.totalItemsCount > 0) {
                 suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
                 hubListState.scrollToItem(0)
                 delay(120)
                 suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
-                return@LaunchedEffect
+                return
             }
             delay(16L)
         }
+    }
+
+    LaunchedEffect(args.realtimeChannel, messages.isNotEmpty()) {
+        if (messages.isEmpty() || initialTimelineScrollDone.value) return@LaunchedEffect
+        initialTimelineScrollDone.value = true
+        scrollHubTimelineToLatest()
+    }
+
+    LaunchedEffect(peerNewestMessageId) {
+        if (peerNewestMessageId == null) return@LaunchedEffect
+        scrollHubTimelineToLatest()
     }
 
     LaunchedEffect(viewModel) {
@@ -306,31 +318,9 @@ fun HubChatScreen(
                                 expanded = settingsMenuExpanded,
                                 onDismissRequest = { settingsMenuExpanded = false },
                             ) {
-                                // Wait for ownership to fully resolve before listing options so all
-                                // entries appear simultaneously instead of "Leave" first, then Edit/Delete.
-                                if (!isCreatorResolved) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                CircularProgressIndicator(
-                                                    strokeWidth = 2.dp,
-                                                    modifier = Modifier.size(16.dp),
-                                                )
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Text(
-                                                    "Loading…",
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                        },
-                                        onClick = {},
-                                        enabled = false,
-                                    )
-                                    return@DropdownMenu
-                                }
                                 val items = visibleHubSettingsMenuItems(
                                     currentUserId = currentUserId,
-                                    creatorId = if (isCreator) currentUserId else args.creatorId,
+                                    creatorId = resolvedCreatorId,
                                 )
                                 if (HubSettingsMenuItem.Leave in items) {
                                     DropdownMenuItem(
@@ -698,29 +688,9 @@ private fun HubChatInputBar(
     isOutOfBounds: Boolean = false,
     mediaPickers: ChatMediaPickerHandles,
 ) {
-    var localDraft by remember { mutableStateOf("") }
-    val vmDraft by viewModel.draft.collectAsState()
-
-    LaunchedEffect(vmDraft) {
-        if (vmDraft != localDraft) {
-            localDraft = vmDraft
-        }
-    }
-
+    val draft by viewModel.draft.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
-    val composerFocusRequester = remember { FocusRequester() }
-    var hadSubmitInFlight by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isSending) {
-        if (isSending) {
-            hadSubmitInFlight = true
-            return@LaunchedEffect
-        }
-        if (!hadSubmitInFlight) return@LaunchedEffect
-        hadSubmitInFlight = false
-        composerFocusRequester.requestFocus()
-    }
 
     val composerStyle = LocalPlatformStyle.current
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
@@ -738,10 +708,11 @@ private fun HubChatInputBar(
     val sendInteraction = remember { MutableInteractionSource() }
     val composerStripInteraction = remember { MutableInteractionSource() }
     val composerFieldInteraction = remember { MutableInteractionSource() }
+    val composerFocusRequester = remember { FocusRequester() }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
 
-    val canSend = !inLobby && !isOutOfBounds && localDraft.trim().isNotEmpty() && !isSending
-    val enabled = !inLobby && !isOutOfBounds
+    val canSend = !inLobby && !isOutOfBounds && draft.trim().isNotEmpty()
+    val enabled = !inLobby && !isOutOfBounds && !isSending
     val attachTint = PrimaryBlue.copy(alpha = 0.92f)
     val sendGradient = Brush.linearGradient(
         colors = if (canSend) {
@@ -806,11 +777,8 @@ private fun HubChatInputBar(
                     .heightIn(min = auxButtonSize),
             ) {
                 BasicTextField(
-                    value = localDraft,
-                    onValueChange = { newText ->
-                        localDraft = newText
-                        viewModel.updateDraft(newText)
-                    },
+                    value = draft,
+                    onValueChange = viewModel::updateDraft,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = fieldSideInset, end = fieldSideInset)
@@ -833,7 +801,7 @@ private fun HubChatInputBar(
                     cursorBrush = SolidColor(PrimaryBlue),
                     decorationBox = { innerTextField ->
                         OutlinedTextFieldDefaults.DecorationBox(
-                            value = localDraft,
+                            value = draft,
                             innerTextField = innerTextField,
                             enabled = enabled,
                             singleLine = false,
@@ -943,6 +911,7 @@ private fun HubChatInputBar(
                             indication = null,
                             enabled = canSend,
                             onClick = {
+                                PlatformHapticsPolicy.lightImpact()
                                 viewModel.sendMessage()
                                 composerFocusRequester.requestFocus()
                             },

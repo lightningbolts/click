@@ -8,6 +8,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.audioCacheFileExtension
@@ -204,16 +205,11 @@ class HubChatViewModel(
     private val _channelReady = MutableStateFlow(false)
     val channelReady: StateFlow<Boolean> = _channelReady.asStateFlow()
 
-    private val _isCreator = MutableStateFlow(false)
+    private val _isCreator = MutableStateFlow(creatorId != null && creatorId == currentUserId)
     val isCreator: StateFlow<Boolean> = _isCreator.asStateFlow()
 
-    /**
-     * False until ownership has been authoritatively determined (after the `hub_venues` lookup, or
-     * immediately when detail loading is disabled). The settings menu waits on this so all options
-     * render at once instead of popping "Leave" first and then adding "Edit/Delete".
-     */
-    private val _isCreatorResolved = MutableStateFlow(false)
-    val isCreatorResolved: StateFlow<Boolean> = _isCreatorResolved.asStateFlow()
+    private val _resolvedCreatorId = MutableStateFlow(creatorId)
+    val resolvedCreatorId: StateFlow<String?> = _resolvedCreatorId.asStateFlow()
 
     private val _hubDetails = MutableStateFlow(
         HubDetailsState(
@@ -241,9 +237,9 @@ class HubChatViewModel(
     private var sessionJob: Job? = null
 
     init {
-        _isCreator.value = _hubDetails.value.isCreator
+        hydrateFromDiskCache()
         if (loadHubDetails) {
-            viewModelScope.launch(chatMediaDispatcher) {
+            viewModelScope.launch(Dispatchers.Default) {
                 try {
                     val rows = supabase.from("hub_venues")
                         .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("name", "category", "creator_id")) {
@@ -252,7 +248,11 @@ class HubChatViewModel(
                         }
                         .decodeList<HubDetailsRow>()
                     val row = rows.firstOrNull()
-                    val ownsHub = row?.creatorId == currentUserId
+                    val creator = row?.creatorId?.trim()?.takeIf { it.isNotEmpty() }
+                    if (creator != null) {
+                        _resolvedCreatorId.value = creator
+                    }
+                    val ownsHub = creator == currentUserId
                     _isCreator.value = ownsHub
                     _hubDetails.update { current ->
                         current.copy(
@@ -262,14 +262,8 @@ class HubChatViewModel(
                         )
                     }
                 } catch (_: Exception) {
-                } finally {
-                    // Ownership is now authoritative (or the lookup failed and we keep the seed value).
-                    _isCreatorResolved.value = true
                 }
             }
-        } else {
-            // No remote lookup: the constructor-seeded ownership is already authoritative.
-            _isCreatorResolved.value = true
         }
         if (!startRealtime) {
             _channelReady.value = true
@@ -288,6 +282,14 @@ class HubChatViewModel(
                 } catch (e: Exception) {
                     _channelReady.value = true
                     println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
+                }
+            }
+        }
+        viewModelScope.launch {
+            runCatching { hubLocationResolver() }.getOrNull()?.let { loc ->
+                if (loc.latitude.isFinite() && loc.longitude.isFinite()) {
+                    cachedGatekeeperLocation = loc
+                    cachedGatekeeperLocationAtMs = Clock.System.now().toEpochMilliseconds()
                 }
             }
         }
@@ -344,12 +346,209 @@ class HubChatViewModel(
         return MessageWithUser(message = message, user = user, isSent = mine)
     }
 
+    private fun messageWithUserFromCached(message: Message, participants: List<User>): MessageWithUser {
+        val mine = message.user_id == currentUserId
+        val participant = participants.firstOrNull { it.id == message.user_id }
+        val (label, avatar) = when {
+            mine -> "You" to null
+            participant != null -> (participant.name?.takeIf { it.isNotBlank() } ?: "Member") to participant.image
+            else -> senderUiCache[message.user_id] ?: ("Member" to null)
+        }
+        val user = if (mine) {
+            User(id = message.user_id, name = "You", image = null, createdAt = 0L)
+        } else {
+            User(id = message.user_id, name = label, image = avatar, createdAt = 0L)
+        }
+        return MessageWithUser(message = message, user = user, isSent = mine)
+    }
+
+    private fun hydrateFromDiskCache() {
+        val cached = AppDataManager.cachedHubThreadFor(hubId) ?: return
+        if (cached.messages.isEmpty()) return
+        cached.participants.forEach { user ->
+            if (user.id != currentUserId) {
+                val label = user.name?.takeIf { it.isNotBlank() } ?: "Member"
+                val avatar = user.image?.trim()?.takeIf { it.isNotEmpty() }
+                senderUiCache[user.id] = label to avatar
+            }
+        }
+        _messages.value = cached.messages.map { messageWithUserFromCached(it, cached.participants) }
+    }
+
+    private fun persistHubMessagesToDisk(messages: List<MessageWithUser>) {
+        if (messages.isEmpty()) return
+        AppDataManager.cacheHubThread(
+            hubId = hubId,
+            realtimeChannel = realtimeChannelName,
+            messages = messages.map { it.message },
+            participants = messages.map { it.user }.distinctBy { it.id },
+        )
+    }
+
+    private fun pendingOptimisticOutgoing(serverMessages: List<MessageWithUser>): List<MessageWithUser> {
+        return _messages.value.filter { mwu ->
+            val message = mwu.message
+            if (!message.id.startsWith("temp-") || message.user_id != currentUserId) return@filter false
+            if (message.deliveryState != MessageDeliveryState.PENDING) return@filter false
+            val stamp = message.localSentAt
+            if (stamp != null && serverMessages.any { s ->
+                    s.message.user_id == message.user_id && s.message.localSentAt == stamp
+                }
+            ) {
+                return@filter false
+            }
+            !serverMessages.any { s ->
+                s.message.user_id == message.user_id && s.message.content == message.content
+            }
+        }
+    }
+
+    private fun stripOptimisticMatchingServerRow(
+        messages: List<MessageWithUser>,
+        serverMessage: Message,
+    ): List<MessageWithUser> {
+        val stamp = serverMessage.localSentAt
+        return messages.filterNot { mwu ->
+            mwu.message.id.startsWith("temp-") &&
+                mwu.message.user_id == serverMessage.user_id &&
+                stamp != null &&
+                mwu.message.localSentAt == stamp
+        }
+    }
+
+    private fun findPendingOptimisticTempId(
+        messages: List<MessageWithUser>,
+        serverMessage: Message,
+    ): String? {
+        if (serverMessage.user_id != currentUserId) return null
+        serverMessage.localSentAt?.let { stamp ->
+            messages.firstOrNull { mwu ->
+                mwu.message.id.startsWith("temp-") &&
+                    mwu.message.user_id == currentUserId &&
+                    mwu.message.localSentAt == stamp
+            }?.message?.id?.let { return it }
+        }
+        return messages.lastOrNull { mwu ->
+            mwu.message.id.startsWith("temp-") &&
+                mwu.message.user_id == currentUserId &&
+                mwu.message.messageType == serverMessage.messageType &&
+                mwu.message.deliveryState == MessageDeliveryState.PENDING &&
+                mwu.message.content == serverMessage.content
+        }?.message?.id
+    }
+
+    private fun resolveInsertedMessage(
+        serverMessage: Message,
+        messages: List<MessageWithUser>,
+        tempId: String?,
+    ): Message {
+        if (serverMessage.localSentAt != null) {
+            return serverMessage.copy(deliveryState = MessageDeliveryState.SENT)
+        }
+        val optimistic = tempId?.let { id -> messages.find { it.message.id == id }?.message }
+        val stamp = optimistic?.localSentAt ?: return serverMessage.copy(deliveryState = MessageDeliveryState.SENT)
+        return serverMessage.copy(localSentAt = stamp, deliveryState = MessageDeliveryState.SENT)
+    }
+
+    private fun applyInsertedHubMessage(serverMessage: Message, optimisticTempId: String? = null) {
+        val current = _messages.value
+        val tempIdToReplace = optimisticTempId
+            ?: findPendingOptimisticTempId(current, serverMessage)
+        val mergedMessage = resolveInsertedMessage(serverMessage, current, tempIdToReplace)
+        val user = if (mergedMessage.user_id == currentUserId) {
+            User(id = currentUserId, name = "You", image = null, createdAt = 0L)
+        } else {
+            val (label, avatar) = senderUiCache[mergedMessage.user_id] ?: ("Member" to null)
+            User(id = mergedMessage.user_id, name = label, image = avatar, createdAt = 0L)
+        }
+
+        if (tempIdToReplace != null) {
+            val idx = current.indexOfFirst { it.message.id == tempIdToReplace }
+            if (idx >= 0) {
+                val replaced = current.toMutableList()
+                replaced[idx] = MessageWithUser(
+                    message = mergedMessage,
+                    user = user,
+                    isSent = mergedMessage.user_id == currentUserId,
+                )
+                _messages.value = replaced
+                persistHubMessagesToDisk(replaced)
+                return
+            }
+        }
+
+        val baseList = stripOptimisticMatchingServerRow(current, mergedMessage)
+        val existingIdx = baseList.indexOfFirst { it.message.id == mergedMessage.id }
+        if (existingIdx >= 0) {
+            val updated = baseList.toMutableList()
+            val prior = updated[existingIdx].message
+            updated[existingIdx] = MessageWithUser(
+                message = mergedMessage.copy(
+                    localSentAt = mergedMessage.localSentAt ?: prior.localSentAt,
+                ),
+                user = user,
+                isSent = mergedMessage.user_id == currentUserId,
+            )
+            _messages.value = updated
+            persistHubMessagesToDisk(updated)
+            return
+        }
+
+        val next = baseList + MessageWithUser(
+            message = mergedMessage,
+            user = user,
+            isSent = mergedMessage.user_id == currentUserId,
+        )
+        _messages.value = next
+        persistHubMessagesToDisk(next)
+    }
+
+    private fun markOptimisticSendFailed(tempId: String) {
+        val next = _messages.value.map { mwu ->
+            if (mwu.message.id == tempId) {
+                mwu.copy(message = mwu.message.copy(deliveryState = MessageDeliveryState.ERROR))
+            } else {
+                mwu
+            }
+        }
+        _messages.value = next
+        persistHubMessagesToDisk(next)
+    }
+
+    private fun appendOptimisticOutgoing(text: String): String {
+        val localMs = Clock.System.now().toEpochMilliseconds()
+        val tempId = "temp-$localMs-${Random.nextLong()}"
+        val optimistic = MessageWithUser(
+            message = Message(
+                id = tempId,
+                user_id = currentUserId,
+                content = text,
+                timeCreated = localMs,
+                timeEdited = null,
+                isRead = true,
+                messageType = ChatMessageType.TEXT,
+                metadata = null,
+                localSentAt = localMs,
+                deliveryState = MessageDeliveryState.PENDING,
+            ),
+            user = User(id = currentUserId, name = "You", image = null, createdAt = 0L),
+            isSent = true,
+        )
+        val next = _messages.value + optimistic
+        _messages.value = next
+        persistHubMessagesToDisk(next)
+        return tempId
+    }
+
     private suspend fun mergeMessages(rows: List<HubMessageRow>) {
         val filtered = rows
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
         prefetchSenderUi(filtered.map { it.userId })
-        _messages.value = filtered.map { rowToMessageWithUser(it) }
+        val merged = filtered.map { rowToMessageWithUser(it) }
+        val next = merged + pendingOptimisticOutgoing(merged)
+        _messages.value = next
+        persistHubMessagesToDisk(next)
     }
 
     private fun clearHubSecureMediaCache(purgePersistentCache: Boolean = false) {
@@ -363,7 +562,7 @@ class HubChatViewModel(
         }
     }
 
-    private fun clearLocalHubState() {
+    private fun clearLocalHubState(clearDiskCache: Boolean = false) {
         sessionJob?.cancel()
         sessionJob = null
         _messages.value = emptyList()
@@ -372,6 +571,9 @@ class HubChatViewModel(
         _outOfBounds.value = false
         clearHubSecureMediaCache(purgePersistentCache = true)
         activeHubCache.removeActiveHub(hubId)
+        if (clearDiskCache) {
+            AppDataManager.clearHubThreadCache(hubId)
+        }
     }
 
     private suspend fun CoroutineScope.runRealtimeSession() {
@@ -436,10 +638,7 @@ class HubChatViewModel(
                         if (row.userId != currentUserId && !senderUiCache.containsKey(row.userId)) {
                             prefetchSenderUi(listOf(row.userId))
                         }
-                        val ui = rowToMessageWithUser(row)
-                        if (_messages.value.none { it.message.id == ui.message.id }) {
-                            _messages.value = _messages.value + ui
-                        }
+                        applyInsertedHubMessage(rowToMessageWithUser(row).message)
                     }
                     is PostgresAction.Update -> {
                         val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
@@ -447,15 +646,30 @@ class HubChatViewModel(
                         val current = _messages.value
                         val idx = current.indexOfFirst { it.message.id == row.id }
                         if (idx >= 0) {
+                            val existing = current[idx].message
                             val refreshed = rowToMessageWithUser(row)
-                            _messages.value = current.toMutableList().also { it[idx] = refreshed }
+                            val preservedMessage = refreshed.message.copy(
+                                localSentAt = refreshed.message.localSentAt ?: existing.localSentAt,
+                                deliveryState = if (existing.deliveryState == MessageDeliveryState.PENDING) {
+                                    MessageDeliveryState.SENT
+                                } else {
+                                    refreshed.message.deliveryState
+                                },
+                            )
+                            val next = current.toMutableList().also {
+                                it[idx] = refreshed.copy(message = preservedMessage)
+                            }
+                            _messages.value = next
+                            persistHubMessagesToDisk(next)
                         }
                     }
                     is PostgresAction.Delete -> {
                         val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
                         val current = _messages.value
                         if (current.any { it.message.id == deletedId }) {
-                            _messages.value = current.filterNot { it.message.id == deletedId }
+                            val next = current.filterNot { it.message.id == deletedId }
+                            _messages.value = next
+                            persistHubMessagesToDisk(next)
                         }
                     }
                     else -> Unit
@@ -513,15 +727,18 @@ class HubChatViewModel(
 
     fun sendMessage() {
         val text = _draft.value.trim()
-        if (text.isEmpty() || _isSending.value) return
+        if (text.isEmpty()) return
+
+        _draft.value = ""
+        _sendError.value = null
+        val tempId = appendOptimisticOutgoing(text)
+
         viewModelScope.launch {
-            _isSending.value = true
-            _sendError.value = null
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
                 val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                     ?: throw IllegalStateException("Please sign in again.")
-                chatApi.sendHubMessage(
+                val dto = chatApi.sendHubMessage(
                     hubId = hubId,
                     body = text,
                     userLat = loc.latitude,
@@ -530,16 +747,29 @@ class HubChatViewModel(
                     messageType = ChatMessageType.TEXT,
                     metadata = null,
                 ).getOrElse { e -> throw e }
-                _draft.value = ""
+                applyInsertedHubMessage(
+                    serverMessage = rowToMessageWithUser(
+                        HubMessageRow(
+                            id = dto.id,
+                            hubId = dto.hubId,
+                            userId = dto.userId,
+                            body = dto.body,
+                            createdAt = dto.createdAt,
+                            messageType = dto.messageType,
+                            metadata = dto.metadata,
+                        ),
+                    ).message,
+                    optimisticTempId = tempId,
+                )
             } catch (e: Exception) {
+                markOptimisticSendFailed(tempId)
+                _draft.value = text
                 if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
                     _sendError.value = e.redactedRestMessage().ifBlank { "Could not send" }
                 }
-            } finally {
-                _isSending.value = false
             }
         }
     }
@@ -759,7 +989,8 @@ class HubChatViewModel(
                     hubId = hubId,
                     authToken = jwt,
                 ).getOrThrow()
-                clearLocalHubState()
+                AppDataManager.dismissCommunityHub(hubId)
+                clearLocalHubState(clearDiskCache = true)
                 navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
                 onResult(true)
             } catch (e: Exception) {

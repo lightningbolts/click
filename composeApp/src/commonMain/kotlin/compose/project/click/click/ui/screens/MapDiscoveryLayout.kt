@@ -332,7 +332,7 @@ internal fun MapDiscoveryScreen(
     onDropBeacon: () -> Unit,
     mapContent: @Composable (Modifier, Boolean) -> Unit,
     expandedMapChrome: @Composable () -> Unit,
-    onHubClick: (CommunityHubPin) -> Unit,
+    onHubClick: (CommunityHubPin, distanceMeters: Double?) -> Unit,
     onBeaconClick: (MapBeacon) -> Unit,
     onConnectionClick: (ConnectionMapPoint) -> Unit,
 ) {
@@ -559,7 +559,10 @@ internal fun MapDiscoveryScreen(
                             item = item,
                             onClick = {
                                 when (item) {
-                                    is DiscoveryFeedItem.Hub -> onHubClick(item.hub)
+                                    is DiscoveryFeedItem.Hub -> onHubClick(
+                                        item.hub,
+                                        item.distanceM.takeIf { it.isFinite() && it < Double.MAX_VALUE },
+                                    )
                                     is DiscoveryFeedItem.Beacon -> onBeaconClick(item.beacon)
                                     is DiscoveryFeedItem.Connection -> onConnectionClick(item.point)
                                 }
