@@ -226,12 +226,28 @@ class MapViewModel : ViewModel() {
     val discoveryFeedLoading: StateFlow<Boolean> = _discoveryFeedLoading.asStateFlow()
 
     val discoveryFeedPending: StateFlow<Boolean> = combine(
-        _discoveryFeedLoading,
-        _discoveryProximityFetchCompleted,
-        discoveryFeedBeacons,
-        discoveryFeedHubs,
-    ) { loading, completed, beacons, hubs ->
-        loading || (!completed && beacons.isEmpty() && hubs.isEmpty())
+        combine(
+            _discoveryFeedLoading,
+            _discoveryProximityFetchCompleted,
+            discoveryFeedBeacons,
+            discoveryFeedHubs,
+        ) { loading, completed, beacons, hubs ->
+            Quadruple(loading, completed, beacons, hubs)
+        },
+        combine(
+            AppDataManager.prefetchedMapBeacons,
+            AppDataManager.prefetchedCommunityHubs,
+        ) { prefetchedBeacons, prefetchedHubs ->
+            prefetchedBeacons to prefetchedHubs
+        },
+    ) { base, prefetched ->
+        val (loading, completed, beacons, hubs) = base
+        val (prefetchedBeacons, prefetchedHubs) = prefetched
+        val hasLocalFeedData = beacons.isNotEmpty() ||
+            hubs.isNotEmpty() ||
+            prefetchedBeacons.isNotEmpty() ||
+            prefetchedHubs.isNotEmpty()
+        loading || (!completed && !hasLocalFeedData)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -432,6 +448,7 @@ class MapViewModel : ViewModel() {
     private fun applyPrefetchedBeacons(list: List<MapBeacon>) {
         if (list.isEmpty()) return
         _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+        AppDataManager.mergeCachedMapBeacons(list)
         markDiscoveryProximityFetchCompleted()
     }
 
@@ -449,6 +466,7 @@ class MapViewModel : ViewModel() {
             )
         }
         _communityHubs.update { current -> mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming)) }
+        AppDataManager.mergeCachedCommunityHubsFromDto(rows)
         markDiscoveryProximityFetchCompleted()
     }
 
@@ -510,6 +528,10 @@ class MapViewModel : ViewModel() {
                     }
                     isLoading -> {
                         _mapState.value = MapState.Loading
+                    }
+                    connections.isNotEmpty() -> {
+                        val mapConnections = connections.filter { it.id !in hiddenIds }
+                        _mapState.value = MapState.Success(mapConnections)
                     }
                     else -> {
                         _mapState.value = MapState.Success(emptyList())
@@ -1669,6 +1691,7 @@ class MapViewModel : ViewModel() {
                         _communityHubs.update { current ->
                             mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
                         }
+                        AppDataManager.mergeCachedCommunityHubsFromDto(hubRows)
                     }
                 }
                 if (wantBeacons) {
@@ -1686,6 +1709,7 @@ class MapViewModel : ViewModel() {
                     }.awaitAll().flatten()
                     if (beaconRows.isNotEmpty()) {
                         _mapBeacons.update { current -> mergeMapBeaconLists(current, beaconRows) }
+                        AppDataManager.mergeCachedMapBeacons(beaconRows)
                     }
                 }
             }
@@ -1693,7 +1717,10 @@ class MapViewModel : ViewModel() {
                 if (seq == discoveryFetchSeq) {
                     if (showPulse) _discoveryFeedLoading.value = false
                     if (markInitialComplete) {
-                        val hasFeedData = _mapBeacons.value.isNotEmpty() || _communityHubs.value.isNotEmpty()
+                        val hasFeedData = _mapBeacons.value.isNotEmpty() ||
+                            _communityHubs.value.isNotEmpty() ||
+                            AppDataManager.prefetchedMapBeacons.value.isNotEmpty() ||
+                            AppDataManager.prefetchedCommunityHubs.value.isNotEmpty()
                         when {
                             fetchRan || hasFeedData -> completeDiscoveryPrefetchAfterSuccess()
                             !canEverResolveProximityCenters() -> finishDiscoveryPrefetchAttempt()
@@ -1841,9 +1868,6 @@ class MapViewModel : ViewModel() {
                         )
                     }
                 } else {
-                    if (jobSlot != DiscoveryFetchSlot.Discovery) {
-                        _communityHubs.value = emptyList()
-                    }
                     null
                 }
                 val beaconsDeferred = if (wantBeacons) {
@@ -1875,9 +1899,13 @@ class MapViewModel : ViewModel() {
                     _communityHubs.update { current ->
                         mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
                     }
+                    AppDataManager.mergeCachedCommunityHubsFromDto(rows)
                 }
                 beaconsDeferred?.await()?.onSuccess { list ->
-                    _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+                    if (list.isNotEmpty()) {
+                        _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+                        AppDataManager.mergeCachedMapBeacons(list)
+                    }
                 }
             }
         }

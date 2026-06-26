@@ -129,6 +129,8 @@ actual class CallManager {
                     )
                 }
                 "ended" -> {
+                    // Native CallKit can emit a stale "ended" on cold boot before any session starts.
+                    if (_callState.value is CallState.Idle && !endCallGraceActive) return@addObserverForName
                     _callState.value = CallState.Ended(reason)
                 }
                 else -> {

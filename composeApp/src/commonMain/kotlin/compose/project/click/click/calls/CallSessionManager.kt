@@ -122,10 +122,12 @@ object CallSessionManager {
     private var completedCallLogInserted: Boolean = false
 
     private var previousCallState: CallState = CallState.Idle
+    private var previousOverlayState: CallOverlayState = CallOverlayState.Idle
 
     init {
         scope.launch {
             callState.collectLatest { state ->
+                val overlayBeforeUpdate = _overlayState.value
                 when (state) {
                     is CallState.Connected -> {
                         callConnectedAtMs = Clock.System.now().toEpochMilliseconds()
@@ -148,7 +150,17 @@ object CallSessionManager {
                         activeInviteValue?.let { invite ->
                             PlatformIncomingCallUi.dismissIncomingCall(invite.callId, state.reason)
                         }
-                        _overlayState.value = CallOverlayState.Ended(activeInviteValue, state.reason ?: "Call ended")
+                        if (
+                            CallOverlayTransitionPolicy.shouldPresentCallEndedOverlay(
+                                previousCallState = previousCallState,
+                                overlayState = overlayBeforeUpdate,
+                            )
+                        ) {
+                            _overlayState.value = CallOverlayState.Ended(
+                                activeInviteValue,
+                                state.reason ?: "Call ended",
+                            )
+                        }
                     }
 
                     CallState.Idle -> {
@@ -169,6 +181,7 @@ object CallSessionManager {
                     }
                 }
                 previousCallState = state
+                previousOverlayState = _overlayState.value
             }
         }
     }

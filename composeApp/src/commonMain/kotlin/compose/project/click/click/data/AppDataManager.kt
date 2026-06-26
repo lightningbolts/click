@@ -1,11 +1,15 @@
 package compose.project.click.click.data
 
+import compose.project.click.click.data.models.CachedAppSnapshot
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.CachedChatThread
 import compose.project.click.click.data.models.CachedHubThread
 import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.CachedAppSnapshot
+import compose.project.click.click.data.models.StoredCommunityHubPin
+import compose.project.click.click.data.models.StoredMapBeacon
+import compose.project.click.click.data.models.toMapBeacon
+import compose.project.click.click.data.models.toStoredMapBeacon
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
@@ -34,7 +38,11 @@ import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
+import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.ui.utils.CommunityHubPin
+import compose.project.click.click.ui.utils.mergeCommunityHubLists
+import compose.project.click.click.ui.utils.mergeMapBeaconLists
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineScope
@@ -197,6 +205,53 @@ object AppDataManager {
 
     fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
         _inboxFeedChats.value = chats
+        scope.launch { persistSnapshot() }
+    }
+
+    /** Local SSOT merge for map beacons; persisted in [CachedAppSnapshot] for offline cold start. */
+    fun mergeCachedMapBeacons(incoming: List<MapBeacon>) {
+        if (incoming.isEmpty()) return
+        _prefetchedMapBeacons.value = mergeMapBeaconLists(_prefetchedMapBeacons.value, incoming)
+        scope.launch { persistSnapshot() }
+    }
+
+    /** Local SSOT merge for community hubs; persisted in [CachedAppSnapshot] for offline cold start. */
+    fun mergeCachedCommunityHubsFromDto(incoming: List<CommunityHubNearbyDto>) {
+        if (incoming.isEmpty()) return
+        val existingPins = _prefetchedCommunityHubs.value.map { dto ->
+            CommunityHubPin(
+                hubId = dto.hubId,
+                name = dto.name,
+                latitude = dto.latitude,
+                longitude = dto.longitude,
+                radiusMeters = dto.radiusMeters,
+                activeUserCount = dto.activeUserCount,
+                reportedDistanceMeters = dto.distanceMeters,
+            )
+        }
+        val incomingPins = incoming.map { dto ->
+            CommunityHubPin(
+                hubId = dto.hubId,
+                name = dto.name,
+                latitude = dto.latitude,
+                longitude = dto.longitude,
+                radiusMeters = dto.radiusMeters,
+                activeUserCount = dto.activeUserCount,
+                reportedDistanceMeters = dto.distanceMeters,
+            )
+        }
+        val merged = mergeCommunityHubLists(existingPins, incomingPins)
+        _prefetchedCommunityHubs.value = merged.map { pin ->
+            CommunityHubNearbyDto(
+                hubId = pin.hubId,
+                name = pin.name,
+                latitude = pin.latitude,
+                longitude = pin.longitude,
+                radiusMeters = pin.radiusMeters,
+                activeUserCount = pin.activeUserCount,
+                distanceMeters = pin.reportedDistanceMeters ?: 0.0,
+            )
+        }
         scope.launch { persistSnapshot() }
     }
 
@@ -937,10 +992,14 @@ object AppDataManager {
                         mapBeaconRepository.fetchNearbyCommunityHubs(minLat, maxLat, minLon, maxLon)
                     }
                     beaconsDeferred.await().onSuccess { list ->
-                        if (list.isNotEmpty()) _prefetchedMapBeacons.value = list
+                        if (list.isNotEmpty()) {
+                            mergeCachedMapBeacons(list)
+                        }
                     }
                     hubsDeferred.await().onSuccess { rows ->
-                        if (rows.isNotEmpty()) _prefetchedCommunityHubs.value = rows
+                        if (rows.isNotEmpty()) {
+                            mergeCachedCommunityHubsFromDto(rows)
+                        }
                     }
                 }
             }.onFailure { e ->
@@ -1700,11 +1759,16 @@ object AppDataManager {
     }
 
     /**
-     * Apply server connection snapshot. Preserves locally cached core pins when the server
-     * returns none but cold-start restore already had IDs (avoids wiping pins on failed reads).
+     * Apply server connection snapshot. Preserves locally cached rows when the server
+     * returns none but cold-start restore already had data (offline network failure).
      */
     private fun applyFetchedConnectionSnapshot(snapshot: UserConnectionsSnapshot) {
-        _connections.value = snapshot.connections
+        val localConnections = _connections.value
+        _connections.value = when {
+            snapshot.connections.isNotEmpty() -> snapshot.connections
+            localConnections.isNotEmpty() -> localConnections
+            else -> snapshot.connections
+        }
         _archivedConnectionIds.value = snapshot.archivedConnectionIds
         _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
         val serverCore = snapshot.coreConnectionIds
@@ -1734,6 +1798,22 @@ object AppDataManager {
             _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
             _cachedHubThreads.value = snapshot.cachedHubThreads.associateBy { it.hubId }
             _inboxFeedChats.value = snapshot.inboxFeedChats
+            if (snapshot.cachedMapBeacons.isNotEmpty()) {
+                _prefetchedMapBeacons.value = snapshot.cachedMapBeacons.map { it.toMapBeacon() }
+            }
+            if (snapshot.cachedCommunityHubs.isNotEmpty()) {
+                _prefetchedCommunityHubs.value = snapshot.cachedCommunityHubs.map { hub ->
+                    CommunityHubNearbyDto(
+                        hubId = hub.hubId,
+                        name = hub.name,
+                        latitude = hub.latitude,
+                        longitude = hub.longitude,
+                        radiusMeters = hub.radiusMeters,
+                        activeUserCount = hub.activeUserCount,
+                        distanceMeters = hub.reportedDistanceMeters ?: 0.0,
+                    )
+                }
+            }
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
             _isDataLoaded.value =
                 snapshot.currentUser != null ||
@@ -1758,6 +1838,18 @@ object AppDataManager {
             cachedHubThreads = _cachedHubThreads.value.values.toList(),
             cachedUserPublicProfiles = supabaseRepository.snapshotCachedUserPublicProfiles(),
             inboxFeedChats = _inboxFeedChats.value,
+            cachedMapBeacons = _prefetchedMapBeacons.value.map { it.toStoredMapBeacon() },
+            cachedCommunityHubs = _prefetchedCommunityHubs.value.map { dto ->
+                StoredCommunityHubPin(
+                    hubId = dto.hubId,
+                    name = dto.name,
+                    latitude = dto.latitude,
+                    longitude = dto.longitude,
+                    radiusMeters = dto.radiusMeters,
+                    activeUserCount = dto.activeUserCount,
+                    reportedDistanceMeters = dto.distanceMeters,
+                )
+            },
         )
         runCatching {
             tokenStorage.saveCachedAppSnapshot(json.encodeToString(snapshot))

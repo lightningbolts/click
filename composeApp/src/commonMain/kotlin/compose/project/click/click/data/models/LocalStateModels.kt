@@ -62,6 +62,10 @@ data class CachedAppSnapshot(
      * Last successful unified inbox (direct + group rows) for instant Clicks list paint on cold start.
      */
     val inboxFeedChats: List<ChatWithDetails> = emptyList(),
+    /** Cached map discovery beacons for offline map / feed paint. */
+    val cachedMapBeacons: List<StoredMapBeacon> = emptyList(),
+    /** Cached community hubs for offline map / feed paint. */
+    val cachedCommunityHubs: List<StoredCommunityHubPin> = emptyList(),
 )
 
 /**

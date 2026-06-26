@@ -71,8 +71,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.util.chatMediaDispatcher
+import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaVaultLocalPath
 import compose.project.click.click.util.imageVaultFileExtension
@@ -1065,12 +1067,23 @@ class SupabaseChatRepository(
 
     /**
      * Fetches connections, archived IDs, and hidden IDs for [userId] in parallel.
+     * Falls back to [AppDataManager] local SSOT when the network is unavailable.
      */
     private suspend fun fetchConnectionsWithJunctionIds(
         userId: String,
     ): Triple<List<Connection>, Set<String>, Set<String>> {
-        val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
-        return Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
+        return try {
+            val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
+            Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
+        } catch (e: Exception) {
+            if (!e.isOfflineNetworkFailure()) throw e
+            println("SupabaseChatRepository: junction fetch offline — using local SSOT: ${e.redactedRestMessage()}")
+            Triple(
+                AppDataManager.connections.value,
+                AppDataManager.archivedConnectionIds.value,
+                AppDataManager.hiddenConnectionIds.value,
+            )
+        }
     }
 
     override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?, limit: Int?): List<Message>? {

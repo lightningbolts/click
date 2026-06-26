@@ -14,6 +14,7 @@ import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: 
 import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
+import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
@@ -481,6 +482,7 @@ class SupabaseRepository {
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
+            if (e.isOfflineNetworkFailure()) throw e
             println("fetchActiveChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
@@ -507,6 +509,7 @@ class SupabaseRepository {
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
+            if (e.isOfflineNetworkFailure()) throw e
             println("fetchArchivedChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
@@ -538,6 +541,7 @@ class SupabaseRepository {
                 .decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
+            if (e.isOfflineNetworkFailure()) throw e
             println("fetchLifecycleArchivedConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }

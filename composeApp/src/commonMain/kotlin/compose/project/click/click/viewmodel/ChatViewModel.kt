@@ -773,9 +773,13 @@ class ChatViewModel(
                         }
 
                     } else {
-                        _chatListState.value = ChatListState.Success(emptyList())
-                        if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
-                            AppDataManager.persistInboxFeedChats(emptyList())
+                        val hasCachedRows = cachedSeedChats.isNotEmpty() ||
+                            (_chatListState.value as? ChatListState.Success)?.chats?.isNotEmpty() == true
+                        if (!hasCachedRows) {
+                            _chatListState.value = ChatListState.Success(emptyList())
+                            if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                                AppDataManager.persistInboxFeedChats(emptyList())
+                            }
                         }
                     }
                 }
