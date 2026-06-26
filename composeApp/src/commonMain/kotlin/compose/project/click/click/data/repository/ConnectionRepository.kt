@@ -36,6 +36,7 @@ import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.sensors.HardwareVibeSnapshot
 import compose.project.click.click.encounter.PendingEncounterQueue
+import compose.project.click.click.proximity.PROXIMITY_NO_NEARBY_DEVICES_MESSAGE
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.auth.auth
@@ -463,6 +464,7 @@ class ConnectionRepository(
         bearerJwt: String,
         myToken: String,
         heardTokens: List<String>,
+        detectedDevices: List<String> = emptyList(),
         latitude: Double?,
         longitude: Double?,
         exactBarometricElevationM: Double? = null,
@@ -481,6 +483,12 @@ class ConnectionRepository(
             if (bearerJwt.isBlank()) {
                 return Result.failure(IllegalStateException("Please sign in again."))
             }
+            val normalizedHeard = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            val normalizedBle = detectedDevices.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            if (!simulatorMock && normalizedHeard.isEmpty() && normalizedBle.isEmpty()) {
+                return Result.failure(IllegalStateException(PROXIMITY_NO_NEARBY_DEVICES_MESSAGE))
+            }
+            val combinedPeerTokens = (normalizedHeard + normalizedBle).distinct()
             val hasGps = latitude != null && longitude != null &&
                 latitude.isFinite() && longitude.isFinite() &&
                 !(latitude == 0.0 && longitude == 0.0)
@@ -496,8 +504,9 @@ class ConnectionRepository(
                 .div(60)
             val request = ProximityHandshakePostBody(
                 myToken = myToken,
-                tokens = heardTokens,
-                heardTokens = heardTokens,
+                tokens = combinedPeerTokens,
+                heardTokens = normalizedHeard,
+                detectedDevices = normalizedBle,
                 timezoneOffsetMinutes = tzOffsetMinutes,
                 latitude = if (hasGps) latitude else null,
                 longitude = if (hasGps) longitude else null,
@@ -534,6 +543,9 @@ class ConnectionRepository(
                         ),
                     )
                 }
+                is ProximityHandshakePostResult.IgnoredEmptyPayload -> {
+                    Result.failure(IllegalStateException(PROXIMITY_NO_NEARBY_DEVICES_MESSAGE))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -543,6 +555,7 @@ class ConnectionRepository(
     suspend fun enqueuePendingProximityHandshake(
         myToken: String,
         heardTokens: List<String>,
+        detectedDevices: List<String> = emptyList(),
         latitude: Double?,
         longitude: Double?,
         altitudeMeters: Double?,
@@ -557,6 +570,7 @@ class ConnectionRepository(
         pendingEncounterQueue.enqueue(
             myToken = myToken,
             heardTokens = heardTokens,
+            detectedDevices = detectedDevices,
             latitude = latitude,
             longitude = longitude,
             altitudeMeters = altitudeMeters,
@@ -589,6 +603,10 @@ class ConnectionRepository(
                 return PendingProximityHandshakeSyncResult(null, 0)
             }
             val head = queue.first()
+            if (head.heardTokens.isEmpty() && head.detectedDevices.isEmpty()) {
+                pendingEncounterQueue.replaceAll(queue.drop(1))
+                continue
+            }
             val lat = head.location?.latitude
             val lng = head.location?.longitude
             val attempt = runCatching {
@@ -598,6 +616,7 @@ class ConnectionRepository(
                         bearerJwt = bearerJwt,
                         myToken = head.myToken,
                         heardTokens = head.heardTokens,
+                        detectedDevices = head.detectedDevices,
                         latitude = lat,
                         longitude = lng,
                         exactBarometricElevationM = head.exactBarometricElevationM,

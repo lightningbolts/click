@@ -47,6 +47,7 @@ class PendingEncounterQueue(
     suspend fun enqueue(
         myToken: String,
         heardTokens: List<String>,
+        detectedDevices: List<String> = emptyList(),
         latitude: Double? = null,
         longitude: Double? = null,
         altitudeMeters: Double? = null,
@@ -73,10 +74,16 @@ class PendingEncounterQueue(
         } else {
             null
         }
+        val normalizedHeard = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val normalizedBle = detectedDevices.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (normalizedHeard.isEmpty() && normalizedBle.isEmpty()) {
+            throw IllegalArgumentException("Cannot enqueue handshake without peer audio or BLE evidence")
+        }
         val draft = PendingHandshake(
             id = id ?: compose.project.click.click.data.models.newPendingHandshakeId(),
             myToken = myToken.trim(),
-            heardTokens = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+            heardTokens = normalizedHeard,
+            detectedDevices = normalizedBle,
             capturedAtEpochMs = now,
             location = loc,
             hardwareVibe = hardwareVibe,
@@ -92,6 +99,7 @@ class PendingEncounterQueue(
             val dup = q.lastOrNull {
                 it.myToken == draft.myToken &&
                     it.heardTokens == draft.heardTokens &&
+                    it.detectedDevices == draft.detectedDevices &&
                     (now - it.capturedAtEpochMs) < 60_000L
             }
             if (dup != null) return dup

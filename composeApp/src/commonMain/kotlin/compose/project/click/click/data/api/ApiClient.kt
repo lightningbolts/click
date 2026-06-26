@@ -212,6 +212,7 @@ data class ProximityHandshakePostBody(
     @SerialName("my_token") val myToken: String,
     val tokens: List<String> = emptyList(),
     @SerialName("heard_tokens") val heardTokens: List<String> = emptyList(),
+    @SerialName("detected_devices") val detectedDevices: List<String> = emptyList(),
     @SerialName("latitude") val latitude: Double? = null,
     @SerialName("longitude") val longitude: Double? = null,
     @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
@@ -260,9 +261,20 @@ data class ProximityBindPendingResponseDto(
     val matches: List<User> = emptyList(),
 )
 
+/** HTTP 200 — server ignored an empty peer-evidence payload (no DB row). */
+@Serializable
+data class ProximityBindIgnoredResponseDto(
+    val success: Boolean = false,
+    val status: String,
+    val message: String? = null,
+    @SerialName("encounter_logged") val encounterLogged: Boolean = false,
+    val matches: List<User> = emptyList(),
+)
+
 sealed class ProximityHandshakePostResult {
     data class InstantMatch(val body: ProximityBindOkResponseDto) : ProximityHandshakePostResult()
     data class PendingMatch(val body: ProximityBindPendingResponseDto) : ProximityHandshakePostResult()
+    data class IgnoredEmptyPayload(val body: ProximityBindIgnoredResponseDto) : ProximityHandshakePostResult()
 }
 
 @Serializable
@@ -1086,6 +1098,11 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             }
             when (response.status.value) {
                 200 -> {
+                    val raw = response.bodyAsText()
+                    if (raw.contains("ignored_empty_payload")) {
+                        val ignored = json.decodeFromString(ProximityBindIgnoredResponseDto.serializer(), raw)
+                        return Result.success(ProximityHandshakePostResult.IgnoredEmptyPayload(ignored))
+                    }
                     val dto = response.body<ProximityBindOkResponseDto>()
                     if (!dto.error.isNullOrBlank()) {
                         Result.failure(Exception(dto.error))

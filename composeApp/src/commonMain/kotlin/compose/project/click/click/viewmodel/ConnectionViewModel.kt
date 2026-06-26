@@ -29,6 +29,8 @@ import compose.project.click.click.proximity.MockProximityManager // pragma: all
 import compose.project.click.click.proximity.ProximityHardwarePermissionException // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
+import compose.project.click.click.proximity.ProximityHandshakeListenResult
+import compose.project.click.click.proximity.proximityHandshakeAbortMessage
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
@@ -318,9 +320,12 @@ class ConnectionViewModel : ViewModel() {
                 }
                 _connectionState.value = ConnectionState.ProximityHandshaking
 
-                val tokensOnly = if (simulatorMock) {
+                val listenResult: ProximityHandshakeListenResult = if (simulatorMock) {
                     delay(2_000L)
-                    SIMULATOR_MOCK_HEARD_TOKENS
+                    ProximityHandshakeListenResult(
+                        heardTokens = SIMULATOR_MOCK_HEARD_TOKENS,
+                        detectedDevices = emptyList(),
+                    )
                 } else {
                     try {
                         coroutineScope {
@@ -337,6 +342,14 @@ class ConnectionViewModel : ViewModel() {
                         runCatching { proximityManager.stopAll() }
                     }
                 }
+
+                proximityHandshakeAbortMessage(listenResult)?.let { abortMessage ->
+                    _connectionState.value = ConnectionState.Error(abortMessage)
+                    return@launch
+                }
+
+                val heardTokensAudio = listenResult.heardTokens
+                val detectedDevicesBle = listenResult.detectedDevices
 
                 val tokenStorage = createTokenStorage()
                 val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
@@ -367,7 +380,8 @@ class ConnectionViewModel : ViewModel() {
                                 httpClient = httpClient,
                                 bearerJwt = jwt,
                                 myToken = myToken,
-                                heardTokens = tokensOnly,
+                                heardTokens = heardTokensAudio,
+                                detectedDevices = detectedDevicesBle,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
                                 exactBarometricElevationM = proximitySensorContext
@@ -444,7 +458,8 @@ class ConnectionViewModel : ViewModel() {
                     if (e.isRetryableForProximityBind()) {
                         repository.enqueuePendingProximityHandshake(
                             myToken = myToken,
-                            heardTokens = tokensOnly,
+                            heardTokens = heardTokensAudio,
+                            detectedDevices = detectedDevicesBle,
                             latitude = lastProximityLat,
                             longitude = lastProximityLng,
                             altitudeMeters = lastProximityAltitudeMeters,

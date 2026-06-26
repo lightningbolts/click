@@ -192,9 +192,6 @@ class IosProximityManager : ProximityManager {
     private var audioPlayer: AVAudioPlayer? = null
     private var audioRecorder: AVAudioRecorder? = null
 
-    /** Heard tokens (main-thread only mutations from BLE + Main post from audio). */
-    private val heardTokens = mutableSetOf<String>()
-
     override fun supportsTapExchange(): Boolean = true
 
     override fun capabilityNote(): String =
@@ -443,9 +440,10 @@ class IosProximityManager : ProximityManager {
         }
     }
 
-    override suspend fun startHandshakeListening(): List<String> {
+    override suspend fun startHandshakeListening(): ProximityHandshakeListenResult {
         enforceProximityAudioPermission()
-        heardTokens.clear()
+        val bleDetectedTokens = mutableSetOf<String>()
+        val audioHeardTokens = mutableSetOf<String>()
         pendingGattReads.clear()
         connectingPeripheralIds.clear()
         prepareProximityAudioSession()
@@ -540,8 +538,8 @@ class IosProximityManager : ProximityManager {
                             val bytes = value?.toByteArray()
                             val token = parseGattTokenPayload(bytes)
                             if (token != null) {
-                                heardTokens.add(token)
-                                NSLog("🔵 BLE central: captured GATT token=$token id=$id heardCount=${heardTokens.size}")
+                                bleDetectedTokens.add(token)
+                                NSLog("🔵 BLE central: captured GATT token=$token id=$id heardCount=${bleDetectedTokens.size}")
                             } else {
                                 NSLog(
                                     "🔵 BLE central: GATT read returned no token — " +
@@ -639,24 +637,29 @@ class IosProximityManager : ProximityManager {
             }
         }
         coroutineScope {
-            val audio = async(Dispatchers.Default) { recordAudioSampleToSink() }
+            val audio = async(Dispatchers.Default) { recordAudioSampleToSink(audioHeardTokens) }
             delay(BLE_SCAN_HOLD_MS)
             NSLog("🔵 BLE central: ${BLE_SCAN_HOLD_MS}ms scan window elapsed — stopping scan")
             centralManager?.stopScan()
             awaitPendingGattReads(GATT_READ_GRACE_MS)
             audio.await()
         }
-        NSLog("🔵 BLE central: listen complete — heardTokens=${heardTokens.sorted()}")
+        NSLog(
+            "🔵 BLE central: listen complete — ble=${bleDetectedTokens.sorted()} audio=${audioHeardTokens.sorted()}",
+        )
         centralManager?.stopScan()
         centralManager = null
         centralDelegate = null
         discoveredPeripheralDelegate = null
         connectingPeripheralIds.clear()
         pendingGattReads.clear()
-        return heardTokens.sorted()
+        return ProximityHandshakeListenResult(
+            heardTokens = audioHeardTokens.sorted(),
+            detectedDevices = bleDetectedTokens.sorted(),
+        )
     }
 
-    private suspend fun recordAudioSampleToSink() {
+    private suspend fun recordAudioSampleToSink(sink: MutableSet<String>) {
         val path = NSTemporaryDirectory().trimEnd('/') + "/click_prox_listen_${kotlin.random.Random.nextLong()}.wav"
         val url = NSURL.fileURLWithPath(path)
         val settings = mutableMapOf<Any?, Any?>(
@@ -687,7 +690,7 @@ class IosProximityManager : ProximityManager {
             val decoded = decodeAllHandshakeTokensFromPcmMono(pcm)
             if (decoded.isEmpty()) return
             withContext(Dispatchers.Main) {
-                decoded.forEach { heardTokens.add(it) }
+                decoded.forEach { sink.add(it) }
             }
         } finally {
             NSFileManager.defaultManager.removeItemAtPath(path, error = null)

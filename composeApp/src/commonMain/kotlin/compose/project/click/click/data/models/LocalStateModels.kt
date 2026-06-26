@@ -158,6 +158,7 @@ data class PendingHandshake(
     val id: String,
     val myToken: String,
     val heardTokens: List<String>,
+    @SerialName("detected_devices") val detectedDevices: List<String> = emptyList(),
     val capturedAtEpochMs: Long,
     val location: ProximityHandshakeLocationSnapshot? = null,
     val hardwareVibe: HardwareVibeSnapshot? = null,

@@ -196,9 +196,10 @@ class AndroidProximityManager(
         }
     }
 
-    override suspend fun startHandshakeListening(): List<String> {
+    override suspend fun startHandshakeListening(): ProximityHandshakeListenResult {
         enforceAudioRuntimePermission()
-        val tokens = ConcurrentHashMap.newKeySet<String>()
+        val bleDetectedTokens = ConcurrentHashMap.newKeySet<String>()
+        val audioHeardTokens = ConcurrentHashMap.newKeySet<String>()
         stopScanOnly()
         val sc = scanner?.takeIf { canUseBleGatt() }
         val serviceUuid = ParcelUuid.fromString(CLICK_SERVICE_UUID)
@@ -206,7 +207,7 @@ class AndroidProximityManager(
             object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult?) {
                     val device = result?.device ?: return
-                    connectAndReadToken(device, tokens)
+                    connectAndReadToken(device, bleDetectedTokens)
                 }
 
                 override fun onBatchScanResults(results: MutableList<ScanResult>?) {
@@ -232,14 +233,17 @@ class AndroidProximityManager(
             }
         }
         coroutineScope {
-            val audio = async(Dispatchers.IO) { collectAudioToken(PROXIMITY_DEBOUNCE_WINDOW_MS, tokens) }
+            val audio = async(Dispatchers.IO) { collectAudioToken(PROXIMITY_DEBOUNCE_WINDOW_MS, audioHeardTokens) }
             delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
             audio.await()
         }
         withContext(Dispatchers.Main) {
             stopScanOnly()
         }
-        return tokens.sorted()
+        return ProximityHandshakeListenResult(
+            heardTokens = audioHeardTokens.sorted(),
+            detectedDevices = bleDetectedTokens.sorted(),
+        )
     }
 
     private fun startGattServer(tokenPayload: ByteArray) {
