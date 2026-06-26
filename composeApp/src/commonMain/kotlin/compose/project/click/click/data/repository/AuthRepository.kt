@@ -1,5 +1,6 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Apple
@@ -306,6 +307,18 @@ class AuthRepository(
 
     suspend fun restoreSession(): Result<UserInfo> {
         return try {
+            // Fast path: valid local tokens — import into SDK without awaiting network refresh.
+            LocalSessionCache.read(tokenStorage)?.let { identity ->
+                SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage)
+                supabase.auth.currentUserOrNull()?.let { user ->
+                    println("AuthRepository: Restored session from local cache (offline-capable)")
+                    return Result.success(user)
+                }
+                return Result.failure(
+                    Exception("Offline session available for ${identity.userId} but SDK user not hydrated"),
+                )
+            }
+
             // ── Strategy ──
             // 1. First check if the Supabase SDK already has a valid session
             //    (auto-loaded from SettingsSessionManager on startup).
@@ -357,11 +370,12 @@ class AuthRepository(
                 // Import the session into Supabase
                 supabase.auth.importSession(session)
                 
-                // Always try to refresh when restoring from TokenStorage
-                // since these tokens may be stale
+                // Refresh when online; offline boots must not block on this call.
                 var refreshFailed = false
                 try {
-                    supabase.auth.refreshCurrentSession()
+                    withTimeout(AUTH_TIMEOUT_MS) {
+                        supabase.auth.refreshCurrentSession()
+                    }
                     println("AuthRepository: Successfully refreshed session from TokenStorage")
                 } catch (e: Exception) {
                     refreshFailed = true
@@ -406,8 +420,11 @@ class AuthRepository(
     }
 
     fun isAuthenticated(): Boolean {
-        return supabase.auth.currentUserOrNull() != null
+        if (supabase.auth.currentUserOrNull() != null) return true
+        return false
     }
+
+    suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
     suspend fun refreshSession(): Result<Unit> {
         return try {

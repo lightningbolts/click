@@ -123,6 +123,7 @@ import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -628,17 +629,20 @@ fun App() {
                         return@LaunchedEffect
                     }
 
-                val remoteUser = profileApi.getUserProfile(currentUser.id).getOrNull()?.user
-                if (remoteUser != null) {
-                    remoteBirthdayMissing = remoteUser.birthday.isNullOrBlank()
-                    remoteFirstNameMissing = remoteUser.firstName.isNullOrBlank()
-                    remoteAvatarPresent = !remoteUser.image.isNullOrBlank()
-                } else {
-                    remoteBirthdayMissing = localUser.birthday.isNullOrBlank()
-                    remoteFirstNameMissing = localUser.firstName.isNullOrBlank()
-                    remoteAvatarPresent = !localUser.image.isNullOrBlank()
-                }
+                // Admit immediately from local cache; refresh profile remotely in the background.
+                remoteBirthdayMissing = localUser.birthday.isNullOrBlank()
+                remoteFirstNameMissing = localUser.firstName.isNullOrBlank()
+                remoteAvatarPresent = !localUser.image.isNullOrBlank()
                 profileGateCheckReady = true
+
+                launch(Dispatchers.IO) {
+                    val remoteUser = profileApi.getUserProfile(currentUser.id).getOrNull()?.user
+                    if (remoteUser != null) {
+                        remoteBirthdayMissing = remoteUser.birthday.isNullOrBlank()
+                        remoteFirstNameMissing = remoteUser.firstName.isNullOrBlank()
+                        remoteAvatarPresent = !remoteUser.image.isNullOrBlank()
+                    }
+                }
             }
 
             LaunchedEffect(appDataUser?.id, appDataUser?.name) {

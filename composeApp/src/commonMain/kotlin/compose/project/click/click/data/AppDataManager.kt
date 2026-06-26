@@ -30,6 +30,8 @@ import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.api.CommunityHubNearbyDto
 import compose.project.click.click.utils.LocationService
+import compose.project.click.click.auth.LocalSessionCache
+import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -89,6 +91,8 @@ object AppDataManager {
     private var profilePrefetchJob: Job? = null
     private var queuedProfilePrefetchIds: Set<String> = emptySet()
     private var pendingSyncPausedForAuth: Boolean = false
+    private var networkConnectivityJob: Job? = null
+    private val networkConnectivityMonitor by lazy { NetworkConnectivityMonitor() }
     
     /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
     private val tokenStorage by lazy { createTokenStorage() }
@@ -632,6 +636,7 @@ object AppDataManager {
             refreshPendingConnectionCount()
         }
         startPendingConnectionSync()
+        startNetworkConnectivityObserver()
         
         startLoadAllDataJob()
     }
@@ -646,16 +651,20 @@ object AppDataManager {
         restoreActiveHubs()
 
         try {
-            // Get current user from auth
+            // Get current user from auth (or fall back to restored cache / local session tokens).
             val authUser = authRepository.getCurrentUser()
-            if (authUser == null) {
+            val cachedUserId = _currentUser.value?.id
+            val localSessionUserId = LocalSessionCache.read(tokenStorage)?.userId
+            if (authUser == null && cachedUserId.isNullOrBlank() && localSessionUserId.isNullOrBlank()) {
                 println("AppDataManager: No auth user found")
                 _isDataLoaded.value = true
                 _isLoading.value = false
                 return
             }
+
+            val effectiveUserId = authUser?.id ?: cachedUserId ?: localSessionUserId!!
             
-            println("AppDataManager: Loading data for user ${authUser.id}")
+            println("AppDataManager: Loading data for user $effectiveUserId")
 
             // Kick off the map beacon prefetch in parallel with the connections snapshot so map
             // data is cached by the time the user navigates to the Social Map tab.
@@ -663,26 +672,26 @@ object AppDataManager {
 
             withTimeout(STARTUP_TIMEOUT_MS) {
                 val snapshotDeferred = async {
-                    runCatching { supabaseRepository.fetchUserConnectionsSnapshot(authUser.id) }
+                    runCatching { supabaseRepository.fetchUserConnectionsSnapshot(effectiveUserId) }
                         .onFailure { println("AppDataManager: Connection snapshot fetch failed: ${it.message}") }
                         .getOrNull()
                 }
 
-                val meta = authUser.userMetadata
+                val meta = authUser?.userMetadata
                 fun metaStr(key: String) =
                     meta?.get(key)?.toString()?.removeSurrounding("\"")?.trim()?.takeIf { it.isNotEmpty() }
                 val metaFirst = metaStr("first_name")
                 val metaLast = metaStr("last_name")
                 val metaBirthday = metaStr("birthday")
-                val cachedSessionUser = _currentUser.value?.takeIf { it.id == authUser.id }
+                val cachedSessionUser = _currentUser.value?.takeIf { it.id == effectiveUserId }
                 val cachedImage = cachedSessionUser?.image?.trim()?.takeIf { it.isNotEmpty() }
-                val authDisplay = authUser.displayNameFromMetadata()
+                val authDisplay = authUser?.displayNameFromMetadata()
                 println(
                     "AppDataManager: Auth metadata — first/last: $metaFirst / $metaLast, display: $authDisplay"
                 )
 
                 // Fetch user data from database
-                var user = supabaseRepository.fetchUserById(authUser.id)
+                var user = supabaseRepository.fetchUserById(effectiveUserId)
                 println("AppDataManager: Fetched user from DB: ${user?.name}")
 
                 if (user == null) {
@@ -690,17 +699,21 @@ object AppDataManager {
                     val resolvedLast = metaLast ?: cachedSessionUser?.lastName
                     val resolvedBirthday = metaBirthday ?: cachedSessionUser?.birthday
                     val resolvedImage = cachedImage
+                    val offlineUser = cachedSessionUser?.takeIf { it.id == effectiveUserId }
+                    if (offlineUser != null && authUser == null) {
+                        user = offlineUser
+                    } else {
                     // Create user in database if not exists
                     val newUser = User(
-                        id = authUser.id,
+                        id = effectiveUserId,
                         name = resolveDisplayName(
                             firstName = resolvedFirst,
                             lastName = resolvedLast,
                             fullName = metaStr("full_name") ?: authDisplay,
                             name = null,
-                            email = authUser.email
+                            email = authUser?.email
                         ),
-                        email = authUser.email,
+                        email = authUser?.email,
                         image = resolvedImage,
                         createdAt = Clock.System.now().toEpochMilliseconds(),
                         lastPolled = null,
@@ -715,15 +728,16 @@ object AppDataManager {
                     println("AppDataManager: Creating new user in DB: ${newUser.name}")
                     supabaseRepository.upsertUser(newUser)
                     user = newUser
+                    }
                 } else {
                     val desiredName = resolveDisplayName(
                         firstName = metaFirst ?: user.firstName,
                         lastName = metaLast ?: user.lastName,
                         fullName = metaStr("full_name") ?: authDisplay,
                         name = user.name,
-                        email = authUser.email ?: user.email
+                        email = authUser?.email ?: user.email
                     )
-                    val desiredEmail = authUser.email ?: user.email
+                    val desiredEmail = authUser?.email ?: user.email
                     val resolvedImage = user.image?.trim()?.takeIf { it.isNotEmpty() } ?: cachedImage
                     val syncedUser = user.copy(
                         name = desiredName,
@@ -1573,6 +1587,24 @@ object AppDataManager {
             .onFailure { println("AppDataManager: Session refresh after restore failed: ${it.message}") }
 
         return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun startNetworkConnectivityObserver() {
+        if (networkConnectivityJob?.isActive == true) return
+        networkConnectivityMonitor.start()
+        var wasOnline = networkConnectivityMonitor.isOnline.value
+        networkConnectivityJob = scope.launch {
+            networkConnectivityMonitor.isOnline.collect { online ->
+                if (online && !wasOnline) {
+                    runCatching { flushPendingProximityHandshakesFromBackgroundWorker() }
+                        .onFailure {
+                            println("AppDataManager: Encounter queue drain on reconnect failed: ${it.message}")
+                        }
+                    runCatching { connectionRepository.syncPendingConnections() }
+                }
+                wasOnline = online
+            }
+        }
     }
 
     private fun startPendingConnectionSync() {

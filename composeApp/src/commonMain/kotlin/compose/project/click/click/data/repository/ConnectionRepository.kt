@@ -32,6 +32,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.sensors.HardwareVibeSnapshot
+import compose.project.click.click.encounter.PendingEncounterQueue
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import io.github.jan.supabase.auth.auth
@@ -405,6 +406,8 @@ class ConnectionRepository(
         ignoreUnknownKeys = true
         isLenient = true
     }
+
+    private val pendingEncounterQueue by lazy { PendingEncounterQueue(tokenStorage, json) }
     /** Next.js companion (`/api/qr`, etc.) — not Supabase Functions. */
     private val companionWebHttpClient by lazy {
         HttpClient {
@@ -593,58 +596,38 @@ class ConnectionRepository(
         exactBarometricElevationM: Double? = null,
         contextTags: List<String> = emptyList(),
     ) {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val loc = if (latitude != null && longitude != null &&
-            latitude.isFinite() && longitude.isFinite() &&
-            !(latitude == 0.0 && longitude == 0.0)
-        ) {
-            ProximityHandshakeLocationSnapshot(
-                latitude = latitude,
-                longitude = longitude,
-                altitudeMeters = altitudeMeters?.takeIf { it.isFinite() },
-                capturedAtEpochMs = now,
-            )
-        } else {
-            null
-        }
-        val draft = PendingHandshake(
-            id = newPendingHandshakeId(),
-            myToken = myToken.trim(),
-            heardTokens = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
-            capturedAtEpochMs = now,
-            location = loc,
+        pendingEncounterQueue.hydrate()
+        pendingEncounterQueue.enqueue(
+            myToken = myToken,
+            heardTokens = heardTokens,
+            latitude = latitude,
+            longitude = longitude,
+            altitudeMeters = altitudeMeters,
             hardwareVibe = hardwareVibe,
-            noiseLevel = noiseLevel?.trim()?.takeIf { it.isNotEmpty() },
-            exactNoiseLevelDb = exactNoiseLevelDb?.takeIf { it.isFinite() },
-            heightCategory = heightCategory?.trim()?.takeIf { it.isNotEmpty() },
-            exactBarometricElevationM = exactBarometricElevationM?.takeIf { it.isFinite() },
-            contextTags = contextTags.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+            noiseLevel = noiseLevel,
+            exactNoiseLevelDb = exactNoiseLevelDb,
+            heightCategory = heightCategory,
+            exactBarometricElevationM = exactBarometricElevationM,
+            contextTags = contextTags,
         )
-        val q = loadPendingProximityHandshakeQueue().toMutableList()
-        val dup = q.lastOrNull {
-            it.myToken == draft.myToken &&
-                it.heardTokens == draft.heardTokens &&
-                (now - it.capturedAtEpochMs) < 60_000L
-        }
-        if (dup != null) return
-        q += draft
-        while (q.size > 32) q.removeAt(0)
-        savePendingProximityHandshakeQueue(q)
     }
 
-    suspend fun pendingProximityHandshakeQueueSize(): Int =
-        loadPendingProximityHandshakeQueue().size
+    suspend fun pendingProximityHandshakeQueueSize(): Int {
+        pendingEncounterQueue.hydrate()
+        return pendingEncounterQueue.size
+    }
 
     /**
      * Replays the oldest queued handshake against [bind-proximity-connection].
      * Drops head when the server returns an empty match list (stale tokens).
      */
     suspend fun syncPendingProximityHandshakes(bearerJwt: String): PendingProximityHandshakeSyncResult {
+        pendingEncounterQueue.hydrate()
         if (bearerJwt.isBlank()) {
-            return PendingProximityHandshakeSyncResult(null, loadPendingProximityHandshakeQueue().size)
+            return PendingProximityHandshakeSyncResult(null, pendingEncounterQueue.size)
         }
         while (true) {
-            val queue = loadPendingProximityHandshakeQueue()
+            val queue = pendingEncounterQueue.snapshot()
             if (queue.isEmpty()) {
                 return PendingProximityHandshakeSyncResult(null, 0)
             }
@@ -677,7 +660,7 @@ class ConnectionRepository(
                 val outcome = attempt.getOrNull()!!
                 val users = outcome.matches
                 val rest = queue.drop(1)
-                savePendingProximityHandshakeQueue(rest)
+                pendingEncounterQueue.replaceAll(rest)
                 if (users.isNotEmpty()) {
                     return PendingProximityHandshakeSyncResult(
                         recoveredUsers = users,
@@ -703,25 +686,8 @@ class ConnectionRepository(
                 return PendingProximityHandshakeSyncResult(null, queue.size)
             }
             val rest = queue.drop(1)
-            savePendingProximityHandshakeQueue(rest)
+            pendingEncounterQueue.replaceAll(rest)
         }
-    }
-
-    private suspend fun loadPendingProximityHandshakeQueue(): List<PendingHandshake> {
-        val raw = tokenStorage.getPendingProximityHandshakeQueue()
-        if (raw.isNullOrBlank()) return emptyList()
-        return runCatching {
-            json.decodeFromString<List<PendingHandshake>>(raw)
-        }.getOrElse {
-            println("ConnectionRepository: Failed to decode pending proximity handshake queue: ${it.message}")
-            emptyList()
-        }
-    }
-
-    private suspend fun savePendingProximityHandshakeQueue(items: List<PendingHandshake>) {
-        tokenStorage.savePendingProximityHandshakeQueue(
-            if (items.isEmpty()) null else json.encodeToString(items),
-        )
     }
 
     private suspend fun bumpChatUpdatedAt(connectionId: String, atMs: Long) {

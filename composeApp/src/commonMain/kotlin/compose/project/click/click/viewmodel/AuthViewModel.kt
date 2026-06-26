@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.auth.AuthBootFastPath
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.displayNameFromMetadata
@@ -13,14 +14,11 @@ import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.coroutines.withContext
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -86,8 +84,16 @@ class AuthViewModel(
 
     private fun checkAuthStatus() {
         viewModelScope.launch {
+            // Offline-first: admit immediately from local cache; never block UI on network.
+            val cachedBoot = AuthBootFastPath.resolveLoggedInState(tokenStorage)
+            if (cachedBoot != null) {
+                isAuthenticated = true
+                authState = cachedBoot
+                launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
+                return@launch
+            }
+
             try {
-                // Try to restore session from storage
                 val userResult = if (authRepository.isAuthenticated()) {
                     val user = authRepository.getCurrentUser()
                     if (user != null) Result.success(user) else Result.failure(Exception("No user"))
@@ -103,12 +109,15 @@ class AuthViewModel(
                             email = user.email ?: "",
                             name = user.displayNameFromMetadata()
                         )
+                        launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                     },
                     onFailure = { error ->
                         val restoredOffline = restoreOfflineSessionIfPossible(error)
                         if (!restoredOffline) {
                             isAuthenticated = false
                             authState = AuthState.Idle
+                        } else {
+                            launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                         }
                     }
                 )
@@ -117,10 +126,37 @@ class AuthViewModel(
                 if (!restoredOffline) {
                     isAuthenticated = false
                     authState = AuthState.Idle
+                } else {
+                    launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 }
             }
         }
     }
+
+    /**
+     * Network-backed session refresh + profile hydration. Runs only after the UI has transitioned
+     * off the splash/loading state.
+     */
+    private suspend fun refreshSessionAndProfileInBackground() {
+        withContext(Dispatchers.IO) {
+            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            runCatching { authRepository.refreshSession() }
+                .onFailure { restoreOfflineSessionIfPossible(it) }
+            authRepository.restoreSession()
+                .onSuccess { user ->
+                    isAuthenticated = true
+                    authState = AuthState.Success(
+                        userId = user.id,
+                        email = user.email ?: "",
+                        name = user.displayNameFromMetadata(),
+                    )
+                }
+        }
+    }
+
+    /** Test seam: mirrors the offline-first fast path used at cold boot. */
+    internal suspend fun probeOfflineBootState(): AuthState.Success? =
+        AuthBootFastPath.resolveLoggedInState(tokenStorage)
 
     /**
      * Background coroutine that proactively refreshes the session every 45 minutes.
@@ -371,18 +407,10 @@ class AuthViewModel(
     private suspend fun restoreOfflineSessionIfPossible(error: Throwable?): Boolean {
         if (!isLikelyNetworkFailure(error)) return false
 
-        val jwt = tokenStorage.getJwt()
-        val refreshToken = tokenStorage.getRefreshToken()
-        if (jwt.isNullOrBlank() || refreshToken.isNullOrBlank()) return false
-
-        val identity = parseCachedIdentityFromJwt(jwt) ?: return false
+        val cachedBoot = AuthBootFastPath.resolveLoggedInState(tokenStorage) ?: return false
 
         isAuthenticated = true
-        authState = AuthState.Success(
-            userId = identity.userId,
-            email = identity.email,
-            name = identity.name,
-        )
+        authState = cachedBoot
         println("AuthViewModel: Using cached offline auth state from persisted tokens")
         return true
     }
@@ -411,38 +439,6 @@ class AuthViewModel(
         }
         return false
     }
-
-    @OptIn(ExperimentalEncodingApi::class)
-    private fun parseCachedIdentityFromJwt(jwt: String): CachedIdentity? {
-        return runCatching {
-            val payload = jwt.split('.')
-                .getOrNull(1)
-                ?.replace('-', '+')
-                ?.replace('_', '/')
-                ?.let { segment ->
-                    val padding = (4 - (segment.length % 4)) % 4
-                    segment + "=".repeat(padding)
-                }
-                ?: return null
-
-            val json = Base64.decode(payload).decodeToString()
-            val claims = Json.parseToJsonElement(json).jsonObject
-
-            val userId = claims["sub"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                ?: return null
-            val email = claims["email"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            val name = claims["full_name"]?.jsonPrimitive?.contentOrNull
-                ?: claims["name"]?.jsonPrimitive?.contentOrNull
-
-            CachedIdentity(userId = userId, email = email, name = name)
-        }.getOrNull()
-    }
-
-    private data class CachedIdentity(
-        val userId: String,
-        val email: String,
-        val name: String?,
-    )
 
     fun signOut() {
         viewModelScope.launch {

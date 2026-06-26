@@ -5,14 +5,17 @@ package compose.project.click.click.data.storage
  */
 class FakeTokenStorage(
     private val jwt: String? = null,
+    private val refreshToken: String? = "test-refresh-token",
+    private val expiresAtEpochMs: Long? = null,
 ) : TokenStorage {
     private var activeHubsJson: String? = null
+    private var pendingEncounterQueueJson: String? = null
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {}
     override suspend fun getJwt(): String? = jwt
-    override suspend fun getRefreshToken(): String? = null
-    override suspend fun getExpiresAt(): Long? = null
-    override suspend fun getTokenType(): String? = null
+    override suspend fun getRefreshToken(): String? = refreshToken
+    override suspend fun getExpiresAt(): Long? = expiresAtEpochMs
+    override suspend fun getTokenType(): String? = "bearer"
     override suspend fun clearTokens() {}
     override suspend fun saveFreeThisWeek(isFree: Boolean) {}
     override suspend fun getFreeThisWeek(): Boolean? = null
@@ -38,8 +41,10 @@ class FakeTokenStorage(
     override suspend fun getCachedAppSnapshot(): String? = null
     override suspend fun savePendingConnectionQueue(queue: String?) {}
     override suspend fun getPendingConnectionQueue(): String? = null
-    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {}
-    override suspend fun getPendingProximityHandshakeQueue(): String? = null
+    override suspend fun savePendingProximityHandshakeQueue(queue: String?) {
+        pendingEncounterQueueJson = queue
+    }
+    override suspend fun getPendingProximityHandshakeQueue(): String? = pendingEncounterQueueJson
 
     override suspend fun saveActiveHubs(json: String?) {
         activeHubsJson = json
@@ -57,5 +62,6 @@ class FakeTokenStorage(
 
     override suspend fun clearSessionData() {
         beaconRsvpSnapshot = null
+        pendingEncounterQueueJson = null
     }
 }

@@ -11,11 +11,14 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.storage.Storage
+import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.data.storage.TokenStorage
+import io.github.jan.supabase.auth.user.UserSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 
 
@@ -67,6 +70,37 @@ object SupabaseConfig {
      * tokens into SettingsSessionManager but our Keychain / EncryptedPrefs
      * (TokenStorage) would go stale. Now they stay in sync.
      */
+    /**
+     * Imports a persisted session into the GoTrue client without triggering a network refresh.
+     * Used for offline-first cold boot so UI can render before connectivity returns.
+     */
+    suspend fun importStoredSessionWithoutRefresh(tokenStorage: TokenStorage): Boolean {
+        val accessToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val refreshToken = tokenStorage.getRefreshToken()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val identity = LocalSessionCache.read(tokenStorage) ?: return false
+
+        val expiresAt = tokenStorage.getExpiresAt() ?: identity.expiresAtEpochMs
+        val now = Clock.System.now().toEpochMilliseconds()
+        val expiresIn = if (expiresAt != null) {
+            val remaining = (expiresAt - now) / 1000
+            if (remaining > 0) remaining else 0L
+        } else {
+            3600L
+        }
+
+        val session = UserSession(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            expiresIn = expiresIn,
+            tokenType = tokenStorage.getTokenType() ?: "bearer",
+            user = null,
+        )
+        return runCatching {
+            client.auth.importSession(session)
+            true
+        }.getOrDefault(false)
+    }
+
     fun startSessionSync(tokenStorage: TokenStorage) {
         syncScope.launch {
             client.auth.sessionStatus.collect { status ->
