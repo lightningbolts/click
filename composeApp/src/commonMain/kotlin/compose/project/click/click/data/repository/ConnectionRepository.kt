@@ -3,6 +3,9 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
+import compose.project.click.click.data.api.ProximityBindOkResponseDto
+import compose.project.click.click.data.api.ProximityHandshakePostBody
+import compose.project.click.click.data.api.ProximityHandshakePostResult
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.OpenMeteoWeatherService
@@ -121,8 +124,10 @@ data class PendingProximityHandshakeSyncResult(
     val recoveredEncounterLogged: Boolean = true,
     /** True when the last bind attempt failed due to an auth/session issue (401/403/invalid JWT). */
     val authorizationFailed: Boolean = false,
-    /** From [bind-proximity-connection] when the replayed bind was a multi-user cluster (includes self). */
+    /** From proximity bind when the replayed bind was a multi-user cluster (includes self). */
     val groupCliqueCandidateMemberIds: List<String>? = null,
+    /** True when the server accepted the handshake but no peer is online yet (HTTP 202). */
+    val serverPendingMatch: Boolean = false,
 )
 
 data class ProximityHandshakeRecoveryPayload(
@@ -137,7 +142,7 @@ data class BindProximityHandshakeOutcome(
     val encounterId: String? = null,
     val collaborationTtl: String? = null,
     /**
-     * Top-level `is_new_connection` from bind-proximity-connection when present; else derived from match rows.
+     * Top-level `is_new_connection` from proximity bind when present; else derived from match rows.
      * When false, route reconnect UX (encounter logging) instead of the “new spark” sheet.
      */
     val isAggregateNewConnection: Boolean = true,
@@ -147,13 +152,42 @@ data class BindProximityHandshakeOutcome(
      */
     val encounterLogged: Boolean,
     /**
-     * When non-null, the edge clustered ≥3 users in one proximity component; clients may start a
+     * When non-null, the server clustered ≥3 users in one proximity component; clients may start a
      * verified group flow with these ids (includes the caller).
      */
     val groupCliqueCandidateMemberIds: List<String>? = null,
     val connectionId: String? = null,
     val isGroup: Boolean = false,
 )
+
+/** Result of `POST /api/connections/proximity` — instant match vs async pending. */
+sealed class BindProximityHandshakeResult {
+    data class InstantMatch(val outcome: BindProximityHandshakeOutcome) : BindProximityHandshakeResult()
+    data class PendingServerMatch(
+        val pendingHandshakeId: String,
+        val expiresAt: String,
+    ) : BindProximityHandshakeResult()
+}
+
+private fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeOutcome {
+    val rows = matches.orEmpty()
+    val aggregateEncounterLogged = encounterLogged
+        ?: rows.none { it.encounterLogged == false }
+    val aggregateNewConnection = isNewConnection
+        ?: rows.any { it.isNewConnection }
+    val groupCliqueCandidateMemberIds =
+        groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() }
+    return BindProximityHandshakeOutcome(
+        matches = rows,
+        isAggregateNewConnection = aggregateNewConnection,
+        encounterLogged = aggregateEncounterLogged,
+        groupCliqueCandidateMemberIds = groupCliqueCandidateMemberIds,
+        connectionId = connectionId,
+        isGroup = isGroup == true,
+        encounterId = encounterId?.trim()?.takeIf { it.isNotEmpty() },
+        collaborationTtl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
+    )
+}
 
 private fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
     val utcTime = Clock.System
@@ -175,54 +209,13 @@ sealed class ProximityResult {
     data class Error(val message: String) : ProximityResult()
 }
 
-@Serializable
-private data class GroupCliqueCandidatePayload(
-    @SerialName("member_user_ids") val memberUserIds: List<String> = emptyList(),
-)
-
-@Serializable
-private data class BindProximityResponse(
-    val success: Boolean? = true,
-    @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
-    @SerialName("connection_id") val connectionId: String? = null,
-    @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
-    @SerialName("is_group") val isGroup: Boolean? = null,
-    val matches: List<User>? = null,
-    val error: String? = null,
-    @SerialName("group_clique_candidate") val groupCliqueCandidate: GroupCliqueCandidatePayload? = null,
-    @SerialName("encounter_id") val encounterId: String? = null,
-    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
-)
-
-@Serializable
-private data class BindProximityRequest(
-    @SerialName("my_token") val myToken: String,
-    val tokens: List<String>,
-    @SerialName("heard_tokens") val heardTokens: List<String>,
-    @SerialName("latitude") val latitude: Double? = null,
-    @SerialName("longitude") val longitude: Double? = null,
-    @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
-    @SerialName("noise_level") val noiseLevel: String? = null,
-    @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
-    @SerialName("context_tags") val contextTags: List<String>? = null,
-    @SerialName("height_category") val heightCategory: String? = null,
-    @SerialName("lux_level") val luxLevel: Double? = null,
-    @SerialName("motion_variance") val motionVariance: Double? = null,
-    @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
-    @SerialName("battery_level") val batteryLevel: Int? = null,
-    /** When true, edge function defers encounter rows until connection create. */
-    @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
-    @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
-    @SerialName("simulator_mock") val simulatorMock: Boolean? = null,
-    @SerialName("timezone_offset_minutes") val timezoneOffsetMinutes: Int? = null,
-)
 
 /**
  * Connection + encounter persistence.
  *
  * **QR (token) flows** must use the Next.js companion host only:
- * `POST {CLICK_WEB_BASE_URL}/api/qr` for redemption — never Supabase Edge `bind-proximity-connection`.
- * Proximity tap / deferred replay is the sole caller of [bindProximityHandshake].
+ * `POST {CLICK_WEB_BASE_URL}/api/qr` for redemption.
+ * Proximity tap / deferred replay uses `POST /api/connections/proximity` via [bindProximityHandshake].
  *
  * Chat **read receipts / inbox unread badges** are handled by the chat layer
  * (`ChatViewModel` + `SupabaseChatRepository.markMessagesAsRead`), not this repository.
@@ -408,16 +401,8 @@ class ConnectionRepository(
     }
 
     private val pendingEncounterQueue by lazy { PendingEncounterQueue(tokenStorage, json) }
-    /** Next.js companion (`/api/qr`, etc.) — not Supabase Functions. */
+    /** Next.js companion (`/api/qr`, `/api/connections/proximity`, etc.). */
     private val companionWebHttpClient by lazy {
-        HttpClient {
-            install(ContentNegotiation) {
-                json(this@ConnectionRepository.json)
-            }
-        }
-    }
-    /** Supabase Edge Functions only (e.g. `bind-proximity-connection`). */
-    private val supabaseFunctionsHttpClient by lazy {
         HttpClient {
             install(ContentNegotiation) {
                 json(this@ConnectionRepository.json)
@@ -462,28 +447,16 @@ class ConnectionRepository(
         bearerJwt: String,
     ) {
         if (bearerJwt.isBlank()) return
+        @Suppress("UNUSED_PARAMETER")
+        val unusedClient = httpClient
         runCatching {
-            val client = httpClient ?: supabaseFunctionsHttpClient
-            client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
-                contentType(ContentType.Application.Json)
-                headers {
-                    append("apikey", SupabaseConfig.supabaseAnonApiKey)
-                    append(HttpHeaders.Authorization, "Bearer $bearerJwt")
-                }
-                setBody(
-                    BindProximityRequest(
-                        myToken = "",
-                        tokens = emptyList(),
-                        heardTokens = emptyList(),
-                    ),
-                )
-            }
+            apiClient.prewarmProximityHandshake()
         }
     }
 
     /**
-     * Server-side tri-factor clustering: posts ephemeral token + heard tokens + GPS to the
-     * Supabase Edge Function [bind-proximity-connection] and returns matched user profiles.
+     * Server-side tri-factor clustering: posts ephemeral token + heard tokens + GPS to
+     * `POST /api/connections/proximity` and returns matched user profiles or a pending async match.
      */
     suspend fun bindProximityHandshake(
         httpClient: HttpClient? = null,
@@ -501,9 +474,13 @@ class ConnectionRepository(
         bindExactNoiseLevelDb: Double? = null,
         bindHeightCategory: HeightCategory? = null,
         simulatorMock: Boolean = false,
-    ): Result<BindProximityHandshakeOutcome> {
+    ): Result<BindProximityHandshakeResult> {
         return try {
-            val client = httpClient ?: supabaseFunctionsHttpClient
+            @Suppress("UNUSED_PARAMETER")
+            val unusedClient = httpClient
+            if (bearerJwt.isBlank()) {
+                return Result.failure(IllegalStateException("Please sign in again."))
+            }
             val hasGps = latitude != null && longitude != null &&
                 latitude.isFinite() && longitude.isFinite() &&
                 !(latitude == 0.0 && longitude == 0.0)
@@ -517,7 +494,7 @@ class ConnectionRepository(
                 .offsetIn(TimeZone.currentSystemDefault())
                 .totalSeconds
                 .div(60)
-            val request = BindProximityRequest(
+            val request = ProximityHandshakePostBody(
                 myToken = myToken,
                 tokens = heardTokens,
                 heardTokens = heardTokens,
@@ -537,47 +514,27 @@ class ConnectionRepository(
                 weatherSnapshot = trimmedWeather,
                 simulatorMock = if (simulatorMock) true else null,
             )
-            val outgoingJson = json.encodeToString(BindProximityRequest.serializer(), request)
+            val outgoingJson = json.encodeToString(ProximityHandshakePostBody.serializer(), request)
             println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
-            val response = client.post(SupabaseConfig.functionUrl("bind-proximity-connection")) {
-                contentType(ContentType.Application.Json)
-                headers {
-                    append("apikey", SupabaseConfig.supabaseAnonApiKey)
-                    append(HttpHeaders.Authorization, "Bearer $bearerJwt")
+            val apiResult = apiClient.postProximityHandshake(request).getOrElse {
+                return Result.failure(it)
+            }
+            when (apiResult) {
+                is ProximityHandshakePostResult.InstantMatch -> {
+                    val parsed = apiResult.body
+                    val outcome = parsed.toBindOutcome()
+                    Result.success(BindProximityHandshakeResult.InstantMatch(outcome))
                 }
-                setBody(request)
+                is ProximityHandshakePostResult.PendingMatch -> {
+                    val pending = apiResult.body
+                    Result.success(
+                        BindProximityHandshakeResult.PendingServerMatch(
+                            pendingHandshakeId = pending.pendingHandshakeId,
+                            expiresAt = pending.expiresAt,
+                        ),
+                    )
+                }
             }
-            val text = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                return Result.failure(Exception(text.ifBlank { "bind-proximity-connection failed" }))
-            }
-            val parsed = runCatching {
-                json.decodeFromString(BindProximityResponse.serializer(), text)
-            }.getOrElse {
-                return Result.failure(Exception("Could not read proximity server response."))
-            }
-            if (!parsed.error.isNullOrBlank()) {
-                return Result.failure(Exception(parsed.error))
-            }
-            val rows = parsed.matches.orEmpty()
-            val aggregateEncounterLogged = parsed.encounterLogged
-                ?: rows.none { it.encounterLogged == false }
-            val aggregateNewConnection = parsed.isNewConnection
-                ?: rows.any { it.isNewConnection }
-            val groupCliqueCandidateMemberIds =
-                parsed.groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() }
-            Result.success(
-                BindProximityHandshakeOutcome(
-                    matches = rows,
-                    isAggregateNewConnection = aggregateNewConnection,
-                    encounterLogged = aggregateEncounterLogged,
-                    groupCliqueCandidateMemberIds = groupCliqueCandidateMemberIds,
-                    connectionId = parsed.connectionId,
-                    isGroup = parsed.isGroup == true,
-                    encounterId = parsed.encounterId?.trim()?.takeIf { it.isNotEmpty() },
-                    collaborationTtl = parsed.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
-                ),
-            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -618,7 +575,7 @@ class ConnectionRepository(
     }
 
     /**
-     * Replays the oldest queued handshake against [bind-proximity-connection].
+     * Replays the oldest queued handshake against `POST /api/connections/proximity`.
      * Drops head when the server returns an empty match list (stale tokens).
      */
     suspend fun syncPendingProximityHandshakes(bearerJwt: String): PendingProximityHandshakeSyncResult {
@@ -657,24 +614,37 @@ class ConnectionRepository(
                 }
             }
             if (attempt.isSuccess) {
-                val outcome = attempt.getOrNull()!!
-                val users = outcome.matches
+                val bindResult = attempt.getOrNull()!!
                 val rest = queue.drop(1)
                 pendingEncounterQueue.replaceAll(rest)
-                if (users.isNotEmpty()) {
-                    return PendingProximityHandshakeSyncResult(
-                        recoveredUsers = users,
-                        remainingInQueue = rest.size,
-                        recoveredEncounterLogged = outcome.encounterLogged,
-                        groupCliqueCandidateMemberIds = outcome.groupCliqueCandidateMemberIds,
-                    )
+                when (bindResult) {
+                    is BindProximityHandshakeResult.PendingServerMatch -> {
+                        return PendingProximityHandshakeSyncResult(
+                            recoveredUsers = null,
+                            remainingInQueue = rest.size,
+                            serverPendingMatch = true,
+                        )
+                    }
+                    is BindProximityHandshakeResult.InstantMatch -> {
+                        val outcome = bindResult.outcome
+                        val users = outcome.matches
+                        if (users.isNotEmpty()) {
+                            return PendingProximityHandshakeSyncResult(
+                                recoveredUsers = users,
+                                remainingInQueue = rest.size,
+                                recoveredEncounterLogged = outcome.encounterLogged,
+                                groupCliqueCandidateMemberIds = outcome.groupCliqueCandidateMemberIds,
+                            )
+                        }
+                        continue
+                    }
                 }
-                continue
             }
             val err = attempt.exceptionOrNull() ?: return PendingProximityHandshakeSyncResult(null, queue.size)
             val authHint = err.message?.lowercase().orEmpty()
             if (authHint.contains("401") || authHint.contains("403") ||
-                authHint.contains("unauthorized") || authHint.contains("invalid jwt")
+                authHint.contains("unauthorized") || authHint.contains("invalid jwt") ||
+                err is ClickWebRequestException && err.statusCode in setOf(401, 403)
             ) {
                 return PendingProximityHandshakeSyncResult(
                     recoveredUsers = null,

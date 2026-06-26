@@ -305,6 +305,12 @@ fun NfcScreen(
                                     onDismiss = { connectionViewModel.resetConnectionState() },
                                 )
                             }
+                            is ConnectionState.ProximityHandshakePendingMatch -> {
+                                ProximityPendingMatchContent(
+                                    message = state.message,
+                                    onDismiss = { connectionViewModel.resetConnectionState() },
+                                )
+                            }
                             is ConnectionState.Success -> {
                                 NfcSuccessContent(
                                     connection = state.connection,
@@ -582,6 +588,52 @@ private fun ProximityConfirmConnectionsContent(
 }
 
 @Composable
+private fun ProximityPendingMatchContent(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            Icons.Default.Schedule,
+            contentDescription = null,
+            modifier = Modifier.size(88.dp),
+            tint = PrimaryBlue.copy(alpha = 0.9f),
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = "Handshake Saved",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier
+                .fillMaxWidth(0.72f)
+                .height(52.dp),
+            shape = RoundedCornerShape(26.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+        ) {
+            Text("Got it", style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
 private fun ProximityOfflineCapturedContent(
     message: String,
     onTryNow: () -> Unit,
@@ -601,7 +653,7 @@ private fun ProximityOfflineCapturedContent(
         )
         Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = "Connection Captured",
+            text = "Saved Offline",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,

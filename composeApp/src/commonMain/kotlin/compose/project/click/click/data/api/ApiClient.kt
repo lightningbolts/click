@@ -7,9 +7,9 @@ import compose.project.click.click.data.models.LoginRequest
 import compose.project.click.click.data.models.SignUpRequest
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.MapBeaconInsert
 import compose.project.click.click.data.models.parseMapBeaconRows
-import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -205,6 +205,65 @@ data class HubCreateResponseDto(
     @SerialName("hub_id") val hubId: String,
     @SerialName("expires_at") val expiresAt: String? = null,
 )
+
+/** POST `/api/connections/proximity` — tri-factor bind (mirrors legacy bind-proximity-connection). */
+@Serializable
+data class ProximityHandshakePostBody(
+    @SerialName("my_token") val myToken: String,
+    val tokens: List<String> = emptyList(),
+    @SerialName("heard_tokens") val heardTokens: List<String> = emptyList(),
+    @SerialName("latitude") val latitude: Double? = null,
+    @SerialName("longitude") val longitude: Double? = null,
+    @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
+    @SerialName("noise_level") val noiseLevel: String? = null,
+    @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
+    @SerialName("context_tags") val contextTags: List<String>? = null,
+    @SerialName("height_category") val heightCategory: String? = null,
+    @SerialName("lux_level") val luxLevel: Double? = null,
+    @SerialName("motion_variance") val motionVariance: Double? = null,
+    @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
+    @SerialName("battery_level") val batteryLevel: Int? = null,
+    @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
+    @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+    @SerialName("simulator_mock") val simulatorMock: Boolean? = null,
+    @SerialName("timezone_offset_minutes") val timezoneOffsetMinutes: Int? = null,
+)
+
+@Serializable
+data class ProximityGroupCliqueCandidateDto(
+    @SerialName("member_user_ids") val memberUserIds: List<String> = emptyList(),
+)
+
+/** HTTP 200 — instant peer match from `POST /api/connections/proximity`. */
+@Serializable
+data class ProximityBindOkResponseDto(
+    val success: Boolean? = true,
+    @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
+    @SerialName("connection_id") val connectionId: String? = null,
+    @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
+    @SerialName("is_group") val isGroup: Boolean? = null,
+    val matches: List<User>? = null,
+    val error: String? = null,
+    @SerialName("group_clique_candidate") val groupCliqueCandidate: ProximityGroupCliqueCandidateDto? = null,
+    @SerialName("encounter_id") val encounterId: String? = null,
+    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
+)
+
+/** HTTP 202 — peer offline; handshake stored server-side for async match. */
+@Serializable
+data class ProximityBindPendingResponseDto(
+    val success: Boolean = true,
+    val status: String,
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
+    @SerialName("expires_at") val expiresAt: String,
+    @SerialName("encounter_logged") val encounterLogged: Boolean = false,
+    val matches: List<User> = emptyList(),
+)
+
+sealed class ProximityHandshakePostResult {
+    data class InstantMatch(val body: ProximityBindOkResponseDto) : ProximityHandshakePostResult()
+    data class PendingMatch(val body: ProximityBindPendingResponseDto) : ProximityHandshakePostResult()
+}
 
 @Serializable
 data class ConnectionEncounterPostBody(
@@ -1009,6 +1068,57 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
+     * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200 or
+     * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet).
+     */
+    suspend fun postProximityHandshake(body: ProximityHandshakePostBody): Result<ProximityHandshakePostResult> {
+        return try {
+            val response: HttpResponse = clickWebClient.post(
+                "$clickWebAuthOrigin/api/connections/proximity",
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            when (response.status.value) {
+                200 -> {
+                    val dto = response.body<ProximityBindOkResponseDto>()
+                    if (!dto.error.isNullOrBlank()) {
+                        Result.failure(Exception(dto.error))
+                    } else {
+                        Result.success(ProximityHandshakePostResult.InstantMatch(dto))
+                    }
+                }
+                202 -> {
+                    val dto = response.body<ProximityBindPendingResponseDto>()
+                    Result.success(ProximityHandshakePostResult.PendingMatch(dto))
+                }
+                else -> clickWebFailure(response)
+            }
+        } catch (e: ClientRequestException) {
+            clickWebFailure(e.response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** Cold-start prewarm: invalid `my_token` exercises JWT/auth without inserting a row. */
+    suspend fun prewarmProximityHandshake() {
+        runCatching {
+            clickWebClient.post("$clickWebAuthOrigin/api/connections/proximity") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ProximityHandshakePostBody(
+                        myToken = "",
+                        tokens = emptyList(),
+                        heardTokens = emptyList(),
+                    ),
+                )
+            }
         }
     }
 
