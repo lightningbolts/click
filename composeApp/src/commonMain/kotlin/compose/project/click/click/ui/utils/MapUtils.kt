@@ -470,6 +470,23 @@ fun haversineDistance(
 }
 
 /**
+ * Synchronous distance for beacon detail sheets: prefer feed/search seed distance, then
+ * haversine from the last known device location (same source as the discovery feed list).
+ */
+internal fun resolveBeaconQuickDistanceMeters(
+    seedDistanceMeters: Double?,
+    beaconLat: Double,
+    beaconLon: Double,
+    cachedUserLatLon: Pair<Double, Double>?,
+): Double? {
+    seedDistanceMeters
+        ?.takeIf { it.isFinite() && it >= 0 && it < Double.MAX_VALUE }
+        ?.let { return it }
+    val cached = cachedUserLatLon ?: return null
+    return haversineDistance(cached.first, cached.second, beaconLat, beaconLon)
+}
+
+/**
  * Calculate the optimal zoom level to fit a bounding box
  */
 fun calculateZoomForBounds(bounds: BoundingBox, mapWidthPx: Int = 400): Double {

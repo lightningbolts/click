@@ -65,8 +65,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -356,9 +354,9 @@ fun MapScreen(
                             TelemetryBatcher.recordActionTaken()
                             viewModel.onCommunityHubTapped(hub, distanceM)
                         },
-                        onBeaconClick = { beacon ->
+                        onBeaconClick = { beacon, distanceM ->
                             TelemetryBatcher.recordActionTaken()
-                            viewModel.onMapPinTapped(MapPin.fromBeacon(beacon))
+                            viewModel.onBeaconPinTapped(beacon.id, seedDistanceMeters = distanceM)
                         },
                         onConnectionClick = { point ->
                             TelemetryBatcher.recordActionTaken()
@@ -1079,9 +1077,16 @@ private fun EventBeaconDetail(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(attendees, key = { it.userId }) { attendee ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                attendees.forEach { attendee ->
+                    Column(
+                        modifier = Modifier.widthIn(max = 56.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         ConnectionListUserAvatarFace(
                             displayName = attendee.name,
                             email = null,

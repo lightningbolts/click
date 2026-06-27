@@ -333,7 +333,7 @@ internal fun MapDiscoveryScreen(
     mapContent: @Composable (Modifier, Boolean) -> Unit,
     expandedMapChrome: @Composable () -> Unit,
     onHubClick: (CommunityHubPin, distanceMeters: Double?) -> Unit,
-    onBeaconClick: (MapBeacon) -> Unit,
+    onBeaconClick: (MapBeacon, distanceMeters: Double?) -> Unit,
     onConnectionClick: (ConnectionMapPoint) -> Unit,
 ) {
     val platformStyle = LocalPlatformStyle.current
@@ -563,7 +563,10 @@ internal fun MapDiscoveryScreen(
                                         item.hub,
                                         item.distanceM.takeIf { it.isFinite() && it < Double.MAX_VALUE },
                                     )
-                                    is DiscoveryFeedItem.Beacon -> onBeaconClick(item.beacon)
+                                    is DiscoveryFeedItem.Beacon -> onBeaconClick(
+                                        item.beacon,
+                                        item.distanceM.takeIf { it.isFinite() && it < Double.MAX_VALUE },
+                                    )
                                     is DiscoveryFeedItem.Connection -> onConnectionClick(item.point)
                                 }
                             },

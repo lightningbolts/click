@@ -769,15 +769,20 @@ class MapViewModel : ViewModel() {
         _beaconDropFailureToast.value = null
     }
 
-    fun onBeaconPinTapped(beaconId: String) {
+    fun onBeaconPinTapped(beaconId: String, seedDistanceMeters: Double? = null) {
         val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
             ?: return
-        _selection.value = MapSelection.BeaconSelected(beacon, distanceMeters = null)
+        val quickDistance = resolveBeaconQuickDistanceMeters(
+            seedDistanceMeters = seedDistanceMeters,
+            beaconLat = beacon.latitude,
+            beaconLon = beacon.longitude,
+            cachedUserLatLon = AppDataManager.lastKnownDeviceLocation.value,
+        )
+        _selection.value = MapSelection.BeaconSelected(beacon, distanceMeters = quickDistance)
 
         viewModelScope.launch(Dispatchers.Default) {
-            val distance = locationService.getHighAccuracyLocation(3500L)?.let { loc ->
-                haversineDistance(loc.latitude, loc.longitude, beacon.latitude, beacon.longitude)
-            }
+            val loc = resolveFastMapLocation() ?: return@launch
+            val distance = haversineDistance(loc.latitude, loc.longitude, beacon.latitude, beacon.longitude)
             val current = _selection.value as? MapSelection.BeaconSelected ?: return@launch
             if (current.beacon.id == beaconId) {
                 _selection.value = current.copy(distanceMeters = distance)
