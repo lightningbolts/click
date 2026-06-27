@@ -1813,12 +1813,6 @@ fun App() {
                             }
                         }
 
-                        if (!isOnline) {
-                            OfflineStatusBanner(
-                                modifier = Modifier.align(Alignment.TopCenter),
-                            )
-                        }
-
                         if (connectionState is ConnectionState.TaggingContext && !showNfcScreen && !suppressConnectionContextSheet) {
                             val tagging = connectionState as ConnectionState.TaggingContext
                             var calendarLockInProgress by remember { mutableStateOf(false) }
@@ -2236,6 +2230,13 @@ fun App() {
                         },
                     )
                 }
+            }
+            if (!isOnline) {
+                OfflineStatusBanner(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(68f),
+                )
             }
             GlobalTetherOverlay(
                 modifier = Modifier
