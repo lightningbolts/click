@@ -82,6 +82,7 @@ import compose.project.click.click.calendar.AvailabilityOverlapGap
 import compose.project.click.click.calendar.lockAvailabilityIntentForGap
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.AppShimmerScreen
+import compose.project.click.click.ui.components.OfflineStatusBanner
 import compose.project.click.click.ui.components.GlobalTetherOverlay
 import compose.project.click.click.encounter.EncounterTetherManager
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
@@ -134,6 +135,7 @@ import kotlin.coroutines.resume
 
 import compose.project.click.click.viewmodel.ConnectionViewModel
 import compose.project.click.click.viewmodel.ConnectionState
+import compose.project.click.click.viewmodel.ConnectivityViewModel
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
 import compose.project.click.click.data.hub.HubConnectionManager
 import compose.project.click.click.data.hub.HubVerifyResult
@@ -167,7 +169,9 @@ fun App() {
     }
     val appScope = rememberCoroutineScope()
     val authViewModel: AuthViewModel = viewModel { AuthViewModel(tokenStorage = tokenStorage) }
+    val connectivityViewModel: ConnectivityViewModel = viewModel { ConnectivityViewModel() }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
+    val isOnline by connectivityViewModel.isOnline.collectAsState()
 
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }
@@ -241,10 +245,6 @@ fun App() {
                 runCatching { onboardingJson.decodeFromString<OnboardingState>(serialized) }.getOrNull()
             }
 
-        val canFastTrackOnboardingGate =
-            persistedHasCompletedOnboarding == true || savedState?.isComplete == true
-        interestsRemoteResolved = canFastTrackOnboardingGate
-
         val effectiveHasCompletedOnboarding =
             persistedHasCompletedOnboarding ?: savedState?.permissionsCompleted ?: false
         hasCompletedOnboarding = effectiveHasCompletedOnboarding
@@ -275,43 +275,45 @@ fun App() {
         }
 
         val supabaseRepo = compose.project.click.click.data.repository.SupabaseRepository()
-        supabaseRepo.fetchUserInterests(currentUser.id).fold(
-            onSuccess = { row ->
-                if (row != null) {
-                    if (hasCompletedOnboarding != true) {
-                        hasCompletedOnboarding = true
-                        tokenStorage.saveHasCompletedOnboarding(true)
-                    }
-                    val base = (onboardingState ?: OnboardingState()).let { state ->
-                        if (hasCompletedOnboarding == true && !state.permissionsCompleted) {
-                            state.copy(permissionsCompleted = true)
-                        } else {
-                            state
-                        }
-                    }
-                    val permissionsCompleted = hasCompletedOnboarding == true || base.permissionsCompleted
-                    val merged = base.copy(
-                        welcomeSeen = true,
-                        interestsCompleted = true,
-                        permissionsCompleted = permissionsCompleted,
-                        flowVersion = if (permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
-                        completedAt = base.completedAt ?: if (permissionsCompleted) {
-                            kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                        } else {
-                            null
-                        },
-                    )
-                    onboardingState = merged
-                    tokenStorage.saveTagsInitialized(true)
-                    tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
-                }
-            },
-            onFailure = { err ->
-                println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
-            },
-        )
-
+        // Do not block onboarding / dashboard on network — resolve interests in the background.
         interestsRemoteResolved = true
+        launch(Dispatchers.IO) {
+            supabaseRepo.fetchUserInterests(currentUser.id).fold(
+                onSuccess = { row ->
+                    if (row != null) {
+                        if (hasCompletedOnboarding != true) {
+                            hasCompletedOnboarding = true
+                            tokenStorage.saveHasCompletedOnboarding(true)
+                        }
+                        val base = (onboardingState ?: OnboardingState()).let { state ->
+                            if (hasCompletedOnboarding == true && !state.permissionsCompleted) {
+                                state.copy(permissionsCompleted = true)
+                            } else {
+                                state
+                            }
+                        }
+                        val permissionsCompleted = hasCompletedOnboarding == true || base.permissionsCompleted
+                        val merged = base.copy(
+                            welcomeSeen = true,
+                            interestsCompleted = true,
+                            permissionsCompleted = permissionsCompleted,
+                            flowVersion = if (permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
+                            completedAt = base.completedAt ?: if (permissionsCompleted) {
+                                kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                            } else {
+                                null
+                            },
+                        )
+                        onboardingState = merged
+                        tokenStorage.saveTagsInitialized(true)
+                        tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
+                    }
+                },
+                onFailure = { err ->
+                    println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
+                },
+            )
+        }
     }
 
     // Coroutine scope for location-aware connection
@@ -1776,7 +1778,11 @@ fun App() {
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
                                     .windowInsetsPadding(WindowInsets.statusBars)
-                                    .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                                    .padding(
+                                        top = if (!isOnline) 56.dp else 8.dp,
+                                        start = 16.dp,
+                                        end = 16.dp,
+                                    )
                                     .fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
@@ -1805,6 +1811,12 @@ fun App() {
                                     }
                                 }
                             }
+                        }
+
+                        if (!isOnline) {
+                            OfflineStatusBanner(
+                                modifier = Modifier.align(Alignment.TopCenter),
+                            )
                         }
 
                         if (connectionState is ConnectionState.TaggingContext && !showNfcScreen && !suppressConnectionContextSheet) {

@@ -1,6 +1,7 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.auth.LocalSessionCache
+import compose.project.click.click.auth.LocalSessionIdentity
 import compose.project.click.click.data.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Apple
@@ -314,9 +315,8 @@ class AuthRepository(
                     println("AuthRepository: Restored session from local cache (offline-capable)")
                     return Result.success(user)
                 }
-                return Result.failure(
-                    Exception("Offline session available for ${identity.userId} but SDK user not hydrated"),
-                )
+                println("AuthRepository: Admitting offline session for ${identity.userId} from local cache")
+                return Result.success(offlineUserInfoFromIdentity(identity))
             }
 
             // ── Strategy ──
@@ -397,8 +397,11 @@ class AuthRepository(
                     }
                     Result.success(user)
                 } else {
-                    // Keep local tokens on restore failure so offline cold boots do not force sign-out.
-                    // Explicit sign-out still clears session data via AuthViewModel.signOut().
+                    // Offline or refresh failed — admit from local JWT identity without clearing tokens.
+                    LocalSessionCache.read(tokenStorage)?.let { identity ->
+                        println("AuthRepository: Admitting offline session for ${identity.userId} without SDK user hydration")
+                        return Result.success(offlineUserInfoFromIdentity(identity))
+                    }
                     if (refreshFailed) {
                         println("AuthRepository: Session refresh failed; preserving local tokens for offline recovery")
                     } else {
@@ -611,6 +614,16 @@ class AuthRepository(
         }
         return mapAuthErrorMessage(error, defaultMessage = defaultMessage)
     }
+
+    private fun offlineUserInfoFromIdentity(identity: LocalSessionIdentity): UserInfo =
+        UserInfo(
+            id = identity.userId,
+            aud = "authenticated",
+            email = identity.email.takeIf { it.isNotBlank() },
+            userMetadata = buildJsonObject {
+                identity.name?.let { put("name", it) }
+            },
+        )
 
     private fun isIosRuntime(): Boolean =
         getPlatform().name.contains("iOS", ignoreCase = true)

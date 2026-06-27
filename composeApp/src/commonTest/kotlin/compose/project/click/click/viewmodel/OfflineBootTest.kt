@@ -41,7 +41,7 @@ class OfflineBootTest {
     }
 
     @Test
-    fun offlineBoot_rejectsExpiredLocalCache() = runTest {
+    fun offlineBoot_allowsExpiredAccessTokenWhenRefreshTokenPresent() = runTest {
         val storage = FakeTokenStorage(
             jwt = testJwt(
                 userId = USER_ID,
@@ -55,7 +55,8 @@ class OfflineBootTest {
 
         val bootState = AuthBootFastPath.resolveLoggedInState(storage)
 
-        assertNull(bootState)
+        assertNotNull(bootState)
+        assertEquals(USER_ID, bootState.userId)
     }
 
     @Test

@@ -683,6 +683,18 @@ object AppDataManager {
     }
     
     /**
+     * Hydrate local SSOT from disk immediately after auth fast-path so the dashboard can render
+     * without waiting for the first network-backed [loadAllData] pass.
+     */
+    suspend fun primeOfflineBootCache() {
+        restoreCachedSnapshot()
+        restoreActiveHubs()
+        if (_currentUser.value != null) {
+            _isDataLoaded.value = true
+        }
+    }
+
+    /**
      * Initialize app data - call this once when the app starts
      */
     fun initializeData() {
@@ -704,6 +716,10 @@ object AppDataManager {
         _error.value = null
         restoreCachedSnapshot()
         restoreActiveHubs()
+        if (_currentUser.value != null) {
+            _isDataLoaded.value = true
+            _isLoading.value = false
+        }
 
         try {
             // Get current user from auth (or fall back to restored cache / local session tokens).

@@ -11,8 +11,10 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.displayNameFromMetadata
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.RefreshFailureCause
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -37,15 +39,11 @@ class AuthViewModel(
     var isAuthenticated by mutableStateOf(false)
         private set
 
-    init {
-        // Start syncing SDK session refreshes → TokenStorage (Keychain/EncryptedPrefs).
-        // This is the primary fix for "random logouts" — without this, the SDK
-        // auto-refreshes its tokens but our Keychain/EncryptedPrefs storage goes stale.
-        SupabaseConfig.startSessionSync(tokenStorage)
+    private var supabaseObserversStarted = false
 
+    init {
         checkAuthStatus()
         startBackgroundTokenRefresh()
-        observeOAuthCompletion()
     }
 
     /**
@@ -53,33 +51,49 @@ class AuthViewModel(
      * once [AppDataManager] loads [public.users] — see [compose.project.click.click.data.models.isPublicUserProfileIncomplete].
      *
      * Reflect deep-link-driven OAuth completion into the UI state machine (Phase 2 — C16).
-     *
-     * When the PKCE callback (`click://login`) is delivered to the app, supabase-kt
-     * exchanges the code for a session and transitions [sessionStatus] to
-     * [SessionStatus.Authenticated]. We watch for that transition and flip
-     * [authState] so the login screen dismisses and downstream data loads.
-     *
-     * We intentionally only react while we're currently in [AuthState.Loading] from
-     * an OAuth launch — other state transitions are owned by the email/password
-     * flow and by [checkAuthStatus] at cold boot.
      */
     private fun observeOAuthCompletion() {
         viewModelScope.launch {
             SupabaseConfig.client.auth.sessionStatus.collect { status ->
-                if (status is SessionStatus.Authenticated) {
-                    val user = status.session.user
-                    if (user != null && !isAuthenticated) {
-                        isAuthenticated = true
-                        authState = AuthState.Success(
-                            userId = user.id,
-                            email = user.email ?: "",
-                            name = user.displayNameFromMetadata(),
-                        )
-                        AppDataManager.resetAndReload()
+                when (status) {
+                    is SessionStatus.Authenticated -> {
+                        val user = status.session.user
+                        if (user != null && !isAuthenticated) {
+                            isAuthenticated = true
+                            authState = AuthState.Success(
+                                userId = user.id,
+                                email = user.email ?: "",
+                                name = user.displayNameFromMetadata(),
+                            )
+                            AppDataManager.resetAndReload()
+                        }
                     }
+                    is SessionStatus.RefreshFailure -> {
+                        val networkCause = status.cause as? RefreshFailureCause.NetworkError
+                        if (networkCause != null) {
+                            restoreOfflineSessionIfPossible(networkCause.exception)
+                        }
+                    }
+                    is SessionStatus.NotAuthenticated -> {
+                        // Never clear local tokens from SDK transitions — explicit sign-out only.
+                    }
+                    else -> Unit
                 }
             }
         }
+    }
+
+    private fun scheduleAutoRefreshForCurrentSession() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+        }
+    }
+
+    private fun ensureSupabaseObserversStarted() {
+        if (supabaseObserversStarted) return
+        supabaseObserversStarted = true
+        SupabaseConfig.startSessionSync(tokenStorage)
+        observeOAuthCompletion()
     }
 
     private fun checkAuthStatus() {
@@ -89,9 +103,13 @@ class AuthViewModel(
             if (cachedBoot != null) {
                 isAuthenticated = true
                 authState = cachedBoot
+                AppDataManager.primeOfflineBootCache()
+                ensureSupabaseObserversStarted()
                 launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 return@launch
             }
+
+            ensureSupabaseObserversStarted()
 
             try {
                 val userResult = if (authRepository.isAuthenticated()) {
@@ -109,6 +127,7 @@ class AuthViewModel(
                             email = user.email ?: "",
                             name = user.displayNameFromMetadata()
                         )
+                        AppDataManager.primeOfflineBootCache()
                         launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                     },
                     onFailure = { error ->
@@ -117,6 +136,7 @@ class AuthViewModel(
                             isAuthenticated = false
                             authState = AuthState.Idle
                         } else {
+                            AppDataManager.primeOfflineBootCache()
                             launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                         }
                     }
@@ -127,6 +147,7 @@ class AuthViewModel(
                     isAuthenticated = false
                     authState = AuthState.Idle
                 } else {
+                    AppDataManager.primeOfflineBootCache()
                     launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 }
             }
@@ -141,6 +162,9 @@ class AuthViewModel(
         withContext(Dispatchers.IO) {
             runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
             runCatching { authRepository.refreshSession() }
+                .onSuccess {
+                    runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                }
                 .onFailure { restoreOfflineSessionIfPossible(it) }
             authRepository.restoreSession()
                 .onSuccess { user ->
@@ -170,6 +194,9 @@ class AuthViewModel(
                 if (isAuthenticated) {
                     try {
                         authRepository.refreshSession()
+                            .onSuccess {
+                                runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                            }
                         println("AuthViewModel: Background token refresh successful")
                     } catch (e: Exception) {
                         println("AuthViewModel: Background token refresh failed: ${e.redactedRestMessage()}")
@@ -182,6 +209,7 @@ class AuthViewModel(
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             try {
+                ensureSupabaseObserversStarted()
                 authState = AuthState.Loading
 
                 val result = authRepository.signInWithEmail(email, password)
@@ -194,7 +222,7 @@ class AuthViewModel(
                             email = user.email ?: email,
                             name = user.displayNameFromMetadata()
                         )
-                        // Trigger data load for the newly logged-in user
+                        scheduleAutoRefreshForCurrentSession()
                         AppDataManager.resetAndReload()
                     },
                     onFailure = { error ->
@@ -214,6 +242,7 @@ class AuthViewModel(
      */
     fun signInWithGoogle() {
         viewModelScope.launch {
+            ensureSupabaseObserversStarted()
             authState = AuthState.Loading
             var awaitingAsyncCompletion = false
             try {
@@ -227,6 +256,7 @@ class AuthViewModel(
                                 email = user.email ?: "",
                                 name = user.displayNameFromMetadata(),
                             )
+                            scheduleAutoRefreshForCurrentSession()
                             AppDataManager.resetAndReload()
                         } else {
                             awaitingAsyncCompletion = true
@@ -256,14 +286,13 @@ class AuthViewModel(
      */
     fun signInWithApple() {
         viewModelScope.launch {
+            ensureSupabaseObserversStarted()
             authState = AuthState.Loading
             var browserOpenedAwaitingDeepLink = false
             try {
                 val result = authRepository.signInWithApple()
                 result.fold(
                     onSuccess = {
-                        // Native Apple ID-token sign-in or browser OAuth launch both transition
-                        // through Supabase session callbacks; keep Loading while awaiting completion.
                         browserOpenedAwaitingDeepLink = true
                     },
                     onFailure = { error ->
@@ -278,40 +307,6 @@ class AuthViewModel(
                     e.message ?: "Could not start Apple sign-in right now.",
                 )
             } finally {
-                // Equivalent to clearing loading state when startup failed before auth callback.
-                if (!browserOpenedAwaitingDeepLink && authState is AuthState.Loading) {
-                    authState = AuthState.Idle
-                }
-            }
-        }
-    }
-
-    private fun launchOAuthSignIn(providerLabel: String, launch: suspend () -> Result<Unit>) {
-        viewModelScope.launch {
-            authState = AuthState.Loading
-            var browserOpenedAwaitingDeepLink = false
-            try {
-                launch().fold(
-                    onSuccess = {
-                        // The browser is open. The final AuthState.Success flip happens when
-                        // the deep link returns and `sessionStatus` transitions to
-                        // Authenticated. `checkAuthStatus()` is not re-invoked here to avoid
-                        // racing the session manager.
-                        browserOpenedAwaitingDeepLink = true
-                    },
-                    onFailure = { error ->
-                        authState = AuthState.Error(
-                            error.message ?: "Could not start $providerLabel sign-in right now.",
-                        )
-                    },
-                )
-            } catch (e: Exception) {
-                authState = AuthState.Error(
-                    e.message ?: "Could not start $providerLabel sign-in right now.",
-                )
-            } finally {
-                // Never leave the login UI spinning if the flow failed to open the browser
-                // or threw before we are waiting on the OAuth deep link.
                 if (!browserOpenedAwaitingDeepLink && authState is AuthState.Loading) {
                     authState = AuthState.Idle
                 }
@@ -330,6 +325,7 @@ class AuthViewModel(
     ) {
         viewModelScope.launch {
             try {
+                ensureSupabaseObserversStarted()
                 authState = AuthState.Loading
 
                 val result = authRepository.signUpWithEmail(
@@ -349,6 +345,7 @@ class AuthViewModel(
                                 email = user.email ?: email,
                                 name = user.displayNameFromMetadata()
                             )
+                            scheduleAutoRefreshForCurrentSession()
                             AppDataManager.resetAndReload()
                         }
 
@@ -384,12 +381,11 @@ class AuthViewModel(
             val result = authRepository.refreshSession()
             result.fold(
                 onSuccess = {
-                    // Session refreshed successfully
+                    scheduleAutoRefreshForCurrentSession()
                 },
                 onFailure = { error ->
                     val keptOffline = restoreOfflineSessionIfPossible(error)
                     if (!keptOffline) {
-                        // Refresh failed for a non-network reason, require re-login
                         isAuthenticated = false
                         authState = AuthState.Idle
                     }
@@ -417,24 +413,10 @@ class AuthViewModel(
 
     private fun isLikelyNetworkFailure(error: Throwable?): Boolean {
         if (error == null) return false
-        var cursor: Throwable? = error
+        if (error.isOfflineNetworkFailure()) return true
+        var cursor: Throwable? = error.cause
         while (cursor != null) {
-            val message = cursor.message?.lowercase().orEmpty()
-            if (
-                message.contains("network") ||
-                message.contains("offline") ||
-                message.contains("no network") ||
-                message.contains("no internet") ||
-                message.contains("timeout") ||
-                message.contains("timed out") ||
-                message.contains("unable to resolve host") ||
-                message.contains("socket") ||
-                message.contains("connect") ||
-                message.contains("dns") ||
-                message.contains("unreachable")
-            ) {
-                return true
-            }
+            if (cursor.isOfflineNetworkFailure()) return true
             cursor = cursor.cause
         }
         return false

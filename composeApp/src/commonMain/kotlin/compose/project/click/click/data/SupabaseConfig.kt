@@ -52,8 +52,9 @@ object SupabaseConfig {
                 host = "login"
                 // Use SettingsSessionManager for persistent session storage
                 sessionManager = SettingsSessionManager(authSessionSettings)
-                // Ensure tokens are auto-refreshed and auto-loaded
-                alwaysAutoRefresh = true
+                // Do not block cold boot on network refresh for expired sessions — AuthViewModel
+                // imports the local session and refreshes in a background coroutine after UI paint.
+                alwaysAutoRefresh = false
                 autoLoadFromStorage = true
             }
             install(Postgrest)

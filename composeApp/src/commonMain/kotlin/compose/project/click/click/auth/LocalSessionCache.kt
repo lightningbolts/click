@@ -25,16 +25,31 @@ object LocalSessionCache {
     suspend fun read(tokenStorage: TokenStorage, nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): LocalSessionIdentity? {
         val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val refreshToken = tokenStorage.getRefreshToken()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (refreshToken.isEmpty()) return null
 
         val identity = parseIdentityFromJwt(jwt) ?: return null
         val expiresAt = tokenStorage.getExpiresAt() ?: identity.expiresAtEpochMs
-        if (!isUsable(expiresAt, nowEpochMs)) return null
+        if (!isUsableForOfflineBoot(expiresAt, hasRefreshToken = refreshToken.isNotEmpty(), nowEpochMs)) return null
 
         return identity.copy(expiresAtEpochMs = expiresAt)
     }
 
-    fun isUsable(expiresAtEpochMs: Long?, nowEpochMs: Long): Boolean {
+    /**
+     * Offline boot may proceed with an expired access token when a refresh token is present.
+     * Network refresh is deferred until after the UI has navigated past the splash screen.
+     */
+    fun isUsableForOfflineBoot(
+        expiresAtEpochMs: Long?,
+        hasRefreshToken: Boolean,
+        nowEpochMs: Long = Clock.System.now().toEpochMilliseconds(),
+    ): Boolean {
+        if (!hasRefreshToken) return false
+        if (expiresAtEpochMs == null) return true
+        // Access token expired is OK offline — refresh runs in the background when online.
+        return true
+    }
+
+    /** Strict validity check for API calls that require a non-expired JWT. */
+    fun isAccessTokenFresh(expiresAtEpochMs: Long?, nowEpochMs: Long): Boolean {
         if (expiresAtEpochMs == null) return true
         return expiresAtEpochMs > nowEpochMs + EXPIRY_SKEW_MS
     }

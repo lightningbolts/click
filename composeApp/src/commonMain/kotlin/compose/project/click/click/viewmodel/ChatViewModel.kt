@@ -59,6 +59,8 @@ import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: 
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pragma: allowlist secret
+import compose.project.click.click.network.NetworkConnectivityMonitor
+import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
@@ -176,6 +178,13 @@ class ChatViewModel(
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
     private val chatApi: ChatApiClient = ChatApiClient(),
 ) : ViewModel(), SecureChatMediaHost {
+
+    private val connectivityMonitor = NetworkConnectivityMonitor()
+
+    private companion object {
+        const val OFFLINE_SEND_NOTICE =
+            "You're offline. Your message is saved on this device and will send when you reconnect."
+    }
 
     private data class PrefetchedChatPayload(
         val messages: List<MessageWithUser>,
@@ -382,6 +391,7 @@ class ChatViewModel(
     }
 
     init {
+        connectivityMonitor.start()
         viewModelScope.launch {
             AppDataManager.cachedChatThreads.collect { threads ->
                 if (threads.isEmpty()) return@collect
@@ -2287,7 +2297,12 @@ class ChatViewModel(
         val content = _messageInput.value.trim()
         if (content.isEmpty()) return
 
-        _messageSendError.value = null
+        val offlineAtSend = !connectivityMonitor.isOnline.value
+        if (offlineAtSend) {
+            _messageSendError.value = OFFLINE_SEND_NOTICE
+        } else {
+            _messageSendError.value = null
+        }
         val replyTargetCaptured = _replyingTo.value
         val metadataCaptured = if (replyTargetCaptured != null) {
             buildJsonObject {
@@ -2375,19 +2390,27 @@ class ChatViewModel(
                         applyInsertedMessage(message, currentUser, userId)
                         activateConnectionIfPending(connectionId)
                     } else {
-                        markOptimisticSendFailed(tempId)
-                        _messageSendError.value = "Failed to send message"
-                        _messageInput.value = content
-                        updateMessageInput(content)
-                        println("Failed to send message")
+                        if (offlineAtSend || !connectivityMonitor.isOnline.value) {
+                            _messageSendError.value = OFFLINE_SEND_NOTICE
+                        } else {
+                            markOptimisticSendFailed(tempId)
+                            _messageSendError.value = "Failed to send message"
+                            _messageInput.value = content
+                            updateMessageInput(content)
+                            println("Failed to send message")
+                        }
                     }
                 } catch (e: Exception) {
-                    markOptimisticSendFailed(tempId)
-                    _messageSendError.value =
-                        "Failed to send — ${e.redactedRestMessage().ifBlank { "encryption or network error" }}"
-                    _messageInput.value = content
-                    updateMessageInput(content)
-                    println("Error sending message: ${e.redactedRestMessage()}")
+                    if (offlineAtSend || !connectivityMonitor.isOnline.value || e.isOfflineNetworkFailure()) {
+                        _messageSendError.value = OFFLINE_SEND_NOTICE
+                    } else {
+                        markOptimisticSendFailed(tempId)
+                        _messageSendError.value =
+                            "Failed to send — ${e.redactedRestMessage().ifBlank { "encryption or network error" }}"
+                        _messageInput.value = content
+                        updateMessageInput(content)
+                        println("Error sending message: ${e.redactedRestMessage()}")
+                    }
                 } finally {
                     _isMessageSubmitInProgress.value = false
                 }
@@ -4088,6 +4111,7 @@ class ChatViewModel(
         val messageSub = activeMessageSubscription
         activeMessageSubscription = null
 
+        connectivityMonitor.stop()
         super.onCleared()
 
         if (connectionsChannel != null) {

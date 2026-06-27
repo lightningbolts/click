@@ -9,7 +9,12 @@ import compose.project.click.click.viewmodel.AuthState
  */
 internal object AuthBootFastPath {
     suspend fun resolveLoggedInState(tokenStorage: TokenStorage): AuthState.Success? {
-        val identity = LocalSessionCache.read(tokenStorage) ?: return null
+        runCatching { SupabaseSettingsSessionReader.syncTokensToStorageIfMissing(tokenStorage) }
+
+        val identity = LocalSessionCache.read(tokenStorage)
+            ?: runCatching { SupabaseSettingsSessionReader.readIdentity() }.getOrNull()
+            ?: return null
+
         return AuthState.Success(
             userId = identity.userId,
             email = identity.email,
