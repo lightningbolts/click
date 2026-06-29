@@ -26,7 +26,7 @@ class ProximityPeerEvidenceTest {
     fun hasNearbyPeerEvidence_falseWhenBothEmpty() {
         val evidence = ProximityHandshakeListenResult()
         assertFalse(evidence.hasNearbyPeerEvidence())
-        assertEquals(PROXIMITY_NO_NEARBY_DEVICES_MESSAGE, proximityHandshakeAbortMessage(evidence))
+        assertNull(proximityHandshakeAbortMessage(evidence))
     }
 
     @Test

@@ -30,7 +30,6 @@ import compose.project.click.click.proximity.ProximityHardwarePermissionExceptio
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityHandshakeListenResult
-import compose.project.click.click.proximity.proximityHandshakeAbortMessage
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
@@ -341,11 +340,6 @@ class ConnectionViewModel : ViewModel() {
                         // BLE advertise/scan and the microphone, not just the happy path.
                         runCatching { proximityManager.stopAll() }
                     }
-                }
-
-                proximityHandshakeAbortMessage(listenResult)?.let { abortMessage ->
-                    _connectionState.value = ConnectionState.Error(abortMessage)
-                    return@launch
                 }
 
                 val heardTokensAudio = listenResult.heardTokens

@@ -5,7 +5,7 @@ expect fun isSimulatorOrEmulatorRuntime(): Boolean
 
 /**
  * Tri-factor listen window output — audio ([heardTokens]) and BLE ([detectedDevices]) are kept
- * separate so the client can abort before queueing or calling the API when both are empty.
+ * separate so the server can distinguish strong radio evidence from same-time/same-place fallback.
  */
 data class ProximityHandshakeListenResult(
     val heardTokens: List<String> = emptyList(),
@@ -20,6 +20,6 @@ fun ProximityHandshakeListenResult.hasNearbyPeerEvidence(): Boolean =
 
 const val PROXIMITY_NO_NEARBY_DEVICES_MESSAGE: String = "No nearby devices detected."
 
-/** @return null when the handshake should proceed; otherwise the user-facing abort message. */
+/** @return null when the handshake should proceed; tap attempts are always sent to the API. */
 fun proximityHandshakeAbortMessage(evidence: ProximityHandshakeListenResult): String? =
-    if (evidence.hasNearbyPeerEvidence()) null else PROXIMITY_NO_NEARBY_DEVICES_MESSAGE
+    null

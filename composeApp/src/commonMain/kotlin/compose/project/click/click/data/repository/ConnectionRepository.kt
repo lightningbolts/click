@@ -526,9 +526,6 @@ class ConnectionRepository(
             }
             val normalizedHeard = heardTokens.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
             val normalizedBle = detectedDevices.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-            if (!simulatorMock && normalizedHeard.isEmpty() && normalizedBle.isEmpty()) {
-                return Result.failure(IllegalStateException(PROXIMITY_NO_NEARBY_DEVICES_MESSAGE))
-            }
             val combinedPeerTokens = (normalizedHeard + normalizedBle).distinct()
             val hasGps = latitude != null && longitude != null &&
                 latitude.isFinite() && longitude.isFinite() &&
@@ -644,10 +641,6 @@ class ConnectionRepository(
                 return PendingProximityHandshakeSyncResult(null, 0)
             }
             val head = queue.first()
-            if (head.heardTokens.isEmpty() && head.detectedDevices.isEmpty()) {
-                pendingEncounterQueue.replaceAll(queue.drop(1))
-                continue
-            }
             val lat = head.location?.latitude
             val lng = head.location?.longitude
             val attempt = runCatching {
