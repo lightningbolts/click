@@ -37,4 +37,18 @@ class ProximityPeerEvidenceTest {
         )
         assertEquals(listOf("1234", "5678", "9012"), evidence.allPeerTokens)
     }
+
+    @Test
+    fun proximityBindLocationWaitMs_shortForStrongPeerEvidence() {
+        val evidence = ProximityHandshakeListenResult(heardTokens = listOf("1234"))
+
+        assertEquals(PROXIMITY_STRONG_EVIDENCE_LOCATION_WAIT_MS, proximityBindLocationWaitMs(evidence))
+    }
+
+    @Test
+    fun proximityBindLocationWaitMs_longerForServerFallbackEvidence() {
+        val evidence = ProximityHandshakeListenResult()
+
+        assertEquals(PROXIMITY_EMPTY_EVIDENCE_LOCATION_WAIT_MS, proximityBindLocationWaitMs(evidence))
+    }
 }

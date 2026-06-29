@@ -92,15 +92,15 @@ private fun advertisementContainsClickService(advertisementData: Map<Any?, *>): 
 
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
-private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 3_000L
 /** Let this device's chirp finish before opening the mic to reduce speaker self-bleed. */
 private const val AUDIO_SELF_BLEED_GUARD_MS: Long = 900L
 /** BLE must stay discoverable long after the short audio chirp so centrals can connect and read GATT. */
-private const val BLE_BROADCAST_HOLD_MS: Long = 6_000L
+private const val BLE_BROADCAST_HOLD_MS: Long = 3_500L
 /** Central scan window — must match [BLE_BROADCAST_HOLD_MS] so we can connect and read GATT before advertising stops. */
 private const val BLE_SCAN_HOLD_MS: Long = BLE_BROADCAST_HOLD_MS
-/** After stopping scan, wait for in-flight GATT connects/reads (late discoveries at ~5s need this). */
-private const val GATT_READ_GRACE_MS: Long = 5_000L
+/** After stopping scan, wait for in-flight GATT connects/reads without dominating the tap UX. */
+private const val GATT_READ_GRACE_MS: Long = 2_000L
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private fun NSData.toByteArray(): ByteArray {

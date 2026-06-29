@@ -47,7 +47,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
-private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 3_000L
 /** Let this device's chirp finish before opening the mic to reduce speaker self-bleed. */
 private const val AUDIO_SELF_BLEED_GUARD_MS: Long = 900L
 

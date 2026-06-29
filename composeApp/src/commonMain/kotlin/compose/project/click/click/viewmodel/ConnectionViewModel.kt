@@ -30,6 +30,9 @@ import compose.project.click.click.proximity.ProximityHardwarePermissionExceptio
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityHandshakeListenResult
+import compose.project.click.click.proximity.PROXIMITY_SENSOR_LOCATION_WAIT_MS
+import compose.project.click.click.proximity.PROXIMITY_SENSOR_WAIT_MS
+import compose.project.click.click.proximity.proximityBindLocationWaitMs
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
@@ -42,6 +45,7 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -58,6 +62,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 
 /** Emitted when a proximity bind returns a multi-user verified-clique cluster from the edge function. */
@@ -155,6 +160,9 @@ class ConnectionViewModel : ViewModel() {
     private var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
+
+    private suspend fun <T> Deferred<T>.awaitWithin(timeoutMs: Long): T? =
+        withTimeoutOrNull(timeoutMs) { await() }
 
     private fun activateCollaborationSessionIfPresent(
         connectionId: String?,
@@ -297,19 +305,6 @@ class ConnectionViewModel : ViewModel() {
             try {
                 lastProximityEncounterLoggedAggregate = true
                 val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
-                val location = if (shouldFetchLocation) {
-                    _connectionState.value = ConnectionState.ProximityFetchingLocation
-                    if (!locationService.hasLocationPermission()) {
-                        locationService.requestLocationPermission()
-                        delay(800L)
-                    }
-                    runCatching { locationService.getHighAccuracyLocation(6500L) }.getOrNull()
-                } else {
-                    null
-                }
-                lastProximityLat = location?.latitude
-                lastProximityLng = location?.longitude
-                lastProximityAltitudeMeters = location?.altitudeMeters
 
                 val simulatorMock = proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
                 val myToken = if (simulatorMock) {
@@ -317,160 +312,193 @@ class ConnectionViewModel : ViewModel() {
                 } else {
                     (0..9999).random().toString().padStart(4, '0')
                 }
-                _connectionState.value = ConnectionState.ProximityHandshaking
 
-                val listenResult: ProximityHandshakeListenResult = if (simulatorMock) {
-                    delay(2_000L)
-                    ProximityHandshakeListenResult(
-                        heardTokens = SIMULATOR_MOCK_HEARD_TOKENS,
-                        detectedDevices = emptyList(),
-                    )
+                val tokenStorage = createTokenStorage()
+                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+
+                _connectionState.value = if (shouldFetchLocation) {
+                    ConnectionState.ProximityFetchingLocation
                 } else {
-                    try {
-                        coroutineScope {
+                    ConnectionState.ProximityHandshaking
+                }
+
+                coroutineScope {
+                    val locationDeferred = if (shouldFetchLocation) {
+                        async {
+                            if (!locationService.hasLocationPermission()) {
+                                locationService.requestLocationPermission()
+                                delay(800L)
+                            }
+                            runCatching { locationService.getHighAccuracyLocation(6500L) }.getOrNull()
+                        }
+                    } else {
+                        null
+                    }
+
+                    val sensorDeferred = if (ambientNoiseMonitor != null && barometricHeightMonitor != null) {
+                        async {
+                            runCatching {
+                                val locationForSensors = locationDeferred?.awaitWithin(PROXIMITY_SENSOR_LOCATION_WAIT_MS)
+                                captureConnectionSensorContext(
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = noiseOptIn,
+                                    barometricContextOptIn = baroOptIn,
+                                    latitude = locationForSensors?.latitude,
+                                    longitude = locationForSensors?.longitude,
+                                )
+                            }.getOrNull()
+                        }
+                    } else {
+                        null
+                    }
+
+                    val vibeDeferred = async(Dispatchers.Default) {
+                        runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                    }
+
+                    _connectionState.value = ConnectionState.ProximityHandshaking
+                    val listenResult: ProximityHandshakeListenResult = if (simulatorMock) {
+                        delay(2_000L)
+                        ProximityHandshakeListenResult(
+                            heardTokens = SIMULATOR_MOCK_HEARD_TOKENS,
+                            detectedDevices = emptyList(),
+                        )
+                    } else {
+                        try {
                             val listen = async { proximityManager.startHandshakeListening(myToken) }
                             delay(120L)
                             // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
                             delay(Random.nextLong(0, 400))
                             proximityManager.startHandshakeBroadcast(myToken)
                             listen.await()
+                        } finally {
+                            // Broadcast/permission failures and cancellation must still release
+                            // BLE advertise/scan and the microphone, not just the happy path.
+                            runCatching { proximityManager.stopAll() }
                         }
-                    } finally {
-                        // Broadcast/permission failures and cancellation must still release
-                        // BLE advertise/scan and the microphone, not just the happy path.
-                        runCatching { proximityManager.stopAll() }
                     }
-                }
 
-                val heardTokensAudio = listenResult.heardTokens
-                val detectedDevicesBle = listenResult.detectedDevices
+                    val heardTokensAudio = listenResult.heardTokens
+                    val detectedDevicesBle = listenResult.detectedDevices
+                    val locationWaitMs = proximityBindLocationWaitMs(listenResult)
 
-                val tokenStorage = createTokenStorage()
-                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                val proximitySensorContext =
-                    if (ambientNoiseMonitor != null && barometricHeightMonitor != null) {
-                        captureConnectionSensorContext(
-                            ambientNoiseMonitor = ambientNoiseMonitor,
-                            barometricHeightMonitor = barometricHeightMonitor,
-                            ambientNoiseOptIn = noiseOptIn,
-                            barometricContextOptIn = baroOptIn,
-                            latitude = lastProximityLat,
-                            longitude = lastProximityLng,
-                        )
+                    val location = locationDeferred?.awaitWithin(locationWaitMs)
+                    lastProximityLat = location?.latitude
+                    lastProximityLng = location?.longitude
+                    lastProximityAltitudeMeters = location?.altitudeMeters
+
+                    val proximitySensorContext = sensorDeferred?.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
+                    val vibe = vibeDeferred.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
+                    lastProximityHardwareVibe = vibe
+
+                    _connectionState.value = ConnectionState.ProximityResolving
+                    val bindResult = withContext(Dispatchers.Default) {
+                        runCatching {
+                            withTimeout(22_000L) {
+                                repository.bindProximityHandshake(
+                                    httpClient = httpClient,
+                                    bearerJwt = jwt,
+                                    myToken = myToken,
+                                    heardTokens = heardTokensAudio,
+                                    detectedDevices = detectedDevicesBle,
+                                    latitude = lastProximityLat,
+                                    longitude = lastProximityLng,
+                                    exactBarometricElevationM = proximitySensorContext
+                                        ?.exactBarometricElevationMeters
+                                        ?.takeIf { it.isFinite() },
+                                    hardwareVibe = vibe,
+                                    clientContextFirst = true,
+                                    bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
+                                    bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                    bindHeightCategory = proximitySensorContext?.heightCategory,
+                                    simulatorMock = simulatorMock,
+                                ).getOrThrow()
+                            }
+                        }
+                    }
+
+                    if (bindResult.isSuccess) {
+                        when (val handshake = bindResult.getOrNull()!!) {
+                            is BindProximityHandshakeResult.PendingServerMatch -> {
+                                _connectionState.value = ConnectionState.ProximityHandshakePendingMatch(
+                                    message = PROXIMITY_PENDING_MATCH_MESSAGE,
+                                )
+                            }
+                            is BindProximityHandshakeResult.InstantMatch -> {
+                                val outcome = handshake.outcome
+                                activateCollaborationSessionIfPresent(outcome)
+                                lastProximityEncounterLoggedAggregate = outcome.encounterLogged
+                                val users = outcome.matches
+                                if (users.isEmpty()) {
+                                    _connectionState.value =
+                                        ConnectionState.Error("No nearby tap detected. Try again closer together.")
+                                } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
+                                    _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                                }
+                                if (users.isNotEmpty()) {
+                                    PlatformHapticsPolicy.successNotification()
+                                    val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
+                                    val others = groupIds?.filter { it != currentUserId }.orEmpty()
+                                    if (outcome.isGroup && outcome.connectionId != null && groupIds != null && others.size >= 2) {
+                                        val groupConnection = syntheticProximityConnection(
+                                            connectionId = outcome.connectionId,
+                                            memberUserIds = groupIds,
+                                            isGroup = true,
+                                        )
+                                        AppDataManager.addConnection(groupConnection, syntheticUserForProximitySuccess(users.map { it.toUserProfile() }))
+                                        _connectionState.value = ConnectionState.TaggingContext(
+                                            newConnections = listOf(groupConnection),
+                                            targetUsers = users.map { it.toUserProfile() },
+                                            isGroup = true,
+                                            memberUserIds = groupIds,
+                                            isNewConnection = outcome.isAggregateNewConnection,
+                                        )
+                                    } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
+                                        val peer = users.first()
+                                        val connection = syntheticProximityConnection(
+                                            connectionId = outcome.connectionId,
+                                            memberUserIds = listOf(currentUserId, peer.id).distinct().sorted(),
+                                            isGroup = false,
+                                        )
+                                        AppDataManager.addConnection(connection, peer)
+                                        _connectionState.value = ConnectionState.TaggingContext(
+                                            newConnections = listOf(connection),
+                                            targetUsers = listOf(peer.toUserProfile()),
+                                            isNewConnection = outcome.isAggregateNewConnection,
+                                        )
+                                    } else {
+                                        _connectionState.value = ConnectionState.PendingConfirmation(users)
+                                    }
+                                }
+                            }
+                        }
                     } else {
-                        null
-                    }
-                val vibe = withContext(Dispatchers.Default) {
-                    runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                }
-                lastProximityHardwareVibe = vibe
-
-                _connectionState.value = ConnectionState.ProximityResolving
-                val bindResult = withContext(Dispatchers.Default) {
-                    runCatching {
-                        withTimeout(22_000L) {
-                            repository.bindProximityHandshake(
-                                httpClient = httpClient,
-                                bearerJwt = jwt,
+                        val e = bindResult.exceptionOrNull()!!
+                        if (e.isRetryableForProximityBind()) {
+                            repository.enqueuePendingProximityHandshake(
                                 myToken = myToken,
                                 heardTokens = heardTokensAudio,
                                 detectedDevices = detectedDevicesBle,
                                 latitude = lastProximityLat,
                                 longitude = lastProximityLng,
+                                altitudeMeters = lastProximityAltitudeMeters,
+                                hardwareVibe = lastProximityHardwareVibe,
+                                noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
+                                exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                heightCategory = proximitySensorContext?.heightCategory?.name,
                                 exactBarometricElevationM = proximitySensorContext
                                     ?.exactBarometricElevationMeters
                                     ?.takeIf { it.isFinite() },
-                                hardwareVibe = vibe,
-                                clientContextFirst = true,
-                                bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
-                                bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
-                                bindHeightCategory = proximitySensorContext?.heightCategory,
-                                simulatorMock = simulatorMock,
-                            ).getOrThrow()
-                        }
-                    }
-                }
-
-                if (bindResult.isSuccess) {
-                    when (val handshake = bindResult.getOrNull()!!) {
-                        is BindProximityHandshakeResult.PendingServerMatch -> {
-                            _connectionState.value = ConnectionState.ProximityHandshakePendingMatch(
-                                message = PROXIMITY_PENDING_MATCH_MESSAGE,
                             )
+                            scheduleProximityHandshakeSync()
+                            _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing(
+                                message = PROXIMITY_OFFLINE_SYNC_MESSAGE,
+                            )
+                        } else {
+                            _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
                         }
-                        is BindProximityHandshakeResult.InstantMatch -> {
-                            val outcome = handshake.outcome
-                            activateCollaborationSessionIfPresent(outcome)
-                            lastProximityEncounterLoggedAggregate = outcome.encounterLogged
-                            val users = outcome.matches
-                            if (users.isEmpty()) {
-                                _connectionState.value =
-                                    ConnectionState.Error("No nearby tap detected. Try again closer together.")
-                            } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
-                                _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
-                            }
-                            if (users.isNotEmpty()) {
-                                PlatformHapticsPolicy.successNotification()
-                                val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
-                                val others = groupIds?.filter { it != currentUserId }.orEmpty()
-                                if (outcome.isGroup && outcome.connectionId != null && groupIds != null && others.size >= 2) {
-                                    val groupConnection = syntheticProximityConnection(
-                                        connectionId = outcome.connectionId,
-                                        memberUserIds = groupIds,
-                                        isGroup = true,
-                                    )
-                                    AppDataManager.addConnection(groupConnection, syntheticUserForProximitySuccess(users.map { it.toUserProfile() }))
-                                    _connectionState.value = ConnectionState.TaggingContext(
-                                        newConnections = listOf(groupConnection),
-                                        targetUsers = users.map { it.toUserProfile() },
-                                        isGroup = true,
-                                        memberUserIds = groupIds,
-                                        isNewConnection = outcome.isAggregateNewConnection,
-                                    )
-                                } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
-                                    val peer = users.first()
-                                    val connection = syntheticProximityConnection(
-                                        connectionId = outcome.connectionId,
-                                        memberUserIds = listOf(currentUserId, peer.id).distinct().sorted(),
-                                        isGroup = false,
-                                    )
-                                    AppDataManager.addConnection(connection, peer)
-                                    _connectionState.value = ConnectionState.TaggingContext(
-                                        newConnections = listOf(connection),
-                                        targetUsers = listOf(peer.toUserProfile()),
-                                        isNewConnection = outcome.isAggregateNewConnection,
-                                    )
-                                } else {
-                                    _connectionState.value = ConnectionState.PendingConfirmation(users)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    val e = bindResult.exceptionOrNull()!!
-                    if (e.isRetryableForProximityBind()) {
-                        repository.enqueuePendingProximityHandshake(
-                            myToken = myToken,
-                            heardTokens = heardTokensAudio,
-                            detectedDevices = detectedDevicesBle,
-                            latitude = lastProximityLat,
-                            longitude = lastProximityLng,
-                            altitudeMeters = lastProximityAltitudeMeters,
-                            hardwareVibe = lastProximityHardwareVibe,
-                            noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
-                            exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
-                            heightCategory = proximitySensorContext?.heightCategory?.name,
-                            exactBarometricElevationM = proximitySensorContext
-                                ?.exactBarometricElevationMeters
-                                ?.takeIf { it.isFinite() },
-                        )
-                        scheduleProximityHandshakeSync()
-                        _connectionState.value = ConnectionState.ProximityCapturedOfflineSyncing(
-                            message = PROXIMITY_OFFLINE_SYNC_MESSAGE,
-                        )
-                    } else {
-                        _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
                     }
                 }
             } catch (e: ProximityHardwarePermissionException) {
