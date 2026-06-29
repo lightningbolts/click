@@ -208,6 +208,10 @@ object AppDataManager {
         scope.launch { persistSnapshot() }
     }
 
+    fun persistProfileTimelineCaches() {
+        scope.launch { persistSnapshot() }
+    }
+
     /** Local SSOT merge for map beacons; persisted in [CachedAppSnapshot] for offline cold start. */
     fun mergeCachedMapBeacons(incoming: List<MapBeacon>) {
         if (incoming.isEmpty()) return
@@ -1085,6 +1089,7 @@ object AppDataManager {
         _cachedHubThreads.value = emptyMap()
         _inboxFeedChats.value = emptyList()
         supabaseRepository.clearCachedUserPublicProfiles()
+        supabaseRepository.clearCachedProfileTimelines()
         _userAvailability.value = null
         _isDataLoaded.value = false
         _isLoading.value = false
@@ -1831,6 +1836,7 @@ object AppDataManager {
                 }
             }
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
+            supabaseRepository.seedCachedProfileTimelines(snapshot.cachedProfileTimelines)
             _isDataLoaded.value =
                 snapshot.currentUser != null ||
                     snapshot.connections.isNotEmpty() ||
@@ -1853,6 +1859,7 @@ object AppDataManager {
             cachedChatThreads = _cachedChatThreads.value.values.toList(),
             cachedHubThreads = _cachedHubThreads.value.values.toList(),
             cachedUserPublicProfiles = supabaseRepository.snapshotCachedUserPublicProfiles(),
+            cachedProfileTimelines = supabaseRepository.snapshotCachedProfileTimelines(),
             inboxFeedChats = _inboxFeedChats.value,
             cachedMapBeacons = _prefetchedMapBeacons.value.map { it.toStoredMapBeacon() },
             cachedCommunityHubs = _prefetchedCommunityHubs.value.map { dto ->

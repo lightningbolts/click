@@ -12,6 +12,8 @@ import compose.project.click.click.data.models.UserPublicProfile // pragma: allo
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
@@ -98,6 +100,8 @@ class SupabaseRepository {
     companion object {
         private val userPublicProfileCache =
             MutableStateFlow<Map<String, UserPublicProfile>>(emptyMap())
+        private val profileTimelineCache =
+            MutableStateFlow<Map<String, ProfileTimelineCacheEntry>>(emptyMap())
         private val sweptStaleConnectionUserIds = mutableSetOf<String>()
     }
 
@@ -132,10 +136,72 @@ class SupabaseRepository {
         userPublicProfileCache.value = emptyMap()
     }
 
+    fun getCachedProfileTimeline(targetType: String, targetId: String): ProfileTimelinePayload? {
+        val key = profileTimelineCacheKey(targetType, targetId) ?: return null
+        return profileTimelineCache.value[key]?.payload
+    }
+
+    fun snapshotCachedProfileTimelines(): List<ProfileTimelineCacheEntry> =
+        profileTimelineCache.value.values.toList()
+
+    fun seedCachedProfileTimelines(entries: List<ProfileTimelineCacheEntry>) {
+        val seeded = entries
+            .filter { it.key.isNotBlank() && it.targetId.isNotBlank() }
+            .associateBy { it.key }
+        if (seeded.isEmpty()) return
+        profileTimelineCache.value = profileTimelineCache.value + seeded
+    }
+
+    fun clearCachedProfileTimelines() {
+        profileTimelineCache.value = emptyMap()
+    }
+
+    private fun cacheProfileTimeline(payload: ProfileTimelinePayload) {
+        val key = profileTimelineCacheKey(payload.targetType, payload.targetId) ?: return
+        profileTimelineCache.value = profileTimelineCache.value + (
+            key to ProfileTimelineCacheEntry(
+                key = key,
+                targetType = payload.targetType,
+                targetId = payload.targetId,
+                cachedAtMs = Clock.System.now().toEpochMilliseconds(),
+                payload = payload,
+            )
+        )
+    }
+
+    suspend fun refreshProfileTimeline(targetType: String, targetId: String): ProfileTimelinePayload? {
+        val fresh = apiClient.getProfileTimeline(targetType, targetId).getOrNull()
+        if (fresh != null) cacheProfileTimeline(fresh)
+        return fresh
+    }
+
+    suspend fun createProfileTimelineJournalEntry(
+        targetType: String,
+        targetId: String,
+        body: String,
+        visibility: String,
+    ): ProfileTimelinePayload? {
+        val fresh = apiClient.postProfileTimelineJournalEntry(
+            targetType = targetType,
+            targetId = targetId,
+            body = body,
+            visibility = visibility,
+        ).getOrNull()
+        if (fresh != null) cacheProfileTimeline(fresh)
+        return fresh
+    }
+
     private fun cacheUserPublicProfile(targetUserId: String, profile: UserPublicProfile) {
         val key = targetUserId.trim()
         if (key.isEmpty()) return
         userPublicProfileCache.value = userPublicProfileCache.value + (key to profile)
+    }
+
+    private fun profileTimelineCacheKey(targetType: String, targetId: String): String? {
+        val type = targetType.trim().lowercase()
+        val id = targetId.trim()
+        if (type.isBlank() || id.isBlank()) return null
+        return "$type:$id"
     }
 
     suspend fun refreshUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {

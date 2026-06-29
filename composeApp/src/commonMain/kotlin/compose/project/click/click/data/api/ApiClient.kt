@@ -8,6 +8,7 @@ import compose.project.click.click.data.models.SignUpRequest
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.ProfileTimelinePayload
 import compose.project.click.click.data.models.MapBeaconInsert
 import compose.project.click.click.data.models.parseMapBeaconRows
 import compose.project.click.click.data.models.UserCore
@@ -123,6 +124,14 @@ data class NotificationPreferencesPatchBody(
 data class NotificationPreferencesPatchResponse(
     val ok: Boolean,
     val message: String,
+)
+
+@Serializable
+private data class ProfileTimelinePostBody(
+    @SerialName("target_type") val targetType: String,
+    @SerialName("target_id") val targetId: String,
+    val body: String,
+    val visibility: String,
 )
 
 @Serializable
@@ -642,6 +651,59 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             )
             if (response.status.value in 200..299) {
                 Result.success(response.body<UserProfileGetResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getProfileTimeline(targetType: String, targetId: String): Result<ProfileTimelinePayload> {
+        val type = targetType.trim()
+        val id = targetId.trim()
+        if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/profile/timeline") {
+                parameter("target_type", type)
+                parameter("target_id", id)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ProfileTimelinePayload>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postProfileTimelineJournalEntry(
+        targetType: String,
+        targetId: String,
+        body: String,
+        visibility: String,
+    ): Result<ProfileTimelinePayload> {
+        val type = targetType.trim()
+        val id = targetId.trim()
+        val text = body.trim()
+        val vis = visibility.trim().lowercase()
+        if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
+        if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
+        return try {
+            val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/profile/timeline") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ProfileTimelinePostBody(
+                        targetType = type,
+                        targetId = id,
+                        body = text,
+                        visibility = vis,
+                    ),
+                )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ProfileTimelinePayload>())
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }

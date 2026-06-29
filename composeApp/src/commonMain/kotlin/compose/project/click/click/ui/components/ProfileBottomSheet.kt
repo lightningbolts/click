@@ -55,12 +55,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -95,6 +95,9 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.GroupSharedInterest // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileTimelineJournalEntry // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.api.ConnectionTabMessage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
@@ -332,6 +335,75 @@ fun ProfileBottomSheet(
             legacyError = result.exceptionOrNull()?.message
         }
         legacyLoading = false
+    }
+
+    val timelineTargetType = if (state.isGroup) {
+        "chat"
+    } else if (!state.userId.isNullOrBlank()) {
+        "user"
+    } else {
+        null
+    }
+    val timelineTargetId = if (state.isGroup) {
+        state.connectionId?.trim()
+    } else {
+        state.userId?.trim()
+    }?.takeIf { it.isNotEmpty() }
+    var profileTimeline by remember(timelineTargetType, timelineTargetId) {
+        mutableStateOf<ProfileTimelinePayload?>(null)
+    }
+    var journalText by remember(timelineTargetType, timelineTargetId) { mutableStateOf("") }
+    var journalVisibility by remember(timelineTargetType, timelineTargetId) { mutableStateOf("private") }
+    var journalPosting by remember(timelineTargetType, timelineTargetId) { mutableStateOf(false) }
+    var journalError by remember(timelineTargetType, timelineTargetId) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(timelineTargetType, timelineTargetId) {
+        val type = timelineTargetType
+        val id = timelineTargetId
+        if (type == null || id == null) {
+            profileTimeline = null
+            return@LaunchedEffect
+        }
+        profileTimeline = repository.getCachedProfileTimeline(type, id)
+        val refreshed = runCatching {
+            withContext(Dispatchers.Default) {
+                repository.refreshProfileTimeline(type, id)
+            }
+        }.getOrNull()
+        if (refreshed != null) {
+            profileTimeline = refreshed
+            AppDataManager.persistProfileTimelineCaches()
+        }
+    }
+
+    val submitJournalEntry: () -> Unit = {
+        val type = timelineTargetType
+        val id = timelineTargetId
+        val text = journalText.trim()
+        if (type != null && id != null && text.isNotEmpty() && !journalPosting) {
+            scope.launch {
+                journalPosting = true
+                journalError = null
+                val refreshed = runCatching {
+                    withContext(Dispatchers.Default) {
+                        repository.createProfileTimelineJournalEntry(
+                            targetType = type,
+                            targetId = id,
+                            body = text,
+                            visibility = journalVisibility,
+                        )
+                    }
+                }.getOrNull()
+                if (refreshed != null) {
+                    profileTimeline = refreshed
+                    journalText = ""
+                    AppDataManager.persistProfileTimelineCaches()
+                } else {
+                    journalError = "Couldn't save that journal entry. Please try again."
+                }
+                journalPosting = false
+            }
+        }
     }
 
     val localMediaMessages = remember(profileLocalMessages) {
@@ -585,10 +657,11 @@ fun ProfileBottomSheet(
             Spacer(Modifier.height(12.dp))
         }
 
-        SecondaryTabRow(
+        ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurface,
+            edgePadding = 0.dp,
         ) {
             visibleTabs.forEachIndexed { index, tab ->
                 val selected = pagerState.currentPage == index
@@ -600,6 +673,8 @@ fun ProfileBottomSheet(
                             tab.label,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     },
                     icon = {
@@ -632,6 +707,16 @@ fun ProfileBottomSheet(
                     legacyLoading = legacyLoading,
                     legacyError = legacyError,
                     showLegacy = !state.userId.isNullOrBlank(),
+                    isGroup = state.isGroup,
+                    sharedInterests = profileTimeline?.sharedInterests.orEmpty(),
+                    journalEntries = profileTimeline?.journalEntries.orEmpty(),
+                    journalText = journalText,
+                    onJournalTextChange = { journalText = it.take(1_200) },
+                    journalVisibility = journalVisibility,
+                    onJournalVisibilityChange = { journalVisibility = it },
+                    journalPosting = journalPosting,
+                    journalError = journalError,
+                    onSubmitJournalEntry = submitJournalEntry,
                 )
                 ProfileSheetTab.Media -> MediaPanel(
                     items = effectiveMedia,
@@ -1159,16 +1244,18 @@ private fun TimelinePanel(
     legacyLoading: Boolean,
     legacyError: String?,
     showLegacy: Boolean,
+    isGroup: Boolean,
+    sharedInterests: List<GroupSharedInterest>,
+    journalEntries: List<ProfileTimelineJournalEntry>,
+    journalText: String,
+    onJournalTextChange: (String) -> Unit,
+    journalVisibility: String,
+    onJournalVisibilityChange: (String) -> Unit,
+    journalPosting: Boolean,
+    journalError: String?,
+    onSubmitJournalEntry: () -> Unit,
 ) {
     val hasTimelineItems = items.isNotEmpty()
-    if (!showLegacy && !hasTimelineItems) {
-        EmptyTabState(
-            icon = Icons.Outlined.History,
-            title = "No timeline yet",
-            body = "Shared moments will show up here as you connect.",
-        )
-        return
-    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1176,11 +1263,33 @@ private fun TimelinePanel(
             .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        JournalComposerCard(
+            text = journalText,
+            onTextChange = onJournalTextChange,
+            visibility = journalVisibility,
+            onVisibilityChange = onJournalVisibilityChange,
+            posting = journalPosting,
+            error = journalError,
+            onSubmit = onSubmitJournalEntry,
+        )
+        if (isGroup && sharedInterests.isNotEmpty()) {
+            SharedInterestsTimelineSection(sharedInterests)
+        }
+        if (journalEntries.isNotEmpty()) {
+            Text(
+                text = "Journal",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+            )
+            journalEntries.forEach { entry -> JournalTimelineRow(entry) }
+        }
         if (hasTimelineItems) {
             items.forEach { TimelineRow(item = it) }
         }
         if (showLegacy) {
-            if (hasTimelineItems) {
+            if (hasTimelineItems || journalEntries.isNotEmpty() || sharedInterests.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                 Spacer(Modifier.height(6.dp))
@@ -1190,7 +1299,212 @@ private fun TimelinePanel(
                 loading = legacyLoading,
                 error = legacyError,
             )
+        } else if (!hasTimelineItems && journalEntries.isEmpty() && sharedInterests.isEmpty()) {
+            EmptyTabState(
+                icon = Icons.Outlined.History,
+                title = "No timeline yet",
+                body = "Add a journal entry or come back after shared moments appear.",
+            )
         }
+    }
+}
+
+@Composable
+private fun JournalComposerCard(
+    text: String,
+    onTextChange: (String) -> Unit,
+    visibility: String,
+    onVisibilityChange: (String) -> Unit,
+    posting: Boolean,
+    error: String?,
+    onSubmit: () -> Unit,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(1.dp, PrimaryBlue.copy(alpha = 0.28f), shape)
+            .background(GlassSheetTokens.GlassSurface)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Add to timeline",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            maxLines = 5,
+            placeholder = {
+                Text("Write a quick memory, note, or plan...")
+            },
+            enabled = !posting,
+            shape = RoundedCornerShape(14.dp),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProfileVisibilityPill(
+                label = "Private",
+                selected = visibility != "shared",
+                onClick = { onVisibilityChange("private") },
+            )
+            ProfileVisibilityPill(
+                label = "Everyone",
+                selected = visibility == "shared",
+                onClick = { onVisibilityChange("shared") },
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = onSubmit,
+                enabled = text.trim().isNotEmpty() && !posting,
+            ) {
+                if (posting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = PrimaryBlue,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Add")
+            }
+        }
+        if (!error.isNullOrBlank()) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileVisibilityPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(999.dp)
+    Surface(
+        onClick = onClick,
+        shape = shape,
+        color = if (selected) PrimaryBlue.copy(alpha = 0.18f) else Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder,
+        ),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (selected) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+        )
+    }
+}
+
+@Composable
+private fun SharedInterestsTimelineSection(items: List<GroupSharedInterest>) {
+    val grouped = items
+        .groupBy { it.count }
+        .entries
+        .sortedByDescending { entry -> entry.key }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Common ground",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 2.dp),
+        )
+        grouped.forEach { entry ->
+            val count = entry.key
+            val tags = entry.value
+            val shape = RoundedCornerShape(16.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .border(1.dp, GlassSheetTokens.GlassBorder, shape)
+                    .background(GlassSheetTokens.GlassSurface)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = if (count == tags.firstOrNull()?.userIds?.size && count > 2) {
+                        "$count members share"
+                    } else {
+                        "$count people share"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryBlue,
+                )
+                tags.forEach { item ->
+                    Text(
+                        text = item.tag,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = item.memberNames.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JournalTimelineRow(entry: ProfileTimelineJournalEntry) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(1.dp, GlassSheetTokens.GlassBorder, shape)
+            .background(GlassSheetTokens.GlassSurface)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = entry.authorName?.takeIf { it.isNotBlank() } ?: "You",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = if (entry.visibility == "shared") "Everyone" else "Private",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (entry.visibility == "shared") PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = entry.body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = formatProfileTimelineIso(entry.createdAt),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+        )
     }
 }
 
@@ -1757,6 +2071,12 @@ private fun formatFileSize(bytes: Long): String = when {
 private fun formatProfileSheetDate(epochMs: Long): String {
     if (epochMs <= 0L) return ""
     val local = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    return "${shortProfileMonth(local.monthNumber)} ${local.dayOfMonth}, ${local.year}"
+}
+
+private fun formatProfileTimelineIso(iso: String): String {
+    val instant = runCatching { Instant.parse(iso) }.getOrNull() ?: return iso.take(10)
+    val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
     return "${shortProfileMonth(local.monthNumber)} ${local.dayOfMonth}, ${local.year}"
 }
 

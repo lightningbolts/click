@@ -58,6 +58,8 @@ data class CachedAppSnapshot(
     val cachedHubThreads: List<CachedHubThread> = emptyList(),
     /** Hydrated user profiles restored on cold start so profile sheets can open without a network wait. */
     val cachedUserPublicProfiles: List<UserPublicProfile> = emptyList(),
+    /** Profile/group timeline payloads restored on cold start for instant timeline tab paint. */
+    val cachedProfileTimelines: List<ProfileTimelineCacheEntry> = emptyList(),
     /**
      * Last successful unified inbox (direct + group rows) for instant Clicks list paint on cold start.
      */
@@ -66,6 +68,56 @@ data class CachedAppSnapshot(
     val cachedMapBeacons: List<StoredMapBeacon> = emptyList(),
     /** Cached community hubs for offline map / feed paint. */
     val cachedCommunityHubs: List<StoredCommunityHubPin> = emptyList(),
+)
+
+@Serializable
+data class ProfileTimelineCacheEntry(
+    val key: String,
+    @SerialName("target_type")
+    val targetType: String,
+    @SerialName("target_id")
+    val targetId: String,
+    val cachedAtMs: Long,
+    val payload: ProfileTimelinePayload,
+)
+
+@Serializable
+data class ProfileTimelinePayload(
+    @SerialName("target_type")
+    val targetType: String,
+    @SerialName("target_id")
+    val targetId: String,
+    @SerialName("shared_interests")
+    val sharedInterests: List<GroupSharedInterest> = emptyList(),
+    @SerialName("journal_entries")
+    val journalEntries: List<ProfileTimelineJournalEntry> = emptyList(),
+)
+
+@Serializable
+data class GroupSharedInterest(
+    val tag: String,
+    val count: Int,
+    @SerialName("user_ids")
+    val userIds: List<String> = emptyList(),
+    @SerialName("member_names")
+    val memberNames: List<String> = emptyList(),
+)
+
+@Serializable
+data class ProfileTimelineJournalEntry(
+    val id: String,
+    @SerialName("target_type")
+    val targetType: String,
+    @SerialName("target_id")
+    val targetId: String,
+    @SerialName("author_user_id")
+    val authorUserId: String,
+    @SerialName("author_name")
+    val authorName: String? = null,
+    val body: String,
+    val visibility: String,
+    @SerialName("created_at")
+    val createdAt: String,
 )
 
 /**
