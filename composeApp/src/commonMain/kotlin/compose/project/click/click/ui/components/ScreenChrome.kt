@@ -1,25 +1,34 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+
+private val AndroidStatusBarFallback = 24.dp
 
 /** Shared horizontal gutter for tab-root screens. */
 object AppScreenDefaults {
@@ -73,6 +82,76 @@ fun rememberTabBarOverlayHeight(): Dp {
 fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Dp {
     return rememberTabBarOverlayHeight() + extra
 }
+
+/**
+ * Reliable top safe-area inset for floating headers.
+ * iOS: statusBars only (avoids safeDrawing/IME coupling).
+ * Android: max(statusBars, safeDrawing top) with fallback for first-frame zero insets.
+ */
+@Composable
+fun rememberStatusBarTopPadding(): Dp {
+    val style = LocalPlatformStyle.current
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    if (style.isIOS) return statusBarTop
+
+    val safeTop = WindowInsets.safeDrawing
+        .only(WindowInsetsSides.Top)
+        .asPaddingValues()
+        .calculateTopPadding()
+    val measured = maxOf(statusBarTop, safeTop)
+    return if (measured < 1.dp) AndroidStatusBarFallback else measured
+}
+
+/** Declarative status-bar padding for overlay headers (Android cutout-safe). */
+fun Modifier.floatingHeaderStatusBarPadding(): Modifier = composed {
+    val style = LocalPlatformStyle.current
+    if (style.isIOS) {
+        Modifier.windowInsetsPadding(WindowInsets.statusBars)
+    } else {
+        Modifier.windowInsetsPadding(
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+        )
+    }
+}
+
+/**
+ * Measures expanded header body height (excluding status bar) so scroll content clears
+ * multi-line subtitles and accessibility font scaling.
+ *
+ * [measureModifier] must be applied to the header **body** only — not the status-bar inset
+ * wrapper — so [statusBarTop] is not double-counted in list top padding.
+ */
+@Composable
+fun rememberFloatingHeaderTopPadding(
+    collapseFraction: Float,
+    statusBarTop: Dp = rememberStatusBarTopPadding(),
+): Pair<Dp, Modifier> {
+    val density = LocalDensity.current
+    var expandedHeaderBodyHeight by remember {
+        mutableStateOf(AppScreenDefaults.FloatingHeaderLargeHeight)
+    }
+    var hasLockedExpandedHeight by remember { mutableStateOf(false) }
+    val measureModifier = Modifier.onGloballyPositioned { coordinates ->
+        if (!hasLockedExpandedHeight && collapseFraction < 0.05f) {
+            val measuredBody = with(density) { coordinates.size.height.toDp() }
+            if (measuredBody >= AppScreenDefaults.FloatingHeaderCompactHeight) {
+                expandedHeaderBodyHeight = measuredBody
+                hasLockedExpandedHeight = true
+            }
+        }
+    }
+    // Fixed expanded inset — overlay header collapses visually; do not shrink this during
+    // scroll (causes jitter on both LazyColumn and verticalScroll screens).
+    val topPadding = statusBarTop + expandedHeaderBodyHeight + AppScreenDefaults.SectionSpacing
+    return topPadding to measureModifier
+}
+
+/** Minimum top inset for scroll content on collapsing-header screens (compact pill + safe area). */
+@Composable
+fun rememberCompactFloatingHeaderClearance(
+    statusBarTop: Dp = rememberStatusBarTopPadding(),
+): Dp =
+    statusBarTop + AppScreenDefaults.FloatingHeaderCompactHeight + AppScreenDefaults.SectionSpacing
 
 /** FABs / map controls sit [AppScreenDefaults.FabGapAboveTabBar] above the tab bar top edge. */
 @Composable

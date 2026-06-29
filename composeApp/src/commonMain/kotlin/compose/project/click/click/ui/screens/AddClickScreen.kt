@@ -23,9 +23,6 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 
 @Composable
 fun AddClickScreen(
@@ -187,14 +184,12 @@ fun AddClickContent(
 
         // Tap to Connect (BLE + audio + GPS) — full width card
         AdaptiveCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp),
+            modifier = Modifier.fillMaxWidth(),
             onClick = onNavigateToNfc
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
@@ -216,7 +211,9 @@ fun AddClickContent(
                 Text(
                     "Nearby handshake with Bluetooth and audio",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                 )
             }
         }

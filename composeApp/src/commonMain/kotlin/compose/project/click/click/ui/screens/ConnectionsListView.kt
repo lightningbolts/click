@@ -148,15 +148,15 @@ import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pr
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import androidx.compose.runtime.DisposableEffect
+import compose.project.click.click.ui.components.floatingHeaderStatusBarPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberFloatingHeaderTopPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberStatusBarTopPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
@@ -271,7 +271,7 @@ fun ConnectionsListView(
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val activeHubs by AppDataManager.activeHubs.collectAsState()
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = rememberStatusBarTopPadding()
     val bottomChrome = rememberBottomChromePadding()
     val fabAboveNav = rememberFabAboveNavPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -586,18 +586,9 @@ fun ConnectionsListView(
             }
         }
     }
-    val listTopPadding = remember(collapseFraction, statusBarTop, effectiveChats.isNotEmpty()) {
-        val compactHeader = effectiveChats.isNotEmpty() && collapseFraction > 0.42f
-        if (compactHeader) {
-            statusBarTop + 76.dp
-        } else {
-            val collapsed = AppScreenDefaults.FloatingHeaderCompactHeight
-            val expanded = AppScreenDefaults.FloatingHeaderLargeHeight
-            val headerH = statusBarTop + collapsed + (expanded - collapsed) * (1f - collapseFraction)
-            val tabH = if (effectiveChats.isNotEmpty()) 76.dp else 0.dp
-            headerH + tabH + 8.dp
-        }
-    }
+    val (headerContentPadding, headerMeasureModifier) =
+        rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop)
+    val listTopPadding = headerContentPadding
 
     Box(modifier = Modifier.fillMaxSize()) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
@@ -767,20 +758,27 @@ fun ConnectionsListView(
                 .align(Alignment.TopCenter)
                 .zIndex(1f)
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = statusBarTop),
+                .floatingHeaderStatusBarPadding()
+                .padding(start = 20.dp, end = 20.dp),
         ) {
-            ConnectionsFloatingHeader(
-                collapseFraction = collapseFraction,
-                title = "Clicks",
-                subtitle = headerSubtitle.takeIf { it.isNotBlank() },
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = { selectedTabIndex = it },
-                activeCount = activeCount,
-                groupCount = groupCount,
-                archivedCount = archivedCount,
-                showTabs = effectiveChats.isNotEmpty(),
-                onOpenSearch = onOpenSearch,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(headerMeasureModifier),
+            ) {
+                ConnectionsFloatingHeader(
+                    collapseFraction = collapseFraction,
+                    title = "Clicks",
+                    subtitle = headerSubtitle.takeIf { it.isNotBlank() },
+                    selectedTabIndex = selectedTabIndex,
+                    onTabSelected = { selectedTabIndex = it },
+                    activeCount = activeCount,
+                    groupCount = groupCount,
+                    archivedCount = archivedCount,
+                    showTabs = effectiveChats.isNotEmpty(),
+                    onOpenSearch = onOpenSearch,
+                )
+            }
         }
     }
     }
