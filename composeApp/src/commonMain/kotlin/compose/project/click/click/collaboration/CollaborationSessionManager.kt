@@ -10,7 +10,8 @@ import kotlinx.datetime.Instant
 /** Active re-engagement window after existing-friend proximity bumps. */
 data class CollaborationSession(
     val encounterId: String,
-    val connectionId: String,
+    val connectionId: String = "",
+    val chatId: String? = null,
     val collaborationTtlIso: String,
     val createdAtEpochMs: Long = Clock.System.now().toEpochMilliseconds(),
 ) {
@@ -36,7 +37,7 @@ data class CollaborationSession(
 }
 
 /**
- * In-memory store of collaboration sessions keyed by [CollaborationSession.connectionId].
+ * In-memory store of collaboration sessions keyed by connection id or group chat id.
  * Populated from bind-proximity-connection when `is_new_connection == false`.
  */
 object CollaborationSessionManager {
@@ -44,12 +45,16 @@ object CollaborationSessionManager {
     val sessions: StateFlow<Map<String, CollaborationSession>> = _sessions.asStateFlow()
 
     fun activate(session: CollaborationSession) {
-        if (session.encounterId.isBlank() || session.connectionId.isBlank()) return
-        _sessions.update { cur -> cur + (session.connectionId to session) }
+        val key = sessionKey(session.connectionId, session.chatId) ?: return
+        if (session.encounterId.isBlank()) return
+        _sessions.update { cur -> cur + (key to session) }
     }
 
     fun forConnection(connectionId: String): CollaborationSession? =
         _sessions.value[connectionId]
+
+    fun forChat(chatId: String): CollaborationSession? =
+        _sessions.value[chatKey(chatId)]
 
     fun activeMapDropSession(): CollaborationSession? {
         val now = Clock.System.now()
@@ -59,4 +64,14 @@ object CollaborationSessionManager {
     fun clear(connectionId: String) {
         _sessions.update { cur -> cur - connectionId }
     }
+
+    private fun sessionKey(connectionId: String, chatId: String?): String? {
+        val cid = connectionId.trim()
+        if (cid.isNotEmpty()) return cid
+        return chatId?.let(::chatKey)?.takeIf { it != CHAT_KEY_PREFIX }
+    }
+
+    private fun chatKey(chatId: String): String = CHAT_KEY_PREFIX + chatId.trim()
+
+    private const val CHAT_KEY_PREFIX = "chat:"
 }

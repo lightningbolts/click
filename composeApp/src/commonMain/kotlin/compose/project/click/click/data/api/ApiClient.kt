@@ -1181,6 +1181,29 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** POST `/api/chats/{id}/collaboration-session` — opens Disposable Roll window for group chats. */
+    suspend fun postOpenCollaborationSessionForChat(chatId: String): Result<CollaborationSessionPostResponse> {
+        val cid = chatId.trim()
+        if (cid.isEmpty()) return Result.failure(IllegalArgumentException("chatId required"))
+        return try {
+            val response = clickWebClient.post(
+                "$clickWebAuthOrigin/api/chats/$cid/collaboration-session",
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {})
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<CollaborationSessionPostResponse>())
+            } else {
+                clickWebFailure(response)
+            }
+        } catch (e: ClientRequestException) {
+            clickWebFailure(e.response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * Fallback when the dedicated collaboration-session route is not deployed yet.
      * POST `/api/connections/encounter` with `{ connection_id, open_disposable_roll: true }`.

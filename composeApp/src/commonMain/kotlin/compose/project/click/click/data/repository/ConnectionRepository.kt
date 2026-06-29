@@ -296,6 +296,26 @@ class ConnectionRepository(
         }
     }
 
+    /** POST `/api/chats/{id}/collaboration-session` — opens Disposable Roll for a group chat. */
+    suspend fun openCollaborationSessionForChat(chatId: String): Result<CollaborationSession> {
+        val cid = chatId.trim()
+        if (cid.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Invalid chat"))
+        }
+        return apiClient.postOpenCollaborationSessionForChat(cid).mapCatching { response ->
+            val encounterId = response.encounterId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: throw IllegalStateException("Missing encounter id")
+            val ttl = response.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
+                ?: throw IllegalStateException("Missing collaboration window")
+            CollaborationSession(
+                encounterId = encounterId,
+                connectionId = "",
+                chatId = cid,
+                collaborationTtlIso = ttl,
+            )
+        }
+    }
+
     private suspend fun openCollaborationSessionResponse(
         connectionId: String,
     ): Result<CollaborationSessionPostResponse> {
@@ -346,6 +366,27 @@ class ConnectionRepository(
         val uid = viewerUserId?.trim().orEmpty()
         return if (uid.isNotBlank()) {
             chatRepository.vaultEncryptedMediaMessages(chatId, uid, fetched)
+        } else {
+            fetched
+        }
+    }
+
+    suspend fun fetchDecryptedMessagesForChat(
+        chatId: String,
+        viewerUserId: String?,
+    ): List<Message> {
+        val cid = chatId.trim()
+        if (cid.isBlank()) return emptyList()
+        val cachedThread = AppDataManager.cachedChatThreadFor(cid)
+        if (cachedThread != null && cachedThread.messages.isNotEmpty()) {
+            return cachedThread.messages
+        }
+        val fetched = runCatching {
+            chatRepository.fetchMessagesForChat(cid, viewerUserId).orEmpty()
+        }.getOrDefault(emptyList())
+        val uid = viewerUserId?.trim().orEmpty()
+        return if (uid.isNotBlank() && fetched.isNotEmpty()) {
+            chatRepository.vaultEncryptedMediaMessages(cid, uid, fetched)
         } else {
             fetched
         }

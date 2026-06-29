@@ -49,12 +49,16 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
@@ -151,13 +155,13 @@ fun ProfileBottomSheet(
     onDownloadFile: ((ProfileSheetFile) -> Unit)? = null,
     onOpenDisposableRoll: (() -> Unit)? = null,
 ) {
-    val visibleTabs = remember {
+    val visibleTabs = remember(state.isGroup) {
         listOf(
             ProfileSheetTab.Timeline,
             ProfileSheetTab.Media,
             ProfileSheetTab.Links,
             ProfileSheetTab.Files,
-        )
+        ) + if (state.isGroup) listOf(ProfileSheetTab.Members) else emptyList()
     }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
     val scope = rememberCoroutineScope()
@@ -232,10 +236,17 @@ fun ProfileBottomSheet(
 
         val fetched = if (!effectiveViewerUserId.isNullOrBlank()) {
             runCatching {
-                connectionRepository.fetchDecryptedMessagesForProfileConnection(
-                    connectionId = connectionId,
-                    viewerUserId = effectiveViewerUserId,
-                )
+                if (state.isGroup) {
+                    connectionRepository.fetchDecryptedMessagesForChat(
+                        chatId = connectionId,
+                        viewerUserId = effectiveViewerUserId,
+                    )
+                } else {
+                    connectionRepository.fetchDecryptedMessagesForProfileConnection(
+                        connectionId = connectionId,
+                        viewerUserId = effectiveViewerUserId,
+                    )
+                }
             }.getOrDefault(emptyList())
         } else {
             emptyList()
@@ -560,15 +571,19 @@ fun ProfileBottomSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        ProfileActionGrid(
-            showNudge = state.canNudge,
-            showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
-            onMessage = onMessage,
-            onNudge = onNudge,
-            onOpenDisposableRoll = onOpenDisposableRoll,
-        )
+        if (!state.isGroup) {
+            ProfileActionGrid(
+                showNudge = state.canNudge,
+                showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
+                onMessage = onMessage,
+                onNudge = onNudge,
+                onOpenDisposableRoll = onOpenDisposableRoll,
+            )
 
-        Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(18.dp))
+        } else {
+            Spacer(Modifier.height(12.dp))
+        }
 
         SecondaryTabRow(
             selectedTabIndex = pagerState.currentPage,
@@ -637,6 +652,14 @@ fun ProfileBottomSheet(
                     items = effectiveFiles,
                     openingFileIds = openingFileIds,
                     onDownload = handleDownloadFile,
+                )
+                ProfileSheetTab.Members -> MembersPanel(
+                    members = state.groupMembers,
+                    viewerUserId = state.viewerUserId,
+                    groupCreatorId = state.groupCreatorId,
+                    onAddMember = state.onAddMember,
+                    onRemoveMember = state.onRemoveMember,
+                    onMemberClick = state.onMemberClick,
                 )
             }
         }
@@ -864,6 +887,12 @@ data class ProfileSheetState(
     val viewerUserId: String? = null,
     /** Optional connection/chat id retained for callers that want contextual actions. */
     val connectionId: String? = null,
+    val isGroup: Boolean = false,
+    val groupMembers: List<User> = emptyList(),
+    val groupCreatorId: String? = null,
+    val onAddMember: (() -> Unit)? = null,
+    val onRemoveMember: ((String) -> Unit)? = null,
+    val onMemberClick: ((String) -> Unit)? = null,
     /**
      * All locally-decrypted chat messages with type metadata. Used to populate
      * the Media / Files / Links tabs from the local E2EE cache instead of making
@@ -960,6 +989,7 @@ enum class ProfileSheetTab(val label: String, val icon: ImageVector) {
     Media("Media", Icons.Outlined.Image),
     Links("Links", Icons.Outlined.Link),
     Files("Files", Icons.Outlined.AttachFile),
+    Members("Members", Icons.Outlined.People),
 }
 
 @Composable
@@ -1525,6 +1555,87 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MembersPanel(
+    members: List<User>,
+    viewerUserId: String?,
+    groupCreatorId: String?,
+    onAddMember: (() -> Unit)?,
+    onRemoveMember: ((String) -> Unit)?,
+    onMemberClick: ((String) -> Unit)?,
+) {
+    val isGroupAdmin = !viewerUserId.isNullOrBlank() && viewerUserId == groupCreatorId
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
+        if (onAddMember != null) {
+            item("add_member") {
+                TextButton(onClick = onAddMember) {
+                    Text("Add member")
+                }
+            }
+        }
+        if (members.isEmpty()) {
+            item("empty") {
+                EmptyTabState(
+                    icon = Icons.Outlined.People,
+                    title = "No members yet",
+                    body = "People in this group will show up here.",
+                )
+            }
+        } else {
+            items(members, key = { it.id }) { user ->
+                val label = user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Member"
+                val canRemove = isGroupAdmin &&
+                    onRemoveMember != null &&
+                    !viewerUserId.isNullOrBlank() &&
+                    user.id != viewerUserId
+                ListItem(
+                    headlineContent = {
+                        Text(label, color = MaterialTheme.colorScheme.onSurface)
+                    },
+                    supportingContent = user.email?.trim()?.takeIf { it.isNotEmpty() }?.let { email ->
+                        {
+                            Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    leadingContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(PrimaryBlue.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = label.take(1).uppercase(),
+                                color = PrimaryBlue,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    },
+                    trailingContent = if (canRemove) {
+                        {
+                            TextButton(onClick = { onRemoveMember?.invoke(user.id) }) {
+                                Text("Remove", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onMemberClick?.invoke(user.id) },
+                )
             }
         }
     }
@@ -2228,6 +2339,75 @@ fun TabbedUserProfileSheet(
                         }
                     }
                 },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TabbedGroupProfileSheet(
+    groupName: String?,
+    chatId: String?,
+    viewerUserId: String?,
+    members: List<User>,
+    groupCreatorId: String?,
+    onDismiss: () -> Unit,
+    onAddMember: (() -> Unit)? = null,
+    onRemoveMember: ((String) -> Unit)? = null,
+    onMemberClick: ((String) -> Unit)? = null,
+    localMessages: List<ProfileSheetLocalMessage> = emptyList(),
+) {
+    val resolvedChatId = chatId?.trim().orEmpty()
+    if (resolvedChatId.isBlank()) return
+
+    val displayName = groupName?.trim()?.takeIf { it.isNotEmpty() } ?: "Group Click"
+    val subtitle = when (members.size) {
+        0 -> "No members"
+        1 -> "1 member"
+        else -> "${members.size} members"
+    }
+    val state = remember(
+        displayName,
+        subtitle,
+        resolvedChatId,
+        viewerUserId,
+        members,
+        groupCreatorId,
+        onAddMember,
+        onRemoveMember,
+        onMemberClick,
+        localMessages,
+    ) {
+        ProfileSheetState(
+            displayName = displayName,
+            subtitle = subtitle,
+            canNudge = false,
+            timeline = emptyList(),
+            media = emptyList(),
+            links = emptyList(),
+            files = emptyList(),
+            userId = null,
+            viewerUserId = viewerUserId,
+            connectionId = resolvedChatId,
+            isGroup = true,
+            groupMembers = members,
+            groupCreatorId = groupCreatorId,
+            onAddMember = onAddMember,
+            onRemoveMember = onRemoveMember,
+            onMemberClick = onMemberClick,
+            localMessages = localMessages,
+        )
+    }
+
+    ClickFormBottomSheet(
+        onDismissRequest = onDismiss,
+    ) {
+        OledSheetTheme {
+            ProfileBottomSheet(
+                state = state,
+                onMessage = {},
+                onNudge = {},
             )
         }
     }

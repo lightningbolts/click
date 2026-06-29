@@ -92,7 +92,9 @@ private fun advertisementContainsClickService(advertisementData: Map<Any?, *>): 
 
 /** `kAudioFormatLinearPCM` — four-char code `lpcm`. */
 private const val K_AUDIO_FORMAT_LINEAR_PCM: UInt = 1819304813u
-private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
+/** Let this device's chirp finish before opening the mic to reduce speaker self-bleed. */
+private const val AUDIO_SELF_BLEED_GUARD_MS: Long = 900L
 /** BLE must stay discoverable long after the short audio chirp so centrals can connect and read GATT. */
 private const val BLE_BROADCAST_HOLD_MS: Long = 6_000L
 /** Central scan window — must match [BLE_BROADCAST_HOLD_MS] so we can connect and read GATT before advertising stops. */
@@ -440,7 +442,7 @@ class IosProximityManager : ProximityManager {
         }
     }
 
-    override suspend fun startHandshakeListening(): ProximityHandshakeListenResult {
+    override suspend fun startHandshakeListening(myToken: String): ProximityHandshakeListenResult {
         enforceProximityAudioPermission()
         val bleDetectedTokens = mutableSetOf<String>()
         val audioHeardTokens = mutableSetOf<String>()
@@ -537,7 +539,7 @@ class IosProximityManager : ProximityManager {
                         if (didUpdateValueForCharacteristic.UUID.UUIDString.equals(CLICK_TOKEN_CHARACTERISTIC_UUID, ignoreCase = true)) {
                             val bytes = value?.toByteArray()
                             val token = parseGattTokenPayload(bytes)
-                            if (token != null) {
+                            if (token != null && token != myToken) {
                                 bleDetectedTokens.add(token)
                                 NSLog("🔵 BLE central: captured GATT token=$token id=$id heardCount=${bleDetectedTokens.size}")
                             } else {
@@ -637,7 +639,7 @@ class IosProximityManager : ProximityManager {
             }
         }
         coroutineScope {
-            val audio = async(Dispatchers.Default) { recordAudioSampleToSink(audioHeardTokens) }
+            val audio = async(Dispatchers.Default) { recordAudioSampleToSink(myToken, audioHeardTokens) }
             delay(BLE_SCAN_HOLD_MS)
             NSLog("🔵 BLE central: ${BLE_SCAN_HOLD_MS}ms scan window elapsed — stopping scan")
             centralManager?.stopScan()
@@ -659,7 +661,7 @@ class IosProximityManager : ProximityManager {
         )
     }
 
-    private suspend fun recordAudioSampleToSink(sink: MutableSet<String>) {
+    private suspend fun recordAudioSampleToSink(myToken: String, sink: MutableSet<String>) {
         val path = NSTemporaryDirectory().trimEnd('/') + "/click_prox_listen_${kotlin.random.Random.nextLong()}.wav"
         val url = NSURL.fileURLWithPath(path)
         val settings = mutableMapOf<Any?, Any?>(
@@ -679,6 +681,7 @@ class IosProximityManager : ProximityManager {
                 audioRecorder = null
                 return
             }
+            delay(AUDIO_SELF_BLEED_GUARD_MS)
             recorder.record()
             delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
             recorder.stop()
@@ -690,7 +693,7 @@ class IosProximityManager : ProximityManager {
             val decoded = decodeAllHandshakeTokensFromPcmMono(pcm)
             if (decoded.isEmpty()) return
             withContext(Dispatchers.Main) {
-                decoded.forEach { sink.add(it) }
+                decoded.filter { it != myToken }.forEach { sink.add(it) }
             }
         } finally {
             NSFileManager.defaultManager.removeItemAtPath(path, error = null)

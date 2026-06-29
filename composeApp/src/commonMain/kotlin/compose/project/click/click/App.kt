@@ -1153,6 +1153,28 @@ fun App() {
                     }
                 }
             }
+            val openChatDisposableRoll: (String?) -> Unit = openChatDisposableRoll@{ chatId ->
+                val cid = chatId?.trim()?.takeIf { it.isNotEmpty() } ?: return@openChatDisposableRoll
+                connectionScope.launch {
+                    disposableRollOpening = true
+                    try {
+                        connectionViewModel.ensureCollaborationSessionReadyForChat(cid)
+                            .onSuccess { session ->
+                                connectionRollConnectionId = cid
+                                pendingRollSession = session
+                                showConnectionDisposableRoll = true
+                            }
+                            .onFailure { error ->
+                                val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
+                                    ?.take(160)
+                                    ?: "Couldn't open Click Drops"
+                                snackbarHostState.showSnackbar(message)
+                            }
+                    } finally {
+                        disposableRollOpening = false
+                    }
+                }
+            }
             val suppressConnectionContextSheet =
                 when (connectionRevealState?.phase) {
                     ConnectionRevealPhase.Connecting,
@@ -1231,7 +1253,17 @@ fun App() {
             LaunchedEffect(currentUser.id) {
                 EncounterTetherManager.setCurrentUserId(currentUser.id)
             }
+            if (!isOnline) {
+                OfflineStatusBanner(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(0.5f),
+                )
+            }
             Scaffold(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = if (!isOnline) 28.dp else 0.dp),
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
@@ -1345,6 +1377,9 @@ fun App() {
                                                 },
                                                 onOpenDisposableRoll = { cid ->
                                                     openConnectionDisposableRoll(cid)
+                                                },
+                                                onOpenDisposableRollForChat = { chatId ->
+                                                    openChatDisposableRoll(chatId)
                                                 },
                                             )
                                         } else {
@@ -2230,13 +2265,6 @@ fun App() {
                         },
                     )
                 }
-            }
-            if (!isOnline) {
-                OfflineStatusBanner(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .zIndex(68f),
-                )
             }
             GlobalTetherOverlay(
                 modifier = Modifier

@@ -14,10 +14,10 @@ class MockProximityManager : ProximityManager {
         // No hardware: broadcast is a no-op for the mock path.
     }
 
-    override suspend fun startHandshakeListening(): ProximityHandshakeListenResult {
+    override suspend fun startHandshakeListening(myToken: String): ProximityHandshakeListenResult {
         delay(2_000L)
         return ProximityHandshakeListenResult(
-            heardTokens = listOf("5678"),
+            heardTokens = listOf("5678").filter { it != myToken },
             detectedDevices = emptyList(),
         )
     }

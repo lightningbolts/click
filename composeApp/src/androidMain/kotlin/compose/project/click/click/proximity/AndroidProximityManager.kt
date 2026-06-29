@@ -47,7 +47,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
-private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 1_500L
+private const val PROXIMITY_DEBOUNCE_WINDOW_MS: Long = 4_000L
+/** Let this device's chirp finish before opening the mic to reduce speaker self-bleed. */
+private const val AUDIO_SELF_BLEED_GUARD_MS: Long = 900L
 
 @SuppressLint("MissingPermission")
 class AndroidProximityManager(
@@ -196,7 +198,7 @@ class AndroidProximityManager(
         }
     }
 
-    override suspend fun startHandshakeListening(): ProximityHandshakeListenResult {
+    override suspend fun startHandshakeListening(myToken: String): ProximityHandshakeListenResult {
         enforceAudioRuntimePermission()
         val bleDetectedTokens = ConcurrentHashMap.newKeySet<String>()
         val audioHeardTokens = ConcurrentHashMap.newKeySet<String>()
@@ -207,7 +209,7 @@ class AndroidProximityManager(
             object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult?) {
                     val device = result?.device ?: return
-                    connectAndReadToken(device, bleDetectedTokens)
+                    connectAndReadToken(device, bleDetectedTokens, myToken)
                 }
 
                 override fun onBatchScanResults(results: MutableList<ScanResult>?) {
@@ -233,7 +235,9 @@ class AndroidProximityManager(
             }
         }
         coroutineScope {
-            val audio = async(Dispatchers.IO) { collectAudioToken(PROXIMITY_DEBOUNCE_WINDOW_MS, audioHeardTokens) }
+            val audio = async(Dispatchers.IO) {
+                collectAudioToken(PROXIMITY_DEBOUNCE_WINDOW_MS, myToken, audioHeardTokens)
+            }
             delay(PROXIMITY_DEBOUNCE_WINDOW_MS)
             audio.await()
         }
@@ -284,7 +288,7 @@ class AndroidProximityManager(
         }
     }
 
-    private fun connectAndReadToken(device: BluetoothDevice, sink: MutableSet<String>) {
+    private fun connectAndReadToken(device: BluetoothDevice, sink: MutableSet<String>, myToken: String) {
         val address = device.address ?: return
         if (!connectingDeviceAddresses.add(address)) return
         val callback = object : BluetoothGattCallback() {
@@ -326,7 +330,9 @@ class AndroidProximityManager(
                     status == BluetoothGatt.GATT_SUCCESS &&
                     characteristic.uuid == UUID.fromString(CLICK_TOKEN_CHARACTERISTIC_UUID)
                 ) {
-                    parseGattTokenPayload(characteristic.value)?.let { sink.add(it) }
+                    parseGattTokenPayload(characteristic.value)
+                        ?.takeIf { it != myToken }
+                        ?.let { sink.add(it) }
                 }
                 finishGatt(gatt, address)
             }
@@ -341,7 +347,9 @@ class AndroidProximityManager(
                     status == BluetoothGatt.GATT_SUCCESS &&
                     characteristic.uuid == UUID.fromString(CLICK_TOKEN_CHARACTERISTIC_UUID)
                 ) {
-                    parseGattTokenPayload(value)?.let { sink.add(it) }
+                    parseGattTokenPayload(value)
+                        ?.takeIf { it != myToken }
+                        ?.let { sink.add(it) }
                 }
                 finishGatt(gatt, address)
             }
@@ -361,7 +369,7 @@ class AndroidProximityManager(
         runCatching { gatt.close() }
     }
 
-    private suspend fun collectAudioToken(durationMs: Long, sink: MutableSet<String>) {
+    private suspend fun collectAudioToken(durationMs: Long, myToken: String, sink: MutableSet<String>) {
         val rate = 44_100
         val channel = AudioFormat.CHANNEL_IN_MONO
         val encoding = AudioFormat.ENCODING_PCM_16BIT
@@ -382,6 +390,7 @@ class AndroidProximityManager(
         val totalSamples = (rate * durationMs / 1000).toInt()
         val acc = ShortArray(totalSamples)
         var written = 0
+        delay(AUDIO_SELF_BLEED_GUARD_MS)
         record.startRecording()
         try {
             val chunk = ShortArray(bufferSize / 2)
@@ -399,7 +408,9 @@ class AndroidProximityManager(
         if (written < rate / 5) return
         val slice = acc.copyOf(written)
         if (pcmRms(slice) < 0.002) return
-        decodeAllHandshakeTokensFromPcmMono(slice).forEach { sink.add(it) }
+        decodeAllHandshakeTokensFromPcmMono(slice)
+            .filter { it != myToken }
+            .forEach { sink.add(it) }
     }
 
     private suspend fun playPcmMono(pcm: ShortArray) = withContext(Dispatchers.IO) {

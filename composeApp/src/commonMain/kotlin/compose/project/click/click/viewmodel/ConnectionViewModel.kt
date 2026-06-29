@@ -329,7 +329,7 @@ class ConnectionViewModel : ViewModel() {
                 } else {
                     try {
                         coroutineScope {
-                            val listen = async { proximityManager.startHandshakeListening() }
+                            val listen = async { proximityManager.startHandshakeListening(myToken) }
                             delay(120L)
                             // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
                             delay(Random.nextLong(0, 400))
@@ -737,6 +737,17 @@ class ConnectionViewModel : ViewModel() {
         }
         CollaborationSessionManager.forConnection(cid)?.let { return Result.success(it) }
         return repository.openCollaborationSession(cid).onSuccess { session ->
+            CollaborationSessionManager.activate(session)
+        }
+    }
+
+    suspend fun ensureCollaborationSessionReadyForChat(chatId: String): Result<CollaborationSession> {
+        val cid = chatId.trim()
+        if (cid.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Invalid chat"))
+        }
+        CollaborationSessionManager.forChat(cid)?.let { return Result.success(it) }
+        return repository.openCollaborationSessionForChat(cid).onSuccess { session ->
             CollaborationSessionManager.activate(session)
         }
     }

@@ -1,15 +1,11 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.Icon
@@ -24,35 +20,32 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun OfflineStatusBanner(
     modifier: Modifier = Modifier,
-    message: String = "You're offline. Some features are limited until you reconnect.",
+    message: String = "Offline",
 ) {
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .wrapContentHeight()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(top = 8.dp, start = 16.dp, end = 16.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
-        tonalElevation = 2.dp,
+            .height(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.Center,
         ) {
             Icon(
                 imageVector = Icons.Default.CloudOff,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(14.dp),
             )
+            androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
             Text(
                 text = message,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

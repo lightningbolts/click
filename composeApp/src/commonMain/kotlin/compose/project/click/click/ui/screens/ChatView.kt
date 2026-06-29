@@ -292,6 +292,7 @@ fun ChatView(
     onOpenUserProfile: (String) -> Unit = {},
     onOpenGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
     onOpenDisposableRoll: ((connectionId: String) -> Unit)? = null,
+    onOpenDisposableRollForChat: ((chatId: String) -> Unit)? = null,
     /**
      * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
      * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]). When false, the chat
@@ -1335,7 +1336,12 @@ fun ChatView(
                                 replyingTo = replyingTo,
                                 mediaPickers = mediaPickers,
                                 onOpenDisposableRoll = {
-                                    onOpenDisposableRoll?.invoke(chatDetails.connection.id)
+                                    if (isGroupChat) {
+                                        chatDetails.chat.id?.trim()?.takeIf { it.isNotEmpty() }
+                                            ?.let { onOpenDisposableRollForChat?.invoke(it) }
+                                    } else {
+                                        onOpenDisposableRoll?.invoke(chatDetails.connection.id)
+                                    }
                                 },
                                 tetherPingEnabled = tetherChannelId.isNotBlank() && !currentUserId.isNullOrBlank(),
                                 pingTetherLoading = tetherSenderAck != null,

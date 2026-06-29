@@ -46,6 +46,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.PlatformBackHandler
+import compose.project.click.click.ui.components.TabbedGroupProfileSheet
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.viewmodel.ChatViewModel
@@ -65,6 +66,7 @@ fun ConnectionsScreen(
     onHubSelected: ((compose.project.click.click.data.ActiveHubEntry) -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
+    onOpenDisposableRollForChat: ((String) -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() },
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
@@ -291,6 +293,7 @@ fun ConnectionsScreen(
                                 onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
                                 parentInteractiveBackSwipePx = iosChatSwipeDragPx,
                                 onOpenDisposableRoll = onOpenDisposableRoll,
+                                onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                             )
                         }
                     )
@@ -343,6 +346,7 @@ fun ConnectionsScreen(
                         showGroupMembersSheet = true
                     },
                     onOpenDisposableRoll = onOpenDisposableRoll,
+                    onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                 )
             }
         }
@@ -382,19 +386,16 @@ fun ConnectionsScreen(
     val groupPickerContext = groupMembersPickerContext
     if (showGroupMembersSheet && groupPickerContext != null) {
         val isGroupCreator = groupPickerContext.createdByUserId == userId
-        GroupMembersPickerSheet(
+        TabbedGroupProfileSheet(
+            groupName = groupPickerContext.groupName,
+            chatId = groupPickerContext.chatId,
+            viewerUserId = userId,
             members = groupPickerContext.members,
+            groupCreatorId = groupPickerContext.createdByUserId,
             onDismiss = {
                 showGroupMembersSheet = false
                 groupMembersPickerContext = null
             },
-            onMemberClick = { id ->
-                showGroupMembersSheet = false
-                groupMembersPickerContext = null
-                profileUserId = id
-            },
-            isGroupAdmin = isGroupCreator,
-            currentUserId = userId,
             onAddMember = {
                 showGroupMembersSheet = false
                 selectedAddMemberIds = emptySet()
@@ -415,6 +416,11 @@ fun ConnectionsScreen(
                 }
             } else {
                 null
+            },
+            onMemberClick = { id ->
+                showGroupMembersSheet = false
+                groupMembersPickerContext = null
+                profileUserId = id
             },
         )
     }
