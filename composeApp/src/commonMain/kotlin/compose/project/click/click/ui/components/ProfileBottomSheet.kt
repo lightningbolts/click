@@ -356,6 +356,10 @@ fun ProfileBottomSheet(
     var journalVisibility by remember(timelineTargetType, timelineTargetId) { mutableStateOf("private") }
     var journalPosting by remember(timelineTargetType, timelineTargetId) { mutableStateOf(false) }
     var journalError by remember(timelineTargetType, timelineTargetId) { mutableStateOf<String?>(null) }
+    var editingJournalId by remember(timelineTargetType, timelineTargetId) { mutableStateOf<String?>(null) }
+    var editingJournalText by remember(timelineTargetType, timelineTargetId) { mutableStateOf("") }
+    var editingJournalVisibility by remember(timelineTargetType, timelineTargetId) { mutableStateOf("private") }
+    var mutatingJournalIds by remember(timelineTargetType, timelineTargetId) { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(timelineTargetType, timelineTargetId) {
         val type = timelineTargetType
@@ -402,6 +406,64 @@ fun ProfileBottomSheet(
                     journalError = "Couldn't save that journal entry. Please try again."
                 }
                 journalPosting = false
+            }
+        }
+    }
+    val startEditJournalEntry: (ProfileTimelineJournalEntry) -> Unit = { entry ->
+        editingJournalId = entry.id
+        editingJournalText = entry.body
+        editingJournalVisibility = entry.visibility
+        journalError = null
+    }
+    val cancelEditJournalEntry: () -> Unit = {
+        editingJournalId = null
+        editingJournalText = ""
+        editingJournalVisibility = "private"
+    }
+    val saveEditJournalEntry: (String) -> Unit = { entryId ->
+        val text = editingJournalText.trim()
+        if (entryId.isNotBlank() && text.isNotEmpty() && entryId !in mutatingJournalIds) {
+            scope.launch {
+                mutatingJournalIds = mutatingJournalIds + entryId
+                journalError = null
+                val refreshed = runCatching {
+                    withContext(Dispatchers.Default) {
+                        repository.updateProfileTimelineJournalEntry(
+                            id = entryId,
+                            body = text,
+                            visibility = editingJournalVisibility,
+                        )
+                    }
+                }.getOrNull()
+                if (refreshed != null) {
+                    profileTimeline = refreshed
+                    cancelEditJournalEntry()
+                    AppDataManager.persistProfileTimelineCaches()
+                } else {
+                    journalError = "Couldn't update that journal entry. Please try again."
+                }
+                mutatingJournalIds = mutatingJournalIds - entryId
+            }
+        }
+    }
+    val deleteJournalEntry: (String) -> Unit = { entryId ->
+        if (entryId.isNotBlank() && entryId !in mutatingJournalIds) {
+            scope.launch {
+                mutatingJournalIds = mutatingJournalIds + entryId
+                journalError = null
+                val refreshed = runCatching {
+                    withContext(Dispatchers.Default) {
+                        repository.deleteProfileTimelineJournalEntry(entryId)
+                    }
+                }.getOrNull()
+                if (refreshed != null) {
+                    profileTimeline = refreshed
+                    if (editingJournalId == entryId) cancelEditJournalEntry()
+                    AppDataManager.persistProfileTimelineCaches()
+                } else {
+                    journalError = "Couldn't delete that journal entry. Please try again."
+                }
+                mutatingJournalIds = mutatingJournalIds - entryId
             }
         }
     }
@@ -643,19 +705,15 @@ fun ProfileBottomSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        if (!state.isGroup) {
-            ProfileActionGrid(
-                showNudge = state.canNudge,
-                showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
-                onMessage = onMessage,
-                onNudge = onNudge,
-                onOpenDisposableRoll = onOpenDisposableRoll,
-            )
+        ProfileActionGrid(
+            showNudge = state.canNudge,
+            showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
+            onMessage = onMessage,
+            onNudge = onNudge,
+            onOpenDisposableRoll = onOpenDisposableRoll,
+        )
 
-            Spacer(Modifier.height(18.dp))
-        } else {
-            Spacer(Modifier.height(12.dp))
-        }
+        Spacer(Modifier.height(18.dp))
 
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
@@ -717,6 +775,17 @@ fun ProfileBottomSheet(
                     journalPosting = journalPosting,
                     journalError = journalError,
                     onSubmitJournalEntry = submitJournalEntry,
+                    viewerUserId = effectiveViewerUserId,
+                    editingJournalId = editingJournalId,
+                    editingJournalText = editingJournalText,
+                    onEditingJournalTextChange = { editingJournalText = it.take(1_200) },
+                    editingJournalVisibility = editingJournalVisibility,
+                    onEditingJournalVisibilityChange = { editingJournalVisibility = it },
+                    mutatingJournalIds = mutatingJournalIds,
+                    onStartEditJournalEntry = startEditJournalEntry,
+                    onCancelEditJournalEntry = cancelEditJournalEntry,
+                    onSaveEditJournalEntry = saveEditJournalEntry,
+                    onDeleteJournalEntry = deleteJournalEntry,
                 )
                 ProfileSheetTab.Media -> MediaPanel(
                     items = effectiveMedia,
@@ -1254,6 +1323,17 @@ private fun TimelinePanel(
     journalPosting: Boolean,
     journalError: String?,
     onSubmitJournalEntry: () -> Unit,
+    viewerUserId: String?,
+    editingJournalId: String?,
+    editingJournalText: String,
+    onEditingJournalTextChange: (String) -> Unit,
+    editingJournalVisibility: String,
+    onEditingJournalVisibilityChange: (String) -> Unit,
+    mutatingJournalIds: Set<String>,
+    onStartEditJournalEntry: (ProfileTimelineJournalEntry) -> Unit,
+    onCancelEditJournalEntry: () -> Unit,
+    onSaveEditJournalEntry: (String) -> Unit,
+    onDeleteJournalEntry: (String) -> Unit,
 ) {
     val hasTimelineItems = items.isNotEmpty()
     Column(
@@ -1283,7 +1363,22 @@ private fun TimelinePanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 2.dp),
             )
-            journalEntries.forEach { entry -> JournalTimelineRow(entry) }
+            journalEntries.forEach { entry ->
+                JournalTimelineRow(
+                    entry = entry,
+                    canEdit = entry.authorUserId == viewerUserId,
+                    isEditing = editingJournalId == entry.id,
+                    editText = editingJournalText,
+                    onEditTextChange = onEditingJournalTextChange,
+                    editVisibility = editingJournalVisibility,
+                    onEditVisibilityChange = onEditingJournalVisibilityChange,
+                    isMutating = entry.id in mutatingJournalIds,
+                    onStartEdit = { onStartEditJournalEntry(entry) },
+                    onCancelEdit = onCancelEditJournalEntry,
+                    onSaveEdit = { onSaveEditJournalEntry(entry.id) },
+                    onDelete = { onDeleteJournalEntry(entry.id) },
+                )
+            }
         }
         if (hasTimelineItems) {
             items.forEach { TimelineRow(item = it) }
@@ -1299,7 +1394,8 @@ private fun TimelinePanel(
                 loading = legacyLoading,
                 error = legacyError,
             )
-        } else if (!hasTimelineItems && journalEntries.isEmpty() && sharedInterests.isEmpty()) {
+        }
+        if (!showLegacy && !hasTimelineItems && journalEntries.isEmpty() && sharedInterests.isEmpty()) {
             EmptyTabState(
                 icon = Icons.Outlined.History,
                 title = "No timeline yet",
@@ -1470,7 +1566,20 @@ private fun SharedInterestsTimelineSection(items: List<GroupSharedInterest>) {
 }
 
 @Composable
-private fun JournalTimelineRow(entry: ProfileTimelineJournalEntry) {
+private fun JournalTimelineRow(
+    entry: ProfileTimelineJournalEntry,
+    canEdit: Boolean,
+    isEditing: Boolean,
+    editText: String,
+    onEditTextChange: (String) -> Unit,
+    editVisibility: String,
+    onEditVisibilityChange: (String) -> Unit,
+    isMutating: Boolean,
+    onStartEdit: () -> Unit,
+    onCancelEdit: () -> Unit,
+    onSaveEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
@@ -1495,16 +1604,64 @@ private fun JournalTimelineRow(entry: ProfileTimelineJournalEntry) {
                 color = if (entry.visibility == "shared") PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = entry.body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        if (isEditing) {
+            OutlinedTextField(
+                value = editText,
+                onValueChange = onEditTextChange,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 5,
+                enabled = !isMutating,
+                shape = RoundedCornerShape(14.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ProfileVisibilityPill(
+                    label = "Private",
+                    selected = editVisibility != "shared",
+                    onClick = { onEditVisibilityChange("private") },
+                )
+                ProfileVisibilityPill(
+                    label = "Everyone",
+                    selected = editVisibility == "shared",
+                    onClick = { onEditVisibilityChange("shared") },
+                )
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onCancelEdit, enabled = !isMutating) {
+                    Text("Cancel")
+                }
+                TextButton(
+                    onClick = onSaveEdit,
+                    enabled = editText.trim().isNotEmpty() && !isMutating,
+                ) {
+                    Text("Save")
+                }
+            }
+        } else {
+            Text(
+                text = entry.body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
         Text(
             text = formatProfileTimelineIso(entry.createdAt),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
         )
+        if (canEdit && !isEditing) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = onStartEdit, enabled = !isMutating) {
+                    Text("Edit")
+                }
+                TextButton(onClick = onDelete, enabled = !isMutating) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
     }
 }
 
@@ -2673,6 +2830,9 @@ fun TabbedGroupProfileSheet(
     members: List<User>,
     groupCreatorId: String?,
     onDismiss: () -> Unit,
+    onMessage: (() -> Unit)? = null,
+    onNudge: (() -> Unit)? = null,
+    onOpenDisposableRoll: ((String) -> Unit)? = null,
     onAddMember: (() -> Unit)? = null,
     onRemoveMember: ((String) -> Unit)? = null,
     onMemberClick: ((String) -> Unit)? = null,
@@ -2697,12 +2857,15 @@ fun TabbedGroupProfileSheet(
         onAddMember,
         onRemoveMember,
         onMemberClick,
+        onMessage,
+        onNudge,
+        onOpenDisposableRoll,
         localMessages,
     ) {
         ProfileSheetState(
             displayName = displayName,
             subtitle = subtitle,
-            canNudge = false,
+            canNudge = onNudge != null,
             timeline = emptyList(),
             media = emptyList(),
             links = emptyList(),
@@ -2726,8 +2889,20 @@ fun TabbedGroupProfileSheet(
         OledSheetTheme {
             ProfileBottomSheet(
                 state = state,
-                onMessage = {},
-                onNudge = {},
+                onMessage = {
+                    onMessage?.invoke()
+                    onDismiss()
+                },
+                onNudge = {
+                    onNudge?.invoke()
+                    onDismiss()
+                },
+                onOpenDisposableRoll = onOpenDisposableRoll?.let { open ->
+                    {
+                        open(resolvedChatId)
+                        onDismiss()
+                    }
+                },
             )
         }
     }

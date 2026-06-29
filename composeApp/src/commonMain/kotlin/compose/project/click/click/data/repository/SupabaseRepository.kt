@@ -191,6 +191,26 @@ class SupabaseRepository {
         return fresh
     }
 
+    suspend fun updateProfileTimelineJournalEntry(
+        id: String,
+        body: String,
+        visibility: String,
+    ): ProfileTimelinePayload? {
+        val fresh = apiClient.putProfileTimelineJournalEntry(
+            id = id,
+            body = body,
+            visibility = visibility,
+        ).getOrNull()
+        if (fresh != null) cacheProfileTimeline(fresh)
+        return fresh
+    }
+
+    suspend fun deleteProfileTimelineJournalEntry(id: String): ProfileTimelinePayload? {
+        val fresh = apiClient.deleteProfileTimelineJournalEntry(id).getOrNull()
+        if (fresh != null) cacheProfileTimeline(fresh)
+        return fresh
+    }
+
     private fun cacheUserPublicProfile(targetUserId: String, profile: UserPublicProfile) {
         val key = targetUserId.trim()
         if (key.isEmpty()) return

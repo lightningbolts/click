@@ -27,6 +27,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -132,6 +133,13 @@ private data class ProfileTimelinePostBody(
     @SerialName("target_id") val targetId: String,
     val body: String,
     val visibility: String,
+)
+
+@Serializable
+private data class ProfileTimelineMutateBody(
+    val id: String,
+    val body: String? = null,
+    val visibility: String? = null,
 )
 
 @Serializable
@@ -701,6 +709,49 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                         visibility = vis,
                     ),
                 )
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ProfileTimelinePayload>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun putProfileTimelineJournalEntry(
+        id: String,
+        body: String,
+        visibility: String,
+    ): Result<ProfileTimelinePayload> {
+        val entryId = id.trim()
+        val text = body.trim()
+        val vis = visibility.trim().lowercase()
+        if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
+        if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry body required"))
+        return try {
+            val response: HttpResponse = clickWebClient.put("$clickWebAuthOrigin/api/profile/timeline") {
+                contentType(ContentType.Application.Json)
+                setBody(ProfileTimelineMutateBody(id = entryId, body = text, visibility = vis))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ProfileTimelinePayload>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteProfileTimelineJournalEntry(id: String): Result<ProfileTimelinePayload> {
+        val entryId = id.trim()
+        if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
+        return try {
+            val response: HttpResponse = clickWebClient.delete("$clickWebAuthOrigin/api/profile/timeline") {
+                contentType(ContentType.Application.Json)
+                setBody(ProfileTimelineMutateBody(id = entryId))
             }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ProfileTimelinePayload>())

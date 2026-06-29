@@ -396,6 +396,21 @@ fun ConnectionsScreen(
                 showGroupMembersSheet = false
                 groupMembersPickerContext = null
             },
+            onMessage = groupPickerContext.chatId?.let { chatId ->
+                {
+                    showGroupMembersSheet = false
+                    groupMembersPickerContext = null
+                    openChat(chatId)
+                }
+            },
+            onNudge = groupPickerContext.chatId?.let { chatId ->
+                {
+                    showGroupMembersSheet = false
+                    groupMembersPickerContext = null
+                    viewModel.sendNudgeToChat(chatId, groupPickerContext.groupName ?: "the group")
+                }
+            },
+            onOpenDisposableRoll = onOpenDisposableRollForChat,
             onAddMember = {
                 showGroupMembersSheet = false
                 selectedAddMemberIds = emptySet()
