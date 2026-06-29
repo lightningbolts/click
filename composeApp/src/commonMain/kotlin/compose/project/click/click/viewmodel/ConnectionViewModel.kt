@@ -71,6 +71,18 @@ data class VerifiedCliqueProximityIntent(
     val matchedUsers: List<User>,
 )
 
+internal fun reconnectEncounterPeersNeedingInsert(
+    targetUsers: List<UserProfile>,
+    currentUserId: String,
+    bindEncounterPersistedPeerIds: Set<String>,
+): List<UserProfile> {
+    if (currentUserId.isBlank()) return emptyList()
+    return targetUsers
+        .filter { it.id.isNotBlank() && it.id != currentUserId }
+        .distinctBy { it.id }
+        .filterNot { bindEncounterPersistedPeerIds.contains(it.id) }
+}
+
 sealed class ConnectionState {
     object Idle : ConnectionState()
     object Loading : ConnectionState()
@@ -103,6 +115,7 @@ sealed class ConnectionState {
         val targetUsers: List<UserProfile>,
         val isGroup: Boolean = false,
         val memberUserIds: List<String> = emptyList(),
+        val bindEncounterPersistedPeerIds: Set<String> = emptySet(),
         /** From bind-proximity `is_new_connection` aggregate — false → encounter-log UX. */
         val isNewConnection: Boolean = true,
         /** True while POST `/api/connections/encounter` is in flight. */
@@ -139,6 +152,8 @@ class ConnectionViewModel : ViewModel() {
             "Handshake saved offline. Will sync when connected."
         private const val SIMULATOR_MOCK_MY_TOKEN: String = "1234"
         private val SIMULATOR_MOCK_HEARD_TOKENS: List<String> = listOf("5678")
+        private const val PENDING_MATCH_RECOVERY_ATTEMPTS: Int = 12
+        private const val PENDING_MATCH_RECOVERY_DELAY_MS: Long = 2_500L
     }
 
     private val _transientNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -204,6 +219,92 @@ class ConnectionViewModel : ViewModel() {
             encounterId = outcome.encounterId,
             collaborationTtl = outcome.collaborationTtl,
         )
+    }
+
+    private fun handleInstantProximityOutcome(outcome: BindProximityHandshakeOutcome, currentUserId: String) {
+        activateCollaborationSessionIfPresent(outcome)
+        lastProximityEncounterLoggedAggregate = outcome.encounterLogged
+        val users = outcome.matches
+        if (users.isEmpty()) {
+            _connectionState.value = ConnectionState.Error("No nearby tap detected. Try again closer together.")
+            return
+        }
+        if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
+            _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+        }
+        PlatformHapticsPolicy.successNotification()
+        val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
+        val others = groupIds?.filter { it != currentUserId }.orEmpty()
+        if (outcome.isGroup && outcome.connectionId != null && groupIds != null && others.size >= 2) {
+            val groupConnection = syntheticProximityConnection(
+                connectionId = outcome.connectionId,
+                memberUserIds = groupIds,
+                isGroup = true,
+            )
+            AppDataManager.addConnection(groupConnection, syntheticUserForProximitySuccess(users.map { it.toUserProfile() }))
+            _connectionState.value = ConnectionState.TaggingContext(
+                newConnections = listOf(groupConnection),
+                targetUsers = users.map { it.toUserProfile() },
+                isGroup = true,
+                memberUserIds = groupIds,
+                bindEncounterPersistedPeerIds = users
+                    .filter { it.encounterPersistedOnBind }
+                    .map { it.id }
+                    .toSet(),
+                isNewConnection = outcome.isAggregateNewConnection,
+            )
+        } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
+            val peer = users.first()
+            val connection = syntheticProximityConnection(
+                connectionId = outcome.connectionId,
+                memberUserIds = listOf(currentUserId, peer.id).distinct().sorted(),
+                isGroup = false,
+            )
+            AppDataManager.addConnection(connection, peer)
+            _connectionState.value = ConnectionState.TaggingContext(
+                newConnections = listOf(connection),
+                targetUsers = listOf(peer.toUserProfile()),
+                bindEncounterPersistedPeerIds = users
+                    .filter { it.encounterPersistedOnBind }
+                    .map { it.id }
+                    .toSet(),
+                isNewConnection = outcome.isAggregateNewConnection,
+            )
+        } else {
+            _connectionState.value = ConnectionState.PendingConfirmation(users)
+        }
+    }
+
+    private fun startPendingProximityRecovery(
+        pendingHandshakeId: String,
+        bearerJwt: String,
+        currentUserId: String,
+    ) {
+        val pendingId = pendingHandshakeId.trim()
+        if (pendingId.isEmpty() || bearerJwt.isBlank()) return
+        viewModelScope.launch {
+            repeat(PENDING_MATCH_RECOVERY_ATTEMPTS) {
+                delay(PENDING_MATCH_RECOVERY_DELAY_MS)
+                if (_connectionState.value !is ConnectionState.ProximityHandshakePendingMatch) {
+                    return@launch
+                }
+                val recovered = withContext(Dispatchers.Default) {
+                    repository.recoverPendingProximityHandshake(
+                        bearerJwt = bearerJwt,
+                        pendingHandshakeId = pendingId,
+                    )
+                }.getOrNull()
+                when (recovered) {
+                    is BindProximityHandshakeResult.InstantMatch -> {
+                        handleInstantProximityOutcome(recovered.outcome, currentUserId)
+                        return@launch
+                    }
+                    is BindProximityHandshakeResult.PendingServerMatch,
+                    null,
+                    -> Unit
+                }
+            }
+        }
     }
 
     /**
@@ -425,53 +526,14 @@ class ConnectionViewModel : ViewModel() {
                                 _connectionState.value = ConnectionState.ProximityHandshakePendingMatch(
                                     message = PROXIMITY_PENDING_MATCH_MESSAGE,
                                 )
+                                startPendingProximityRecovery(
+                                    pendingHandshakeId = handshake.pendingHandshakeId,
+                                    bearerJwt = jwt,
+                                    currentUserId = currentUserId,
+                                )
                             }
                             is BindProximityHandshakeResult.InstantMatch -> {
-                                val outcome = handshake.outcome
-                                activateCollaborationSessionIfPresent(outcome)
-                                lastProximityEncounterLoggedAggregate = outcome.encounterLogged
-                                val users = outcome.matches
-                                if (users.isEmpty()) {
-                                    _connectionState.value =
-                                        ConnectionState.Error("No nearby tap detected. Try again closer together.")
-                                } else if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
-                                    _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
-                                }
-                                if (users.isNotEmpty()) {
-                                    PlatformHapticsPolicy.successNotification()
-                                    val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
-                                    val others = groupIds?.filter { it != currentUserId }.orEmpty()
-                                    if (outcome.isGroup && outcome.connectionId != null && groupIds != null && others.size >= 2) {
-                                        val groupConnection = syntheticProximityConnection(
-                                            connectionId = outcome.connectionId,
-                                            memberUserIds = groupIds,
-                                            isGroup = true,
-                                        )
-                                        AppDataManager.addConnection(groupConnection, syntheticUserForProximitySuccess(users.map { it.toUserProfile() }))
-                                        _connectionState.value = ConnectionState.TaggingContext(
-                                            newConnections = listOf(groupConnection),
-                                            targetUsers = users.map { it.toUserProfile() },
-                                            isGroup = true,
-                                            memberUserIds = groupIds,
-                                            isNewConnection = outcome.isAggregateNewConnection,
-                                        )
-                                    } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
-                                        val peer = users.first()
-                                        val connection = syntheticProximityConnection(
-                                            connectionId = outcome.connectionId,
-                                            memberUserIds = listOf(currentUserId, peer.id).distinct().sorted(),
-                                            isGroup = false,
-                                        )
-                                        AppDataManager.addConnection(connection, peer)
-                                        _connectionState.value = ConnectionState.TaggingContext(
-                                            newConnections = listOf(connection),
-                                            targetUsers = listOf(peer.toUserProfile()),
-                                            isNewConnection = outcome.isAggregateNewConnection,
-                                        )
-                                    } else {
-                                        _connectionState.value = ConnectionState.PendingConfirmation(users)
-                                    }
-                                }
+                                handleInstantProximityOutcome(handshake.outcome, currentUserId)
                             }
                         }
                     } else {
@@ -786,9 +848,21 @@ class ConnectionViewModel : ViewModel() {
         barometricContextOptIn: Boolean = true,
     ) {
         if (currentUserId.isBlank()) return
-        val peer = tagging.targetUsers.firstOrNull { it.id.isNotBlank() && it.id != currentUserId }
-            ?: tagging.targetUsers.firstOrNull()
-            ?: return
+        val peersNeedingInsert = reconnectEncounterPeersNeedingInsert(
+            targetUsers = tagging.targetUsers,
+            currentUserId = currentUserId,
+            bindEncounterPersistedPeerIds = tagging.bindEncounterPersistedPeerIds,
+        )
+        val validPeerCount = tagging.targetUsers
+            .filter { it.id.isNotBlank() && it.id != currentUserId }
+            .distinctBy { it.id }
+            .size
+        if (validPeerCount == 0) return
+        if (peersNeedingInsert.isEmpty()) {
+            PlatformHapticsPolicy.successNotification()
+            _connectionState.value = ConnectionState.Idle
+            return
+        }
         viewModelScope.launch {
             _connectionState.value = tagging.copy(encounterSubmitting = true)
             try {
@@ -810,21 +884,23 @@ class ConnectionViewModel : ViewModel() {
                     latitude = lastProximityLat,
                     longitude = lastProximityLng,
                 ).takeUnless { it.isEmpty() }
-                val result = withContext(Dispatchers.Default) {
-                    repository.postConnectionEncounter(
-                        userId = currentUserId,
-                        peerId = peer.id,
-                        sensorData = sensorJson,
-                    )
+                for (peer in peersNeedingInsert) {
+                    val result = withContext(Dispatchers.Default) {
+                        repository.postConnectionEncounter(
+                            userId = currentUserId,
+                            peerId = peer.id,
+                            sensorData = sensorJson,
+                        )
+                    }
+                    if (result.isFailure) {
+                        _connectionState.value = ConnectionState.Error(
+                            result.exceptionOrNull()?.message ?: "Could not save encounter",
+                        )
+                        return@launch
+                    }
                 }
-                if (result.isSuccess) {
-                    PlatformHapticsPolicy.successNotification()
-                    _connectionState.value = ConnectionState.Idle
-                } else {
-                    _connectionState.value = ConnectionState.Error(
-                        result.exceptionOrNull()?.message ?: "Could not save encounter",
-                    )
-                }
+                PlatformHapticsPolicy.successNotification()
+                _connectionState.value = ConnectionState.Idle
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Could not save encounter")
             }

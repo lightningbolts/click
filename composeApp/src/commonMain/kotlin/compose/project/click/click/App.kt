@@ -1554,10 +1554,6 @@ fun App() {
                                                     phase = ConnectionRevealPhase.Connecting,
                                                 )
                                             },
-                                            disposableRollOpening = disposableRollOpening,
-                                            onOpenDisposableRoll = { cid ->
-                                                openConnectionDisposableRoll(cid)
-                                            },
                                         )
                                     }
 
@@ -1911,10 +1907,6 @@ fun App() {
                                 peerUserId = reconnectPeerId,
                                 currentUserId = currentUser.id,
                                 lockIntentInProgress = calendarLockInProgress,
-                                disposableRollOpening = disposableRollOpening,
-                                onOpenDisposableRoll = { cid ->
-                                    openConnectionDisposableRoll(cid)
-                                },
                                 onLockIntent = { gap: AvailabilityOverlapGap ->
                                     connectionScope.launch {
                                         calendarLockInProgress = true

@@ -590,6 +590,36 @@ class ConnectionRepository(
         }
     }
 
+    suspend fun recoverPendingProximityHandshake(
+        bearerJwt: String,
+        pendingHandshakeId: String,
+    ): Result<BindProximityHandshakeResult> {
+        if (bearerJwt.isBlank()) {
+            return Result.failure(IllegalStateException("Please sign in again."))
+        }
+        val pendingId = pendingHandshakeId.trim()
+        if (pendingId.isEmpty()) {
+            return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+        }
+        return try {
+            when (val apiResult = apiClient.getPendingProximityHandshake(pendingId).getOrThrow()) {
+                is ProximityHandshakePostResult.InstantMatch ->
+                    Result.success(BindProximityHandshakeResult.InstantMatch(apiResult.body.toBindOutcome()))
+                is ProximityHandshakePostResult.PendingMatch ->
+                    Result.success(
+                        BindProximityHandshakeResult.PendingServerMatch(
+                            pendingHandshakeId = apiResult.body.pendingHandshakeId,
+                            expiresAt = apiResult.body.expiresAt,
+                        ),
+                    )
+                is ProximityHandshakePostResult.IgnoredEmptyPayload ->
+                    Result.failure(IllegalStateException(PROXIMITY_NO_NEARBY_DEVICES_MESSAGE))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun enqueuePendingProximityHandshake(
         myToken: String,
         heardTokens: List<String>,

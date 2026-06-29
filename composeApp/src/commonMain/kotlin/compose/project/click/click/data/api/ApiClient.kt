@@ -1270,6 +1270,40 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** GET `/api/connections/proximity` — recover a previously accepted pending handshake. */
+    suspend fun getPendingProximityHandshake(pendingHandshakeId: String): Result<ProximityHandshakePostResult> {
+        val pendingId = pendingHandshakeId.trim()
+        if (pendingId.isEmpty()) {
+            return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+        }
+        return try {
+            val response: HttpResponse = clickWebClient.get(
+                "$clickWebAuthOrigin/api/connections/proximity",
+            ) {
+                parameter("pending_handshake_id", pendingId)
+            }
+            when (response.status.value) {
+                200 -> {
+                    val dto = response.body<ProximityBindOkResponseDto>()
+                    if (!dto.error.isNullOrBlank()) {
+                        Result.failure(Exception(dto.error))
+                    } else {
+                        Result.success(ProximityHandshakePostResult.InstantMatch(dto))
+                    }
+                }
+                202 -> {
+                    val dto = response.body<ProximityBindPendingResponseDto>()
+                    Result.success(ProximityHandshakePostResult.PendingMatch(dto))
+                }
+                else -> clickWebFailure(response)
+            }
+        } catch (e: ClientRequestException) {
+            clickWebFailure(e.response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /** Cold-start prewarm: invalid `my_token` exercises JWT/auth without inserting a row. */
     suspend fun prewarmProximityHandshake() {
         runCatching {
