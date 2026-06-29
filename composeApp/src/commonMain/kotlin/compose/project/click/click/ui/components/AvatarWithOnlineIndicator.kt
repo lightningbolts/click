@@ -267,7 +267,21 @@ fun GroupAvatar(
     members: List<User>,
     modifier: Modifier = Modifier,
     avatarSize: Dp = 36.dp,
+    avatarUrl: String? = null,
 ) {
+    val groupAvatarUrl = avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
+    if (groupAvatarUrl != null) {
+        AsyncImage(
+            model = groupAvatarUrl,
+            contentDescription = "Group avatar",
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(avatarSize)
+                .clip(CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
+        )
+        return
+    }
     if (members.isEmpty()) return
     val sortedUsers: List<User> = members
         .sortedWith(

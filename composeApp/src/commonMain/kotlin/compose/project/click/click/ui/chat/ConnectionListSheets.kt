@@ -576,6 +576,7 @@ data class GroupMembersPickerContext(
     val memberUserIds: List<String>,
     val chatId: String? = null,
     val groupName: String? = null,
+    val avatarUrl: String? = null,
 )
 
 internal fun groupMembersPickerContextFrom(chatDetails: ChatWithDetails): GroupMembersPickerContext? {
@@ -587,6 +588,7 @@ internal fun groupMembersPickerContextFrom(chatDetails: ChatWithDetails): GroupM
         memberUserIds = gc.memberUserIds,
         chatId = chatDetails.chat.id,
         groupName = gc.name,
+        avatarUrl = gc.avatarUrl,
     )
 }
 

@@ -155,10 +155,15 @@ fun ConnectionItem(
     ) {
         if (isGroup) {
             val groupListAvatarSize = 40.dp
-            val groupClusterWidth = groupAvatarClusterWidth(
-                chatDetails.groupMemberUsers.size,
-                groupListAvatarSize,
-            )
+            val groupAvatarUrl = chatDetails.groupClique?.avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
+            val groupClusterWidth = if (groupAvatarUrl != null) {
+                groupListAvatarSize
+            } else {
+                groupAvatarClusterWidth(
+                    chatDetails.groupMemberUsers.size,
+                    groupListAvatarSize,
+                )
+            }
             Box(
                 modifier = Modifier
                     .width(groupClusterWidth)
@@ -172,7 +177,7 @@ fun ConnectionItem(
                     ),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                if (chatDetails.groupMemberUsers.isEmpty()) {
+                if (chatDetails.groupMemberUsers.isEmpty() && groupAvatarUrl == null) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -192,6 +197,7 @@ fun ConnectionItem(
                     GroupAvatar(
                         members = chatDetails.groupMemberUsers,
                         avatarSize = groupListAvatarSize,
+                        avatarUrl = groupAvatarUrl,
                     )
                 }
             }

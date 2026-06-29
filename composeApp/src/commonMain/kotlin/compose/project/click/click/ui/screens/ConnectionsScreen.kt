@@ -388,7 +388,9 @@ fun ConnectionsScreen(
         val isGroupCreator = groupPickerContext.createdByUserId == userId
         TabbedGroupProfileSheet(
             groupName = groupPickerContext.groupName,
+            groupId = groupPickerContext.groupId,
             chatId = groupPickerContext.chatId,
+            avatarUrl = groupPickerContext.avatarUrl,
             viewerUserId = userId,
             members = groupPickerContext.members,
             groupCreatorId = groupPickerContext.createdByUserId,
@@ -436,6 +438,9 @@ fun ConnectionsScreen(
                 showGroupMembersSheet = false
                 groupMembersPickerContext = null
                 profileUserId = id
+            },
+            onGroupAvatarUrlChanged = { url ->
+                groupMembersPickerContext = groupMembersPickerContext?.copy(avatarUrl = url)
             },
         )
     }

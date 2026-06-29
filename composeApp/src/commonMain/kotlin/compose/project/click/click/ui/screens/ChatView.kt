@@ -697,10 +697,15 @@ fun ChatView(
 
                                 if (isGroupChat) {
                                     val chatHeaderGroupAvatarSize = 34.dp
-                                    val groupClusterWidth = groupAvatarClusterWidth(
-                                        chatDetails.groupMemberUsers.size,
-                                        chatHeaderGroupAvatarSize,
-                                    )
+                                    val groupAvatarUrl = chatDetails.groupClique?.avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
+                                    val groupClusterWidth = if (groupAvatarUrl != null) {
+                                        chatHeaderGroupAvatarSize
+                                    } else {
+                                        groupAvatarClusterWidth(
+                                            chatDetails.groupMemberUsers.size,
+                                            chatHeaderGroupAvatarSize,
+                                        )
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .width(groupClusterWidth)
@@ -718,6 +723,7 @@ fun ChatView(
                                         GroupAvatar(
                                             members = chatDetails.groupMemberUsers,
                                             avatarSize = chatHeaderGroupAvatarSize,
+                                            avatarUrl = groupAvatarUrl,
                                         )
                                     }
                                 } else {

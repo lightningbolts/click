@@ -100,12 +100,14 @@ import compose.project.click.click.data.models.ProfileTimelineJournalEntry // pr
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.api.ConnectionTabMessage
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator
 import compose.project.click.click.ui.chat.ChatAudioBubble
 import compose.project.click.click.ui.chat.ChatAudioChromeKind
+import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
 import compose.project.click.click.ui.chat.shareDecryptedImage // pragma: allowlist secret
@@ -157,6 +159,8 @@ fun ProfileBottomSheet(
     onOpenLink: ((String) -> Unit)? = null,
     onDownloadFile: ((ProfileSheetFile) -> Unit)? = null,
     onOpenDisposableRoll: (() -> Unit)? = null,
+    onAvatarClick: (() -> Unit)? = null,
+    avatarUploading: Boolean = false,
 ) {
     val visibleTabs = remember(state.isGroup) {
         listOf(
@@ -701,6 +705,8 @@ fun ProfileBottomSheet(
             subtitle = state.subtitle,
             avatarUrl = state.avatarUrl,
             statusBadge = state.statusBadge,
+            onAvatarClick = onAvatarClick,
+            avatarUploading = avatarUploading,
         )
 
         Spacer(Modifier.height(16.dp))
@@ -1047,6 +1053,7 @@ data class ProfileSheetState(
     val onAddMember: (() -> Unit)? = null,
     val onRemoveMember: ((String) -> Unit)? = null,
     val onMemberClick: ((String) -> Unit)? = null,
+    val onGroupAvatarUrlChanged: ((String) -> Unit)? = null,
     /**
      * All locally-decrypted chat messages with type metadata. Used to populate
      * the Media / Files / Links tabs from the local E2EE cache instead of making
@@ -1152,6 +1159,8 @@ private fun ProfileSheetHeader(
     subtitle: String?,
     avatarUrl: String?,
     statusBadge: ProfileSheetBadge?,
+    onAvatarClick: (() -> Unit)? = null,
+    avatarUploading: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1159,25 +1168,66 @@ private fun ProfileSheetHeader(
     ) {
         Box(
             modifier = Modifier
-                .size(68.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(LightBlue, PrimaryBlue))),
+                .size(78.dp)
+                .clickable(enabled = onAvatarClick != null && !avatarUploading) {
+                    onAvatarClick?.invoke()
+                },
             contentAlignment = Alignment.Center,
         ) {
-            if (!avatarUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = avatarUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(68.dp).clip(CircleShape),
-                )
-            } else {
-                Text(
-                    displayName.firstOrNull()?.uppercase() ?: "?",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(LightBlue, PrimaryBlue))),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!avatarUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text(
+                        displayName.firstOrNull()?.uppercase() ?: "?",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+            }
+            if (avatarUploading) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(68.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+            } else if (onAvatarClick != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryBlue),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PhotoCamera,
+                        contentDescription = "Change group avatar",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
             }
         }
         Spacer(Modifier.width(14.dp))
@@ -2085,11 +2135,13 @@ private fun MembersPanel(
                                 .background(PrimaryBlue.copy(alpha = 0.16f)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = label.take(1).uppercase(),
-                                color = PrimaryBlue,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                            ConnectionListUserAvatarFace(
+                                displayName = user.name,
+                                email = user.email,
+                                avatarUrl = user.image,
+                                userId = user.id,
+                                modifier = Modifier.fillMaxSize(),
+                                useCompactTypography = false,
                             )
                         }
                     },
@@ -2825,7 +2877,9 @@ fun TabbedUserProfileSheet(
 @Composable
 fun TabbedGroupProfileSheet(
     groupName: String?,
+    groupId: String?,
     chatId: String?,
+    avatarUrl: String? = null,
     viewerUserId: String?,
     members: List<User>,
     groupCreatorId: String?,
@@ -2836,10 +2890,44 @@ fun TabbedGroupProfileSheet(
     onAddMember: (() -> Unit)? = null,
     onRemoveMember: ((String) -> Unit)? = null,
     onMemberClick: ((String) -> Unit)? = null,
+    onGroupAvatarUrlChanged: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
 ) {
     val resolvedChatId = chatId?.trim().orEmpty()
     if (resolvedChatId.isBlank()) return
+    val resolvedGroupId = groupId?.trim().orEmpty()
+    val scope = rememberCoroutineScope()
+    val apiClient = remember { ApiClient() }
+    var groupAvatarUrl by remember(resolvedGroupId, avatarUrl) {
+        mutableStateOf(avatarUrl?.trim()?.takeIf { it.isNotEmpty() })
+    }
+    var avatarUploading by remember { mutableStateOf(false) }
+    var avatarUploadError by remember { mutableStateOf<String?>(null) }
+    val mediaPickers = rememberChatMediaPickers(
+        onImagePicked = { bytes, mime ->
+            if (resolvedGroupId.isBlank() || avatarUploading) return@rememberChatMediaPickers
+            scope.launch {
+                avatarUploading = true
+                avatarUploadError = null
+                try {
+                    apiClient.uploadGroupAvatar(resolvedGroupId, bytes, mime).fold(
+                        onSuccess = { url ->
+                            groupAvatarUrl = url
+                            onGroupAvatarUrlChanged?.invoke(url)
+                        },
+                        onFailure = { e ->
+                            avatarUploadError = e.message?.lines()?.firstOrNull()?.take(160)
+                                ?: "Could not update group avatar"
+                        },
+                    )
+                } finally {
+                    avatarUploading = false
+                }
+            }
+        },
+        onAudioPicked = { _, _, _ -> },
+        onMediaAccessBlocked = { msg -> avatarUploadError = msg },
+    )
 
     val displayName = groupName?.trim()?.takeIf { it.isNotEmpty() } ?: "Group Click"
     val subtitle = when (members.size) {
@@ -2847,12 +2935,15 @@ fun TabbedGroupProfileSheet(
         1 -> "1 member"
         else -> "${members.size} members"
     }
+    val uploadErrorBadge = avatarUploadError?.let { ProfileSheetBadge(it, MaterialTheme.colorScheme.error) }
     val state = remember(
         displayName,
         subtitle,
         resolvedChatId,
         viewerUserId,
         members,
+        groupAvatarUrl,
+        uploadErrorBadge,
         groupCreatorId,
         onAddMember,
         onRemoveMember,
@@ -2865,6 +2956,8 @@ fun TabbedGroupProfileSheet(
         ProfileSheetState(
             displayName = displayName,
             subtitle = subtitle,
+            avatarUrl = groupAvatarUrl,
+            statusBadge = uploadErrorBadge,
             canNudge = onNudge != null,
             timeline = emptyList(),
             media = emptyList(),
@@ -2879,6 +2972,7 @@ fun TabbedGroupProfileSheet(
             onAddMember = onAddMember,
             onRemoveMember = onRemoveMember,
             onMemberClick = onMemberClick,
+            onGroupAvatarUrlChanged = onGroupAvatarUrlChanged,
             localMessages = localMessages,
         )
     }
@@ -2903,6 +2997,12 @@ fun TabbedGroupProfileSheet(
                         onDismiss()
                     }
                 },
+                onAvatarClick = if (resolvedGroupId.isNotBlank()) {
+                    { mediaPickers.openPhotoLibrary() }
+                } else {
+                    null
+                },
+                avatarUploading = avatarUploading,
             )
         }
     }

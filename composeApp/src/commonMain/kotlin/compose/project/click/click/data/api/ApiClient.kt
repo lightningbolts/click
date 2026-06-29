@@ -642,6 +642,40 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun uploadGroupAvatar(groupId: String, imageBytes: ByteArray, mimeType: String): Result<String> {
+        val gid = groupId.trim()
+        if (gid.isEmpty()) return Result.failure(IllegalArgumentException("groupId required"))
+        if (imageBytes.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Empty image"))
+        }
+        val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
+        return try {
+            val payload = AvatarUploadBodyDto(
+                fileBase64 = Base64.encode(imageBytes),
+                mimeType = normalizedMime,
+            )
+            val response = clickWebClient.post("$clickWebAuthOrigin/api/groups/$gid/avatar") {
+                contentType(ContentType.Application.Json)
+                setBody(payload)
+            }
+            if (response.status.value in 200..299) {
+                val dto = response.body<AvatarUploadResponseDto>()
+                val url = dto.image.trim()
+                if (url.isEmpty()) {
+                    Result.failure(Exception("Group avatar upload returned an empty URL"))
+                } else {
+                    Result.success(url)
+                }
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+
     /**
      * GET `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
      *

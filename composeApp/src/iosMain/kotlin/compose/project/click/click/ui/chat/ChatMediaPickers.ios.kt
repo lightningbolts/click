@@ -5,6 +5,7 @@ package compose.project.click.click.ui.chat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.utils.iosTopViewControllerForPresentation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -156,7 +157,8 @@ actual fun rememberChatMediaPickers(
         }
         val picker = PHPickerViewController(configuration = config)
         picker.delegate = photoPickerDelegate
-        viewController.presentViewController(picker, animated = true, completion = null)
+        val presenter = iosTopViewControllerForPresentation() ?: viewController
+        presenter.presentViewController(picker, animated = true, completion = null)
     }
 
     fun openCameraInternal() {
@@ -169,7 +171,8 @@ actual fun rememberChatMediaPickers(
         picker.sourceType = cameraSource
         picker.delegate = cameraPickerDelegate
         picker.allowsEditing = false
-        viewController.presentViewController(picker, animated = true, completion = null)
+        val presenter = iosTopViewControllerForPresentation() ?: viewController
+        presenter.presentViewController(picker, animated = true, completion = null)
     }
 
     fun openCamera() {

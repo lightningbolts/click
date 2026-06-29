@@ -294,6 +294,7 @@ class SupabaseChatRepository(
         val name: String,
         @SerialName("created_by") val createdBy: String,
         @SerialName("key_anchor_user_id") val keyAnchorUserId: String? = null,
+        @SerialName("avatar_url") val avatarUrl: String? = null,
     )
 
     @Serializable
@@ -355,7 +356,7 @@ class SupabaseChatRepository(
     ): ByteArray? {
         return try {
             val group = supabase.from("groups")
-                .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id")) {
+                .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id", "avatar_url")) {
                     filter { eq("id", groupId) }
                     limit(1)
                 }
@@ -863,7 +864,7 @@ class SupabaseChatRepository(
                 }
                 val groupsDeferred = async {
                     supabase.from("groups")
-                        .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id")) {
+                        .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id", "avatar_url")) {
                             filter { isIn("id", myGroupIds) }
                         }
                         .decodeList<GroupRow>()
@@ -944,6 +945,7 @@ class SupabaseChatRepository(
                         createdByUserId = group.createdBy,
                         keyAnchorUserId = anchor,
                         memberUserIds = memberIds,
+                        avatarUrl = group.avatarUrl,
                     )
 
                     val rawLast = latestByChatId[chatRow.id]?.toMessage()

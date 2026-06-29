@@ -370,6 +370,7 @@ data class GroupCliqueDetails(
     val createdByUserId: String,
     val keyAnchorUserId: String,
     val memberUserIds: List<String>,
+    val avatarUrl: String? = null,
 )
 
 /**
