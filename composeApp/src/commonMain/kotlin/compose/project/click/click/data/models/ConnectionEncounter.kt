@@ -51,6 +51,65 @@ data class ConnectionEncounter(
         encounteredAt.trim().takeIf { it.isNotEmpty() }?.let { runCatching { Instant.parse(it) }.getOrNull() }
 }
 
+private fun ConnectionEncounter.richnessScore(): Int {
+    var score = 0
+    if (!locationName.isNullOrBlank()) score += 2
+    if (!displayLocation.isNullOrBlank()) score += 1
+    if (!semanticLocation.isNullOrBlank()) score += 2
+    if (gpsLat != null && gpsLon != null) score += 3
+    if (weatherSnapshot != null) score += 3
+    if (!noiseLevel.isNullOrBlank()) score += 1
+    if (!elevationCategory.isNullOrBlank()) score += 1
+    if (exactNoiseLevelDb != null) score += 2
+    if (exactBarometricElevationM != null) score += 2
+    if (relativeAltitudeM != null) score += 1
+    if (luxLevel != null) score += 1
+    if (motionVariance != null) score += 1
+    if (compassAzimuth != null) score += 1
+    if (batteryLevel != null) score += 1
+    score += contextTags.size
+    return score
+}
+
+private inline fun <T> Iterable<ConnectionEncounter>.firstValue(select: (ConnectionEncounter) -> T?): T? =
+    firstNotNullOfOrNull(select)
+
+private fun String?.ifPresent(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
+private fun mergeEncounterRows(rows: List<ConnectionEncounter>): ConnectionEncounter {
+    val ranked = rows.sortedWith(
+        compareByDescending<ConnectionEncounter> { it.richnessScore() }
+            .thenByDescending { it.encounteredAtInstant() ?: Instant.DISTANT_PAST }
+            .thenBy { it.id },
+    )
+    val base = ranked.first()
+    val tags = rows.flatMap { it.contextTags }.mapNotNull { it.ifPresent() }.distinct()
+    val gpsRow = ranked.firstOrNull { it.gpsLat != null && it.gpsLon != null }
+    return base.copy(
+        locationName = ranked.firstValue { it.locationName.ifPresent() },
+        displayLocation = ranked.firstValue { it.displayLocation.ifPresent() },
+        semanticLocation = ranked.firstValue { it.semanticLocation.ifPresent() },
+        gpsLat = gpsRow?.gpsLat,
+        gpsLon = gpsRow?.gpsLon,
+        weatherSnapshot = ranked.firstValue { it.weatherSnapshot },
+        noiseLevel = ranked.firstValue { it.noiseLevel.ifPresent() },
+        elevationCategory = ranked.firstValue { it.elevationCategory.ifPresent() },
+        exactNoiseLevelDb = ranked.firstValue { it.exactNoiseLevelDb?.takeIf { v -> v.isFinite() } },
+        exactBarometricElevationM = ranked.firstValue { it.exactBarometricElevationM?.takeIf { v -> v.isFinite() } },
+        relativeAltitudeM = ranked.firstValue { it.relativeAltitudeM?.takeIf { v -> v.isFinite() } },
+        luxLevel = ranked.firstValue { it.luxLevel?.takeIf { v -> v.isFinite() } },
+        motionVariance = ranked.firstValue { it.motionVariance?.takeIf { v -> v.isFinite() } },
+        compassAzimuth = ranked.firstValue { it.compassAzimuth?.takeIf { v -> v.isFinite() } },
+        batteryLevel = ranked.firstValue { it.batteryLevel?.takeIf { v -> v in 0..100 } },
+        contextTags = tags,
+    )
+}
+
+fun List<ConnectionEncounter>.mergeRichestEncounterEvents(): List<ConnectionEncounter> =
+    groupBy { "${it.connectionId}|${it.encounteredAt}" }
+        .values
+        .map { rows -> mergeEncounterRows(rows) }
+
 fun ConnectionEncounter.toMemoryCapsule(): MemoryCapsule {
     val at = encounteredAtInstant()?.toEpochMilliseconds() ?: 0L
     val tag = contextTags.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let {

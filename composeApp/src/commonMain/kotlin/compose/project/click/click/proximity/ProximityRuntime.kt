@@ -19,7 +19,7 @@ fun ProximityHandshakeListenResult.hasNearbyPeerEvidence(): Boolean =
     heardTokens.isNotEmpty() || detectedDevices.isNotEmpty()
 
 internal const val PROXIMITY_SENSOR_LOCATION_WAIT_MS: Long = 1_200L
-internal const val PROXIMITY_STRONG_EVIDENCE_LOCATION_WAIT_MS: Long = 250L
+internal const val PROXIMITY_STRONG_EVIDENCE_LOCATION_WAIT_MS: Long = 2_500L
 internal const val PROXIMITY_EMPTY_EVIDENCE_LOCATION_WAIT_MS: Long = 1_800L
 internal const val PROXIMITY_SENSOR_WAIT_MS: Long = 800L
 

@@ -345,31 +345,27 @@ fun NfcScreen(
                     val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != userId }?.id
                         ?: tagging.targetUsers.firstOrNull()?.id
                     val finishWithoutTags: () -> Unit = {
-                        if (!tagging.isNewConnection) {
-                            connectionViewModel.resetConnectionState()
-                        } else {
-                            scope.launch {
-                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                val sensors = captureConnectionSensorContext(
-                                    ambientNoiseMonitor = ambientNoiseMonitor,
-                                    barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = noiseOptIn,
-                                    barometricContextOptIn = baroOptIn,
-                                )
-                                connectionViewModel.saveContextTags(
-                                    tagging = tagging,
-                                    contextTag = null,
-                                    noiseLevelCategory = sensors.noiseLevelCategory,
-                                    exactNoiseLevelDb = sensors.exactNoiseLevelDb,
-                                    heightCategory = sensors.heightCategory,
-                                    exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
-                                    ambientNoiseMonitor = ambientNoiseMonitor,
-                                    barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = noiseOptIn,
-                                    barometricContextOptIn = baroOptIn,
-                                )
-                            }
+                        scope.launch {
+                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                            val sensors = captureConnectionSensorContext(
+                                ambientNoiseMonitor = ambientNoiseMonitor,
+                                barometricHeightMonitor = barometricHeightMonitor,
+                                ambientNoiseOptIn = noiseOptIn,
+                                barometricContextOptIn = baroOptIn,
+                            )
+                            connectionViewModel.saveContextTags(
+                                tagging = tagging,
+                                contextTag = null,
+                                noiseLevelCategory = sensors.noiseLevelCategory,
+                                exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                heightCategory = sensors.heightCategory,
+                                exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                ambientNoiseMonitor = ambientNoiseMonitor,
+                                barometricHeightMonitor = barometricHeightMonitor,
+                                ambientNoiseOptIn = noiseOptIn,
+                                barometricContextOptIn = baroOptIn,
+                            )
                         }
                     }
                     ConnectionContextSheet(
@@ -379,11 +375,7 @@ fun NfcScreen(
                         noisePermissionGranted = ambientNoiseMonitor.hasPermission,
                         onSkip = finishWithoutTags,
                         onDismiss = finishWithoutTags,
-                        presentation = if (tagging.isNewConnection) {
-                            ConnectionContextPresentation.NewSpark
-                        } else {
-                            ConnectionContextPresentation.ReconnectEncounter
-                        },
+                        presentation = ConnectionContextPresentation.NewSpark,
                         encounterSaveInProgress = tagging.encounterSubmitting,
                         onSaveEncounter = {
                             scope.launch {

@@ -1851,31 +1851,27 @@ fun App() {
                             val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != currentUser.id }?.id
                                 ?: tagging.targetUsers.firstOrNull()?.id
                             val finishWithoutTags: () -> Unit = {
-                                if (!tagging.isNewConnection) {
-                                    connectionViewModel.resetConnectionState()
-                                } else {
-                                    connectionScope.launch {
-                                        val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                        val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                        val sensors = captureConnectionSensorContext(
-                                            ambientNoiseMonitor = ambientMonitor,
-                                            barometricHeightMonitor = baroMonitor,
-                                            ambientNoiseOptIn = noiseOptIn,
-                                            barometricContextOptIn = baroOptIn,
-                                        )
-                                        connectionViewModel.saveContextTags(
-                                            tagging = tagging,
-                                            contextTag = null,
-                                            noiseLevelCategory = sensors.noiseLevelCategory,
-                                            exactNoiseLevelDb = sensors.exactNoiseLevelDb,
-                                            heightCategory = sensors.heightCategory,
-                                            exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
-                                            ambientNoiseMonitor = ambientMonitor,
-                                            barometricHeightMonitor = baroMonitor,
-                                            ambientNoiseOptIn = noiseOptIn,
-                                            barometricContextOptIn = baroOptIn,
-                                        )
-                                    }
+                                connectionScope.launch {
+                                    val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                                    val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                    val sensors = captureConnectionSensorContext(
+                                        ambientNoiseMonitor = ambientMonitor,
+                                        barometricHeightMonitor = baroMonitor,
+                                        ambientNoiseOptIn = noiseOptIn,
+                                        barometricContextOptIn = baroOptIn,
+                                    )
+                                    connectionViewModel.saveContextTags(
+                                        tagging = tagging,
+                                        contextTag = null,
+                                        noiseLevelCategory = sensors.noiseLevelCategory,
+                                        exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                        heightCategory = sensors.heightCategory,
+                                        exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                        ambientNoiseMonitor = ambientMonitor,
+                                        barometricHeightMonitor = baroMonitor,
+                                        ambientNoiseOptIn = noiseOptIn,
+                                        barometricContextOptIn = baroOptIn,
+                                    )
                                 }
                             }
                             ConnectionContextSheet(
@@ -1885,11 +1881,7 @@ fun App() {
                                 noisePermissionGranted = ambientMonitor.hasPermission,
                                 onDismiss = finishWithoutTags,
                                 onSkip = finishWithoutTags,
-                                presentation = if (tagging.isNewConnection) {
-                                    ConnectionContextPresentation.NewSpark
-                                } else {
-                                    ConnectionContextPresentation.ReconnectEncounter
-                                },
+                                presentation = ConnectionContextPresentation.NewSpark,
                                 encounterSaveInProgress = tagging.encounterSubmitting,
                                 onSaveEncounter = {
                                     connectionScope.launch {

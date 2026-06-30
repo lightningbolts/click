@@ -41,6 +41,7 @@ import compose.project.click.click.sensors.captureConnectionSensorContext // pra
 import compose.project.click.click.sensors.ConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
+import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlin.random.Random
@@ -486,6 +487,14 @@ class ConnectionViewModel : ViewModel() {
                     val locationWaitMs = proximityBindLocationWaitMs(listenResult)
 
                     val location = locationDeferred?.awaitWithin(locationWaitMs)
+                        ?: if (shouldFetchLocation) {
+                            runCatching { locationService.getCurrentLocation() }.getOrNull()
+                                ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
+                                    LocationResult(latitude = la, longitude = lo)
+                                }
+                        } else {
+                            null
+                        }
                     lastProximityLat = location?.latitude
                     lastProximityLng = location?.longitude
                     lastProximityAltitudeMeters = location?.altitudeMeters
@@ -858,11 +867,6 @@ class ConnectionViewModel : ViewModel() {
             .distinctBy { it.id }
             .size
         if (validPeerCount == 0) return
-        if (peersNeedingInsert.isEmpty()) {
-            PlatformHapticsPolicy.successNotification()
-            _connectionState.value = ConnectionState.Idle
-            return
-        }
         viewModelScope.launch {
             _connectionState.value = tagging.copy(encounterSubmitting = true)
             try {
@@ -884,6 +888,31 @@ class ConnectionViewModel : ViewModel() {
                     latitude = lastProximityLat,
                     longitude = lastProximityLng,
                 ).takeUnless { it.isEmpty() }
+                if (peersNeedingInsert.isEmpty()) {
+                    for (connection in tagging.newConnections) {
+                        if (connection.isPendingSync()) continue
+                        val patch = withContext(Dispatchers.Default) {
+                            repository.updateConnectionTags(
+                                connectionId = connection.id,
+                                reportingUserId = currentUserId,
+                                contextTag = null,
+                                noiseLevelCategory = snapshot?.noiseLevelCategory,
+                                exactNoiseLevelDb = snapshot?.exactNoiseLevelDb,
+                                heightCategory = snapshot?.heightCategory,
+                                exactBarometricElevationMeters = snapshot?.exactBarometricElevationMeters,
+                            )
+                        }
+                        if (patch.isFailure) {
+                            _connectionState.value = ConnectionState.Error(
+                                patch.exceptionOrNull()?.message ?: "Could not update encounter",
+                            )
+                            return@launch
+                        }
+                    }
+                    PlatformHapticsPolicy.successNotification()
+                    _connectionState.value = ConnectionState.Idle
+                    return@launch
+                }
                 for (peer in peersNeedingInsert) {
                     val result = withContext(Dispatchers.Default) {
                         repository.postConnectionEncounter(

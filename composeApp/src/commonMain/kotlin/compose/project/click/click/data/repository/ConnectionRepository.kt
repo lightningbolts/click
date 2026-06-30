@@ -33,6 +33,7 @@ import compose.project.click.click.data.models.ReconnectHelper
 import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.mergeRichestEncounterEvents
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.sensors.HardwareVibeSnapshot
 import compose.project.click.click.encounter.PendingEncounterQueue
@@ -225,6 +226,7 @@ class ConnectionRepository(
     private val weatherService: WeatherService = OpenMeteoWeatherService(),
     private val tokenStorage: TokenStorage = createTokenStorage()
 ) {
+    private val authRepository = AuthRepository(tokenStorage = tokenStorage)
     @Serializable
     private data class EncounterIdOnlyRow(val id: String)
 
@@ -464,7 +466,22 @@ class ConnectionRepository(
     }
 
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
-        copy(connectionEncounters = connectionEncounters.sortedByDescending { it.encounteredAt })
+        copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
+
+    private fun Throwable.isClickWebAuthFailure(): Boolean {
+        if (this is ClickWebRequestException && statusCode in setOf(401, 403)) return true
+        val msg = redactedRestMessage().lowercase()
+        return msg.contains("401") ||
+            msg.contains("403") ||
+            msg.contains("unauthorized") ||
+            msg.contains("invalid jwt")
+    }
+
+    private suspend fun refreshedJwtAfterAuthFailure(): String? {
+        authRepository.refreshSession()
+            .onFailure { println("ConnectionRepository: token refresh failed: ${it.redactedRestMessage()}") }
+        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+    }
 
     private fun normalizeContextTag(
         contextTagObject: ContextTag?,
@@ -567,8 +584,12 @@ class ConnectionRepository(
             )
             val outgoingJson = json.encodeToString(ProximityHandshakePostBody.serializer(), request)
             println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
-            val apiResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt).getOrElse {
-                return Result.failure(it)
+            val firstResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt)
+            val apiResult = firstResult.getOrElse { firstError ->
+                val refreshed = if (firstError.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
+                refreshed?.let { freshJwt ->
+                    apiClient.postProximityHandshake(request, bearerJwt = freshJwt).getOrNull()
+                } ?: return Result.failure(firstError)
             }
             when (apiResult) {
                 is ProximityHandshakePostResult.InstantMatch -> {

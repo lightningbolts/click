@@ -93,13 +93,25 @@ class SupabaseChatRepository(
     /** Lazy so [AppDataManager] construction does not eagerly create the Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
+    private val authRepository = AuthRepository(tokenStorage = tokenStorage)
     private val chatPushNotifier = ChatPushNotifier(tokenStorage)
     private val connectionEncountersPerConnection = 25L
     private val connectionEncountersTable = "connection_encounters"
     private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
 
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
-        copy(connectionEncounters = connectionEncounters.sortedByDescending { it.encounteredAt })
+        copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
+
+    private suspend fun refreshedJwtAfterAuthFailure(): String? {
+        authRepository.refreshSession()
+            .onFailure { println("ChatRepository: token refresh failed: ${it.redactedRestMessage()}") }
+        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun Throwable.isAuthFailure(): Boolean {
+        val msg = redactedRestMessage().lowercase()
+        return msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid jwt")
+    }
 
     private sealed class ResolvedChatCrypto {
         data class Pairwise(val keys: MessageCrypto.DerivedKeys) : ResolvedChatCrypto()
@@ -1156,7 +1168,7 @@ class SupabaseChatRepository(
             val authToken = tokenStorage.getJwt() ?: return null
             val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
 
-            val insertedWire = apiClient.sendMessage(
+            val firstSend = apiClient.sendMessage(
                 chatId = chatId,
                 userId = userId,
                 content = wireContent,
@@ -1164,7 +1176,21 @@ class SupabaseChatRepository(
                 messageType = messageType,
                 metadata = enrichedMetadata,
                 localSentAtMs = clientLocalSentAtMs,
-            ).getOrNull() ?: return null
+            )
+            val insertedWire = firstSend.getOrElse { firstError ->
+                val refreshed = if (firstError.isAuthFailure()) refreshedJwtAfterAuthFailure() else null
+                refreshed?.let { freshJwt ->
+                    apiClient.sendMessage(
+                        chatId = chatId,
+                        userId = userId,
+                        content = wireContent,
+                        authToken = freshJwt,
+                        messageType = messageType,
+                        metadata = enrichedMetadata,
+                        localSentAtMs = clientLocalSentAtMs,
+                    ).getOrNull()
+                } ?: return null
+            }
 
             val decrypted = decryptMessage(insertedWire, crypto)
 

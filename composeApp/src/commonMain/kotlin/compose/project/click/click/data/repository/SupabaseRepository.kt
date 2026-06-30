@@ -15,6 +15,7 @@ import compose.project.click.click.data.models.UserInterests // pragma: allowlis
 import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.models.mergeRichestEncounterEvents // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -46,7 +47,7 @@ private const val CONNECTION_ENCOUNTERS_TABLE = "connection_encounters"
 private val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
 
 private fun Connection.withEncountersSortedNewestFirst(): Connection =
-    copy(connectionEncounters = connectionEncounters.sortedByDescending { it.encounteredAt })
+    copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
 
 private fun List<Connection>.withEncountersSortedNewestFirst(): List<Connection> =
     map { it.withEncountersSortedNewestFirst() }
