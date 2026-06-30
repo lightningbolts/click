@@ -1235,12 +1235,18 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
      * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200 or
      * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet).
      */
-    suspend fun postProximityHandshake(body: ProximityHandshakePostBody): Result<ProximityHandshakePostResult> {
+    suspend fun postProximityHandshake(
+        body: ProximityHandshakePostBody,
+        bearerJwt: String? = null,
+    ): Result<ProximityHandshakePostResult> {
         return try {
             val response: HttpResponse = clickWebClient.post(
                 "$clickWebAuthOrigin/api/connections/proximity",
             ) {
                 contentType(ContentType.Application.Json)
+                bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
                 setBody(body)
             }
             when (response.status.value) {
@@ -1271,7 +1277,10 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
     }
 
     /** GET `/api/connections/proximity` — recover a previously accepted pending handshake. */
-    suspend fun getPendingProximityHandshake(pendingHandshakeId: String): Result<ProximityHandshakePostResult> {
+    suspend fun getPendingProximityHandshake(
+        pendingHandshakeId: String,
+        bearerJwt: String? = null,
+    ): Result<ProximityHandshakePostResult> {
         val pendingId = pendingHandshakeId.trim()
         if (pendingId.isEmpty()) {
             return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
@@ -1280,6 +1289,9 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             val response: HttpResponse = clickWebClient.get(
                 "$clickWebAuthOrigin/api/connections/proximity",
             ) {
+                bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
                 parameter("pending_handshake_id", pendingId)
             }
             when (response.status.value) {

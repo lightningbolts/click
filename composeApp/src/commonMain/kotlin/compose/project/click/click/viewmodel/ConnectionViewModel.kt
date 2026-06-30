@@ -1038,11 +1038,13 @@ class ConnectionViewModel : ViewModel() {
                 val exactDbOut = exactNoiseLevelDb ?: snapshot?.exactNoiseLevelDb
                 val heightOut = heightCategory ?: snapshot?.heightCategory
                 val baroOut = exactBarometricElevationMeters ?: snapshot?.exactBarometricElevationMeters
+                val selfId = AppDataManager.currentUser.value?.id
                 for (connection in connections) {
                     if (connection.isPendingSync()) continue
                     val patch = withContext(Dispatchers.Default) {
                         repository.updateConnectionTags(
                             connectionId = connection.id,
+                            reportingUserId = selfId,
                             contextTag = contextTag,
                             noiseLevelCategory = noiseOut,
                             exactNoiseLevelDb = exactDbOut,
@@ -1060,7 +1062,6 @@ class ConnectionViewModel : ViewModel() {
                 if (!connections.any { it.isPendingSync() }) {
                     AppDataManager.refresh(force = true)
                 }
-                val selfId = AppDataManager.currentUser.value?.id
                 if (selfId != null && targetProfiles.size >= 1) {
                     val memberUserIds = (tagging.memberUserIds.takeIf { it.isNotEmpty() }
                         ?: (listOf(selfId) + targetProfiles.map { it.id })).distinct().sorted()

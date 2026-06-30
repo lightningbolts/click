@@ -231,7 +231,9 @@ class ConnectionRepository(
     @Serializable
     private data class EncounterPatchRow(
         val id: String,
+        @SerialName("encountered_at") val encounteredAt: String? = null,
         @SerialName("context_tags") val contextTags: List<String>? = null,
+        @SerialName("reporting_user_id") val reportingUserId: String? = null,
     )
 
     private val supabase by lazy { SupabaseConfig.client }
@@ -457,6 +459,8 @@ class ConnectionRepository(
 
     private companion object {
         const val CONNECTION_TIMEOUT_MS = 15_000L
+        const val ACTIVE_ENCOUNTER_CONTEXT_PATCH_WINDOW_MS = 30L * 60L * 1000L
+        const val ACTIVE_ENCOUNTER_FUTURE_SKEW_MS = 2L * 60L * 1000L
     }
 
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
@@ -563,7 +567,7 @@ class ConnectionRepository(
             )
             val outgoingJson = json.encodeToString(ProximityHandshakePostBody.serializer(), request)
             println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
-            val apiResult = apiClient.postProximityHandshake(request).getOrElse {
+            val apiResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt).getOrElse {
                 return Result.failure(it)
             }
             when (apiResult) {
@@ -602,7 +606,7 @@ class ConnectionRepository(
             return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
         }
         return try {
-            when (val apiResult = apiClient.getPendingProximityHandshake(pendingId).getOrThrow()) {
+            when (val apiResult = apiClient.getPendingProximityHandshake(pendingId, bearerJwt = bearerJwt).getOrThrow()) {
                 is ProximityHandshakePostResult.InstantMatch ->
                     Result.success(BindProximityHandshakeResult.InstantMatch(apiResult.body.toBindOutcome()))
                 is ProximityHandshakePostResult.PendingMatch ->
@@ -832,6 +836,7 @@ class ConnectionRepository(
      */
     private suspend fun mergePatchLatestEncounter(
         connectionId: String,
+        reportingUserId: String?,
         contextTag: ContextTag?,
         noiseLevelCategory: NoiseLevelCategory?,
         exactNoiseLevelDb: Double?,
@@ -842,17 +847,30 @@ class ConnectionRepository(
             return Result.failure(Exception("Missing connection id"))
         }
         return try {
-            val latest = supabase.from("connection_encounters")
+            val latestRows = supabase.from("connection_encounters")
                 .select {
                     filter { eq("connection_id", connectionId) }
                     order("encountered_at", Order.DESCENDING)
-                    limit(1)
+                    limit(25)
                 }
                 .decodeList<EncounterPatchRow>()
-                .firstOrNull() ?: return Result.failure(Exception("No encounter row for connection"))
+            if (latestRows.isEmpty()) {
+                return Result.failure(Exception("No encounter row for connection"))
+            }
+            val nowMs = Clock.System.now().toEpochMilliseconds()
+            val patchableRows = latestRows.filter { row ->
+                val encounteredAtMs = row.encounteredAt
+                    ?.let { raw -> runCatching { Instant.parse(raw).toEpochMilliseconds() }.getOrNull() }
+                encounteredAtMs != null &&
+                    encounteredAtMs >= nowMs - ACTIVE_ENCOUNTER_CONTEXT_PATCH_WINDOW_MS &&
+                    encounteredAtMs <= nowMs + ACTIVE_ENCOUNTER_FUTURE_SKEW_MS
+            }
+            if (patchableRows.isEmpty()) {
+                return Result.failure(Exception("No active encounter row for this save"))
+            }
 
             val normalizedContextTag = normalizeContextTag(contextTagObject = contextTag, contextTag = null)
-            val existingTags = latest.contextTags.orEmpty()
+            val existingTags = patchableRows.flatMap { it.contextTags.orEmpty() }.distinct()
             val tagId = resolveContextTagId(normalizedContextTag)?.trim()?.takeIf { it.isNotEmpty() }
             val tagAddsNew = tagId != null && !existingTags.contains(tagId)
             val mergedTags = if (tagAddsNew) {
@@ -865,19 +883,33 @@ class ConnectionRepository(
                 if (tagAddsNew) {
                     put("context_tags", JsonArray(mergedTags.map { JsonPrimitive(it) }))
                 }
+            }
+            val telemetryPayload = buildJsonObject {
                 noiseLevelCategory?.name?.let { put("noise_level", it) }
                 heightCategory?.name?.let { put("elevation_category", it) }
                 exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { put("exact_noise_level_db", it) }
                 exactBarometricElevationMeters?.takeIf { it.isFinite() }
                     ?.let { put("exact_barometric_elevation_m", it) }
             }
-            if (payload.isEmpty()) {
+            if (payload.isEmpty() && telemetryPayload.isEmpty()) {
                 return Result.success(Unit)
             }
-            supabase.from("connection_encounters")
-                .update(payload) {
-                    filter { eq("id", latest.id) }
+            for (latest in patchableRows) {
+                val rowPayload = buildJsonObject {
+                    payload.forEach { (key, value) -> put(key, value) }
+                    val ownsRow = reportingUserId.isNullOrBlank() ||
+                        latest.reportingUserId == null ||
+                        latest.reportingUserId == reportingUserId
+                    if (ownsRow) {
+                        telemetryPayload.forEach { (key, value) -> put(key, value) }
+                    }
                 }
+                if (rowPayload.isEmpty()) continue
+                supabase.from("connection_encounters")
+                    .update(rowPayload) {
+                        filter { eq("id", latest.id) }
+                    }
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -890,6 +922,7 @@ class ConnectionRepository(
      */
     suspend fun updateConnectionTags(
         connectionId: String,
+        reportingUserId: String? = null,
         contextTag: ContextTag?,
         noiseLevelCategory: NoiseLevelCategory?,
         exactNoiseLevelDb: Double?,
@@ -903,6 +936,7 @@ class ConnectionRepository(
             fetchConnectionById(connectionId) ?: return Result.failure(Exception("Connection not found"))
             mergePatchLatestEncounter(
                 connectionId = connectionId,
+                reportingUserId = reportingUserId,
                 contextTag = contextTag,
                 noiseLevelCategory = noiseLevelCategory,
                 exactNoiseLevelDb = exactNoiseLevelDb,
@@ -1240,6 +1274,7 @@ class ConnectionRepository(
             if (encounterAlreadyHandled && request.connectionMethod == "qr") {
                 mergePatchLatestEncounter(
                     connectionId = result.id,
+                    reportingUserId = request.userId1,
                     contextTag = normalizeContextTag(
                         contextTagObject = request.contextTagObject,
                         contextTag = request.contextTag,
@@ -1437,6 +1472,7 @@ class ConnectionRepository(
             if (encounterAlreadyHandled && request.connectionMethod == "qr") {
                 mergePatchLatestEncounter(
                     connectionId = result.id,
+                    reportingUserId = request.userId1,
                     contextTag = normalizeContextTag(
                         contextTagObject = request.contextTagObject,
                         contextTag = request.contextTag,
