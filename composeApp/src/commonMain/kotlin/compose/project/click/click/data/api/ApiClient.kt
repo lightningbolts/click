@@ -12,6 +12,7 @@ import compose.project.click.click.data.models.ProfileTimelinePayload
 import compose.project.click.click.data.models.MapBeaconInsert
 import compose.project.click.click.data.models.parseMapBeaconRows
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
@@ -364,6 +365,8 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         isLenient = true
     }
 
+    private val tokenStorage by lazy { createTokenStorage() }
+
     /** HTTP client for Flask backend calls — no bearer-auth plugin. */
     private val client = HttpClient {
         install(ContentNegotiation) {
@@ -603,6 +606,15 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         return Result.failure(ClickWebRequestException(status, message))
     }
 
+    private suspend fun currentAccessToken(): String? =
+        tokenStorage.getJwt()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: SupabaseConfig.client.auth.currentSessionOrNull()
+            ?.accessToken
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
     /**
      * PATCH `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
      * Provide at least one of [firstName], [lastName], [image], [tags].
@@ -706,7 +718,11 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         val id = targetId.trim()
         if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
         return try {
+            val bearer = currentAccessToken()
             val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/profile/timeline") {
+                bearer?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
                 parameter("target_type", type)
                 parameter("target_id", id)
             }
@@ -733,8 +749,12 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
         if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
         return try {
+            val bearer = currentAccessToken()
             val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/profile/timeline") {
                 contentType(ContentType.Application.Json)
+                bearer?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
                 setBody(
                     ProfileTimelinePostBody(
                         targetType = type,
@@ -765,8 +785,12 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
         if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry body required"))
         return try {
+            val bearer = currentAccessToken()
             val response: HttpResponse = clickWebClient.put("$clickWebAuthOrigin/api/profile/timeline") {
                 contentType(ContentType.Application.Json)
+                bearer?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
                 setBody(ProfileTimelineMutateBody(id = entryId, body = text, visibility = vis))
             }
             if (response.status.value in 200..299) {
@@ -783,8 +807,12 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         val entryId = id.trim()
         if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
         return try {
+            val bearer = currentAccessToken()
             val response: HttpResponse = clickWebClient.delete("$clickWebAuthOrigin/api/profile/timeline") {
                 contentType(ContentType.Application.Json)
+                bearer?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
                 setBody(ProfileTimelineMutateBody(id = entryId))
             }
             if (response.status.value in 200..299) {
