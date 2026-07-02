@@ -2113,3 +2113,5 @@ private data class Nonuple<A, B, C, D, E, F, G, H, I>(
     val eighth: H,
     val ninth: I,
 )
+
+private const val DISCOVERY_PREFETCH_DEBOUNCE_MS = 400L

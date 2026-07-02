@@ -1,209 +1,189 @@
 # Click — Performance audit
 
-This document summarizes performance hotspots in the Click KMP app (`composeApp/`), ordered by likely impact. The codebase already has several good patterns (disk snapshot restore, chat prefetch, batched group queries, isolated `ChatMessageTimeline`); the items below are the highest-leverage fixes.
+Performance hotspots in the Click KMP app (`composeApp/`), ordered by impact. This doc tracks what was fixed in the **andorid-bugfix → main** merge (PR #40), what still risks failure at scale, and how to prevent it.
+
+**Platforms:** `click` compiles for **Android** and **iOS** (KMP). The browser dashboard lives in **`click-web`** (Next.js) — not a KMP web target.
 
 ---
 
-## 1. Biggest wins: stop N× network work in lists
+## Post-merge status (andorid-bugfix → main)
 
-### Per-row availability overlap in `ConnectionItem` (critical)
-
-Every connection row runs its own `LaunchedEffect` and makes **two Supabase calls** (yours + peer’s availability bubbles):
-
-```kotlin
-// composeApp/.../ui/chat/ConnectionItem.kt
-val overlapRepo = remember { SupabaseRepository() }
-LaunchedEffect(chatDetails.otherUser.id, viewerUserId, isGroup) {
-    ...
-    val mine = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v)
-    val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, theirsPeer)
-    hasActiveAvailabilityIntentOverlap(mine, theirs)
-}
-```
-
-For each peer call, `fetchPeerProfileAvailabilityBubbles` can also run `fetchSharedConnectionBetween` (another DB round-trip). With 30 connections visible, that is easily **60–90 requests** just to show a bolt icon.
-
-**Fix:**
-
-- Move overlap computation to a ViewModel (like `HomeViewModel` already does), batch peers in one job, fetch “mine” once, and only read from `AvailabilityOverlapCache` in the row composable.
-- Do not create a `SupabaseRepository` per row.
-
-### Same pattern on Home
-
-`HomeViewModel.loadHomeAvailabilityOverlapMessages` loops connections sequentially:
-
-```kotlin
-// composeApp/.../viewmodel/HomeViewModel.kt
-val mine = supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, userId)
-for (conn in activeConnections) {
-    val theirs = supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, peerId)
-    ...
-}
-```
-
-**Fix:** One batch RPC or parallel `async` with a concurrency limit (e.g. 8), and skip peers already in `AvailabilityOverlapCache`.
+| Area | Status | Implementation |
+|------|--------|----------------|
+| Per-row availability overlap N+1 | **Fixed (inbox)** | `ConnectionItem` reads `AvailabilityOverlapCache` only; `ConnectionsListView` + `HomeViewModel` batch via `prefetchAvailabilityOverlapsForPeers` (concurrency 8, max 48 peers) |
+| Junction / connection snapshot re-fetch | **Improved** | `appDataJunctionSnapshot` + `seedConnectionJunctionCache`; TTL **5 min**; chat loads use `runStaleSweep = false` |
+| Stale-connection sweep RPC | **Improved** | `sweepStaleConnectionsForUserIfDue` — at most once per user per **24h** |
+| `fetchMessagesForChat` full-table reads | **Fixed** | SQL `LIMIT` + `DESC` when `limit` is set; ascending fetch only when unbounded |
+| Snapshot disk writes | **Improved** | `schedulePersistSnapshot()` debounces **3s** (`PERSIST_SNAPSHOT_DEBOUNCE_MS`) |
+| Inbox reload storms | **Improved** | `isInboxFeedFresh()` skips network when `AppDataManager` SSOT is <30s old |
+| Chat open latency | **Improved** | Cache-fresh path uses `buildChatPayloadWithRetry` + `applyOpenedChatPayload`; stale cache refreshes in background |
+| List recomposition | **Improved** | `activeChats` / `groupChats` / `filteredChats` wrapped in `remember` |
+| Android header overlap | **Fixed** | `ScreenChrome` + `SideEffect` floating-header hide logic |
+| Map discovery duplicate polling | **Partial** | `main` kept retry-aware `prefetchDiscoveryProximityData`; branch’s 45s polling loop was **not** merged (intentionally) |
 
 ---
 
-## 2. Map screen: duplicate proximity fetches
+## Scale failure modes (100k+ users)
 
-`MapScreen` triggers `prefetchDiscoveryProximityData()` from **five separate places**:
+If this system were deployed at hundreds of thousands of DAU, these are the most likely **production** failure modes — not single-device bugs, but aggregate load / correctness under pressure.
 
-- `onMapScreenEntered()`
-- `startDiscoveryProximityPolling()` (every 45s)
-- An 8s location poll loop
-- `LaunchedEffect(userLat, userLon)`
-- `LaunchedEffect(mapState)` when `MapState.Success`
+### 1. Supabase / Postgres read amplification (most likely)
 
-Plus `getHighAccuracyLocation(3_500L)` inside bounds resolution in `MapViewModel`.
+**Symptom:** Elevated p95 on `messages`, `connections`, `profile_availability_*` queries; rate limits; rising egress bills; slow cold starts.
 
-**Fix:** One debounced entry point in `MapViewModel` (debounce already exists for viewport beacons). Coalesce discovery + viewport fetches, cancel stale jobs, and avoid the 8s location loop if polling already runs.
+**Causes:**
 
----
+- **Startup thundering herd:** Every cold start still runs `loadAllData()` → connection snapshot + silent chat prefetch (12 chats × up to 80 messages) + beacon prefetch for users with location.
+- **Per-device fan-out:** Availability overlap still issues up to **48 peer queries** per inbox visit (8 concurrent). At 100k DAU opening Clicks twice/day → millions of reads/day from one feature.
+- **No server-side inbox RPC:** Chat list still assembles junction data client-side (connections + archives + hidden + group batch).
+- **Power users:** Users with 500+ connections still load the full list into memory; no pagination.
 
-## 3. Startup and background sync: too much work at once
+**Prevention:**
 
-### Connection snapshot is heavy and repeated
+- Add a **single inbox RPC** (connections + last message + unread + archive flags).
+- Add a **batch availability-overlap RPC** (peer IDs in → overlap bitmap out).
+- Gate silent prefetch behind Wi‑Fi / charging / “prefetch enabled” setting.
+- Paginate connections (cursor by `last_message_at`).
+- CDN-cache static profile fragments; cap client prefetch counts further by network type.
 
-Every `fetchUserConnectionsSnapshot` runs a stale-connection sweep RPC plus several queries:
+### 2. Realtime / presence saturation
 
-```kotlin
-// composeApp/.../data/repository/SupabaseRepository.kt
-suspend fun fetchUserConnectionsSnapshot(userId: String): UserConnectionsSnapshot {
-    sweepStaleConnectionsForUser(userId)
-    val archivedIds = getArchivedConnectionIds(userId)
-    val hiddenIds = getHiddenConnectionIds(userId)
-    ...
-}
-```
+**Symptom:** Missed message inserts, stale online indicators, reconnect loops, Supabase Realtime connection limits.
 
-This runs on app startup **and again** when `ChatViewModel.loadChats()` hits `getOrFetchJunctionData()` (junction cache TTL is only **5 seconds**).
+**Causes:**
 
-**Fix:**
+- Global presence heartbeat every **30s** × concurrent users.
+- `isInboxFeedFresh()` skips network fetches — correctness depends on Realtime updating `AppDataManager` inbox rows.
+- Foreground recovery still triggers full `loadAllData()` when stale.
 
-- Reuse `AppDataManager.connections` in chat loads instead of re-fetching the full snapshot.
-- Run `sweep_stale_connections` on a schedule (e.g. once per session or daily), not every list refresh.
-- Extend junction cache TTL or invalidate only on realtime events.
+**Prevention:**
 
-### Silent chat prefetch downloads full histories
+- Tier foreground recovery (session + channels first; full snapshot only if stale >30s or recovery failed).
+- Scope presence channels per active chat, not global room where possible.
+- Invalidate `isInboxFeedFresh` explicitly on push notification / Realtime inbox event (not only time-based).
+- Monitor Realtime connection count and add backoff on channel subscribe failures.
 
-Prefetch fetches **all messages** per chat, then truncates in memory:
+### 3. Stale UI under cache hits (correctness at scale)
 
-```kotlin
-// AppDataManager.startSilentChatPrefetch
-val decryptedMessages = chatRepository.fetchMessagesForChat(chatId, userId)?.takeLast(limit)
-```
+**Symptom:** User sees old last-message preview, missing new connection, wrong archive tab count.
 
-But `fetchMessagesForChat` has no SQL `LIMIT`:
+**Causes:**
 
-```kotlin
-// SupabaseChatRepository.fetchMessagesForChat
-supabase.from("messages").select {
-    filter { eq("chat_id", chatId) }
-    order("time_created", Order.ASCENDING)
-}.decodeList<Message>()
-```
+- `isInboxFeedFresh()` returns true when `_connections` is non-empty even if `_inboxFeedChats` is empty or stale.
+- Junction cache (5 min) may serve archived/hidden IDs from memory after server-side lifecycle change on another device.
+- `chatListRefreshEpoch` forces reload, but ordinary navigation within 30s cooldown does not.
 
-**Fix:** Add `limit(N)` + `order DESC` at the DB layer for prefetch and initial chat open. High impact for users with long threads.
+**Prevention:**
 
-### Snapshot persistence is frequent and expensive
+- Tighten freshness: require `_inboxFeedChats` non-empty **and** `lastRefreshTime` within cooldown, or track `inboxVersion` bumped by Realtime.
+- Call `clearChatListLocalCaches()` whenever `applyFetchedConnectionSnapshot` detects a diff.
+- Expose manual pull-to-refresh that always passes `isForced = true`.
 
-`persistSnapshot()` JSON-encodes the entire app state (connections, users, inbox, up to 12×80 cached messages) and is called from many paths—profile prefetch batches, realtime message inserts, inbox updates, etc.
+### 4. Client memory / disk pressure (tail latency)
 
-**Fix:** Debounce writes (e.g. 2–5s coalescing job), persist incrementally (threads separate from connections), or skip persisting on every background message if the thread cache already updated in memory.
+**Symptom:** OOM kills on low-RAM Android, slow resume, ANRs during `persistSnapshot()`.
 
-### Foreground resume reloads everything
+**Causes:**
 
-`handleApplicationForegrounded()` cancels in-flight work and runs a full `loadAllData()` again. That helps correctness after iOS backgrounding, but it hurts resume latency.
+- `CachedAppSnapshot` still serializes full connections + up to 12×80 messages + map beacons every debounced write.
+- Unbounded in-memory profile timeline cache in `SupabaseRepository` companion.
+- Large group threads decrypted on main thread paths.
 
-**Fix:** Tier recovery: refresh session + realtime first; only refresh connections/chats if stale (>30s) or if recovery failed.
+**Prevention:**
 
----
+- Split snapshot files (connections vs threads vs map).
+- LRU-cap profile timeline cache.
+- Move decrypt + JSON encode off main thread; skip persist when only ephemeral presence changed.
 
-## 4. Compose UI: list jank and unnecessary recomposition
+### 5. Map / beacon API storms
 
-### `ConnectionsListView` recomputes the list on every frame
+**Symptom:** Edge function timeouts on `fetch-local-beacons`, map feed empty, battery drain.
 
-Tab filtering/sorting runs inline during composition (not in `remember`):
+**Causes:**
 
-```kotlin
-// ConnectionsListView — inside composable body
-val activeChats = effectiveChats.filter { ... }
-val filteredChats = if (searchQuery.isBlank()) sortedTabChats else sortedTabChats.filter { ... }
-```
+- `startBeaconPrefetch()` on every cold start for non-ghost users with location permission.
+- Discovery prefetch queries multiple GPS/camera centers per session.
 
-Any state change (`onlineUsers`, `cachedChatThreads`, `coreConnectionIds`, tab animation) recomputes filters and re-lays out the whole list.
+**Prevention:**
 
-**Fix:** Wrap `filteredChats`, tab counts, and header subtitle in `remember(...)` or hoist into `ChatViewModel` as derived `StateFlow`s.
-
-### Too many `collectAsState()` collectors at list scope
-
-`ConnectionsListView` collects ~10 flows at the top. When `onlineUsers` updates (presence heartbeat every 30s), **every row** can recompose.
-
-**Fix:**
-
-- Pass `isOnline` as a stable boolean into `ConnectionItem`.
-- Use `@Stable` row models or item-level state in `LazyColumn`.
-- Consider `derivedStateOf` for “is this peer online” lookups.
-
-### Full inbox reload when closing a chat
-
-`ConnectionsScreen.finalizeChatClose` defaults to `viewModel.loadChats()` (forced refresh) even though realtime + local cache already have the latest row.
-
-**Fix:** Default to `loadChats(isForced = false)` or patch the single row from chat state instead of refetching the inbox.
-
-### Expensive visual effects
-
-- `ChatLiquidGlassPlate` applies `blur(18.dp)` on header/composer chrome.
-- Group chat bubbles load peer avatars via Coil per message row.
-
-**Fix:** Use a static translucent tint on mid/low-end devices, reduce blur radius, or gate blur behind a performance flag. Lazy-load group avatars only for visible messages.
+- Debounce beacon prefetch globally (one job per session unless map opened).
+- Server-side geo tile caching; return deltas only.
+- Skip prefetch when on cellular + low battery (Android `WorkManager` constraints).
 
 ---
 
-## 5. What is already done well (keep and extend)
+## Remaining hotspots (priority order)
+
+```mermaid
+flowchart TD
+    A[Inbox + availability batch RPC] --> B[Tier foreground recovery]
+    B --> C[Paginate connections list]
+    C --> D[Cap / gate silent chat prefetch]
+    D --> E[ChatView overlap fallback still per-open]
+    E --> F[Map beacon startup herd]
+    F --> G[Polish: blur, chat-close forced reload]
+```
+
+### Availability overlap — inbox fixed, chat header not
+
+- **Inbox:** `ConnectionItem` → cache only ✅
+- **Chat header:** `ChatView` still falls back to per-open `fetchPeerProfileAvailabilityBubbles` when cache miss ❌
+- **Fix:** Reuse `prefetchAvailabilityOverlapsForPeers` when opening chat, or batch on chat list load.
+
+### Map discovery
+
+- `main` uses retry-aware `prefetchDiscoveryProximityData(showPulse, markInitialComplete)` with `discoveryPrefetchRetryJob`.
+- Branch’s `startDiscoveryProximityPolling()` (45s loop) was dropped to avoid duplicate fetches with `MapScreen` / `AppDataManager.startBeaconPrefetch()`.
+- **Remaining risk:** Multiple entry points still call prefetch (map enter, camera init, pull-to-refresh).
+
+### Foreground resume
+
+`handleApplicationForegrounded()` can still run full `loadAllData()` when data is considered stale.
+
+**Fix:** Tier recovery — Realtime reconnect first; snapshot only if `!isInboxFeedFresh()` or auth recovery failed.
+
+### Compose list scope
+
+`ConnectionsListView` still collects ~10 `StateFlow`s at list scope; presence heartbeats can recompose all rows.
+
+**Fix:** Pass `isOnline: Boolean` into `ConnectionItem`; use `derivedStateOf` for peer online lookup.
+
+---
+
+## What is already done well (keep and extend)
 
 | Area | What the code does |
 |------|-------------------|
 | Cold start | `restoreCachedSnapshot()` paints inbox before network |
-| Chat open | Prefetch map + disk thread cache in `ChatViewModel` |
+| Chat open | Prefetch map + disk thread cache; cache-fresh fast path |
 | Chat scroll | `ChatMessageTimeline` isolated from IME/layout churn |
 | Mesh background | `animateMesh = false` avoids N infinite animations |
 | Group inbox | Batched queries in `fetchGroupUserChatsWithDetails` |
 | List keys | `LazyColumn` uses `key = { it.connection.id }` |
 | Load UX | `loadChats` keeps Success state while refreshing in background |
+| Overlap batching | `util/AvailabilityOverlapPrefetch.kt` + `ViewerAvailabilityBubblesCache` |
+| Junction SSOT | `seedConnectionJunctionCache` after every snapshot apply |
 
 ---
 
-## 6. Suggested priority order
+## Quick measurement checklist
 
-```mermaid
-flowchart TD
-    A[Measure baseline] --> B[Fix ConnectionItem N+1 API calls]
-    B --> C[Add LIMIT to fetchMessagesForChat for prefetch]
-    C --> D[Debounce persistSnapshot]
-    D --> E[Remember filteredChats + reduce list-scope collectors]
-    E --> F[Coalesce MapScreen proximity fetches]
-    F --> G[Avoid full loadAllData on every foreground]
-    G --> H[Polish: blur, chat-close reload, sweep RPC frequency]
-```
-
-### Quick measurement checklist
-
-1. **Cold start:** time from launch → Clicks list painted (with/without network).
-2. **Clicks tab:** scroll 50 rows; count Supabase requests (should be ~0 after first batch).
-3. **Open chat:** time to first message paint for a 500+ message thread.
-4. **Map tab:** count `fetchNearbyCommunityHubs` / beacon calls in 60s (should be 1–2, not 10+).
-5. **Compose:** enable recomposition logging; `ConnectionItem` should not recompose when unrelated rows’ presence changes.
+1. **Cold start:** launch → Clicks list painted (with/without network).
+2. **Clicks tab:** scroll 50 rows; Supabase requests after first batch should be **~0** (overlap prefetch once, capped at 48 peers).
+3. **Open chat:** first message paint for 500+ message thread (should use SQL LIMIT).
+4. **Map tab:** `fetchNearbyCommunityHubs` / beacon calls in 60s (target 1–2, not 10+).
+5. **Compose:** recomposition logging — `ConnectionItem` should not recompose on unrelated presence changes.
+6. **Scale drill:** simulate 200-connection account; verify overlap prefetch stops at 48 peers.
 
 ---
 
-## 7. Backend / DB improvements (if you control Supabase)
+## Backend / DB improvements (Supabase + click-web)
 
-- Add a **single inbox RPC** (connections + last message + unread + archive flags) to replace multiple client round-trips.
-- Add a **batch availability overlap RPC** for all peer IDs.
-- Ensure indexes exist for hot filters (messages by `chat_id`, unread partial index—see `database/migrate_to_python_schema.sql`).
-- Move `sweep_stale_connections_for_user` off the hot path (cron/edge function).
+- **Single inbox RPC** — replace multi-query junction assembly.
+- **Batch availability overlap RPC** — `peer_ids[]` → overlap flags.
+- Indexes on `messages(chat_id, time_created DESC)`, connection junction tables.
+- Move `sweep_stale_connections_for_user` to **cron/edge** (client now throttles to 24h, but cron is safer).
+- Rate-limit per-user read endpoints at API gateway when moving logic to click-web BFF.
 
 ---
 
@@ -211,13 +191,15 @@ flowchart TD
 
 | Concern | Location |
 |---------|----------|
-| Per-row overlap API calls | `composeApp/.../ui/chat/ConnectionItem.kt` |
-| Home overlap batching | `composeApp/.../viewmodel/HomeViewModel.kt` |
-| Map duplicate prefetch | `composeApp/.../ui/screens/MapScreen.kt`, `MapViewModel.kt` |
+| Overlap batch prefetch | `composeApp/.../util/AvailabilityOverlapPrefetch.kt` |
+| Inbox overlap orchestration | `composeApp/.../ui/screens/ConnectionsListView.kt` |
+| Row overlap read (cache only) | `composeApp/.../ui/chat/ConnectionItem.kt` |
+| Chat header overlap fallback | `composeApp/.../ui/screens/ChatView.kt` |
+| Home overlap cards | `composeApp/.../viewmodel/HomeViewModel.kt` |
+| Map discovery prefetch | `composeApp/.../viewmodel/MapViewModel.kt` |
 | Connection snapshot + sweep | `composeApp/.../data/repository/SupabaseRepository.kt` |
-| Chat prefetch + snapshot persist | `composeApp/.../data/AppDataManager.kt` |
-| Full message fetch (no LIMIT) | `composeApp/.../data/repository/SupabaseChatRepository.kt` |
-| List filtering / recomposition | `composeApp/.../ui/screens/ConnectionsListView.kt` |
-| Chat close reload | `composeApp/.../ui/screens/ConnectionsScreen.kt` |
-| Glass blur chrome | `composeApp/.../ui/chat/ChatLiquidGlassChrome.kt` |
-| Junction cache TTL (5s) | `SupabaseChatRepository.kt` (`junctionCacheTtlMs`) |
+| Junction cache + message LIMIT | `composeApp/.../data/repository/SupabaseChatRepository.kt` |
+| Inbox freshness + debounced persist | `composeApp/.../data/AppDataManager.kt` |
+| Cache-fresh chat open | `composeApp/.../viewmodel/ChatViewModel.kt` |
+| Floating header / Android chrome | `composeApp/.../ui/components/ScreenChrome.kt`, `AppScreenScaffold.kt` |
+| Data layer overview | `composeApp/.../data/README.md` |

@@ -23,7 +23,8 @@ import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.HomeEventReminder
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
-import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
+import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
+import compose.project.click.click.util.prefetchAvailabilityOverlapsForPeers // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.PostgresAction
@@ -126,6 +127,7 @@ class HomeViewModel(
     private var connectionsChannel: RealtimeChannel? = null
     private var availabilityIntentRefreshJob: Job? = null
     private var homeOverlapJob: Job? = null
+    private var lastHomeOverlapPeerSignature: String? = null
 
     init {
         observeAppData()
@@ -159,19 +161,24 @@ class HomeViewModel(
             return
         }
         try {
-            val mine = supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, userId)
-            val lines = LinkedHashSet<String>()
-            for (conn in activeConnections) {
-                val peerId = conn.user_ids.firstOrNull { it != userId } ?: continue
-                val theirs = runCatching {
-                    supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, peerId)
-                }.getOrElse { emptyList() }
-                val has = hasActiveAvailabilityIntentOverlap(mine, theirs)
-                AvailabilityOverlapCache.put(userId, peerId, has)
-                if (has) {
-                    val who = shortPeerAvailabilityFirstName(connectedUsers[peerId])
-                    lines.add("You and $who are both available right now!")
+            val mine = ViewerAvailabilityBubblesCache.get(userId)
+                ?: supabaseRepository.fetchPeerProfileAvailabilityBubbles(userId, userId).also {
+                    ViewerAvailabilityBubblesCache.put(userId, it)
                 }
+            val peerIds = activeConnections.mapNotNull { conn ->
+                conn.user_ids.firstOrNull { it != userId }
+            }
+            prefetchAvailabilityOverlapsForPeers(
+                viewerUserId = userId,
+                peerUserIds = peerIds,
+                viewerBubbles = mine,
+                repository = supabaseRepository,
+            )
+            val lines = LinkedHashSet<String>()
+            for (peerId in peerIds) {
+                if (AvailabilityOverlapCache.get(userId, peerId) != true) continue
+                val who = shortPeerAvailabilityFirstName(connectedUsers[peerId])
+                lines.add("You and $who are both available right now!")
             }
             _homeAvailabilityOverlapMessages.value = lines.toList()
         } catch (e: Exception) {
@@ -222,10 +229,12 @@ class HomeViewModel(
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
                     AvailabilityOverlapCache.clear()
+                    ViewerAvailabilityBubblesCache.clear()
                     availabilityIntentRefreshJob?.cancel()
                     availabilityIntentRefreshJob = null
                     homeOverlapJob?.cancel()
                     homeOverlapJob = null
+                    lastHomeOverlapPeerSignature = null
                 }
 
                 when {
@@ -284,9 +293,16 @@ class HomeViewModel(
 
                         _connectedUsers.value = connectedUsers
 
-                        homeOverlapJob?.cancel()
-                        homeOverlapJob = viewModelScope.launch {
-                            loadHomeAvailabilityOverlapMessages(user.id, activeConnections, connectedUsers)
+                        val overlapPeerSignature = activeConnections
+                            .mapNotNull { conn -> conn.user_ids.firstOrNull { it != user.id } }
+                            .sorted()
+                            .joinToString(",")
+                        if (overlapPeerSignature != lastHomeOverlapPeerSignature) {
+                            lastHomeOverlapPeerSignature = overlapPeerSignature
+                            homeOverlapJob?.cancel()
+                            homeOverlapJob = viewModelScope.launch {
+                                loadHomeAvailabilityOverlapMessages(user.id, activeConnections, connectedUsers)
+                            }
                         }
 
                         _pollPairSuggestion.value = try {
@@ -339,12 +355,21 @@ class HomeViewModel(
                 }
             }
 
-            val chats = chatRepository.fetchUserChatsWithDetails(userId)
-            val lastMessageByConnectionId = chats.associate { chatWithDetails ->
-                chatWithDetails.connection.id to (
-                    chatWithDetails.lastMessage?.timeCreated
-                        ?: chatWithDetails.connection.created
-                )
+            val inbox = AppDataManager.inboxFeedChats.value
+            val lastMessageByConnectionId = if (inbox.isNotEmpty()) {
+                inbox.associate { chatWithDetails ->
+                    chatWithDetails.connection.id to (
+                        chatWithDetails.lastMessage?.timeCreated
+                            ?: chatWithDetails.connection.created
+                        )
+                }
+            } else {
+                chatRepository.fetchUserChatsWithDetails(userId).associate { chatWithDetails ->
+                    chatWithDetails.connection.id to (
+                        chatWithDetails.lastMessage?.timeCreated
+                            ?: chatWithDetails.connection.created
+                        )
+                }
             }
 
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)

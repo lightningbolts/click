@@ -103,11 +103,7 @@ fun ConnectionsScreen(
         viewModel.leaveChatRoom(clearMessageSurface = leaveChatClearsMessageSurface)
         // Forced reload clears local inbox caches and can repaint the list; skip that on the iOS
         // gesture-dismiss path where we already avoided flashing the message surface.
-        if (leaveChatClearsMessageSurface) {
-            viewModel.loadChats()
-        } else {
-            viewModel.loadChats(isForced = false)
-        }
+        viewModel.loadChats(isForced = false)
         onChatDismissed?.invoke()
     }
 

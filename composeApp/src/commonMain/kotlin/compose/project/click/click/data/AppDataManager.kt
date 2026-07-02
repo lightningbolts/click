@@ -37,6 +37,7 @@ import compose.project.click.click.utils.LocationService
 import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.util.ViewerAvailabilityBubblesCache
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -205,7 +206,15 @@ object AppDataManager {
 
     fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
         _inboxFeedChats.value = chats
-        scope.launch { persistSnapshot() }
+        scope.launch { schedulePersistSnapshot() }
+    }
+
+    /** In-memory inbox row for opening a thread without refetching the full inbox. */
+    fun chatInboxRowForThread(threadId: String, userId: String): ChatWithDetails? {
+        if (_currentUser.value?.id != userId || threadId.isBlank()) return null
+        return _inboxFeedChats.value.firstOrNull {
+            it.connection.id == threadId || it.chat.id == threadId
+        }
     }
 
     fun persistProfileTimelineCaches() {
@@ -287,8 +296,10 @@ object AppDataManager {
     private const val CHAT_PREFETCH_MAX_MESSAGES = 80
     private const val GROUP_CHAT_PREFETCH_MAX_MESSAGES = 50
     private const val HUB_THREAD_CACHE_MAX_MESSAGES = 120
+    private const val PERSIST_SNAPSHOT_DEBOUNCE_MS = 3_000L
 
     private var loadAllDataJob: Job? = null
+    private var persistSnapshotJob: Job? = null
     private var lastForegroundRecoveryMs: Long = 0L
 
     // Error state
@@ -431,15 +442,22 @@ object AppDataManager {
         val now = Clock.System.now().toEpochMilliseconds()
         if (now - lastForegroundRecoveryMs < FOREGROUND_RECOVERY_DEBOUNCE_MS) return
         lastForegroundRecoveryMs = now
-        loadAllDataJob?.cancel()
         scope.launch {
-            runCatching { SupabaseForegroundRecovery.recoverAfterBackground(SupabaseConfig.client) }
-                .onFailure { e ->
-                    println("AppDataManager: foreground Supabase recovery failed: ${e.redactedRestMessage()}")
-                }
+            val recoveryOk = runCatching {
+                SupabaseForegroundRecovery.recoverAfterBackground(SupabaseConfig.client)
+            }.onFailure { e ->
+                println("AppDataManager: foreground Supabase recovery failed: ${e.redactedRestMessage()}")
+            }.isSuccess
             _foregroundRealtimeRecovery.emit(Unit)
-            lastRefreshTime = 0L
-            startLoadAllDataJob()
+
+            val dataStale = now - lastRefreshTime > REFRESH_COOLDOWN_MS
+            if (!recoveryOk || dataStale) {
+                loadAllDataJob?.cancel()
+                if (dataStale) {
+                    lastRefreshTime = 0L
+                }
+                startLoadAllDataJob()
+            }
         }
     }
 
@@ -479,7 +497,7 @@ object AppDataManager {
             updateConnectionChatActivity(connectionId, last.timeCreated, last)
             updateInboxFeedChatActivity(connectionId, last)
         } else {
-            scope.launch { persistSnapshot() }
+            scope.launch { schedulePersistSnapshot() }
         }
     }
 
@@ -569,8 +587,11 @@ object AppDataManager {
                     } else {
                         CHAT_PREFETCH_MAX_MESSAGES
                     }
-                    val decryptedMessages = chatRepository.fetchMessagesForChat(chatId, userId, limit)
-                        ?: continue
+                    val decryptedMessages = chatRepository.fetchMessagesForChat(
+                        chatId = chatId,
+                        viewerUserId = userId,
+                        limit = limit,
+                    ) ?: continue
                     val messages = chatRepository.vaultEncryptedMediaMessages(chatId, userId, decryptedMessages)
                     val participants = chatRepository.fetchChatParticipants(chatId)
                     val reactions = runCatching { chatRepository.fetchReactionsForChat(chatId) }.getOrElse { emptyList() }
@@ -630,7 +651,7 @@ object AppDataManager {
                         }
                     }.awaitAll()
                 }
-                persistSnapshot()
+                schedulePersistSnapshot()
             }
         }
     }
@@ -674,7 +695,7 @@ object AppDataManager {
                             participants = participants,
                         )
                     }
-                    persistSnapshot()
+                    schedulePersistSnapshot()
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -1033,6 +1054,16 @@ object AppDataManager {
     }
 
     /**
+     * True after a recent [loadAllData] when local connection/inbox caches can back the Clicks list
+     * without an immediate [ChatViewModel.loadChats] network round-trip.
+     */
+    fun isInboxFeedFresh(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
+        if (!_isDataLoaded.value || lastRefreshTime <= 0L) return false
+        if (nowMs - lastRefreshTime >= REFRESH_COOLDOWN_MS) return false
+        return _inboxFeedChats.value.isNotEmpty() || _connections.value.isNotEmpty()
+    }
+
+    /**
      * Refresh data - respects cooldown to prevent excessive API calls
      */
     fun refresh(force: Boolean = false) {
@@ -1070,6 +1101,10 @@ object AppDataManager {
         _discoveryMapPrefetchComplete.value = false
         _lastKnownDeviceLocation.value = null
         queuedProfilePrefetchIds = emptySet()
+        persistSnapshotJob?.cancel()
+        persistSnapshotJob = null
+        SupabaseRepository.resetStaleConnectionSweepSchedule()
+        ViewerAvailabilityBubblesCache.clear()
         // R0.5: clearSessionCaches disposes all ephemeral channels AND zero-fills
         // group master keys AND stops global presence, so this single call
         // replaces the old stopGlobalPresence() + leaks derived keys into the
@@ -1146,8 +1181,9 @@ object AppDataManager {
             }
         }
 
+        seedJunctionCacheFromMemory()
         scope.launch {
-            persistSnapshot()
+            schedulePersistSnapshot()
         }
     }
     
@@ -1156,8 +1192,9 @@ object AppDataManager {
      */
     fun removeConnection(connectionId: String) {
         _connections.value = _connections.value.filter { it.id != connectionId }
+        seedJunctionCacheFromMemory()
         scope.launch {
-            persistSnapshot()
+            schedulePersistSnapshot()
         }
     }
 
@@ -1169,7 +1206,8 @@ object AppDataManager {
 
     fun unhideConnectionLocally(connectionId: String) {
         _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
-        scope.launch { persistSnapshot() }
+        seedJunctionCacheFromMemory()
+        scope.launch { schedulePersistSnapshot() }
     }
 
     /**
@@ -1180,27 +1218,30 @@ object AppDataManager {
     fun revertHideConnectionLocally(connectionId: String, connection: Connection) {
         _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
         _connections.value = (_connections.value + connection).distinctBy { it.id }
-        scope.launch { persistSnapshot() }
+        seedJunctionCacheFromMemory()
+        scope.launch { schedulePersistSnapshot() }
     }
 
     fun markConnectionArchivedLocally(connectionId: String) {
         _archivedConnectionIds.value = _archivedConnectionIds.value + connectionId
-        scope.launch { persistSnapshot() }
+        seedJunctionCacheFromMemory()
+        scope.launch { schedulePersistSnapshot() }
     }
 
     fun markConnectionUnarchivedLocally(connectionId: String) {
         _archivedConnectionIds.value = _archivedConnectionIds.value - connectionId
-        scope.launch { persistSnapshot() }
+        seedJunctionCacheFromMemory()
+        scope.launch { schedulePersistSnapshot() }
     }
 
     fun markConnectionCoreLocally(connectionId: String) {
         _coreConnectionIds.value = _coreConnectionIds.value + connectionId
-        scope.launch { persistSnapshot() }
+        scope.launch { schedulePersistSnapshot() }
     }
 
     fun markConnectionNotCoreLocally(connectionId: String) {
         _coreConnectionIds.value = _coreConnectionIds.value - connectionId
-        scope.launch { persistSnapshot() }
+        scope.launch { schedulePersistSnapshot() }
     }
 
     /**
@@ -1210,7 +1251,8 @@ object AppDataManager {
         _archivedConnectionIds.value = _archivedConnectionIds.value - connection.id
         _hiddenConnectionIds.value = _hiddenConnectionIds.value - connection.id
         _connections.value = (_connections.value.filter { it.id != connection.id } + connection).distinctBy { it.id }
-        scope.launch { persistSnapshot() }
+        seedJunctionCacheFromMemory()
+        scope.launch { schedulePersistSnapshot() }
     }
 
     fun replaceLocalConnection(localId: String, syncedConnection: Connection, otherUser: User? = null) {
@@ -1222,7 +1264,7 @@ object AppDataManager {
             _connectedUsers.value = _connectedUsers.value + (otherUser.id to otherUser)
         }
         scope.launch {
-            persistSnapshot()
+            schedulePersistSnapshot()
         }
     }
 
@@ -1249,7 +1291,7 @@ object AppDataManager {
             }
             c.copy(last_message_at = mergedAt, chat = newChat)
         }
-        scope.launch { persistSnapshot() }
+        scope.launch { schedulePersistSnapshot() }
     }
 
     fun setPendingConnectionsCount(count: Int) {
@@ -1409,7 +1451,7 @@ object AppDataManager {
         scope.launch {
             runCatching { supabaseRepository.updateLocationPreferences(userId, prefs) }
                 .onFailure { println("AppDataManager: Failed to save location preferences: ${it.message}") }
-            persistSnapshot()
+            schedulePersistSnapshot()
         }
     }
 
@@ -1567,7 +1609,7 @@ object AppDataManager {
                     _transientUserMessages.emit(msg)
                 } else {
                     println("updateProfileName: Successfully updated profile to: $display")
-                    persistSnapshot()
+                    schedulePersistSnapshot()
                 }
             } catch (e: Exception) {
                 println("updateProfileName: Error updating profile: ${e.redactedRestMessage()}")
@@ -1587,7 +1629,7 @@ object AppDataManager {
         val latest = _currentUser.value ?: return
         _currentUser.value = latest.copy(image = publicUrl)
         scope.launch {
-            runCatching { persistSnapshot() }
+            runCatching { schedulePersistSnapshot() }
                 .onFailure { println("applyProfilePictureUrl: snapshot failed: ${it.message}") }
         }
     }
@@ -1598,7 +1640,7 @@ object AppDataManager {
         _currentUser.value = latest.copy(tags = tags)
         _userInterestTags.value = tags
         scope.launch {
-            runCatching { persistSnapshot() }
+            runCatching { schedulePersistSnapshot() }
                 .onFailure { println("applyInterestTags: snapshot failed: ${it.message}") }
         }
     }
@@ -1800,6 +1842,25 @@ object AppDataManager {
             serverCore.isNotEmpty() -> serverCore
             else -> _coreConnectionIds.value
         }
+        seedJunctionCacheFromMemory()
+    }
+
+    private fun seedJunctionCacheFromMemory() {
+        val userId = _currentUser.value?.id ?: return
+        chatRepository.seedConnectionJunctionCache(
+            userId = userId,
+            connections = _connections.value,
+            archivedConnectionIds = _archivedConnectionIds.value,
+            hiddenConnectionIds = _hiddenConnectionIds.value,
+        )
+    }
+
+    private fun schedulePersistSnapshot() {
+        persistSnapshotJob?.cancel()
+        persistSnapshotJob = scope.launch {
+            delay(PERSIST_SNAPSHOT_DEBOUNCE_MS)
+            persistSnapshot()
+        }
     }
 
     private suspend fun restoreCachedSnapshot(): Boolean {
@@ -1841,6 +1902,7 @@ object AppDataManager {
                 snapshot.currentUser != null ||
                     snapshot.connections.isNotEmpty() ||
                     snapshot.inboxFeedChats.isNotEmpty()
+            seedJunctionCacheFromMemory()
             snapshot
         }.onFailure {
             println("AppDataManager: Failed to restore cached snapshot: ${it.message}")

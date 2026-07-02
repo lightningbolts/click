@@ -111,6 +111,8 @@ Multi-Tap emits `VerifiedCliqueProximityIntent` for UI autofill into group membe
 
 ### ChatViewModel highlights
 
+- **Inbox freshness** — `loadChats(isForced = false)` skips network when `AppDataManager.isInboxFeedFresh()` (30s SSOT window); forced reloads and `chatListRefreshEpoch` bypass.
+- **Chat open fast path** — `resolveCachedChatPayload` + `isChatThreadCacheFresh`; stale threads refresh via `buildChatPayloadWithRetry` / `scheduleBackgroundChatPayloadRefresh`.
 - **E2EE** — `MessageCrypto` + `AttachmentCrypto` for text and media; group threads use wrapped master keys via `VerifiedCliqueCreation`.
 - **Realtime** — `SupabaseChatRepository` subscriptions for messages, reactions, typing, connection `last_message_at`.
 - **Offline queue** — `PendingMessageQueue` retries sends; `NetworkConnectivityMonitor` triggers flush.

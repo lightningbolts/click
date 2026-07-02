@@ -1015,7 +1015,23 @@ class SupabaseChatRepository(
     private var cachedJunctionData: Triple<List<Connection>, Set<String>, Set<String>>? = null
     private var cachedJunctionUserId: String? = null
     private var cachedJunctionTimestamp: Long = 0L
-    private val junctionCacheTtlMs = 60_000L
+    private val junctionCacheTtlMs = 300_000L // 5 minutes
+
+    private fun appDataJunctionSnapshot(userId: String): Triple<List<Connection>, Set<String>, Set<String>>? {
+        if (compose.project.click.click.data.AppDataManager.currentUser.value?.id != userId) return null
+        if (!compose.project.click.click.data.AppDataManager.isDataLoaded.value) return null
+        val connections = compose.project.click.click.data.AppDataManager.connections.value
+        if (connections.isEmpty() &&
+            compose.project.click.click.data.AppDataManager.inboxFeedChats.value.isEmpty()
+        ) {
+            return null
+        }
+        return Triple(
+            connections,
+            compose.project.click.click.data.AppDataManager.archivedConnectionIds.value,
+            compose.project.click.click.data.AppDataManager.hiddenConnectionIds.value,
+        )
+    }
 
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
@@ -1072,6 +1088,12 @@ class SupabaseChatRepository(
         if (cached != null && cachedJunctionUserId == userId && now - cachedJunctionTimestamp < junctionCacheTtlMs) {
             return cached
         }
+        appDataJunctionSnapshot(userId)?.let { snapshot ->
+            cachedJunctionData = snapshot
+            cachedJunctionUserId = userId
+            cachedJunctionTimestamp = now
+            return snapshot
+        }
         val result = fetchConnectionsWithJunctionIds(userId)
         cachedJunctionData = result
         cachedJunctionUserId = userId
@@ -1087,7 +1109,7 @@ class SupabaseChatRepository(
         userId: String,
     ): Triple<List<Connection>, Set<String>, Set<String>> {
         return try {
-            val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
+            val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId, runStaleSweep = false)
             Triple(snapshot.connections, snapshot.archivedConnectionIds, snapshot.hiddenConnectionIds)
         } catch (e: Exception) {
             if (!e.isOfflineNetworkFailure()) throw e
@@ -1100,25 +1122,34 @@ class SupabaseChatRepository(
         }
     }
 
-    override suspend fun fetchMessagesForChat(chatId: String, viewerUserId: String?, limit: Int?): List<Message>? {
+    override suspend fun fetchMessagesForChat(
+        chatId: String,
+        viewerUserId: String?,
+        limit: Int?,
+    ): List<Message>? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId)
-            val rows = supabase.from("messages")
-                .select {
-                    filter {
-                        eq("chat_id", chatId)
-                    }
-                    if (limit != null && limit > 0) {
+            val rows = if (limit != null && limit > 0) {
+                supabase.from("messages")
+                    .select {
+                        filter {
+                            eq("chat_id", chatId)
+                        }
                         order("time_created", Order.DESCENDING)
                         limit(limit.toLong())
-                    } else {
+                    }
+                    .decodeList<Message>()
+                    .asReversed()
+            } else {
+                supabase.from("messages")
+                    .select {
+                        filter {
+                            eq("chat_id", chatId)
+                        }
                         order("time_created", Order.ASCENDING)
                     }
-                }
-                .decodeList<Message>()
-                .let { fetched ->
-                    if (limit != null && limit > 0) fetched.asReversed() else fetched
-                }
+                    .decodeList<Message>()
+            }
             val decrypted = withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
             }
@@ -1440,6 +1471,23 @@ class SupabaseChatRepository(
 
     // Fetch chat with details by chat ID via API
     override suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? {
+        compose.project.click.click.data.AppDataManager.chatInboxRowForThread(chatId, currentUserId)
+            ?.let { row -> return normalizeChatDetailsRow(row) }
+
+        val byChatRow = runCatching {
+            loadChatWithDetailsByRawId(chatId, currentUserId)
+        }.onFailure { e ->
+            println("ChatRepository: loadChatWithDetailsByRawId failed: ${e.redactedRestMessage()}")
+        }.getOrNull()
+        if (byChatRow != null) return byChatRow
+
+        val byConnection = runCatching {
+            loadChatWithDetailsByConnectionId(chatId, currentUserId)
+        }.onFailure { e ->
+            println("ChatRepository: loadChatWithDetailsByConnectionId failed: ${e.redactedRestMessage()}")
+        }.getOrNull()
+        if (byConnection != null) return byConnection
+
         val fromList = runCatching {
             fetchUserChatsWithDetails(currentUserId)
                 .firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
@@ -1451,37 +1499,29 @@ class SupabaseChatRepository(
         }.getOrNull()
 
         if (fromList != null) {
-            return runCatching {
-                if (!fromList.chat.id.isNullOrBlank() || fromList.groupClique != null) {
-                    fromList
-                } else {
-                    val ensured = ensureChatForConnection(fromList.connection.id) ?: return@runCatching fromList
-                    fromList.copy(
-                        chat = fromList.chat.copy(
-                            id = ensured.id,
-                            connectionId = fromList.connection.id,
-                        ),
-                    )
-                }
-            }.getOrElse { e ->
-                println("ChatRepository: normalize inbox chat row failed: ${e.redactedRestMessage()}")
-                fromList
-            }
+            return normalizeChatDetailsRow(fromList)
         }
 
-        val byChatRow = runCatching {
-            loadChatWithDetailsByRawId(chatId, currentUserId)
-        }.onFailure { e ->
-            println("ChatRepository: loadChatWithDetailsByRawId failed: ${e.redactedRestMessage()}")
-        }.getOrNull()
+        return null
+    }
 
-        if (byChatRow != null) return byChatRow
-
+    private suspend fun normalizeChatDetailsRow(row: ChatWithDetails): ChatWithDetails {
         return runCatching {
-            loadChatWithDetailsByConnectionId(chatId, currentUserId)
-        }.onFailure { e ->
-            println("ChatRepository: loadChatWithDetailsByConnectionId failed: ${e.redactedRestMessage()}")
-        }.getOrNull()
+            if (!row.chat.id.isNullOrBlank() || row.groupClique != null) {
+                row
+            } else {
+                val ensured = ensureChatForConnection(row.connection.id) ?: return@runCatching row
+                row.copy(
+                    chat = row.chat.copy(
+                        id = ensured.id,
+                        connectionId = row.connection.id,
+                    ),
+                )
+            }
+        }.getOrElse { e ->
+            println("ChatRepository: normalize inbox chat row failed: ${e.redactedRestMessage()}")
+            row
+        }
     }
 
     /**
@@ -2075,6 +2115,18 @@ class SupabaseChatRepository(
         cachedJunctionData = null
         cachedJunctionUserId = null
         cachedJunctionTimestamp = 0L
+    }
+
+    override fun seedConnectionJunctionCache(
+        userId: String,
+        connections: List<Connection>,
+        archivedConnectionIds: Set<String>,
+        hiddenConnectionIds: Set<String>,
+    ) {
+        if (userId.isBlank()) return
+        cachedJunctionData = Triple(connections, archivedConnectionIds, hiddenConnectionIds)
+        cachedJunctionUserId = userId
+        cachedJunctionTimestamp = Clock.System.now().toEpochMilliseconds()
     }
 
     override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean =

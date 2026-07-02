@@ -11,9 +11,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -1098,18 +1098,13 @@ private fun HomeAvailabilityIntentsRow(
     Column(modifier = Modifier.fillMaxWidth()) {
         GradientSectionHeader(text = "I'm down for…")
         Spacer(modifier = Modifier.height(10.dp))
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(
-                count = intents.size,
-                key = { idx ->
-                    val row = intents[idx]
-                    row.id ?: "${row.intentTag}_${row.expiresAt}"
-                },
-            ) { idx ->
-                val row = intents[idx]
+            intents.forEach { row ->
                 val label = row.intentTag?.trim().orEmpty().ifEmpty { "Intent" }
                 val sub = row.activeUntilLabel()
                 AssistChip(
@@ -1142,27 +1137,25 @@ private fun HomeAvailabilityIntentsRow(
                     ),
                 )
             }
-            item(key = "add_intent") {
-                AssistChip(
-                    onClick = onOpenSheet,
-                    label = {
-                        Text(
-                            if (intents.isEmpty()) "Set what you're down for" else "Edit intents",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
-                    shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                )
-            }
+            AssistChip(
+                onClick = onOpenSheet,
+                label = {
+                    Text(
+                        if (intents.isEmpty()) "Set what you're down for" else "Edit intents",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                shape = RoundedCornerShape(22.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                    labelColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            )
         }
     }
 }

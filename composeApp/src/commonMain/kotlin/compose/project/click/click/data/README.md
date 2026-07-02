@@ -116,6 +116,34 @@ Invalidation uses explicit epoch counters rather than polling:
 | `_foregroundRealtimeRecovery` | `handleApplicationForegrounded()` | `ChatViewModel` re-attaches Postgres channels |
 | `discoveryMapPrefetchComplete` | Beacon prefetch finishes | `MapViewModel` seeds from prefetch |
 
+### Inbox freshness short-circuit
+
+`isInboxFeedFresh()` (30s window, tied to `REFRESH_COOLDOWN_MS`) lets `ChatViewModel.loadChats()` paint from `AppDataManager` SSOT without a network round-trip when:
+
+- `isDataLoaded` is true
+- `lastRefreshTime` is within cooldown
+- `_inboxFeedChats` **or** `_connections` is non-empty
+
+Forced reloads (`loadChats(isForced = true)`) and `chatListRefreshEpoch` bumps bypass this path.
+
+### Junction cache seeding
+
+After every `applyFetchedConnectionSnapshot()`, `seedJunctionCacheFromMemory()` pushes connections + archive/hidden IDs into `SupabaseChatRepository.seedConnectionJunctionCache()`. `getOrFetchJunctionData()` prefers:
+
+1. In-memory junction cache (TTL **5 minutes**)
+2. `appDataJunctionSnapshot()` from `AppDataManager` when loaded
+3. Network `fetchUserConnectionsSnapshot(userId, runStaleSweep = false)` with offline SSOT fallback
+
+`clearChatListLocalCaches()` resets junction cache on archive/delete/group mutations.
+
+### Debounced snapshot persistence
+
+`schedulePersistSnapshot()` coalesces disk writes with a **3s** debounce (`PERSIST_SNAPSHOT_DEBOUNCE_MS`) instead of encoding the full `CachedAppSnapshot` on every realtime delta.
+
+### Stale-connection sweep throttle
+
+`fetchUserConnectionsSnapshot` calls `sweepStaleConnectionsForUserIfDue` — at most **once per user per 24 hours** per process (`STALE_SWEEP_INTERVAL_MS`). Resets on logout via `SupabaseRepository.resetStaleConnectionSweepSchedule()`.
+
 Pending connection / proximity handshake queues sync on a `PENDING_SYNC_RETRY_MS` (15s) loop with network connectivity observer.
 
 ### Hydration sequence (detailed)
@@ -125,7 +153,7 @@ Pending connection / proximity handshake queues sync on a `PENDING_SYNC_RETRY_MS
 3. **Parallel beacon prefetch** seeds map before user opens Map tab
 4. **Silent chat prefetch** loads top N thread timelines in background
 5. **Profile prefetch** hydrates peer avatars for connection list rows
-6. **`persistSnapshot()`** writes durable cache after each successful merge
+6. **`persistSnapshot()`** writes durable cache after each successful merge (debounced 3s via `schedulePersistSnapshot()`)
 
 ---
 

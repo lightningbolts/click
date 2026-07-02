@@ -150,15 +150,15 @@ import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pr
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import androidx.compose.runtime.DisposableEffect
+import compose.project.click.click.ui.components.floatingHeaderStatusBarPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberFloatingHeaderTopPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberStatusBarTopPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
@@ -170,6 +170,7 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CallLogSystemRow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatBubblePhotoContent // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
@@ -218,8 +219,8 @@ import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pr
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
-import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
+import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
+import compose.project.click.click.util.prefetchAvailabilityOverlapsForPeers // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
@@ -274,7 +275,7 @@ fun ConnectionsListView(
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val activeHubs by AppDataManager.activeHubs.collectAsState()
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = rememberStatusBarTopPadding()
     val bottomChrome = rememberBottomChromePadding()
     val fabAboveNav = rememberFabAboveNavPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
@@ -369,13 +370,93 @@ fun ConnectionsListView(
         else -> emptyList()
     }
 
-    val activeOneToOneChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats
-            .filter {
-                it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+    var viewerAvailabilityBubbles by remember(currentUserId) {
+        mutableStateOf<List<ProfileAvailabilityIntentBubble>?>(null)
+    }
+    var overlapPrefetchGeneration by remember(currentUserId) { mutableStateOf(0) }
+    LaunchedEffect(currentUserId) {
+        val userId = currentUserId?.takeIf { it.isNotBlank() } ?: run {
+            viewerAvailabilityBubbles = null
+            ViewerAvailabilityBubblesCache.clear()
+            return@LaunchedEffect
+        }
+        val cached = ViewerAvailabilityBubblesCache.get(userId)
+        if (cached != null) {
+            viewerAvailabilityBubbles = cached
+            return@LaunchedEffect
+        }
+        val overlapRepo = SupabaseRepository()
+        try {
+            viewerAvailabilityBubbles = withContext(Dispatchers.Default) {
+                overlapRepo.fetchPeerProfileAvailabilityBubbles(userId, userId)
+            }.also { ViewerAvailabilityBubblesCache.put(userId, it) }
+        } catch (e: Exception) {
+            viewerAvailabilityBubbles = emptyList()
+            ViewerAvailabilityBubblesCache.put(userId, emptyList())
+            println("ConnectionsListView: viewer availability bubbles: ${e.redactedRestMessage()}")
+        }
+    }
+
+    val activeChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.filter {
+            it.groupClique == null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
+    }
+    val activeOneToOneChats = remember(activeChats) {
+        activeChats.sortedByDescending { connectionListActivityTs(it) }
+    }
+
+    LaunchedEffect(currentUserId, viewerAvailabilityBubbles, activeOneToOneChats) {
+        val userId = currentUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val mine = viewerAvailabilityBubbles ?: return@LaunchedEffect
+        val peerIds = activeOneToOneChats.map { it.otherUser.id }
+        if (peerIds.isEmpty()) return@LaunchedEffect
+        val fetched = prefetchAvailabilityOverlapsForPeers(
+            viewerUserId = userId,
+            peerUserIds = peerIds,
+            viewerBubbles = mine,
+        )
+        if (fetched > 0) {
+            overlapPrefetchGeneration++
+        }
+    }
+
+    val groupChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.filter {
+            it.groupClique != null &&
+                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
+    }
+    val archivedChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
+        effectiveChats.filter {
+            it.groupClique == null &&
+                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+        }
+    }
+    val sortedTabChats = remember(activeChats, groupChats, archivedChats, selectedTabIndex, coreConnectionIds) {
+        val tabChats = when (selectedTabIndex) {
+            0 -> activeChats
+            1 -> groupChats
+            else -> archivedChats
+        }
+        tabChats.sortedWith(
+            compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
+                .thenByDescending { connectionListActivityTs(it) },
+        )
+    }
+    val filteredChats = remember(sortedTabChats, searchQuery) {
+        if (searchQuery.isBlank()) {
+            sortedTabChats
+        } else {
+            sortedTabChats.filter { chat ->
+                val groupHit =
+                    chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
+                val userHit =
+                    chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
+                groupHit || userHit
             }
-            .sortedByDescending { connectionListActivityTs(it) }
+        }
     }
 
     /** Verified-click picker: every non-group 1:1 edge still in the inbox, including pending and archived-tab rows. */
@@ -463,26 +544,9 @@ fun ConnectionsListView(
         toastState.show(listScope, result)
     }
 
-    // Tab counts derive purely from list inputs; memoize so presence heartbeats and
-    // animation frames don't re-scan the full chat list every recomposition.
-    val activeCount = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.count {
-            it.groupClique == null &&
-                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
-    }
-    val groupCount = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds, activeHubs) {
-        effectiveChats.count {
-            it.groupClique != null &&
-                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-        } + activeHubs.size
-    }
-    val archivedCount = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.count {
-            it.groupClique == null &&
-                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
-    }
+    val activeCount = activeChats.size
+    val groupCount = groupChats.size + activeHubs.size
+    val archivedCount = archivedChats.size
     val headerSubtitle = remember(
         effectiveChats,
         selectedTabIndex,
@@ -495,18 +559,6 @@ fun ConnectionsListView(
         if (effectiveChats.isEmpty()) {
             if (chatListState is ChatListState.Loading) "Loading…" else ""
         } else {
-            val activeChats = effectiveChats.filter {
-                it.groupClique == null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-            }
-            val groupChats = effectiveChats.filter {
-                it.groupClique != null &&
-                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-            }
-            val archivedChats = effectiveChats.filter {
-                it.groupClique == null &&
-                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-            }
             val tabChats = when (selectedTabIndex) {
                 0 -> activeChats
                 1 -> groupChats
@@ -515,13 +567,7 @@ fun ConnectionsListView(
             val filteredCount = if (searchQuery.isBlank()) {
                 tabChats.size
             } else {
-                tabChats.count { chat ->
-                    val groupHit =
-                        chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
-                    val userHit =
-                        chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
-                    groupHit || userHit
-                }
+                filteredChats.size
             }
             val tabLabel = when (selectedTabIndex) {
                 0 -> "active"
@@ -535,18 +581,9 @@ fun ConnectionsListView(
             }
         }
     }
-    val listTopPadding = remember(collapseFraction, statusBarTop, effectiveChats.isNotEmpty()) {
-        val compactHeader = effectiveChats.isNotEmpty() && collapseFraction > 0.42f
-        if (compactHeader) {
-            statusBarTop + 76.dp
-        } else {
-            val collapsed = AppScreenDefaults.FloatingHeaderCompactHeight
-            val expanded = AppScreenDefaults.FloatingHeaderLargeHeight
-            val headerH = statusBarTop + collapsed + (expanded - collapsed) * (1f - collapseFraction)
-            val tabH = if (effectiveChats.isNotEmpty()) 76.dp else 0.dp
-            headerH + tabH + 8.dp
-        }
-    }
+    val (headerContentPadding, headerMeasureModifier) =
+        rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop)
+    val listTopPadding = headerContentPadding
 
     Box(modifier = Modifier.fillMaxSize()) {
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
@@ -584,49 +621,6 @@ fun ConnectionsListView(
                     }
                 }
             } else {
-                // Filtering + sorting the full inbox is O(n log n); memoize on the actual
-                // inputs so unrelated recompositions (tab slide animation frames, presence
-                // ticks) reuse the previous list instead of recomputing it every frame.
-                val filteredChats = remember(
-                    effectiveChats,
-                    archivedConnectionIds,
-                    hiddenConnectionIds,
-                    selectedTabIndex,
-                    searchQuery,
-                    coreConnectionIds,
-                ) {
-                    val tabChats = when (selectedTabIndex) {
-                        0 -> effectiveChats.filter {
-                            it.groupClique == null &&
-                                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                        }
-                        1 -> effectiveChats.filter {
-                            it.groupClique != null &&
-                                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                        }
-                        else -> effectiveChats.filter {
-                            it.groupClique == null &&
-                                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-                        }
-                    }
-                    val sortedTabChats = tabChats
-                        .sortedWith(
-                            compareByDescending<ChatWithDetails> { it.connection.id in coreConnectionIds }
-                                .thenByDescending { connectionListActivityTs(it) },
-                        )
-                    if (searchQuery.isBlank()) {
-                        sortedTabChats
-                    } else {
-                        sortedTabChats.filter { chat ->
-                            val groupHit =
-                                chat.groupClique?.name?.contains(searchQuery, ignoreCase = true) == true
-                            val userHit =
-                                chat.otherUser.name?.contains(searchQuery, ignoreCase = true) == true
-                            groupHit || userHit
-                        }
-                    }
-                }
-
                 val clicksListOrderSignature = remember(filteredChats) {
                     filteredChats.joinToString("\u0000") {
                         "${it.connection.id}\t${connectionListActivityTs(it)}"
@@ -730,6 +724,7 @@ fun ConnectionsListView(
                                 ConnectionItem(
                                     chatDetails = chatDetails,
                                     viewerUserId = currentUserId,
+                                    overlapPrefetchGeneration = overlapPrefetchGeneration,
                                     isCore = connectionId in coreConnectionIds,
                                     showOnlineIndicator = chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,
@@ -760,20 +755,27 @@ fun ConnectionsListView(
                 .align(Alignment.TopCenter)
                 .zIndex(1f)
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = statusBarTop),
+                .floatingHeaderStatusBarPadding()
+                .padding(start = 20.dp, end = 20.dp),
         ) {
-            ConnectionsFloatingHeader(
-                collapseFraction = collapseFraction,
-                title = "Clicks",
-                subtitle = headerSubtitle.takeIf { it.isNotBlank() },
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = { selectedTabIndex = it },
-                activeCount = activeCount,
-                groupCount = groupCount,
-                archivedCount = archivedCount,
-                showTabs = effectiveChats.isNotEmpty(),
-                onOpenSearch = onOpenSearch,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(headerMeasureModifier),
+            ) {
+                ConnectionsFloatingHeader(
+                    collapseFraction = collapseFraction,
+                    title = "Clicks",
+                    subtitle = headerSubtitle.takeIf { it.isNotBlank() },
+                    selectedTabIndex = selectedTabIndex,
+                    onTabSelected = { selectedTabIndex = it },
+                    activeCount = activeCount,
+                    groupCount = groupCount,
+                    archivedCount = archivedCount,
+                    showTabs = effectiveChats.isNotEmpty(),
+                    onOpenSearch = onOpenSearch,
+                )
+            }
         }
     }
     }

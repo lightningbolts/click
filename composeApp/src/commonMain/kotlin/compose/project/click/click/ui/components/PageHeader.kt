@@ -146,6 +146,7 @@ fun LiquidGlassPageHeader(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                             if (presenceOnline != null && animatedCollapse < 0.85f) {
@@ -178,6 +179,7 @@ fun LiquidGlassPageHeader(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                             if (presenceOnline != null) {

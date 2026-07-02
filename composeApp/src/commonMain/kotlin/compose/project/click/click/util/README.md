@@ -15,7 +15,7 @@
 | **Network safety** | `NetworkFailureUtil.kt`, `RedactedThrowable.kt` |
 | **Media vaults** | `ProfileMediaVault.kt`, `ChatMediaVault.kt`, `ChatOutgoingImageCompression.kt`, `ChatMediaDispatcher.kt` |
 | **Search** | `ConnectionSearchHaystack.kt` |
-| **Availability math** | `AvailabilityIntentOverlap.kt`, `AvailabilityOverlapCache.kt` |
+| **Availability math** | `AvailabilityIntentOverlap.kt`, `AvailabilityOverlapCache.kt`, `AvailabilityOverlapPrefetch.kt` |
 | **Compose lifecycle** | `CollectAsStateLifecycleAware.kt` |
 | **ViewModel cleanup** | `ViewModelTeardown.kt` |
 | **Cache** | `LruMemoryCache.kt` |
@@ -116,6 +116,18 @@ Builds searchable text index from connections (names, tags, memory snippets, tim
 ### `AvailabilityIntentOverlap.kt` + `AvailabilityOverlapCache.kt`
 
 Intersect user availability intents with `calendar/` busy blocks; cache per peer pair to avoid repeated calendar reads.
+
+### `AvailabilityOverlapPrefetch.kt`
+
+Batch-fetches peer availability bubbles and writes overlap results into `AvailabilityOverlapCache`:
+
+- `ViewerAvailabilityBubblesCache` — session cache for the signed-in user's bubbles (one fetch per session).
+- `prefetchAvailabilityOverlapsForPeers()` — parallel fetch with **concurrency 8**, capped at **`AVAILABILITY_OVERLAP_MAX_PEERS` (48)** to prevent Supabase read storms for power users.
+- Called from `ConnectionsListView` (inbox bolt icons) and `HomeViewModel` (overlap cards).
+
+`ConnectionItem` reads cache only — no per-row network I/O.
+
+See also `PERFORMANCE.md` § Scale failure modes.
 
 ### `CollectAsStateLifecycleAware.kt`
 

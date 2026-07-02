@@ -73,6 +73,21 @@ data class UserConnectionsSnapshot(
  * Handles direct database queries for users and connections
  */
 class SupabaseRepository {
+    companion object {
+        private var lastStaleSweepUserId: String? = null
+        private var lastStaleSweepAtMs: Long = 0L
+        private const val STALE_SWEEP_INTERVAL_MS = 24L * 60L * 60L * 1000L
+        private val userPublicProfileCache =
+            MutableStateFlow<Map<String, UserPublicProfile>>(emptyMap())
+        private val profileTimelineCache =
+            MutableStateFlow<Map<String, ProfileTimelineCacheEntry>>(emptyMap())
+
+        /** Reset sweep schedule (e.g. on logout). */
+        fun resetStaleConnectionSweepSchedule() {
+            lastStaleSweepUserId = null
+            lastStaleSweepAtMs = 0L
+        }
+    }
     /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
 
@@ -97,14 +112,6 @@ class SupabaseRepository {
      */
     private var connectionArchivesTableMissing: Boolean = false
     private var connectionHiddenTableMissing: Boolean = false
-
-    companion object {
-        private val userPublicProfileCache =
-            MutableStateFlow<Map<String, UserPublicProfile>>(emptyMap())
-        private val profileTimelineCache =
-            MutableStateFlow<Map<String, ProfileTimelineCacheEntry>>(emptyMap())
-        private val sweptStaleConnectionUserIds = mutableSetOf<String>()
-    }
 
     fun getCachedUserPublicProfile(targetUserId: String): UserPublicProfile? {
         val key = targetUserId.trim()
@@ -469,6 +476,7 @@ class SupabaseRepository {
      */
     suspend fun fetchSharedConnectionBetween(viewerUserId: String, peerUserId: String): Connection? {
         if (viewerUserId.isBlank() || peerUserId.isBlank()) return null
+        findSharedConnectionInMemory(viewerUserId, peerUserId)?.let { return it }
         return try {
             val hidden = getHiddenConnectionIds(viewerUserId)
             val rows = supabase.from("connections")
@@ -492,15 +500,38 @@ class SupabaseRepository {
         }
     }
 
+    private fun findSharedConnectionInMemory(viewerUserId: String, peerUserId: String): Connection? {
+        val currentUserId = compose.project.click.click.data.AppDataManager.currentUser.value?.id
+        if (currentUserId != viewerUserId || !compose.project.click.click.data.AppDataManager.isDataLoaded.value) {
+            return null
+        }
+        val hidden = compose.project.click.click.data.AppDataManager.hiddenConnectionIds.value
+        val rows = compose.project.click.click.data.AppDataManager.connections.value
+            .filter { conn ->
+                viewerUserId in conn.user_ids &&
+                    peerUserId in conn.user_ids &&
+                    conn.isVisibleInActiveUi() &&
+                    conn.id !in hidden
+            }
+        return rows.maxByOrNull { conn ->
+            (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
+        }
+    }
+
     /**
      * Lazy-sweep then two-step fetch (active channel + archived channel), matching web API semantics.
      * Also excludes connections where the other participant has blocked this user via [user_blocks].
      */
-    suspend fun fetchUserConnectionsSnapshot(userId: String): UserConnectionsSnapshot {
+    suspend fun fetchUserConnectionsSnapshot(
+        userId: String,
+        runStaleSweep: Boolean = true,
+    ): UserConnectionsSnapshot {
         if (userId.isBlank()) {
             return UserConnectionsSnapshot(emptyList(), emptySet(), emptySet(), emptySet())
         }
-        sweepStaleConnectionsForUserOnce(userId)
+        if (runStaleSweep) {
+            sweepStaleConnectionsForUserIfDue(userId)
+        }
         val archivedIds = getArchivedConnectionIds(userId)
         val hiddenIds = getHiddenConnectionIds(userId)
         val coreFetch = fetchCoreConnectionIds(userId)
@@ -528,11 +559,14 @@ class SupabaseRepository {
         )
     }
 
-    private suspend fun sweepStaleConnectionsForUserOnce(userId: String) {
-        val key = userId.trim()
-        if (key.isEmpty() || key in sweptStaleConnectionUserIds) return
-        sweepStaleConnectionsForUser(key)
-        sweptStaleConnectionUserIds += key
+    private suspend fun sweepStaleConnectionsForUserIfDue(userId: String) {
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        if (lastStaleSweepUserId == userId && now - lastStaleSweepAtMs < STALE_SWEEP_INTERVAL_MS) {
+            return
+        }
+        sweepStaleConnectionsForUser(userId)
+        lastStaleSweepUserId = userId
+        lastStaleSweepAtMs = now
     }
 
     private suspend fun sweepStaleConnectionsForUser(userId: String) {
