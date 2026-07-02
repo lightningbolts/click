@@ -47,6 +47,8 @@ initializeData()
 
 [`data/realtime/RealtimeCoordinator.kt`](realtime/RealtimeCoordinator.kt) owns one app-scoped `messages` insert flow and one `connections` junction flow. ViewModels subscribe to shared `SharedFlow`s instead of opening duplicate Supabase channels.
 
+`subscribeToMessageInserts()` registers `postgresChangeFlow` synchronously (before `attach()`); deferring registration into flow `collect` breaks the global inbox listener with `You cannot call postgresChangeFlow after joining the channel`.
+
 ### ChatSessionCaches (shared session state)
 
 [`repository/ChatSessionCaches.kt`](repository/ChatSessionCaches.kt) is a process-wide singleton holding:

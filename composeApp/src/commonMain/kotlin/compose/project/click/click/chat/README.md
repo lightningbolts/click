@@ -107,6 +107,14 @@ Bulk inbox hydration uses `Semaphore(12)` (`limitParallel`) to cap parallel conn
 
 ### Realtime: `postgresChangeFlow`
 
+**Critical ordering:** call `channel.postgresChangeFlow { … }` **before** `channel.subscribe()`. Supabase throws `You cannot call postgresChangeFlow after joining the channel` if listeners are registered inside `channelFlow`/`callbackFlow` collect (because `RealtimeCoordinator` calls `attach()` before `collect()`).
+
+| Subscription | Channel | Tables | Owner |
+|--------------|---------|--------|-------|
+| Per-chat thread | `messages:$chatId` | `messages`, `message_reactions` | `ChatViewModel` via `subscribeToMessages` |
+| Inbox list preview | `clicks:msg-list:*` | `messages` (INSERT/UPDATE) | `RealtimeCoordinator` via `subscribeToMessageInserts` |
+| Connection junction | `app:connections:$userId` | `connections`, archives, hidden, core | `RealtimeCoordinator` |
+
 `subscribeToMessages` registers **one** Realtime channel per `chatId` with merged Postgres change streams:
 
 | Table | Actions | Client handling |

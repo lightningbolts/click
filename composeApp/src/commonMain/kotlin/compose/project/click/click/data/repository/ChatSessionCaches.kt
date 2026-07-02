@@ -2,6 +2,7 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.data.models.Message
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -21,8 +22,18 @@ object ChatSessionCaches {
     private val routingMutex = Mutex()
     private val chatIdToConnectionId = mutableMapOf<String, String>()
     private val chatIdToGroupId = mutableMapOf<String, String>()
+    @Volatile
+    private var syncListKeyByChatId: Map<String, String> = emptyMap()
 
     val messageTimelineCache = ChatTimelineCache()
+
+    /** Lock-free read for navigation / push deep links (mirrors [peekListKeyForChat]). */
+    fun peekListKeyForChatSync(chatId: String): String? =
+        syncListKeyByChatId[chatId]
+
+    private fun publishListKey(chatId: String, listKey: String) {
+        syncListKeyByChatId = syncListKeyByChatId + (chatId to listKey)
+    }
 
     suspend fun seedConnectionRouting(chatId: String, connectionId: String) {
         if (chatId.isBlank() || connectionId.isBlank()) return
@@ -30,6 +41,7 @@ object ChatSessionCaches {
             chatIdToConnectionId[chatId] = connectionId
             chatIdToGroupId.remove(chatId)
         }
+        publishListKey(chatId, connectionId)
     }
 
     suspend fun seedGroupRouting(chatId: String, groupId: String) {
@@ -38,6 +50,7 @@ object ChatSessionCaches {
             chatIdToGroupId[chatId] = groupId
             chatIdToConnectionId.remove(chatId)
         }
+        publishListKey(chatId, groupId)
     }
 
     suspend fun rememberConnectionRouting(chatId: String, connectionId: String) {
@@ -64,6 +77,7 @@ object ChatSessionCaches {
             chatIdToConnectionId.clear()
             chatIdToGroupId.clear()
         }
+        syncListKeyByChatId = emptyMap()
     }
 
     suspend fun getCrypto(chatId: String): ResolvedChatCrypto? =

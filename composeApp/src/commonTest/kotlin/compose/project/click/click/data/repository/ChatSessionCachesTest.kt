@@ -29,6 +29,7 @@ class ChatSessionCachesTest {
         repoA.mergeCachedTimelineMessage("conn-1", message)
 
         assertEquals("conn-1", runBlocking { ChatSessionCaches.peekListKeyForChat("chat-1") })
+        assertEquals("conn-1", ChatSessionCaches.peekListKeyForChatSync("chat-1"))
         assertNotNull(repoB.peekCachedMessageTimeline("conn-1"))
         assertEquals("hello", repoB.peekCachedMessageTimeline("conn-1")?.last()?.content)
     }

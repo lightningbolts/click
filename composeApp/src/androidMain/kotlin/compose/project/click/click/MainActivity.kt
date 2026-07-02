@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != ACTION_VIEW_CHAT) return
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID)
         val connectionId = intent.getStringExtra(EXTRA_CHAT_CONNECTION_ID)
-        val deepLinkId = chatId?.takeIf { it.isNotBlank() } ?: connectionId ?: return
+        val deepLinkId = connectionId?.takeIf { it.isNotBlank() } ?: chatId ?: return
         ChatNotificationDismisser.dismissForThread(
             chatId = chatId.orEmpty(),
             connectionId = connectionId.orEmpty(),

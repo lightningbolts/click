@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.core.app.ApplicationProvider
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
@@ -666,5 +667,56 @@ class ChatViewModelTest {
         val list = vm.chatListState.value as ChatListState.Success
         assertEquals(1, list.chats.first().unreadCount)
         assertEquals(false, list.chats.first().lastMessage?.isRead)
+    }
+
+    @Test
+    fun realtimePreview_survivesConnectionSnapshotWithAheadLastMessageAt() = runVmTest {
+        val selfId = "user-self"
+        val connectionId = "conn-1"
+        val msgTs = 1_700_000_000_000L
+        val triggerAheadTs = msgTs + 5_000L
+        val connection = Connection(
+            id = connectionId,
+            created = msgTs,
+            expiry = Long.MAX_VALUE,
+            geo_location = GeoLocation(0.0, 0.0),
+            user_ids = listOf(selfId, "other"),
+            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            has_begun = true,
+            expiry_state = "active",
+        )
+        val row = ChatWithDetails(
+            chat = connection.chat,
+            connection = connection,
+            otherUser = User(id = "other", name = "Other"),
+            lastMessage = null,
+            unreadCount = 0,
+        )
+        val fake = FakeChatRepository(
+            onFetchDirectUserChatsWithDetails = { listOf(row) },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
+        )
+        val vm = testChatViewModel(chatRepository = fake)
+        vm.setCurrentUser(selfId)
+        advanceUntilIdle()
+        vm.loadChats(isForced = true)
+        advanceUntilIdle()
+
+        compose.project.click.click.notifications.ChatPushInboxBridge.applyChatMessagePush(
+            chatId = "chat-api-1",
+            connectionId = connectionId,
+            senderUserId = "other",
+            previewText = "Live preview text",
+            timeCreated = msgTs,
+        )
+        advanceUntilIdle()
+
+        AppDataManager.updateConnectionChatActivity(connectionId, triggerAheadTs, null)
+        advanceUntilIdle()
+
+        val list = vm.chatListState.value as ChatListState.Success
+        assertEquals("Live preview text", list.chats.first().lastMessage?.content)
+        assertEquals(msgTs, list.chats.first().lastMessage?.timeCreated)
     }
 }

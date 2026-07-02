@@ -55,8 +55,10 @@ fun savePushToken(token: String, platform: String, tokenType: String) {
 }
 
 fun setChatDeepLink(chatId: String, connectionId: String = "") {
-    ChatNotificationDismisser.dismissForThread(chatId, connectionId.ifBlank { chatId })
-    ChatDeepLinkManager.setPendingChat(chatId)
+    val resolvedConnectionId = connectionId.trim().ifBlank { chatId.trim() }
+    if (resolvedConnectionId.isEmpty()) return
+    ChatNotificationDismisser.dismissForThread(chatId, resolvedConnectionId)
+    ChatDeepLinkManager.setPendingChat(resolvedConnectionId)
 }
 
 /** iOS background/foreground chat push — updates inbox previews without opening the thread. */

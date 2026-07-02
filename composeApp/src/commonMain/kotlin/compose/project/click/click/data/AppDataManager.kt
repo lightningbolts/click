@@ -692,10 +692,11 @@ object AppDataManager {
         realtimeCoordinatorJob = scope.launch {
             RealtimeCoordinator.ensureStarted(userId)
             RealtimeCoordinator.messageInserts.collect { event ->
-                val vaulted = chatRepository
-                    .vaultEncryptedMediaMessages(event.chatId, userId, listOf(event.message))
-                    .firstOrNull()
-                    ?: event.message
+                val vaulted = runCatching {
+                    chatRepository
+                        .vaultEncryptedMediaMessages(event.chatId, userId, listOf(event.message))
+                        .firstOrNull()
+                }.getOrNull() ?: event.message
                 updateConnectionChatActivity(event.connectionId, vaulted.timeCreated, vaulted)
                 updateInboxFeedChatActivity(event.connectionId, vaulted)
 
@@ -1351,12 +1352,8 @@ object AppDataManager {
         _connections.value = _connections.value.map { c ->
             if (c.id != connectionId) return@map c
             val mergedAt = listOfNotNull(c.last_message_at, lastMessageAt).maxOrNull()
-            val cachedPreviewTs = c.chat.messages.lastOrNull()?.timeCreated
             val newChat = if (lastMessagePreview != null) {
                 c.chat.copy(messages = listOf(lastMessagePreview))
-            } else if (mergedAt != null && cachedPreviewTs != null && cachedPreviewTs < mergedAt) {
-                // Keep state immutable and clear stale preview text when we only know activity advanced.
-                c.chat.copy(messages = emptyList())
             } else {
                 c.chat
             }

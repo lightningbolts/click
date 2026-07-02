@@ -10,11 +10,13 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -96,21 +98,35 @@ object RealtimeCoordinator {
 
     private fun startMessageListenerLocked() {
         messageCollectJob = scope.launch {
-            var sub: ChatMessageSubscription? = null
-            try {
-                val (subscription, flow) = chatRepository.subscribeToMessageInserts()
-                sub = subscription
-                messageSub = subscription
-                subscription.attach()
-                flow.collect { event ->
-                    bumpInboxVersionLocked()
-                    _messageInserts.emit(event)
+            var attempt = 0
+            while (isActive) {
+                var sub: ChatMessageSubscription? = null
+                try {
+                    // subscribeToMessageInserts() registers postgresChangeFlow synchronously;
+                    // attach() must run before collect() but after listener registration.
+                    val (subscription, flow) = chatRepository.subscribeToMessageInserts()
+                    sub = subscription
+                    messageSub = subscription
+                    subscription.attach()
+                    attempt = 0
+                    flow.collect { event ->
+                        bumpInboxVersionLocked()
+                        _messageInserts.emit(event)
+                    }
+                    return@launch
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    attempt++
+                    println(
+                        "RealtimeCoordinator: message listener failed (attempt $attempt): " +
+                            e.redactedRestMessage(),
+                    )
+                    delay(minOf(30_000L, 500L * attempt))
+                } finally {
+                    runCatching { sub?.detach() }
+                    if (messageSub === sub) messageSub = null
                 }
-            } catch (e: Exception) {
-                println("RealtimeCoordinator: message listener failed: ${e.redactedRestMessage()}")
-            } finally {
-                runCatching { sub?.detach() }
-                if (messageSub === sub) messageSub = null
             }
         }
     }
@@ -122,9 +138,6 @@ object RealtimeCoordinator {
                 val channel = SupabaseConfig.client.channel("app:connections:$userId")
                 connectionsChannel = channel
                 merge(
-                    // Message inserts already bump inbox previews via [messageInserts]. Listening to
-                    // UPDATE on [connections] (last_message_at trigger) caused debounced full inbox
-                    // reloads that clobbered fresher realtime preview patches.
                     channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
                         .filter { it is PostgresAction.Insert }
                         .map { },
@@ -139,6 +152,12 @@ object RealtimeCoordinator {
                         _connectionJunctionChanged.emit(Unit)
                     }
                 }.launchIn(this)
+                channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                    .filter { it is PostgresAction.Update }
+                    .onEach {
+                        bumpInboxVersionLocked()
+                    }
+                    .launchIn(this)
                 channel.subscribe()
             } catch (e: Exception) {
                 println("RealtimeCoordinator: connections listener failed: ${e.redactedRestMessage()}")

@@ -80,7 +80,15 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 - `loadChatMessages` bridges `Loading → Success` before ephemeral Realtime subscribe; duplicate opens for the same connection are deduped via `inFlightLoadConnectionId`.
 - `pendingChatLoadId` retries automatically when `setCurrentUser` runs after a null-user early return.
 - `startGlobalMessageListRealtime` restarts with backoff on collector failure.
+- Global inbox previews depend on `RealtimeCoordinator.messageInserts` (`subscribeToMessageInserts`); `postgresChangeFlow` must be registered before channel subscribe.
 - `ChatPushInboxBridge.inboxPushEvents` and `RealtimeCoordinator.inboxVersion` patch connection-list previews without a full `loadChats` round-trip.
+- `bumpConnectionInChatList` paints `_chatListState` before patching `AppDataManager` so the connections collector cannot clobber a fresh preview.
+- `mergeChatRowWithCache` keeps the freshest `lastMessage` even when DB `last_message_at` is slightly ahead of `message.timeCreated` (trigger clock skew).
+- `resolveListKeyForChat` seeds routing from `AppDataManager` before any network lookup so global `messageInserts` are not dropped pre-open-chat.
+- `connections` UPDATE bumps `inboxVersion` only (no debounced inbox reload); junction tables still trigger archive/hide refresh.
+- Inbound list rows increment `unreadCount` when the thread is not open; `markMessagesAsRead` runs only while the chat is visible.
+- `markConversationUnread` calls click-web `PATCH /api/chat/messages/unread` and syncs badges across devices.
+- Push/deep-link opens prefer `connection_id` and resolve API `chat_id` via `ChatSessionCaches.peekListKeyForChatSync`.
 - `_decryptedPreviews` is populated from `bumpConnectionInChatList` when decrypt succeeds.
 
 ### Global search architecture

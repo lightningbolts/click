@@ -703,12 +703,21 @@ class ChatViewModel(
             var attempt = 0
             while (isActive) {
                 try {
-                    val userId = _currentUserId.value ?: return@launch
+                    val userId = _currentUserId.value
+                    if (userId == null) {
+                        delay(200)
+                        continue
+                    }
                     RealtimeCoordinator.ensureStarted(userId)
+                    val seededRows = (_chatListState.value as? ChatListState.Success)?.chats.orEmpty()
+                    if (seededRows.isNotEmpty()) {
+                        chatRepository.seedInboxChatRouting(seededRows)
+                    }
+                    chatRepository.seedInboxChatRouting(AppDataManager.inboxFeedChats.value)
                     RealtimeCoordinator.messageInserts.collect { event ->
                         chatRepository.mergeCachedTimelineMessage(event.connectionId, event.message)
                         syncPrefetchFromHotTimeline(event.connectionId)
-                        bumpConnectionInChatList(event.connectionId, event.message)
+                        bumpConnectionInChatList(event.connectionId, event.message, event.chatId)
                         if (event.connectionId == currentConnectionId) {
                             val viewerId = _currentUserId.value ?: return@collect
                             viewModelScope.launch {
@@ -999,11 +1008,17 @@ class ChatViewModel(
         val thread = AppDataManager.cachedChatThreadFor(connectionId) ?: return
         val lastMessage = thread.messages.lastOrNull() ?: return
         val chats = state.chats
-        val index = chats.indexOfFirst { it.connection.id == connectionId }
+        val index = findInboxRowIndex(chats, connectionId, thread.chatId)
         if (index < 0) return
         val row = chats[index]
         val rowTs = row.lastMessage?.timeCreated ?: 0L
-        if (rowTs >= lastMessage.timeCreated) return
+        if (rowTs > lastMessage.timeCreated) return
+        if (rowTs == lastMessage.timeCreated &&
+            row.lastMessage?.content == lastMessage.content &&
+            row.lastMessage?.id == lastMessage.id
+        ) {
+            return
+        }
         val userId = _currentUserId.value
         val cachedPatch = userId?.let { uid ->
             inboxRowFromCachedThread(
@@ -1195,14 +1210,10 @@ class ChatViewModel(
             cachedChat.connection.last_message_at,
             bestLast?.timeCreated
         ).maxOrNull()
-        val normalizedLast = bestLast?.takeIf { msg ->
-            mergedAt == null || msg.timeCreated >= mergedAt
-        }
-        val mergedChat = if (normalizedLast != null) {
-            preferredConnection.chat.copy(messages = listOf(normalizedLast))
-        } else if (mergedAt != null) {
-            // last_message_at moved ahead, but we don't have the plaintext yet; drop stale preview.
-            preferredConnection.chat.copy(messages = emptyList())
+        // Keep [bestLast] even when server last_message_at is slightly ahead of message.timeCreated
+        // (DB trigger clock skew). Clearing here caused live inbox previews to vanish until open-chat.
+        val mergedChat = if (bestLast != null) {
+            preferredConnection.chat.copy(messages = listOf(bestLast))
         } else {
             preferredConnection.chat
         }
@@ -1226,10 +1237,20 @@ class ChatViewModel(
         val mergedUnread = maxOf(listChat.unreadCount, cachedChat.unreadCount)
         return listChat.copy(
             connection = mergedConnection,
-            lastMessage = normalizedLast,
+            lastMessage = bestLast,
             otherUser = resolvedOther,
             unreadCount = mergedUnread,
         )
+    }
+
+    private fun findInboxRowIndex(
+        chats: List<ChatWithDetails>,
+        listKey: String,
+        chatId: String? = null,
+    ): Int = chats.indexOfFirst { row ->
+        row.connection.id == listKey ||
+            row.chat.id == listKey ||
+            (!chatId.isNullOrBlank() && row.chat.id == chatId)
     }
 
     private fun updateConnectionState(connectionId: String, transform: (Connection) -> Connection) {
@@ -1453,7 +1474,10 @@ class ChatViewModel(
     fun loadChatMessages(chatId: String) {
         val cachedChat = (_chatListState.value as? ChatListState.Success)
             ?.chats?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-        val connectionId = cachedChat?.connection?.id ?: chatId
+        val connectionId = cachedChat?.connection?.id
+            ?: ChatSessionCaches.peekListKeyForChatSync(chatId)
+            ?: ChatPushInboxBridge.resolveConnectionIdForThread(chatId)
+            ?: chatId
 
         applyPushWarmPrefetch(connectionId, chatId)
 
@@ -1754,7 +1778,9 @@ class ChatViewModel(
     }
 
     private fun applyPushWarmPrefetch(connectionId: String, chatId: String) {
-        val warm = ChatPushInboxBridge.peekWarmMessage(connectionId) ?: return
+        val warm = ChatPushInboxBridge.peekWarmMessage(connectionId)
+            ?: ChatPushInboxBridge.peekWarmMessageForThread(chatId)
+            ?: return
         val viewerId = _currentUserId.value
         if (viewerId != null && connectionId !in prefetchedChatPayloads) {
             val sender = AppDataManager.getConnectedUser(warm.user_id)
@@ -2619,25 +2645,37 @@ class ChatViewModel(
     }
 
     /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
-    private fun bumpConnectionInChatList(connectionId: String, message: Message) {
-        AppDataManager.updateConnectionChatActivity(connectionId, message.timeCreated, message)
-        AppDataManager.updateInboxFeedChatActivity(connectionId, message)
+    private fun bumpConnectionInChatList(
+        connectionId: String,
+        message: Message,
+        chatId: String? = null,
+    ) {
         val preview = message.previewLabel()
-        if (preview.isNotBlank() && preview != "New message") {
-            _decryptedPreviews.value = _decryptedPreviews.value + (connectionId to preview)
-        }
         val viewerId = _currentUserId.value
         val isInbound = viewerId != null && message.user_id != viewerId
-        val isViewingThread = connectionId == currentConnectionId
-        if (isInbound) {
-            _readClearedConnectionIds.update { it - connectionId }
-        }
         val state = _chatListState.value as? ChatListState.Success ?: run {
+            AppDataManager.updateConnectionChatActivity(connectionId, message.timeCreated, message)
+            AppDataManager.updateInboxFeedChatActivity(connectionId, message)
             loadChats(isForced = true)
             return
         }
-        val updated = state.chats.map { chat ->
-            if (chat.connection.id == connectionId) {
+        val rowIndex = findInboxRowIndex(state.chats, connectionId, chatId)
+        val resolvedListKey = if (rowIndex >= 0) {
+            state.chats[rowIndex].connection.id
+        } else {
+            connectionId
+        }
+        val isViewingThread = resolvedListKey == currentConnectionId
+        if (isInbound) {
+            _readClearedConnectionIds.update { it - resolvedListKey }
+        }
+        if (preview.isNotBlank() && preview != "New message") {
+            _decryptedPreviews.value = _decryptedPreviews.value + (resolvedListKey to preview)
+        }
+        val rowExists = rowIndex >= 0
+        val updated = if (rowExists) {
+            state.chats.mapIndexed { index, chat ->
+            if (index == rowIndex) {
                 val prevLastId = chat.lastMessage?.id
                 val inboundUnreadBump =
                     isInbound &&
@@ -2667,10 +2705,16 @@ class ChatViewModel(
                 chat
             }
         }
+        } else {
+            loadChats(isForced = true)
+            state.chats
+        }
         val sorted = updated.sortedByDescending { chatListActivityTimestamp(it) }
         val filtered = applyChatListVisibility(sorted)
         pruneStaleReadClearedHints(filtered)
         _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(filtered))
+        AppDataManager.updateConnectionChatActivity(resolvedListKey, message.timeCreated, message)
+        AppDataManager.updateInboxFeedChatActivity(resolvedListKey, message)
     }
 
     private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {

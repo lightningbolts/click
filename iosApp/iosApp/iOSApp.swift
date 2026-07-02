@@ -252,7 +252,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
                 }
             }
-            ClickKt.setChatDeepLink(chatId: deepLinkId, connectionId: connectionId)
+            DispatchQueue.main.async {
+                ClickKt.setChatDeepLink(chatId: deepLinkId, connectionId: connectionId)
+            }
         }
         completionHandler()
     }
@@ -273,13 +275,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             let preview = userInfo["preview_text"] as? String ?? "New message"
             let messageId = userInfo["message_id"] as? String
             if !chatId.isEmpty || !connectionId.isEmpty {
-                ClickKt.applyChatMessagePushFromNotification(
-                    chatId: chatId,
-                    connectionId: connectionId,
-                    senderUserId: senderUserId,
-                    previewText: preview,
-                    messageId: messageId
-                )
+                DispatchQueue.main.async {
+                    ClickKt.applyChatMessagePushFromNotification(
+                        chatId: chatId,
+                        connectionId: connectionId,
+                        senderUserId: senderUserId,
+                        previewText: preview,
+                        messageId: messageId
+                    )
+                }
                 completionHandler(.newData)
                 return
             }

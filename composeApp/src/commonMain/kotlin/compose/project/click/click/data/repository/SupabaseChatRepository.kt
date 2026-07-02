@@ -42,13 +42,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -549,6 +549,23 @@ class SupabaseChatRepository(
     /** Returns a connection id **or** a group id for Clicks list routing ([bumpConnectionInChatList]). */
     private suspend fun resolveListKeyForChat(chatId: String): String? {
         ChatSessionCaches.peekListKeyForChat(chatId)?.let { return it }
+        AppDataManager.connections.value
+            .firstOrNull { it.chat.id == chatId }
+            ?.let { conn ->
+                rememberChatConnectionRouting(chatId, conn.id)
+                return conn.id
+            }
+        AppDataManager.inboxFeedChats.value
+            .firstOrNull { it.chat.id == chatId }
+            ?.let { inboxRow ->
+                val groupId = inboxRow.groupClique?.groupId
+                if (groupId != null) {
+                    rememberChatGroupRouting(chatId, groupId)
+                    return groupId
+                }
+                rememberChatConnectionRouting(chatId, inboxRow.connection.id)
+                return inboxRow.connection.id
+            }
         val row = supabase.from("chats")
             .select(columns = Columns.list("connection_id", "group_id")) {
                 filter { eq("id", chatId) }
@@ -1473,33 +1490,36 @@ class SupabaseChatRepository(
 
     override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> {
         val channel = supabase.channel("clicks:msg-list:${Clock.System.now().toEpochMilliseconds()}")
-        val flow = channelFlow {
-            channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                table = "messages"
-            }.collect { action ->
-                val row = when (action) {
-                    is PostgresAction.Insert -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
-                    is PostgresAction.Update -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
-                    else -> null
-                } ?: return@collect
-                val listKey = resolveListKeyForChat(row.chatId) ?: return@collect
-                val cached = ChatSessionCaches.getCrypto(row.chatId)
-                // For group cliques listKey is a groupId, so pairwise key derivation
-                // can never succeed — fall back to resolveChatCrypto, which routes
-                // group chats through the wrapped master key and caches the result.
-                val crypto = cached
-                    ?: getEncryptionKeysForConnection(listKey)?.let { ChatSessionCaches.ResolvedChatCrypto.Pairwise(it) }
-                    ?: resolveChatCrypto(row.chatId, supabase.auth.currentUserOrNull()?.id)
-                val rawMessage = row.toMessage()
-                val message = when {
-                    crypto != null -> decryptMessage(rawMessage, crypto)
-                    MessageCrypto.isAnyE2eeWireContent(rawMessage.content) ->
-                        rawMessage.copy(content = "New message")
-                    else -> rawMessage
-                }
-                mergeCachedTimelineMessage(listKey, message)
-                send(MessageListInsertEvent(connectionId = listKey, chatId = row.chatId, message = message))
+        // Register postgres listeners before subscribe() — same contract as [subscribeToMessages].
+        // Do NOT defer postgresChangeFlow into channelFlow/callbackFlow collect; attach() runs first
+        // in RealtimeCoordinator and Supabase rejects listeners registered after join.
+        val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "messages"
+        }.transform { action ->
+            val row = when (action) {
+                is PostgresAction.Insert -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
+                is PostgresAction.Update -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
+                else -> null
+            } ?: return@transform
+            val listKey = resolveListKeyForChat(row.chatId)
+                ?: ChatSessionCaches.peekListKeyForChatSync(row.chatId)
+                ?: row.chatId
+            val cached = ChatSessionCaches.getCrypto(row.chatId)
+            // For group cliques listKey is a groupId, so pairwise key derivation
+            // can never succeed — fall back to resolveChatCrypto, which routes
+            // group chats through the wrapped master key and caches the result.
+            val crypto = cached
+                ?: getEncryptionKeysForConnection(listKey)?.let { ChatSessionCaches.ResolvedChatCrypto.Pairwise(it) }
+                ?: resolveChatCrypto(row.chatId, supabase.auth.currentUserOrNull()?.id)
+            val rawMessage = row.toMessage()
+            val message = when {
+                crypto != null -> decryptMessage(rawMessage, crypto)
+                MessageCrypto.isAnyE2eeWireContent(rawMessage.content) ->
+                    rawMessage.copy(content = "New message")
+                else -> rawMessage
             }
+            mergeCachedTimelineMessage(listKey, message)
+            emit(MessageListInsertEvent(connectionId = listKey, chatId = row.chatId, message = message))
         }
         return SupabaseMessageSubscription(channel) to flow
     }
@@ -2518,7 +2538,9 @@ class SupabaseChatRepository(
 
 private class SupabaseMessageSubscription(private val channel: RealtimeChannel) : ChatMessageSubscription {
     override suspend fun attach() {
-        channel.subscribeWithTimeout()
+        if (!channel.subscribeWithTimeout()) {
+            throw IllegalStateException("Realtime channel subscribe timed out")
+        }
     }
     override suspend fun detach() = channel.unsubscribe()
 }

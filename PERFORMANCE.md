@@ -197,8 +197,10 @@ flowchart TD
 | Load UX | `loadChats` keeps Success state while refreshing in background |
 | Chat session caches | `ChatSessionCaches` shares routing/crypto/timeline across all `SupabaseChatRepository` instances |
 | Chat open (2026-07) | Loading→Success bridge runs **before** ephemeral Realtime subscribe; subscribe has 8s timeout |
-| Inbox previews | Global `messageInserts` + `ChatPushInboxBridge` patch list rows without opening chat |
-| Push open | `ChatPushInboxBridge` warms timeline; deduped `loadChatMessages` from deep link |
+| Inbox previews | Global `messageInserts` + `ChatPushInboxBridge` + `connections` UPDATE `inboxVersion` patch rows without opening chat |
+| Realtime inbox listener | `subscribeToMessageInserts` registers `postgresChangeFlow` before `subscribe()` — required for live list previews |
+| Inbox unread | Bump inbound unread on list only when thread is not open; mark read only inside active chat |
+| Push open | Prefer `connection_id` for deep links; warm timeline via `ChatPushInboxBridge`; iOS routes on main thread |
 | Overlap batching | `util/AvailabilityOverlapPrefetch.kt` + `ViewerAvailabilityBubblesCache` |
 | Junction SSOT | `seedConnectionJunctionCache` after every snapshot apply |
 

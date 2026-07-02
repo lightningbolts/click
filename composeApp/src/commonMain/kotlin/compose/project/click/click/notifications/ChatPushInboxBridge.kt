@@ -22,6 +22,7 @@ import kotlinx.datetime.Clock
 object ChatPushInboxBridge {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val pushWarmMessages = mutableMapOf<String, Message>()
+    private val pushWarmConnectionIds = mutableMapOf<String, String>()
 
     private val _inboxPushEvents = MutableSharedFlow<Pair<String, Message>>(extraBufferCapacity = 16)
     val inboxPushEvents: SharedFlow<Pair<String, Message>> = _inboxPushEvents.asSharedFlow()
@@ -31,6 +32,13 @@ object ChatPushInboxBridge {
 
     fun peekWarmMessage(connectionId: String): Message? =
         pushWarmMessages[connectionId]
+
+    fun peekWarmMessageForThread(threadId: String): Message? =
+        pushWarmMessages[threadId]
+
+    /** Resolve a connection/list key when navigation only has a `chats.id` from push/deep link. */
+    fun resolveConnectionIdForThread(threadId: String): String? =
+        pushWarmConnectionIds[threadId]?.takeIf { it.isNotBlank() }
 
     fun applyChatMessagePush(
         chatId: String,
@@ -61,6 +69,17 @@ object ChatPushInboxBridge {
         )
 
         pushWarmMessages[listKey] = message
+        if (chatId.isNotBlank() && chatId != listKey) {
+            pushWarmMessages[chatId] = message
+        }
+        if (connectionId.isNotBlank() && connectionId != listKey && connectionId != chatId) {
+            pushWarmMessages[connectionId] = message
+        }
+        val resolvedConnectionId = connectionId.ifBlank { listKey }
+        if (chatId.isNotBlank()) {
+            pushWarmConnectionIds[chatId] = resolvedConnectionId
+        }
+        pushWarmConnectionIds[resolvedConnectionId] = resolvedConnectionId
         ChatSessionCaches.mergeTimeline(listKey, message)
         AppDataManager.updateConnectionChatActivity(listKey, timeCreated, message)
         AppDataManager.updateInboxFeedChatActivityFromPush(listKey, message)

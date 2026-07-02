@@ -96,9 +96,9 @@ OS notification tap / data message
         │                      ├─ ChatSessionCaches.mergeTimeline
         │                      └─ ChatViewModel.inboxPushEvents → bumpConnectionInChatList
         │
-        ├─ chat_message (tap) ──► ChatDeepLinkManager.setPendingChat(connectionId)
-        │                      └─ App.kt → navigateTo(Connections) + pendingChatId
-        │                         (ConnectionsScreen + ChatView load thread; deduped)
+        ├─ chat_message (tap) ──► setChatDeepLink (prefers connection_id; iOS main thread)
+        │                      └─ ChatDeepLinkManager.setPendingChat(connectionId)
+        │                         App.kt leaveChatRoom + navigateTo(Connections) + pendingChatId
         │
         ├─ incoming_call ──► CallSessionManager.onIncomingPush(data)
         │                      └─ ActiveCallOverlay / CallPreviewOverlay
@@ -112,7 +112,7 @@ OS notification tap / data message
 
 | Class | Role |
 |-------|------|
-| `ChatPushInboxBridge` | Push receipt → inbox preview + warm timeline for fast open |
+| `ChatPushInboxBridge` | Push receipt → inbox preview + warm timeline + connection-id routing for opens |
 | `ChatDeepLinkManager` | Pending `connectionId` and `hubId` StateFlows |
 | `ChatNotificationDismisser` | Clears tray notifications when chat is opened |
 | `ChatPushNotifier` | Outbound chat push trigger after send |
