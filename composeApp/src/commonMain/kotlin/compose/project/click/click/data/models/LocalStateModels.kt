@@ -68,6 +68,8 @@ data class CachedAppSnapshot(
     val cachedMapBeacons: List<StoredMapBeacon> = emptyList(),
     /** Cached community hubs for offline map / feed paint. */
     val cachedCommunityHubs: List<StoredCommunityHubPin> = emptyList(),
+    /** Wall-clock ms when this snapshot was last persisted; drives cold-start inbox freshness. */
+    val snapshotSavedAtMs: Long = 0L,
 )
 
 @Serializable

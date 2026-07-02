@@ -112,10 +112,17 @@ class FakeChatRepository(
         chatId: String,
         viewerUserId: String?,
         limit: Int?,
+        beforeTimeCreated: Long?,
     ): List<Message>? =
         onFetchMessagesForChat(chatId, viewerUserId)?.let { messages ->
-            limit?.takeIf { it > 0 }?.let { messages.takeLast(it) } ?: messages
+            val bounded = beforeTimeCreated?.let { ts ->
+                messages.filter { it.timeCreated < ts }
+            } ?: messages
+            limit?.takeIf { it > 0 }?.let { bounded.takeLast(it) } ?: bounded
         }
+
+    override suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>?): List<MessageReaction> =
+        onFetchReactionsForChat(chatId)
 
     override fun seedConnectionJunctionCache(
         userId: String,
@@ -176,9 +183,6 @@ class FakeChatRepository(
         null
 
     override suspend fun deleteMessage(chatId: String, messageId: String, userId: String): Boolean = false
-
-    override suspend fun fetchReactionsForChat(chatId: String): List<MessageReaction> =
-        onFetchReactionsForChat(chatId)
 
     override suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean = false
 

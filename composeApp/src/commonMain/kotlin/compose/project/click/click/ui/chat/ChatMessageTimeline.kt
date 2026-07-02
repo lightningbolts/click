@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
@@ -53,6 +55,7 @@ internal fun ChatMessageTimeline(
     onSwipeReply: (MessageWithUser) -> Unit,
     onDownloadAttachment: suspend (MessageWithUser, compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
     onExpandPhoto: (MessageWithUser) -> Unit = {},
+    isLoadingOlderMessages: Boolean = false,
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
@@ -167,6 +170,22 @@ internal fun ChatMessageTimeline(
                                 }
                             }
                         }
+                    }
+                }
+            }
+            if (isLoadingOlderMessages) {
+                item(key = "load_older_indicator") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }

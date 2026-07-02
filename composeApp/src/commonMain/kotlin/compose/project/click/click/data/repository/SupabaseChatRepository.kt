@@ -1173,29 +1173,34 @@ class SupabaseChatRepository(
         chatId: String,
         viewerUserId: String?,
         limit: Int?,
+        beforeTimeCreated: Long?,
     ): List<Message>? {
         return try {
             val crypto = resolveChatCrypto(chatId, viewerUserId)
-            val rows = if (limit != null && limit > 0) {
-                supabase.from("messages")
-                    .select {
-                        filter {
-                            eq("chat_id", chatId)
+            val rows = when {
+                limit != null && limit > 0 -> {
+                    supabase.from("messages")
+                        .select {
+                            filter {
+                                eq("chat_id", chatId)
+                                beforeTimeCreated?.let { ts -> lt("time_created", ts) }
+                            }
+                            order("time_created", Order.DESCENDING)
+                            limit(limit.toLong())
                         }
-                        order("time_created", Order.DESCENDING)
-                        limit(limit.toLong())
-                    }
-                    .decodeList<Message>()
-                    .asReversed()
-            } else {
-                supabase.from("messages")
-                    .select {
-                        filter {
-                            eq("chat_id", chatId)
+                        .decodeList<Message>()
+                        .asReversed()
+                }
+                else -> {
+                    supabase.from("messages")
+                        .select {
+                            filter {
+                                eq("chat_id", chatId)
+                            }
+                            order("time_created", Order.ASCENDING)
                         }
-                        order("time_created", Order.ASCENDING)
-                    }
-                    .decodeList<Message>()
+                        .decodeList<Message>()
+                }
             }
             val decrypted = withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
@@ -1744,22 +1749,22 @@ class SupabaseChatRepository(
         )
     }
 
-    /** Fetch all reactions for messages in a given chat. */
-    override suspend fun fetchReactionsForChat(chatId: String): List<MessageReaction> {
+    /** Fetch reactions for messages in a given chat (optionally scoped to [messageIds]). */
+    override suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>?): List<MessageReaction> {
         return try {
-            // Get all message IDs for this chat first
-            val messageIds = supabase.from("messages")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
-                    filter { eq("chat_id", chatId) }
-                }
-                .decodeList<MessageIdOnly>()
-                .map { it.id }
+            val ids = messageIds?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.isNotEmpty() }
+                ?: supabase.from("messages")
+                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                        filter { eq("chat_id", chatId) }
+                    }
+                    .decodeList<MessageIdOnly>()
+                    .map { it.id }
 
-            if (messageIds.isEmpty()) return emptyList()
+            if (ids.isEmpty()) return emptyList()
 
             supabase.from("message_reactions")
                 .select {
-                    filter { isIn("message_id", messageIds) }
+                    filter { isIn("message_id", ids) }
                 }
                 .decodeList<ReactionRow>()
                 .map { it.toMessageReaction() }

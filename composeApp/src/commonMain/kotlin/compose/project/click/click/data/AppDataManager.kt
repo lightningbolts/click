@@ -304,6 +304,7 @@ object AppDataManager {
     private var loadAllDataJob: Job? = null
     private var persistSnapshotJob: Job? = null
     private var lastForegroundRecoveryMs: Long = 0L
+    private var silentChatPrefetchCompleted = false
 
     // Error state
     private val _error = MutableStateFlow<String?>(null)
@@ -457,9 +458,6 @@ object AppDataManager {
             val inboxStale = !isInboxFeedFresh(now)
             if (!recoveryOk || (dataStale && inboxStale)) {
                 loadAllDataJob?.cancel()
-                if (dataStale) {
-                    lastRefreshTime = 0L
-                }
                 if (recoveryOk && inboxStale && !dataStale) {
                     refreshInboxFromCoordinator(force = true)
                 } else {
@@ -603,12 +601,24 @@ object AppDataManager {
                     ) ?: continue
                     val messages = chatRepository.vaultEncryptedMediaMessages(chatId, userId, decryptedMessages)
                     val participants = chatRepository.fetchChatParticipants(chatId)
-                    val reactions = runCatching { chatRepository.fetchReactionsForChat(chatId) }.getOrElse { emptyList() }
+                    val reactions = runCatching {
+                        chatRepository.fetchReactionsForChat(chatId, messages.map { it.id })
+                    }.getOrElse { emptyList() }
                     withContext(Dispatchers.Default) {
+                        val existing = cachedChatThreadFor(chat.connection.id)
+                        val mergedMessages = if (existing != null && existing.messages.isNotEmpty()) {
+                            val byId = existing.messages.associateBy { it.id }.toMutableMap()
+                            for (message in messages) {
+                                byId[message.id] = message
+                            }
+                            byId.values.sortedBy { it.timeCreated }.takeLast(CHAT_PREFETCH_MAX_MESSAGES)
+                        } else {
+                            messages
+                        }
                         cacheChatThread(
                             connectionId = chat.connection.id,
                             chatId = chatId,
-                            messages = messages,
+                            messages = mergedMessages,
                             participants = participants,
                             reactions = reactions,
                         )
@@ -617,6 +627,8 @@ object AppDataManager {
             }.onFailure { e ->
                 if (e is CancellationException) throw e
                 println("AppDataManager: silent chat prefetch failed: ${e.redactedRestMessage()}")
+            }.onSuccess {
+                silentChatPrefetchCompleted = true
             }
         }
     }
@@ -1090,11 +1102,14 @@ object AppDataManager {
      * without an immediate [ChatViewModel.loadChats] network round-trip.
      */
     fun isInboxFeedFresh(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
-        if (!_isDataLoaded.value || lastRefreshTime <= 0L) return false
-        if (nowMs - lastRefreshTime >= REFRESH_COOLDOWN_MS) return false
-        if (_inboxFeedChats.value.isEmpty()) return false
+        if (!_isDataLoaded.value) return false
+        val hasLocalInbox =
+            _inboxFeedChats.value.isNotEmpty() || _connections.value.isNotEmpty()
+        if (!hasLocalInbox) return false
         val currentVersion = RealtimeCoordinator.currentInboxVersion()
-        return currentVersion == lastSyncedInboxVersion
+        if (currentVersion != lastSyncedInboxVersion) return false
+        if (lastRefreshTime <= 0L) return true
+        return nowMs - lastRefreshTime < REFRESH_COOLDOWN_MS
     }
 
     fun notifyInboxVersionSynced() {
@@ -1138,6 +1153,7 @@ object AppDataManager {
         realtimeCoordinatorJob = null
         RealtimeCoordinator.stop()
         beaconPrefetchedThisSession = false
+        silentChatPrefetchCompleted = false
         lastSyncedInboxVersion = 0L
         profilePrefetchJob?.cancel()
         profilePrefetchJob = null
@@ -1770,6 +1786,10 @@ object AppDataManager {
                             println("AppDataManager: Encounter queue drain on reconnect failed: ${it.message}")
                         }
                     runCatching { connectionRepository.syncPendingConnections() }
+                    val userId = _currentUser.value?.id
+                    if (!userId.isNullOrBlank() && !silentChatPrefetchCompleted) {
+                        startSilentChatPrefetch(userId)
+                    }
                 }
                 wasOnline = online
             }
@@ -1946,6 +1966,7 @@ object AppDataManager {
             }
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
             supabaseRepository.seedCachedProfileTimelines(snapshot.cachedProfileTimelines)
+            applyRestoredSnapshotFreshness(snapshot)
             _isDataLoaded.value =
                 snapshot.currentUser != null ||
                     snapshot.connections.isNotEmpty() ||
@@ -1955,6 +1976,16 @@ object AppDataManager {
         }.onFailure {
             println("AppDataManager: Failed to restore cached snapshot: ${it.message}")
         }.isSuccess
+    }
+
+    private fun applyRestoredSnapshotFreshness(snapshot: CachedAppSnapshot) {
+        val hasCache =
+            snapshot.inboxFeedChats.isNotEmpty() ||
+                snapshot.connections.isNotEmpty() ||
+                snapshot.cachedChatThreads.isNotEmpty()
+        if (!hasCache) return
+        lastRefreshTime = Clock.System.now().toEpochMilliseconds()
+        notifyInboxVersionSynced()
     }
 
     private suspend fun persistSnapshot() {
@@ -1983,6 +2014,7 @@ object AppDataManager {
                     reportedDistanceMeters = dto.distanceMeters,
                 )
             },
+            snapshotSavedAtMs = Clock.System.now().toEpochMilliseconds(),
         )
         runCatching {
             tokenStorage.saveCachedAppSnapshot(json.encodeToString(snapshot))

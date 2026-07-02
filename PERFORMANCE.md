@@ -32,14 +32,30 @@ Implemented after 100k+ DAU failure analysis. Symptom → fix mapping:
 | Slow inbox | N+1 latest-message queries | `get_inbox_previews()` RPC wired in `SupabaseChatRepository` |
 | Availability stampede | 48 peer queries/inbox | `get_availability_overlaps()` batch RPC |
 | Realtime saturation | Duplicate message + connection listeners | `RealtimeCoordinator` singleton |
-| Stale inbox previews | Loose `isInboxFeedFresh()` | Requires non-empty inbox + `inboxVersion` match |
-| Active chat DB load | Full-thread poll every 12s | Reactions-only poll; messages via Realtime |
+| Stale inbox previews | Loose `isInboxFeedFresh()` | Disk restore + `inboxVersion` sync; Realtime bumps invalidate inbox network skip |
+| Active chat DB load | Full-thread poll every 12s | Reactions-only poll; messages via Realtime + merge (never full replace) |
+| Large thread egress | Full history on open | Initial window **80** msgs; scroll-up loads **40** older via cursor |
 | Map/beacon herd | Cold-start prefetch for all users | `requestMapDiscoveryPrefetch()` on map tab only |
 | Hub nearby latency | N+1 participant counts | `get_hubs_nearby` PostGIS RPC |
 | Unbounded beacons | Full radius dump | `fetch_map_beacons_within` `p_limit` + SQL visibility |
 | Group calls missing | 1:1-only signaling | `GroupCallInvite` + `startOutgoingGroupCall()` |
 
 **Compile gates:** `./gradlew :composeApp:compileDebugKotlinAndroid`, `:composeApp:compileKotlinIosSimulatorArm64`; `click-web`: `npx tsc --noEmit`.
+
+### Disk cache vs Realtime (July 2026 follow-up)
+
+Cold-start disk cache is **egress-efficient paint only**. It must never block live delivery:
+
+| Layer | Role | Realtime rule |
+|-------|------|----------------|
+| `CachedAppSnapshot` / `CachedChatThread` | Instant inbox + thread paint on cold start | Background fetch **merges** by message id; never replaces UI wholesale |
+| `ChatTimelineCache` (hot RAM) | Survives back-navigation | Fed by `RealtimeCoordinator.messageInserts` + per-chat channel |
+| `RealtimeCoordinator` | Single fan-in for inserts + junction changes | Bumps `inboxVersion` on inserts (not on listener startup) |
+| Open chat UI | `applyInsertedMessage` | Global inserts vault media + patch open thread; per-chat channel handles updates/deletes/reactions |
+
+**Message pagination (mobile):** `INITIAL_CHAT_MESSAGE_FETCH_LIMIT = 80`, `OLDER_MESSAGES_PAGE_SIZE = 40`, cursor=`beforeTimeCreated`. Reactions fetch scoped to loaded message ids.
+
+**Inbox list pagination:** UI displays 50 rows at a time (`CONNECTIONS_PAGE_SIZE`); server-side `get_inbox_feed` RPC available for future cursor paging.
 
 ---
 

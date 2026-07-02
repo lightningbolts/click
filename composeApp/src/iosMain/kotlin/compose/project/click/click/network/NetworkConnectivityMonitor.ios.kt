@@ -13,7 +13,7 @@ import platform.Network.nw_path_status_satisfied
 import platform.darwin.dispatch_queue_create
 
 actual class NetworkConnectivityMonitor actual constructor() : ConnectivityMonitor {
-    private val _isOnline = MutableStateFlow(false)
+    private val _isOnline = MutableStateFlow(true)
     actual override val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
     private var monitor: platform.Network.nw_path_monitor_t? = null

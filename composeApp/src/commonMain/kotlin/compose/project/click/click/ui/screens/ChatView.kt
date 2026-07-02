@@ -329,6 +329,8 @@ fun ChatView(
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
     val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
     val icebreakerCooldownRemainingSec by viewModel.icebreakerCooldownRemainingSec.collectAsState()
+    val hasMoreOlderMessages by viewModel.hasMoreOlderMessages.collectAsState()
+    val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
 
     // Fresh scroll state per chat so opening a thread doesn't keep the previous scroll offset
     val listState = remember(chatId) { LazyListState() }
@@ -419,6 +421,22 @@ fun ChatView(
     // Newest-first + reverseLayout pins latest messages next to the composer; snap to index 0 after layout
     val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
     val scrollAnchor = successMessages.lastOrNull()?.message?.id to successMessages.size
+    LaunchedEffect(listState, hasMoreOlderMessages, isLoadingOlderMessages) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val total = info.totalItemsCount
+            val maxVisibleIndex = info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
+            maxVisibleIndex to total
+        }.collect { (maxVisibleIndex, total) ->
+            if (total > 0 &&
+                hasMoreOlderMessages &&
+                !isLoadingOlderMessages &&
+                maxVisibleIndex >= total - 3
+            ) {
+                viewModel.loadOlderMessages()
+            }
+        }
+    }
     LaunchedEffect(chatId, scrollAnchor) {
         if (successMessages.isEmpty()) return@LaunchedEffect
         repeat(50) {
@@ -1227,6 +1245,7 @@ fun ChatView(
                                 viewModel.downloadChatAttachment(mwu.message.id, env)
                             },
                             onExpandPhoto = { expandedPhotoTarget = it },
+                            isLoadingOlderMessages = isLoadingOlderMessages,
                             modifier = messageContentModifier
                                 .padding(horizontal = 4.dp)
                                 .then(

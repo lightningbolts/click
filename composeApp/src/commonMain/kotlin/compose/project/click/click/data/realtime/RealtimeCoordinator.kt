@@ -59,7 +59,6 @@ object RealtimeCoordinator {
             boundUserId = userId
             startMessageListenerLocked()
             startConnectionsListenerLocked(userId)
-            bumpInboxVersionLocked()
         }
     }
 

@@ -82,12 +82,14 @@ interface ChatRepository {
 
     /**
      * Loads messages for [chatId], optionally bounded to the newest [limit] rows (ordered ascending for UI).
+     * When [beforeTimeCreated] is set, returns up to [limit] rows strictly older than that timestamp.
      * @return `null` if the request failed (network/RLS/decoding); empty list means the chat has no rows.
      */
     suspend fun fetchMessagesForChat(
         chatId: String,
         viewerUserId: String? = null,
         limit: Int? = null,
+        beforeTimeCreated: Long? = null,
     ): List<Message>?
 
     suspend fun sendMessage(
@@ -191,7 +193,8 @@ interface ChatRepository {
 
     suspend fun deleteMessage(chatId: String, messageId: String, userId: String): Boolean
 
-    suspend fun fetchReactionsForChat(chatId: String): List<MessageReaction>
+    /** Fetch reactions for [chatId], optionally scoped to [messageIds] (reduces egress on paginated threads). */
+    suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>? = null): List<MessageReaction>
 
     suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean
 

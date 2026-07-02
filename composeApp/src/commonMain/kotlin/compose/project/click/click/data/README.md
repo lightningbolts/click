@@ -125,8 +125,11 @@ Invalidation uses explicit epoch counters rather than polling:
 `isInboxFeedFresh()` (30s window, tied to `REFRESH_COOLDOWN_MS`) lets `ChatViewModel.loadChats()` paint from `AppDataManager` SSOT without a network round-trip when:
 
 - `isDataLoaded` is true
-- `lastRefreshTime` is within cooldown
 - `_inboxFeedChats` **or** `_connections` is non-empty
+- `RealtimeCoordinator.inboxVersion` matches `lastSyncedInboxVersion` (Realtime inserts / junction changes invalidate)
+- `lastRefreshTime` is within cooldown (set on disk restore and successful snapshot apply)
+
+**Important:** Freshness gates **inbox list network skips only**. Open-chat Realtime and `applyInsertedMessage` always win over disk/hot cache via id-based merge (`mergeMessageTimelinesPreservingLiveState`).
 
 Forced reloads (`loadChats(isForced = true)`) and `chatListRefreshEpoch` bumps bypass this path.
 
@@ -187,6 +190,7 @@ Pending connection / proximity handshake queues sync on a `PENDING_SYNC_RETRY_MS
 | `data/SupabaseForegroundRecovery.kt` | Background → foreground socket recovery |
 | `data/repository/ConnectionRepository.kt` | Connection operations |
 | `data/repository/SupabaseRepository.kt` | Profiles, hubs, beacons |
+| `data/realtime/RealtimeCoordinator.kt` | App-scoped message + connection Realtime fan-in |
 | `data/repository/SupabaseChatRepository.kt` | Chat + Realtime |
 | `data/storage/TokenStorage.kt` | Snapshot + queue persistence |
 | `data/api/ApiClient.kt` | REST Edge Function client |

@@ -172,6 +172,7 @@ fun App() {
     val connectivityViewModel: ConnectivityViewModel = viewModel { ConnectivityViewModel() }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
     val isOnline by connectivityViewModel.isOnline.collectAsState()
+    val showOfflineBanner by connectivityViewModel.showOfflineBanner.collectAsState()
 
     // Location service for capturing GPS during QR scans
     val locationService = remember { compose.project.click.click.utils.LocationService() }
@@ -1253,17 +1254,17 @@ fun App() {
             LaunchedEffect(currentUser.id) {
                 EncounterTetherManager.setCurrentUserId(currentUser.id)
             }
-            if (!isOnline) {
+            if (showOfflineBanner) {
                 OfflineStatusBanner(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .zIndex(0.5f),
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 4.dp)
+                        .zIndex(10f),
                 )
             }
             Scaffold(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = if (!isOnline) 28.dp else 0.dp),
+                modifier = Modifier.fillMaxSize(),
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
@@ -1810,7 +1811,7 @@ fun App() {
                                     .align(Alignment.TopCenter)
                                     .windowInsetsPadding(WindowInsets.statusBars)
                                     .padding(
-                                        top = if (!isOnline) 56.dp else 8.dp,
+                                        top = 8.dp,
                                         start = 16.dp,
                                         end = 16.dp,
                                     )
