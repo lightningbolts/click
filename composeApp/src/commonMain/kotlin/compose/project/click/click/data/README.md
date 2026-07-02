@@ -196,6 +196,14 @@ Pending connection / proximity handshake queues sync on a `PENDING_SYNC_RETRY_MS
 | `data/api/ApiClient.kt` | REST Edge Function client |
 | `viewmodel/*ViewModel.kt` | UI state consumers |
 
+### click-web HTTP APIs (this module consumes)
+
+`ApiClient.kt` calls `CLICK_WEB_BASE_URL` for companion routes. Notable insights consumer:
+
+- **`GET /api/insights/widget-vibe`** — JWT bearer; home-screen connection density widget (`status_text`, `density_hex_color`). B2B operator dashboard is web-only (`click-web/lib/insights/README.md`).
+
+Connection rows sent to the backend include `include_in_business_insights` from `AppDataManager.locationPreferences.includeInInsightsEnabled`, feeding anonymized venue analytics when opted in.
+
 ---
 
 ## What Click Users Experience

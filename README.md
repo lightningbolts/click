@@ -152,10 +152,41 @@ See [`PERFORMANCE.md`](PERFORMANCE.md) for hotspots, scale failure modes, and Ju
 
 ---
 
-## Monorepo note
+## Monorepo note (click-web companion)
 
-If your checkout includes **`click-web`** beside **`click/`**, run that Next.js app locally when developing QR or LiveKit token flows against `http://localhost:3000` (and set `CLICK_WEB_BASE_URL` accordingly). The KMP app does not embed that server—only calls it over HTTP.
+If your checkout includes **`click-web`** beside **`click/`**, run the Next.js app locally when developing QR, LiveKit token, waitlist, or widget-vibe flows:
 
-Repository-level docs for the whole workspace may live in the parent folder’s `README.md` / `AI.md`.
+```bash
+# Terminal 1 — click-web
+cd click-web && npm run dev   # http://localhost:3000
+
+# Terminal 2 — mobile
+# Set CLICK_WEB_BASE_URL in QRModels.kt / build config to http://localhost:3000 (simulator)
+# or your machine LAN IP for physical devices
+```
+
+The KMP app does **not** embed click-web—it calls it over HTTP with the user's Supabase JWT where required.
+
+### What mobile delegates to click-web
+
+| Flow | Mobile entry | Web route |
+|------|--------------|-----------|
+| QR token issue / redeem | `ApiClient`, `QrCodeView` | `GET/POST /api/qr` |
+| LiveKit room token | `CallApiClient` | `GET /api/livekit/token` |
+| Waitlist | Marketing links | `POST /api/waitlist` |
+| Home widget vibe | `ApiClient.getWidgetVibe()` | `GET /api/insights/widget-vibe` |
+
+### What mobile produces for B2B Click Insights
+
+Mobile handshakes create `connections` and `connection_encounters` rows. When the user has **Include in business insights** enabled (`AppDataManager.locationPreferences.includeInInsightsEnabled`), rows carry `include_in_business_insights: true` and feed anonymized venue analytics on click-web `/insights/*`. Availability intents power Vibe Radar hexbins.
+
+Mobile does **not** host the B2B insights dashboard—that is web-only (`click-web/lib/insights/README.md`).
+
+### Parity reference
+
+- Consumer dashboard parity: `click-web/lib/dashboard/README.md`
+- Connection / QR / proximity: `click-web/lib/connections/README.md`
+- Payload contracts (push, E2EE): `click-web/AI.md` §2, `click-web/lib/chat/README.md`
+- Insights testing playbook: `click-web/lib/insights/README.md` § Real-world testing
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lightningbolts/click)
