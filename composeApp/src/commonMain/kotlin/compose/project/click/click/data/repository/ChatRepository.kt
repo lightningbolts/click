@@ -114,6 +114,9 @@ interface ChatRepository {
 
     suspend fun markMessagesAsRead(chatId: String, userId: String)
 
+    /** Marks the latest peer-authored message unread (syncs inbox badge across devices). */
+    suspend fun markChatAsUnread(chatId: String)
+
     /**
      * Recipient device receipt: marks peer-authored rows with [delivered_at] (click-web gatekeeper).
      */

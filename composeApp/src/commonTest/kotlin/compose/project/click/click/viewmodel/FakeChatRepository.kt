@@ -160,6 +160,8 @@ class FakeChatRepository(
 
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {}
 
+    override suspend fun markChatAsUnread(chatId: String) {}
+
     override suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>) {}
 
     override suspend fun subscribeToMessages(

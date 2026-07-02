@@ -979,6 +979,9 @@ fun ConnectionsListView(
                     ConnectionMenuAction.RemoveFromCore -> {
                         viewModel.removeConnectionFromCore(connId)
                     }
+                    ConnectionMenuAction.MarkUnread -> {
+                        viewModel.markConversationUnread(connId)
+                    }
                     ConnectionMenuAction.RequestRemove -> {
                         dialogConnectionId = connId
                         pendingConnectionDialog = ConnectionSheetDialog.Remove

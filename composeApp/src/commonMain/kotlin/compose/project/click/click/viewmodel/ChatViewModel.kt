@@ -619,9 +619,9 @@ class ChatViewModel(
     }
 
     /**
-     * Supabase updates [connections.last_message_at] when a row is inserted into [messages]
-     * (see DB trigger). Subscribing here keeps the connections list preview and order fresh
-     * even when no per-chat message channel is open.
+     * Junction-table realtime (archive/hide/core + new connection INSERT). Message previews
+     * are patched via [startGlobalMessageListRealtime]; avoid reloading the full inbox on
+     * [connections] UPDATE (last_message_at trigger) or realtime bumps get overwritten.
      */
     private fun startGlobalConnectionsRealtime(userId: String) {
         connectionsRealtimeJob?.cancel()
@@ -850,6 +850,11 @@ class ChatViewModel(
                         }
                         val cachedChatsById =
                             buildCachedChats(cachedConnections, cachedUsers, userId).associateBy { it.connection.id }
+                        val paintedListRowsById =
+                            (_chatListState.value as? ChatListState.Success)
+                                ?.chats
+                                ?.associateBy { it.connection.id }
+                                .orEmpty()
                         val mergedWithLocalPreview = enriched.map { apiChat ->
                             val cachedRow = cachedChatsById[apiChat.connection.id]
                                 ?: inboxRowFromCachedThread(
@@ -859,12 +864,19 @@ class ChatViewModel(
                                     users = cachedUsers,
                                     userId = userId,
                                 )
+                            val paintedRow = paintedListRowsById[apiChat.connection.id]
+                            val localSeed = when {
+                                cachedRow != null && paintedRow != null ->
+                                    mergeChatRowWithCache(cachedRow, paintedRow, null)
+                                paintedRow != null -> paintedRow
+                                else -> cachedRow
+                            }
                             val freshUser = if (apiChat.groupClique == null) {
-                                cachedRow?.otherUser ?: cachedUsers[apiChat.otherUser.id]
+                                localSeed?.otherUser ?: cachedUsers[apiChat.otherUser.id]
                             } else {
                                 null
                             }
-                            mergeChatRowWithCache(apiChat, cachedRow, freshUser)
+                            mergeChatRowWithCache(apiChat, localSeed, freshUser)
                         }
                         val visibilityFiltered = applyChatListVisibility(mergedWithLocalPreview)
                         pruneStaleReadClearedHints(visibilityFiltered)
@@ -1093,6 +1105,39 @@ class ChatViewModel(
         }
     }
 
+    private fun bumpInboxUnreadLocally(connectionId: String, atLeast: Int = 1) {
+        if (connectionId.isBlank() || atLeast <= 0) return
+        val cur = _chatListState.value as? ChatListState.Success ?: return
+        val viewerId = _currentUserId.value
+        _chatListState.value = ChatListState.Success(
+            cur.chats.map { chat ->
+                if (chat.connection.id != connectionId) {
+                    chat
+                } else {
+                    val nextUnread = maxOf(chat.unreadCount, atLeast)
+                    val peerLast = chat.lastMessage?.takeIf { it.user_id != viewerId }
+                    val nextLast = peerLast?.copy(isRead = false) ?: chat.lastMessage
+                    chat.copy(unreadCount = nextUnread, lastMessage = nextLast)
+                }
+            },
+        )
+    }
+
+    fun markConversationUnread(connectionId: String) {
+        if (connectionId.isBlank()) return
+        viewModelScope.launch {
+            val row = (_chatListState.value as? ChatListState.Success)
+                ?.chats
+                ?.firstOrNull { it.connection.id == connectionId }
+            val chatId = row?.chat?.id?.takeIf { it.isNotBlank() }
+                ?: chatRepository.ensureChatForConnection(connectionId)?.id?.takeIf { it.isNotBlank() }
+                ?: return@launch
+            _readClearedConnectionIds.update { it - connectionId }
+            bumpInboxUnreadLocally(connectionId, atLeast = 1)
+            chatRepository.markChatAsUnread(chatId)
+        }
+    }
+
     private fun chatListActivityTimestamp(chat: ChatWithDetails): Long =
         chat.connection.last_message_at
             ?: chat.lastMessage?.timeCreated
@@ -1178,10 +1223,12 @@ class ChatViewModel(
                 (isResolvedDisplayName(cachedChat.otherUser.name) || !isResolvedDisplayName(listChat.otherUser.name)) -> cachedChat.otherUser
             else -> listChat.otherUser
         }
+        val mergedUnread = maxOf(listChat.unreadCount, cachedChat.unreadCount)
         return listChat.copy(
             connection = mergedConnection,
             lastMessage = normalizedLast,
-            otherUser = resolvedOther
+            otherUser = resolvedOther,
+            unreadCount = mergedUnread,
         )
     }
 
@@ -2159,10 +2206,6 @@ class ChatViewModel(
                                                     chatId = chatId,
                                                     userId = userId,
                                                 )
-                                            } else {
-                                                viewModelScope.launch {
-                                                    runCatching { chatRepository.markMessagesAsRead(chatId, userId) }
-                                                }
                                             }
                                         }
                                     }
@@ -2578,9 +2621,16 @@ class ChatViewModel(
     /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
     private fun bumpConnectionInChatList(connectionId: String, message: Message) {
         AppDataManager.updateConnectionChatActivity(connectionId, message.timeCreated, message)
+        AppDataManager.updateInboxFeedChatActivity(connectionId, message)
         val preview = message.previewLabel()
         if (preview.isNotBlank() && preview != "New message") {
             _decryptedPreviews.value = _decryptedPreviews.value + (connectionId to preview)
+        }
+        val viewerId = _currentUserId.value
+        val isInbound = viewerId != null && message.user_id != viewerId
+        val isViewingThread = connectionId == currentConnectionId
+        if (isInbound) {
+            _readClearedConnectionIds.update { it - connectionId }
         }
         val state = _chatListState.value as? ChatListState.Success ?: run {
             loadChats(isForced = true)
@@ -2588,11 +2638,29 @@ class ChatViewModel(
         }
         val updated = state.chats.map { chat ->
             if (chat.connection.id == connectionId) {
+                val prevLastId = chat.lastMessage?.id
+                val inboundUnreadBump =
+                    isInbound &&
+                        !isViewingThread &&
+                        !message.isRead &&
+                        message.id != prevLastId
+                val nextUnread = when {
+                    isViewingThread -> 0
+                    isInbound && !message.isRead && message.id != prevLastId -> chat.unreadCount + 1
+                    isInbound && !message.isRead && message.id == prevLastId -> maxOf(chat.unreadCount, 1)
+                    else -> chat.unreadCount
+                }
+                val previewMessage = if (isInbound && !message.isRead) {
+                    message.copy(isRead = false)
+                } else {
+                    message
+                }
                 chat.copy(
-                    lastMessage = message,
+                    lastMessage = previewMessage,
+                    unreadCount = nextUnread,
                     connection = chat.connection.copy(
                         last_message_at = message.timeCreated,
-                        chat = chat.connection.chat.copy(messages = listOf(message))
+                        chat = chat.connection.chat.copy(messages = listOf(previewMessage))
                     )
                 )
             } else {

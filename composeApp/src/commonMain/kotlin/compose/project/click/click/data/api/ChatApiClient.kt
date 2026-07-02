@@ -139,6 +139,9 @@ class ChatApiClient(
     private data class ClickWebMarkChatReadBody(@SerialName("chat_id") val chat_id: String)
 
     @Serializable
+    private data class ClickWebMarkChatUnreadBody(@SerialName("chat_id") val chat_id: String)
+
+    @Serializable
     private data class ClickWebMarkDeliveredBody(
         @SerialName("chat_id") val chat_id: String,
         @SerialName("message_ids") val message_ids: List<String>,
@@ -569,6 +572,28 @@ class ChatApiClient(
             }
         } catch (e: Exception) {
             println("Error marking chat as read: ${e.redactedRestMessage()}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Marks the latest peer-authored message in [chatId] as unread (JWT identifies the reader).
+     */
+    suspend fun markChatAsUnread(chatId: String, authToken: String): Result<Unit> {
+        if (chatId.isBlank()) return Result.failure(IllegalArgumentException("chatId is blank"))
+        return try {
+            val response = client.patch("$clickWebBaseUrl/api/chat/messages/unread") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ClickWebMarkChatUnreadBody(chat_id = chatId))
+            }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to mark chat as unread: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            println("Error marking chat as unread: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
     }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.outlined.MarkEmailUnread
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -48,6 +49,7 @@ internal sealed class ConnectionMenuAction {
     data object RequestBlock : ConnectionMenuAction()
     data object RequestLeaveGroup : ConnectionMenuAction()
     data object RequestDeleteGroup : ConnectionMenuAction()
+    data object MarkUnread : ConnectionMenuAction()
 }
 
 /**
@@ -68,6 +70,9 @@ internal fun ConnectionActionSheet(
     val isGroup = chatDetails?.groupClique != null
     val uid = currentUserId.orEmpty()
     val isGroupCreator = isGroup && uid.isNotBlank() && chatDetails?.groupClique?.createdByUserId == uid
+    val hasConversationActivity = chatDetails?.lastMessage != null ||
+        chatDetails?.connection?.last_message_at != null
+    val canMarkUnread = hasConversationActivity && (chatDetails?.unreadCount ?: 0) == 0
 
     fun pick(action: ConnectionMenuAction) {
         onMenuAction(action)
@@ -177,6 +182,21 @@ internal fun ConnectionActionSheet(
                     )
                 }
 
+                if (canMarkUnread) {
+                    BentoGlassOptionRow(
+                        title = "Mark as Unread",
+                        subtitle = "Show this conversation as unread on all devices",
+                        onClick = { pick(ConnectionMenuAction.MarkUnread) },
+                        leading = {
+                            Icon(
+                                Icons.Outlined.MarkEmailUnread,
+                                contentDescription = null,
+                                tint = GlassSheetTokens.OnOledMuted,
+                            )
+                        },
+                    )
+                }
+
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 6.dp),
                     color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f),
@@ -227,6 +247,21 @@ internal fun ConnectionActionSheet(
                     },
                 )
             } else {
+                if (canMarkUnread) {
+                    BentoGlassOptionRow(
+                        showBorder = false,
+                        title = "Mark as Unread",
+                        subtitle = "Show this verified click as unread on all devices",
+                        onClick = { pick(ConnectionMenuAction.MarkUnread) },
+                        leading = {
+                            Icon(
+                                Icons.Outlined.MarkEmailUnread,
+                                contentDescription = null,
+                                tint = GlassSheetTokens.OnOledMuted,
+                            )
+                        },
+                    )
+                }
                 BentoGlassOptionRow(
                     showBorder = false,
                     title = "Leave Group",

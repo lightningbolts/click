@@ -538,12 +538,12 @@ object AppDataManager {
         scope.launch { persistSnapshot() }
     }
 
-    private fun updateInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
+    fun updateInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
         applyInboxFeedChatActivity(connectionId, lastMessagePreview)
     }
 
     fun updateInboxFeedChatActivityFromPush(connectionId: String, lastMessagePreview: Message) {
-        applyInboxFeedChatActivity(connectionId, lastMessagePreview)
+        updateInboxFeedChatActivity(connectionId, lastMessagePreview)
     }
 
     private fun applyInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
@@ -1903,7 +1903,12 @@ object AppDataManager {
     private fun applyFetchedConnectionSnapshot(snapshot: UserConnectionsSnapshot) {
         val localConnections = _connections.value
         _connections.value = when {
-            snapshot.connections.isNotEmpty() -> snapshot.connections
+            snapshot.connections.isNotEmpty() -> {
+                val localById = localConnections.associateBy { it.id }
+                snapshot.connections.map { server ->
+                    mergeConnectionSnapshotWithLocal(localById[server.id], server)
+                }
+            }
             localConnections.isNotEmpty() -> localConnections
             else -> snapshot.connections
         }
@@ -1919,6 +1924,32 @@ object AppDataManager {
         }
         seedJunctionCacheFromMemory()
         notifyInboxVersionSynced()
+    }
+
+    /**
+     * Preserve locally patched preview text when a junction refresh returns fresher
+     * [Connection.last_message_at] without embedded [Chat.messages].
+     */
+    private fun mergeConnectionSnapshotWithLocal(local: Connection?, server: Connection): Connection {
+        if (local == null) return server
+        val localPreview = local.chat.messages.lastOrNull()
+        val serverPreview = server.chat.messages.lastOrNull()
+        val mergedAt = listOfNotNull(local.last_message_at, server.last_message_at).maxOrNull()
+        val bestPreview = when {
+            localPreview == null -> serverPreview
+            serverPreview == null -> localPreview
+            localPreview.timeCreated >= serverPreview.timeCreated -> localPreview
+            else -> serverPreview
+        }
+        val previewMsg = bestPreview?.takeIf { msg ->
+            mergedAt == null || msg.timeCreated >= mergedAt
+        }
+        return server.copy(
+            last_message_at = mergedAt,
+            chat = server.chat.copy(
+                messages = previewMsg?.let { listOf(it) } ?: emptyList(),
+            ),
+        )
     }
 
     private fun seedJunctionCacheFromMemory() {

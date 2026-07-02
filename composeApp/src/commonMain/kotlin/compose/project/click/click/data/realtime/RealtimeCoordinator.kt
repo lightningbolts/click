@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.map
@@ -121,7 +122,12 @@ object RealtimeCoordinator {
                 val channel = SupabaseConfig.client.channel("app:connections:$userId")
                 connectionsChannel = channel
                 merge(
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }.map { },
+                    // Message inserts already bump inbox previews via [messageInserts]. Listening to
+                    // UPDATE on [connections] (last_message_at trigger) caused debounced full inbox
+                    // reloads that clobbered fresher realtime preview patches.
+                    channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                        .filter { it is PostgresAction.Insert }
+                        .map { },
                     channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
                     channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
                     channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },

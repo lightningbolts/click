@@ -1508,6 +1508,9 @@ fun ChatView(
                     ConnectionMenuAction.RemoveFromCore -> {
                         if (connId != null) viewModel.removeConnectionFromCore(connId)
                     }
+                    ConnectionMenuAction.MarkUnread -> {
+                        if (connId != null) viewModel.markConversationUnread(connId)
+                    }
                     ConnectionMenuAction.RequestRemove -> {
                         pendingConnectionDialog = ConnectionSheetDialog.Remove
                     }

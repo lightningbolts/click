@@ -1373,6 +1373,18 @@ class SupabaseChatRepository(
         }
     }
 
+    override suspend fun markChatAsUnread(chatId: String) {
+        if (chatId.isBlank()) return
+        try {
+            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            apiClient.markChatAsUnread(chatId, jwt).onFailure { e ->
+                println("markChatAsUnread failed: ${e.redactedRestMessage()}")
+            }
+        } catch (e: Exception) {
+            println("Error marking chat as unread: ${e.redactedRestMessage()}")
+        }
+    }
+
     override suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>) {
         if (chatId.isBlank() || messageIds.isEmpty()) return
         try {
