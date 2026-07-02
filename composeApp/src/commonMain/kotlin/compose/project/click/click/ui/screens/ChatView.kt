@@ -851,7 +851,6 @@ fun ChatView(
                                     }
                                 }
 
-                                if (!isGroupChat) {
                                 Box(modifier = Modifier.size(48.dp)) {
                                     IconButton(
                                         onClick = { showCallMenu = true },
@@ -895,6 +894,53 @@ fun ChatView(
                                             keepIosCallMenuMounted = false
                                         }
                                     }
+                                    val groupCallMemberIds = remember(chatDetails.groupClique) {
+                                        chatDetails.groupClique?.memberUserIds.orEmpty()
+                                    }
+                                    val startVoiceCall = {
+                                        showCallMenu = false
+                                        if (isGroupChat) {
+                                            val groupId = chatDetails.groupClique?.groupId
+                                            val chatId = chatDetails.chat.id
+                                            if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                                CallSessionManager.startOutgoingGroupCall(
+                                                    groupId = groupId,
+                                                    chatId = chatId,
+                                                    memberIds = groupCallMemberIds,
+                                                    videoEnabled = false,
+                                                )
+                                            }
+                                        } else {
+                                            CallSessionManager.startOutgoingCall(
+                                                connectionId = chatDetails.connection.id,
+                                                otherUserId = chatDetails.otherUser.id,
+                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                videoEnabled = false,
+                                            )
+                                        }
+                                    }
+                                    val startVideoCall = {
+                                        showCallMenu = false
+                                        if (isGroupChat) {
+                                            val groupId = chatDetails.groupClique?.groupId
+                                            val chatId = chatDetails.chat.id
+                                            if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                                CallSessionManager.startOutgoingGroupCall(
+                                                    groupId = groupId,
+                                                    chatId = chatId,
+                                                    memberIds = groupCallMemberIds,
+                                                    videoEnabled = true,
+                                                )
+                                            }
+                                        } else {
+                                            CallSessionManager.startOutgoingCall(
+                                                connectionId = chatDetails.connection.id,
+                                                otherUserId = chatDetails.otherUser.id,
+                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                videoEnabled = true,
+                                            )
+                                        }
+                                    }
                                     if (menuStyle.isIOS) {
                                         if (keepIosCallMenuMounted) {
                                             Popup(
@@ -913,24 +959,8 @@ fun ChatView(
                                                     exit = callMenuExit,
                                                 ) {
                                                     ChatCallOptionsIosSurface(
-                                                        onVoice = {
-                                                            showCallMenu = false
-                                                            CallSessionManager.startOutgoingCall(
-                                                                connectionId = chatDetails.connection.id,
-                                                                otherUserId = chatDetails.otherUser.id,
-                                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                                videoEnabled = false
-                                                            )
-                                                        },
-                                                        onVideo = {
-                                                            showCallMenu = false
-                                                            CallSessionManager.startOutgoingCall(
-                                                                connectionId = chatDetails.connection.id,
-                                                                otherUserId = chatDetails.otherUser.id,
-                                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                                videoEnabled = true
-                                                            )
-                                                        },
+                                                        onVoice = startVoiceCall,
+                                                        onVideo = startVideoCall,
                                                     )
                                                 }
                                             }
@@ -945,40 +975,27 @@ fun ChatView(
                                             shadowElevation = 16.dp
                                         ) {
                                             DropdownMenuItem(
-                                                text = { Text("Voice call") },
+                                                text = { Text(if (isGroupChat) "Group voice call" else "Voice call") },
                                                 leadingIcon = {
                                                     Icon(Icons.Filled.Call, contentDescription = null)
                                                 },
                                                 onClick = {
                                                     PlatformHapticsPolicy.lightImpact()
-                                                    showCallMenu = false
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = false
-                                                    )
+                                                    startVoiceCall()
                                                 }
                                             )
                                             DropdownMenuItem(
-                                                text = { Text("Video call") },
+                                                text = { Text(if (isGroupChat) "Group video call" else "Video call") },
                                                 leadingIcon = {
                                                     Icon(Icons.Filled.Videocam, contentDescription = null)
                                                 },
                                                 onClick = {
                                                     PlatformHapticsPolicy.lightImpact()
-                                                    showCallMenu = false
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = true
-                                                    )
+                                                    startVideoCall()
                                                 }
                                             )
                                         }
                                     }
-                                }
                                 }
                                 // Overflow / connection options
                                 IconButton(onClick = { showConnectionSheet = true }) {

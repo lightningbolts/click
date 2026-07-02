@@ -10,17 +10,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-actual class NetworkConnectivityMonitor actual constructor() {
+actual class NetworkConnectivityMonitor actual constructor() : ConnectivityMonitor {
     private val appContext: Context = androidStorageContextOrThrow()
     private val connectivityManager =
         appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     private val _isOnline = MutableStateFlow(readCurrentOnline())
-    actual val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+    actual override val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
     private var callback: ConnectivityManager.NetworkCallback? = null
 
-    actual fun start() {
+    actual override fun start() {
         if (callback != null) return
         _isOnline.value = readCurrentOnline()
 
@@ -47,7 +47,7 @@ actual class NetworkConnectivityMonitor actual constructor() {
         connectivityManager.registerNetworkCallback(request, networkCallback)
     }
 
-    actual fun stop() {
+    actual override fun stop() {
         callback?.let { connectivityManager.unregisterNetworkCallback(it) }
         callback = null
     }

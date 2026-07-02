@@ -24,7 +24,7 @@ import compose.project.click.click.notifications.createPushNotificationService
 import compose.project.click.click.notifications.NotificationRuntimeState
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.ChatMessageSubscription
+import compose.project.click.click.data.realtime.RealtimeCoordinator
 import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload
@@ -97,6 +97,9 @@ object AppDataManager {
     private var pendingSyncJob: Job? = null
     private var chatPrefetchJob: Job? = null
     private var aggressiveBackgroundChatSyncJob: Job? = null
+    private var realtimeCoordinatorJob: Job? = null
+    private var lastSyncedInboxVersion = 0L
+    private var beaconPrefetchedThisSession = false
     private var profilePrefetchJob: Job? = null
     private var queuedProfilePrefetchIds: Set<String> = emptySet()
     private var pendingSyncPausedForAuth: Boolean = false
@@ -451,12 +454,17 @@ object AppDataManager {
             _foregroundRealtimeRecovery.emit(Unit)
 
             val dataStale = now - lastRefreshTime > REFRESH_COOLDOWN_MS
-            if (!recoveryOk || dataStale) {
+            val inboxStale = !isInboxFeedFresh(now)
+            if (!recoveryOk || (dataStale && inboxStale)) {
                 loadAllDataJob?.cancel()
                 if (dataStale) {
                     lastRefreshTime = 0L
                 }
-                startLoadAllDataJob()
+                if (recoveryOk && inboxStale && !dataStale) {
+                    refreshInboxFromCoordinator(force = true)
+                } else {
+                    startLoadAllDataJob()
+                }
             }
         }
     }
@@ -556,6 +564,7 @@ object AppDataManager {
 
     private fun startSilentChatPrefetch(userId: String) {
         if (_ghostModeEnabled.value || userId.isBlank()) return
+        if (!networkConnectivityMonitor.isOnline.value) return
         chatPrefetchJob?.cancel()
         chatPrefetchJob = scope.launch(chatMediaDispatcher) {
             runCatching {
@@ -656,55 +665,80 @@ object AppDataManager {
         }
     }
 
-    private fun startAggressiveBackgroundChatSync(userId: String) {
+    private fun startRealtimeCoordinatorSync(userId: String) {
         if (_ghostModeEnabled.value || userId.isBlank()) return
         aggressiveBackgroundChatSyncJob?.cancel()
-        aggressiveBackgroundChatSyncJob = scope.launch(chatMediaDispatcher) {
-            var subscription: ChatMessageSubscription? = null
-            try {
-                val (sub, flow) = chatRepository.subscribeToMessageInserts()
-                subscription = sub
-                sub.attach()
-                flow.collect { event ->
-                    val vaulted = chatRepository
-                        .vaultEncryptedMediaMessages(event.chatId, userId, listOf(event.message))
-                        .firstOrNull()
-                        ?: event.message
-                    updateConnectionChatActivity(event.connectionId, vaulted.timeCreated, vaulted)
-                    updateInboxFeedChatActivity(event.connectionId, vaulted)
+        realtimeCoordinatorJob?.cancel()
+        realtimeCoordinatorJob = scope.launch {
+            RealtimeCoordinator.ensureStarted(userId)
+            RealtimeCoordinator.messageInserts.collect { event ->
+                val vaulted = chatRepository
+                    .vaultEncryptedMediaMessages(event.chatId, userId, listOf(event.message))
+                    .firstOrNull()
+                    ?: event.message
+                updateConnectionChatActivity(event.connectionId, vaulted.timeCreated, vaulted)
+                updateInboxFeedChatActivity(event.connectionId, vaulted)
 
-                    val cached = cachedChatThreadFor(event.connectionId)
-                    if (cached != null) {
-                        val messages = (cached.messages.filterNot { it.id == vaulted.id } + vaulted)
-                            .sortedBy { it.timeCreated }
-                            .takeLast(CHAT_PREFETCH_MAX_MESSAGES)
-                        cacheChatThread(
-                            connectionId = cached.connectionId,
-                            chatId = cached.chatId,
-                            messages = messages,
-                            participants = cached.participants,
-                            reactions = cached.reactions,
-                        )
-                    } else {
-                        val participants = runCatching { chatRepository.fetchChatParticipants(event.chatId) }
-                            .getOrElse { emptyList() }
-                        cacheChatThread(
-                            connectionId = event.connectionId,
-                            chatId = event.chatId,
-                            messages = listOf(vaulted),
-                            participants = participants,
-                        )
-                    }
-                    schedulePersistSnapshot()
+                val cached = cachedChatThreadFor(event.connectionId)
+                if (cached != null) {
+                    val messages = (cached.messages.filterNot { it.id == vaulted.id } + vaulted)
+                        .sortedBy { it.timeCreated }
+                        .takeLast(CHAT_PREFETCH_MAX_MESSAGES)
+                    cacheChatThread(
+                        connectionId = cached.connectionId,
+                        chatId = cached.chatId,
+                        messages = messages,
+                        participants = cached.participants,
+                        reactions = cached.reactions,
+                    )
+                } else {
+                    val participants = runCatching { chatRepository.fetchChatParticipants(event.chatId) }
+                        .getOrElse { emptyList() }
+                    cacheChatThread(
+                        connectionId = event.connectionId,
+                        chatId = event.chatId,
+                        messages = listOf(vaulted),
+                        participants = participants,
+                    )
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                println("AppDataManager: aggressive chat background sync failed: ${e.redactedRestMessage()}")
-            } finally {
-                runCatching { subscription?.detach() }
+                schedulePersistSnapshot()
             }
         }
+        scope.launch {
+            RealtimeCoordinator.connectionJunctionChanged.collect {
+                refreshInboxFromCoordinator(force = false)
+            }
+        }
+    }
+
+    /** Lightweight inbox refresh after Realtime junction change (avoids full loadAllData). */
+    private fun refreshInboxFromCoordinator(force: Boolean) {
+        if (_ghostModeEnabled.value) return
+        val userId = _currentUser.value?.id ?: return
+        scope.launch {
+            runCatching {
+                val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId, runStaleSweep = false)
+                applyFetchedConnectionSnapshot(snapshot)
+                lastRefreshTime = Clock.System.now().toEpochMilliseconds()
+            }.onFailure { e ->
+                if (force) {
+                    refresh(force = true)
+                } else {
+                    println("AppDataManager: coordinator inbox refresh failed: ${e.redactedRestMessage()}")
+                }
+            }
+        }
+    }
+
+    /** Map tab opened — allow one beacon/hub prefetch per session. */
+    fun requestMapDiscoveryPrefetch() {
+        if (_ghostModeEnabled.value || beaconPrefetchedThisSession) return
+        beaconPrefetchedThisSession = true
+        startBeaconPrefetch()
+    }
+
+    private fun startAggressiveBackgroundChatSync(userId: String) {
+        startRealtimeCoordinatorSync(userId)
     }
     
     /**
@@ -762,9 +796,7 @@ object AppDataManager {
             
             println("AppDataManager: Loading data for user $effectiveUserId")
 
-            // Kick off the map beacon prefetch in parallel with the connections snapshot so map
-            // data is cached by the time the user navigates to the Social Map tab.
-            startBeaconPrefetch()
+            // Beacon prefetch deferred until map tab opens (see requestMapDiscoveryPrefetch).
 
             withTimeout(STARTUP_TIMEOUT_MS) {
                 val snapshotDeferred = async {
@@ -1060,7 +1092,17 @@ object AppDataManager {
     fun isInboxFeedFresh(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
         if (!_isDataLoaded.value || lastRefreshTime <= 0L) return false
         if (nowMs - lastRefreshTime >= REFRESH_COOLDOWN_MS) return false
-        return _inboxFeedChats.value.isNotEmpty() || _connections.value.isNotEmpty()
+        if (_inboxFeedChats.value.isEmpty()) return false
+        val currentVersion = RealtimeCoordinator.currentInboxVersion()
+        return currentVersion == lastSyncedInboxVersion
+    }
+
+    fun notifyInboxVersionSynced() {
+        lastSyncedInboxVersion = RealtimeCoordinator.currentInboxVersion()
+    }
+
+    fun bumpInboxFromPush() {
+        RealtimeCoordinator.bumpInboxVersion()
     }
 
     /**
@@ -1092,6 +1134,11 @@ object AppDataManager {
         chatPrefetchJob = null
         aggressiveBackgroundChatSyncJob?.cancel()
         aggressiveBackgroundChatSyncJob = null
+        realtimeCoordinatorJob?.cancel()
+        realtimeCoordinatorJob = null
+        RealtimeCoordinator.stop()
+        beaconPrefetchedThisSession = false
+        lastSyncedInboxVersion = 0L
         profilePrefetchJob?.cancel()
         profilePrefetchJob = null
         beaconPrefetchJob?.cancel()
@@ -1843,6 +1890,7 @@ object AppDataManager {
             else -> _coreConnectionIds.value
         }
         seedJunctionCacheFromMemory()
+        notifyInboxVersionSynced()
     }
 
     private fun seedJunctionCacheFromMemory() {

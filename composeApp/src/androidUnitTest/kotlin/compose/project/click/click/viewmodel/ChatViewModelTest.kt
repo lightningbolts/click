@@ -15,6 +15,7 @@ import compose.project.click.click.data.repository.MessageChangeEvent
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.data.storage.FakeTokenStorage
 import compose.project.click.click.data.storage.initTokenStorage
+import compose.project.click.click.network.ConnectivityMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -52,6 +53,18 @@ private fun runVmTest(testBody: suspend TestScope.() -> Unit) = runTest {
     }
 }
 
+private fun testChatViewModel(
+    tokenStorage: FakeTokenStorage = FakeTokenStorage(),
+    chatRepository: FakeChatRepository = FakeChatRepository(),
+    supabaseRepository: SupabaseRepository = SupabaseRepository(),
+    connectivityMonitor: ConnectivityMonitor = FakeConnectivityMonitor(initialOnline = true),
+): ChatViewModel = ChatViewModel(
+    tokenStorage = tokenStorage,
+    chatRepository = chatRepository,
+    supabaseRepository = supabaseRepository,
+    connectivityMonitor = connectivityMonitor,
+)
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 @LooperMode(LooperMode.Mode.PAUSED)
@@ -69,8 +82,7 @@ class ChatViewModelTest {
 
     @Test
     fun initialState_chatListIsLoading() = runVmTest {
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = FakeChatRepository()
         )
         advanceUntilIdle()
@@ -79,8 +91,7 @@ class ChatViewModelTest {
 
     @Test
     fun setCurrentUser_updatesCurrentUserIdFlow() = runVmTest {
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = FakeChatRepository()
         )
         vm.setCurrentUser("user-abc")
@@ -93,10 +104,8 @@ class ChatViewModelTest {
         val fake = FakeChatRepository(
             onFetchUserChatsWithDetails = { emptyList() }
         )
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = fake,
-            supabaseRepository = SupabaseRepository()
         )
         vm.setCurrentUser("user-1")
         advanceUntilIdle()
@@ -109,8 +118,7 @@ class ChatViewModelTest {
 
     @Test
     fun updateMessageInput_updatesMessageInputFlow() = runVmTest {
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = FakeChatRepository()
         )
         vm.updateMessageInput("hello")
@@ -183,10 +191,8 @@ class ChatViewModelTest {
             }
         )
 
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = fake,
-            supabaseRepository = SupabaseRepository()
         )
         vm.setCurrentUser(selfId)
         advanceUntilIdle()
@@ -256,10 +262,8 @@ class ChatViewModelTest {
             }
         )
 
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = fake,
-            supabaseRepository = SupabaseRepository()
         )
         vm.setCurrentUser(selfId)
         advanceUntilIdle()
@@ -325,10 +329,8 @@ class ChatViewModelTest {
             }
         )
 
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = fake,
-            supabaseRepository = SupabaseRepository()
         )
         vm.setCurrentUser(selfId)
         advanceUntilIdle()
@@ -410,10 +412,8 @@ class ChatViewModelTest {
             }
         )
 
-        val vm = ChatViewModel(
-            tokenStorage = FakeTokenStorage(),
+        val vm = testChatViewModel(
             chatRepository = fake,
-            supabaseRepository = SupabaseRepository()
         )
         vm.setCurrentUser(selfId)
         advanceUntilIdle()

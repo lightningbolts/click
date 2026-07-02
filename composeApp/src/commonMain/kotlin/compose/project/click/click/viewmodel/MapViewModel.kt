@@ -356,9 +356,10 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    /** Starts (or retries) discovery hub/beacon loading without waiting for the map tab. */
+    /** Starts (or retries) discovery hub/beacon loading when map is opened. */
     fun warmDiscoveryFeed() {
         if (AppDataManager.currentUser.value == null) return
+        AppDataManager.requestMapDiscoveryPrefetch()
         prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = true)
     }
 
@@ -1961,34 +1962,10 @@ class MapViewModel : ViewModel() {
     }
     
     /**
-     * Subscribe to real-time changes on the connections table.
-     * Triggers an AppDataManager refresh on any change so map pins stay current.
+     * Connection junction updates handled by [RealtimeCoordinator] → [AppDataManager].
      */
     private fun subscribeToConnectionChanges() {
-        viewModelScope.launch {
-            try {
-                val channel = SupabaseConfig.client.channel("map:connections")
-                connectionsChannel = channel
-
-                merge(
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connections"
-                    },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connection_archives"
-                    },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connection_hidden"
-                    },
-                ).onEach {
-                    AppDataManager.refresh(force = true)
-                }.launchIn(this)
-
-                channel.subscribe()
-            } catch (e: Exception) {
-                println("MapViewModel: Error subscribing to connections: ${e.redactedRestMessage()}")
-            }
-        }
+        // Intentionally empty — map reads AppDataManager.connections.
     }
     
     override fun onCleared() {

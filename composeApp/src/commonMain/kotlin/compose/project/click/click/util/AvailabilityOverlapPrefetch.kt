@@ -36,8 +36,8 @@ object ViewerAvailabilityBubblesCache {
 }
 
 /**
- * Fetches peer availability bubbles and writes overlap results into [AvailabilityOverlapCache].
- * Skips peers already cached; returns how many peers were fetched.
+ * Fetches peer availability overlaps and writes results into [AvailabilityOverlapCache].
+ * Uses batch RPC when available; falls back to per-peer fetch.
  */
 suspend fun prefetchAvailabilityOverlapsForPeers(
     viewerUserId: String,
@@ -57,9 +57,22 @@ suspend fun prefetchAvailabilityOverlapsForPeers(
         .toList()
     if (uncachedPeerIds.isEmpty()) return@withContext 0
 
+    val batch = runCatching { repository.fetchAvailabilityOverlapsBatch(uncachedPeerIds) }
+        .getOrElse { emptyMap() }
+    if (batch.isNotEmpty()) {
+        for ((peerId, hasOverlap) in batch) {
+            AvailabilityOverlapCache.put(viewerUserId, peerId, hasOverlap)
+        }
+        val missing = uncachedPeerIds.filter { it !in batch.keys }
+        if (missing.isEmpty()) return@withContext uncachedPeerIds.size
+    }
+
+    val peersToFetch = if (batch.isEmpty()) uncachedPeerIds else uncachedPeerIds.filter { it !in batch.keys }
+    if (peersToFetch.isEmpty()) return@withContext uncachedPeerIds.size
+
     val limiter = Semaphore(concurrency.coerceAtLeast(1))
     coroutineScope {
-        uncachedPeerIds.map { peerId ->
+        peersToFetch.map { peerId ->
             async {
                 limiter.withPermit {
                     val theirs = runCatching {

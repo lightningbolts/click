@@ -25,6 +25,19 @@ import kotlinx.serialization.json.put
 import kotlin.random.Random
 
 @Serializable
+data class GroupCallInvite(
+    val callId: String,
+    val groupId: String,
+    val chatId: String,
+    val roomName: String,
+    val callerId: String,
+    val callerName: String,
+    val memberIds: List<String>,
+    val videoEnabled: Boolean,
+    val createdAt: Long,
+)
+
+@Serializable
 data class CallInvite(
     val callId: String,
     val connectionId: String,
@@ -74,6 +87,9 @@ sealed class CallOverlayState {
 }
 
 object CallSessionManager {
+    /** Caller + up to seven other group members (eight total). */
+    const val MAX_GROUP_CALL_MEMBERS = 8
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val authRepository = AuthRepository()
     private val coordinator = CallCoordinator()
@@ -81,6 +97,7 @@ object CallSessionManager {
     private val internalCallManager = createCallManager()
     private val outboundChannels = mutableMapOf<String, RealtimeChannel>()
     private val subscribedOutboundUserIds = mutableSetOf<String>()
+    private val lazyOutboundUserIds = mutableSetOf<String>()
 
     private var inboundChannel: RealtimeChannel? = null
     private var inviteJob: Job? = null
@@ -320,6 +337,87 @@ object CallSessionManager {
         }
     }
 
+    fun startOutgoingGroupCall(
+        groupId: String,
+        chatId: String,
+        memberIds: List<String>,
+        videoEnabled: Boolean,
+    ) {
+        val userId = resolvedCurrentUserId() ?: return
+        val callerName = currentUserName ?: "Click User"
+
+        if (_overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle) {
+            return
+        }
+
+        val distinctMembers = memberIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (!distinctMembers.contains(userId)) {
+            return
+        }
+        if (distinctMembers.size > MAX_GROUP_CALL_MEMBERS) {
+            return
+        }
+
+        val calleeIds = distinctMembers.filter { it != userId }
+        if (calleeIds.isEmpty()) {
+            return
+        }
+
+        val now = Clock.System.now().toEpochMilliseconds()
+        val roomName = "click-group-$groupId-$now"
+        val groupInvite = GroupCallInvite(
+            callId = "call-$now-${Random.nextInt(1000, 9999)}",
+            groupId = groupId,
+            chatId = chatId,
+            roomName = roomName,
+            callerId = userId,
+            callerName = callerName,
+            memberIds = distinctMembers,
+            videoEnabled = videoEnabled,
+            createdAt = now,
+        )
+
+        val primaryCalleeId = calleeIds.first()
+        val invite = CallInvite(
+            callId = groupInvite.callId,
+            connectionId = groupId,
+            roomName = roomName,
+            callerId = userId,
+            callerName = callerName,
+            calleeId = primaryCalleeId,
+            calleeName = "Group call",
+            videoEnabled = videoEnabled,
+            createdAt = now,
+        )
+
+        activeInviteValue = invite
+        _overlayState.value = CallOverlayState.Outgoing(invite)
+        CallRingtonePlayer.startOutgoing()
+
+        scope.launch {
+            for (calleeId in calleeIds) {
+                val memberInvite = invite.copy(calleeId = calleeId)
+                sendInvite(memberInvite)
+                callPushNotifier.notifyIncomingCall(memberInvite)
+                    .onFailure {
+                        println("CallSessionManager: Failed to dispatch group call push to $calleeId: ${it.message}")
+                    }
+            }
+        }
+
+        timeoutJob?.cancel()
+        timeoutJob = scope.launch {
+            delay(30_000)
+            if (activeInviteValue?.callId == invite.callId && _overlayState.value is CallOverlayState.Outgoing) {
+                for (calleeId in calleeIds) {
+                    sendCancel(invite.copy(calleeId = calleeId), calleeId, "missed")
+                }
+                insertCallChatLogAsync(groupInvite.groupId, "missed", 0)
+                failCall(invite, "No answer")
+            }
+        }
+    }
+
     fun acceptIncomingCall() {
         if (_overlayState.value is CallOverlayState.Connecting) return
 
@@ -373,6 +471,7 @@ object CallSessionManager {
         }
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
+        cleanupAfterCall()
     }
 
     fun endActiveCall() {
@@ -393,6 +492,7 @@ object CallSessionManager {
             activeInviteValue = null
             _overlayState.value = CallOverlayState.Idle
         }
+        cleanupAfterCall()
     }
 
     fun dismissEndedCall() {
@@ -401,6 +501,7 @@ object CallSessionManager {
         }
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
+        cleanupAfterCall()
     }
 
     fun receiveIncomingPush(invite: CallInvite, autoAnswer: Boolean = false, autoDecline: Boolean = false) {
@@ -423,6 +524,11 @@ object CallSessionManager {
         }
 
         if (_overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle) {
+            scope.launch {
+                sendResponse(invite, accepted = false, busy = true)
+            }
+            pendingSystemInvite = null
+            pendingSystemAction = null
             return
         }
 
@@ -431,6 +537,23 @@ object CallSessionManager {
         CallRingtonePlayer.startIncoming()
         PlatformIncomingCallUi.showIncomingCall(invite)
         processPendingSystemInviteIfPossible()
+    }
+
+    private fun releaseLazyOutboundChannels() {
+        val toRelease = lazyOutboundUserIds.toList()
+        lazyOutboundUserIds.clear()
+        for (userId in toRelease) {
+            outboundChannels.remove(userId)?.let { channel ->
+                scope.launch {
+                    runCatching { channel.unsubscribe() }
+                }
+            }
+            subscribedOutboundUserIds.remove(userId)
+        }
+    }
+
+    private fun cleanupAfterCall() {
+        releaseLazyOutboundChannels()
     }
 
     private fun subscribeToIncoming(userId: String) {
@@ -497,6 +620,7 @@ object CallSessionManager {
         }
         outboundChannels.clear()
         subscribedOutboundUserIds.clear()
+        lazyOutboundUserIds.clear()
     }
 
     private fun handleInvite(invite: CallInvite) {
@@ -600,6 +724,11 @@ object CallSessionManager {
         }
     }
 
+    private fun groupIdFromInvite(invite: CallInvite): String? {
+        val prefix = "click-group-${invite.connectionId}-"
+        return if (invite.roomName.startsWith(prefix)) invite.connectionId else null
+    }
+
     private suspend fun joinCall(invite: CallInvite) {
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
@@ -607,6 +736,7 @@ object CallSessionManager {
             connectionId = invite.connectionId,
             roomName = invite.roomName,
             participantName = participantName,
+            groupId = groupIdFromInvite(invite),
         )
 
         tokenResult.fold(
@@ -637,6 +767,7 @@ object CallSessionManager {
             connectionId = invite.connectionId,
             roomName = invite.roomName,
             participantName = participantName,
+            groupId = groupIdFromInvite(invite),
         )
 
         tokenResult.fold(
@@ -726,8 +857,10 @@ object CallSessionManager {
             try {
                 outbound.subscribe(blockUntilSubscribed = true)
                 subscribedOutboundUserIds.add(userId)
+                lazyOutboundUserIds.add(userId)
             } catch (_: Exception) {
                 runCatching { outbound.subscribe() }
+                lazyOutboundUserIds.add(userId)
             }
         }
         return outbound
@@ -738,6 +871,7 @@ object CallSessionManager {
         invite?.let { PlatformIncomingCallUi.dismissIncomingCall(it.callId, reason) }
         activeInviteValue = invite
         _overlayState.value = CallOverlayState.Ended(invite, reason)
+        cleanupAfterCall()
     }
 
     private fun resolvedCurrentUserId(): String? {

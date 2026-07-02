@@ -11,12 +11,14 @@ class CallCoordinator(
         connectionId: String,
         roomName: String,
         participantName: String,
+        groupId: String? = null,
     ): Result<LiveKitTokenResponse> {
         return apiClient.postLiveKitToken(
             LiveKitTokenPostBody(
                 connectionId = connectionId,
                 roomName = roomName,
                 participantName = participantName,
+                groupId = groupId,
             ),
         )
     }

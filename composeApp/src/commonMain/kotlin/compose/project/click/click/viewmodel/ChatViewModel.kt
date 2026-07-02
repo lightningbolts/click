@@ -55,11 +55,13 @@ import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.realtime.RealtimeCoordinator
 import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pragma: allowlist secret
+import compose.project.click.click.network.ConnectivityMonitor
 import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -179,9 +181,8 @@ class ChatViewModel(
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
     private val chatApi: ChatApiClient = ChatApiClient(),
+    private val connectivityMonitor: ConnectivityMonitor = NetworkConnectivityMonitor(),
 ) : ViewModel(), SecureChatMediaHost {
-
-    private val connectivityMonitor = NetworkConnectivityMonitor()
 
     private companion object {
         const val OFFLINE_SEND_NOTICE =
@@ -277,6 +278,17 @@ class ChatViewModel(
     /** Relational archive/hide junction state (shared with Home / Map / ConnectionViewModel). */
     val archivedConnectionIds: StateFlow<Set<String>> = AppDataManager.archivedConnectionIds
     val hiddenConnectionIds: StateFlow<Set<String>> = AppDataManager.hiddenConnectionIds
+
+    private val _connectionsDisplayLimit = MutableStateFlow(CONNECTIONS_PAGE_SIZE)
+    val connectionsDisplayLimit: StateFlow<Int> = _connectionsDisplayLimit.asStateFlow()
+
+    fun loadMoreConnectionsPage() {
+        _connectionsDisplayLimit.value += CONNECTIONS_PAGE_SIZE
+    }
+
+    fun resetConnectionsDisplayLimit() {
+        _connectionsDisplayLimit.value = CONNECTIONS_PAGE_SIZE
+    }
 
     // ── Reactions state: messageId → list of reactions ─────────────────────────
     private val _messageReactions = MutableStateFlow<Map<String, List<compose.project.click.click.data.models.MessageReaction>>>(emptyMap())
@@ -537,52 +549,17 @@ class ChatViewModel(
                 runCatching { previous.unsubscribe() }
             }
         }
-        // Keep collection in this same Job: `flow.launchIn(this)` + a short `subscribe()` lets the
-        // parent coroutine finish and cancels the child collector (no events delivered).
         connectionsRealtimeJob = viewModelScope.launch {
             try {
-                val channel = SupabaseConfig.client.channel("chatvm:connections:$userId")
-                connectionsRealtimeChannel = channel
-                try {
-                    val connectionsFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connections"
-                    }.map { ConnectionsRealtimeEvent.MainTable(it) }
-                    val archivesFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connection_archives"
-                    }.map { ConnectionsRealtimeEvent.ArchiveJunction(it) }
-                    val hiddenFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connection_hidden"
-                    }.map { ConnectionsRealtimeEvent.HiddenJunction(it) }
-                    channel.subscribe(blockUntilSubscribed = true)
-                    merge(connectionsFlow, archivesFlow, hiddenFlow).collect { event ->
-                        when (event) {
-                            is ConnectionsRealtimeEvent.MainTable -> {
-                                if (connectionRowRelevantToUser(event.action, userId)) {
-                                    scheduleDebouncedChatListRefresh()
-                                    reapplyChatListVisibilityFromAppData()
-                                }
-                            }
-                            is ConnectionsRealtimeEvent.ArchiveJunction -> {
-                                handleConnectionArchivesRealtime(event.action, userId)
-                            }
-                            is ConnectionsRealtimeEvent.HiddenJunction -> {
-                                handleConnectionHiddenRealtime(event.action, userId)
-                            }
-                        }
-                    }
-                } finally {
-                    runCatching { channel.unsubscribe() }
-                    if (connectionsRealtimeChannel === channel) {
-                        connectionsRealtimeChannel = null
-                    }
+                RealtimeCoordinator.ensureStarted(userId)
+                RealtimeCoordinator.connectionJunctionChanged.collect {
+                    scheduleDebouncedChatListRefresh()
+                    reapplyChatListVisibilityFromAppData()
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // JVM/Robolectric tests and pre-client init: no Supabase — list still updates via
-                // bumpConnectionInChatList / loadChats.
                 println("ChatViewModel: global connections realtime unavailable: ${e.redactedRestMessage()}")
-                connectionsRealtimeChannel = null
             }
         }
     }
@@ -639,12 +616,10 @@ class ChatViewModel(
     private fun startGlobalMessageListRealtime() {
         globalMessageListJob?.cancel()
         globalMessageListJob = viewModelScope.launch {
-            var sub: ChatMessageSubscription? = null
             try {
-                val (subscription, flow) = chatRepository.subscribeToMessageInserts()
-                sub = subscription
-                subscription.attach()
-                flow.collect { event ->
+                val userId = _currentUserId.value ?: return@launch
+                RealtimeCoordinator.ensureStarted(userId)
+                RealtimeCoordinator.messageInserts.collect { event ->
                     chatRepository.mergeCachedTimelineMessage(event.connectionId, event.message)
                     syncPrefetchFromHotTimeline(event.connectionId)
                     bumpConnectionInChatList(event.connectionId, event.message)
@@ -653,8 +628,6 @@ class ChatViewModel(
                 throw e
             } catch (e: Exception) {
                 println("ChatViewModel: global message list realtime unavailable: ${e.redactedRestMessage()}")
-            } finally {
-                runCatching { sub?.detach() }
             }
         }
     }
@@ -2046,10 +2019,7 @@ class ChatViewModel(
         activeChatSyncJob?.cancel()
         activeChatSyncJob = viewModelScope.launch {
             while (currentApiChatId == chatId) {
-                // Re-fetch reactions on an interval: Supabase Realtime delivery for message_reactions
-                // is still flaky on some mobile builds; leaving/re-entering the chat only refetched via REST.
                 syncActiveChatReactions(chatId)
-                syncActiveChatMessages(chatId, userId)
                 delay(ACTIVE_CHAT_SYNC_INTERVAL_MS)
             }
         }
@@ -4310,6 +4280,7 @@ private const val MESSAGE_SUBSCRIPTION_RETRY_DELAY_MS = 750L
 // channel, not the primary delivery path. 800ms refetched the full thread ~75x/min
 // per open chat; 12s keeps reaction recovery snappy without hammering the API.
 private const val ACTIVE_CHAT_SYNC_INTERVAL_MS = 12_000L
+private const val CONNECTIONS_PAGE_SIZE = 50
 private const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L
 private const val APP_DATA_STARTUP_WAIT_MS = 20_000L
 private const val CHAT_THREAD_CACHE_FRESH_MS = 120_000L

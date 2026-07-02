@@ -38,9 +38,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 private const val CONNECTION_ENCOUNTERS_PER_CONNECTION = 25L
 private const val CONNECTION_ENCOUNTERS_TABLE = "connection_encounters"
@@ -77,6 +79,7 @@ class SupabaseRepository {
         private var lastStaleSweepUserId: String? = null
         private var lastStaleSweepAtMs: Long = 0L
         private const val STALE_SWEEP_INTERVAL_MS = 24L * 60L * 60L * 1000L
+        private const val PROFILE_TIMELINE_CACHE_MAX_ENTRIES = 64
         private val userPublicProfileCache =
             MutableStateFlow<Map<String, UserPublicProfile>>(emptyMap())
         private val profileTimelineCache =
@@ -166,15 +169,22 @@ class SupabaseRepository {
 
     private fun cacheProfileTimeline(payload: ProfileTimelinePayload) {
         val key = profileTimelineCacheKey(payload.targetType, payload.targetId) ?: return
-        profileTimelineCache.value = profileTimelineCache.value + (
-            key to ProfileTimelineCacheEntry(
-                key = key,
-                targetType = payload.targetType,
-                targetId = payload.targetId,
-                cachedAtMs = Clock.System.now().toEpochMilliseconds(),
-                payload = payload,
-            )
+        val entry = ProfileTimelineCacheEntry(
+            key = key,
+            targetType = payload.targetType,
+            targetId = payload.targetId,
+            cachedAtMs = Clock.System.now().toEpochMilliseconds(),
+            payload = payload,
         )
+        val merged = profileTimelineCache.value + (key to entry)
+        profileTimelineCache.value = if (merged.size <= PROFILE_TIMELINE_CACHE_MAX_ENTRIES) {
+            merged
+        } else {
+            merged.entries
+                .sortedByDescending { it.value.cachedAtMs }
+                .take(PROFILE_TIMELINE_CACHE_MAX_ENTRIES)
+                .associate { it.key to it.value }
+        }
     }
 
     suspend fun refreshProfileTimeline(targetType: String, targetId: String): ProfileTimelinePayload? {
@@ -449,6 +459,31 @@ class SupabaseRepository {
         } catch (e: Exception) {
             println("fetchAvailabilityIntentBubblesFromIntentsTable (redacted): ${e.redactedRestMessage()}")
             emptyList()
+        }
+    }
+
+    /**
+     * Batch overlap flags for peers via get_availability_overlaps RPC (one round-trip).
+     */
+    suspend fun fetchAvailabilityOverlapsBatch(peerUserIds: List<String>): Map<String, Boolean> {
+        if (peerUserIds.isEmpty()) return emptyMap()
+        return try {
+            @Serializable
+            data class OverlapRow(
+                @SerialName("peer_id") val peerId: String,
+                @SerialName("has_overlap") val hasOverlap: Boolean = false,
+            )
+            val body = buildJsonObject {
+                putJsonArray("p_peer_ids") {
+                    peerUserIds.distinct().filter { it.isNotBlank() }.forEach { add(JsonPrimitive(it)) }
+                }
+            }
+            supabase.postgrest.rpc("get_availability_overlaps", body)
+                .decodeList<OverlapRow>()
+                .associate { it.peerId to it.hasOverlap }
+        } catch (e: Exception) {
+            println("fetchAvailabilityOverlapsBatch RPC failed (redacted): ${e.redactedRestMessage()}")
+            emptyMap()
         }
     }
 

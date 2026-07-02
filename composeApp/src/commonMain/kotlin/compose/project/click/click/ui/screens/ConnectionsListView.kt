@@ -458,6 +458,23 @@ fun ConnectionsListView(
             }
         }
     }
+    val connectionsDisplayLimit by viewModel.connectionsDisplayLimit.collectAsState()
+    val displayedChats = remember(filteredChats, connectionsDisplayLimit, searchQuery) {
+        if (searchQuery.isNotBlank()) filteredChats else filteredChats.take(connectionsDisplayLimit)
+    }
+    LaunchedEffect(connectionsLazyListState, filteredChats.size, connectionsDisplayLimit, searchQuery) {
+        if (searchQuery.isNotBlank()) return@LaunchedEffect
+        snapshotFlow {
+            connectionsLazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+        }.collect { lastVisible ->
+            if (lastVisible >= displayedChats.size - 4 && filteredChats.size > connectionsDisplayLimit) {
+                viewModel.loadMoreConnectionsPage()
+            }
+        }
+    }
+    LaunchedEffect(selectedTabIndex) {
+        viewModel.resetConnectionsDisplayLimit()
+    }
 
     /** Verified-click picker: every non-group 1:1 edge still in the inbox, including pending and archived-tab rows. */
     val verifiedCliquePickableOneToOneChats = remember(effectiveChats) {
@@ -715,7 +732,7 @@ fun ConnectionsListView(
                                 }
                             }
                             items(
-                                filteredChats,
+                                displayedChats,
                                 key = { it.connection.id }
                             ) { chatDetails ->
                                 val connectionId = chatDetails.connection.id

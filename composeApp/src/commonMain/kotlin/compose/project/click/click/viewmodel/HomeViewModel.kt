@@ -611,35 +611,11 @@ class HomeViewModel(
     }
     
     /**
-     * Subscribe to real-time changes on the connections table.
-     * Triggers an AppDataManager refresh on any INSERT/UPDATE/DELETE so
-     * the home screen connection count stays current without manual pull-to-refresh.
+     * Connection junction updates are handled by [RealtimeCoordinator] → [AppDataManager].
+     * Home observes [AppDataManager.connections] directly; no duplicate Realtime channel.
      */
     private fun subscribeToConnectionChanges() {
-        viewModelScope.launch {
-            try {
-                val channel = SupabaseConfig.client.channel("home:connections")
-                connectionsChannel = channel
-
-                merge(
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connections"
-                    },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connection_archives"
-                    },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = "connection_hidden"
-                    },
-                ).onEach {
-                    AppDataManager.refresh(force = true)
-                }.launchIn(this)
-
-                channel.subscribe()
-            } catch (e: Exception) {
-                println("HomeViewModel: Error subscribing to connections: ${e.redactedRestMessage()}")
-            }
-        }
+        // Intentionally empty — see AppDataManager.startRealtimeCoordinatorSync.
     }
     
     override fun onCleared() {

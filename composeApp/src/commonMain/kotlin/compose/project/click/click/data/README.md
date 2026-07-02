@@ -31,23 +31,27 @@ The `data` package is Click's **client-side single source of truth (SSOT)**. `Ap
 ```
 initializeData()
     │
-    ├─ restoreCachedSnapshot()          ← CachedAppSnapshot from TokenStorage
+    ├─ restoreCachedSnapshot()
     ├─ restoreActiveHubs()
     ├─ startPendingConnectionSync()
     ├─ startNetworkConnectivityObserver()
     └─ loadAllData() [async]
-           ├─ authRepository.getCurrentUser() / LocalSessionCache fallback
-           ├─ startBeaconPrefetch()      ← parallel, skipped in ghost mode
+           ├─ RealtimeCoordinator.ensureStarted()  ← single messages + connections listener
            ├─ fetchUserConnectionsSnapshot()
-           ├─ fetchUserById + interests
-           ├─ applyFetchedConnectionSnapshot()
-           ├─ _isDataLoaded = true
-           ├─ persistSnapshot()
-           ├─ startSilentChatPrefetch()
-           └─ background: refreshConnectedUsers, push token upload
+           ├─ applyFetchedConnectionSnapshot() → notifyInboxVersionSynced()
+           ├─ startSilentChatPrefetch()          ← skipped when offline
+           └─ requestMapDiscoveryPrefetch()      ← map tab only (not cold start)
 ```
 
-`primeOfflineBootCache()` (called from auth fast-path) runs only `restoreCachedSnapshot()` + `restoreActiveHubs()` so the dashboard renders before `loadAllData()` completes.
+### RealtimeCoordinator
+
+[`data/realtime/RealtimeCoordinator.kt`](realtime/RealtimeCoordinator.kt) owns one app-scoped `messages` insert flow and one `connections` junction flow. ViewModels subscribe to shared `SharedFlow`s instead of opening duplicate Supabase channels.
+
+### Inbox RPC
+
+[`SupabaseChatRepository.fetchInboxPreviewsFromRpc()`](repository/SupabaseChatRepository.kt) calls Postgres `get_inbox_previews()` — one round-trip for latest message + unread counts (replaces per-chat N+1).
+
+---
 
 ### CachedAppSnapshot persistence
 

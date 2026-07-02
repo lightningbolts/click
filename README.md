@@ -127,6 +127,18 @@ Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts arou
 
 ---
 
+## Performance & scale
+
+See [`PERFORMANCE.md`](PERFORMANCE.md) for hotspots, scale failure modes, and July 2026 remediation (inbox RPC, `RealtimeCoordinator`, gated map prefetch).
+
+**Compile (Android + iOS):**
+
+```bash
+./gradlew :composeApp:compileDebugKotlinAndroid :composeApp:compileKotlinIosSimulatorArm64
+```
+
+---
+
 ## Notable modules (navigation)
 
 | Area | Starting points |

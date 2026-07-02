@@ -175,6 +175,7 @@ data class LiveKitTokenPostBody(
     @SerialName("connection_id") val connectionId: String,
     @SerialName("room_name") val roomName: String,
     @SerialName("participant_name") val participantName: String,
+    @SerialName("group_id") val groupId: String? = null,
 )
 
 @Serializable

@@ -23,7 +23,25 @@ Performance hotspots in the Click KMP app (`composeApp/`), ordered by impact. Th
 
 ---
 
-## Scale failure modes (100k+ users)
+## Scale remediation (July 2026)
+
+Implemented after 100k+ DAU failure analysis. Symptom → fix mapping:
+
+| Symptom | Root cause | Fix |
+|---------|------------|-----|
+| Slow inbox | N+1 latest-message queries | `get_inbox_previews()` RPC wired in `SupabaseChatRepository` |
+| Availability stampede | 48 peer queries/inbox | `get_availability_overlaps()` batch RPC |
+| Realtime saturation | Duplicate message + connection listeners | `RealtimeCoordinator` singleton |
+| Stale inbox previews | Loose `isInboxFeedFresh()` | Requires non-empty inbox + `inboxVersion` match |
+| Active chat DB load | Full-thread poll every 12s | Reactions-only poll; messages via Realtime |
+| Map/beacon herd | Cold-start prefetch for all users | `requestMapDiscoveryPrefetch()` on map tab only |
+| Hub nearby latency | N+1 participant counts | `get_hubs_nearby` PostGIS RPC |
+| Unbounded beacons | Full radius dump | `fetch_map_beacons_within` `p_limit` + SQL visibility |
+| Group calls missing | 1:1-only signaling | `GroupCallInvite` + `startOutgoingGroupCall()` |
+
+**Compile gates:** `./gradlew :composeApp:compileDebugKotlinAndroid`, `:composeApp:compileKotlinIosSimulatorArm64`; `click-web`: `npx tsc --noEmit`.
+
+---
 
 If this system were deployed at hundreds of thousands of DAU, these are the most likely **production** failure modes — not single-device bugs, but aggregate load / correctness under pressure.
 

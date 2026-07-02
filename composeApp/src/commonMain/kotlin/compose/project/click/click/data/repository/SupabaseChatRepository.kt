@@ -646,12 +646,59 @@ class SupabaseChatRepository(
     }
 
     /**
-     * Newest message per chat. A single global messages query ordered by time is row-capped by
-     * PostgREST; the first row per chat in that window is not always the true latest, while
-     * [Connection.last_message_at] (maintained by a DB trigger) still advances — causing sort/preview mismatch.
+     * Batch inbox previews via single RPC (replaces per-chat latest-message queries).
+     */
+    private suspend fun fetchInboxPreviewsFromRpc(): Map<String, MessageRow> {
+        return try {
+            @Serializable
+            data class InboxPreviewRow(
+                @SerialName("chat_id") val chatId: String,
+                @SerialName("connection_id") val connectionId: String? = null,
+                @SerialName("last_message_id") val lastMessageId: String? = null,
+                @SerialName("last_message_user_id") val lastMessageUserId: String? = null,
+                @SerialName("last_message_content") val lastMessageContent: String? = null,
+                @SerialName("last_message_time_created") val lastMessageTimeCreated: Long? = null,
+                @SerialName("last_message_type") val lastMessageType: String? = null,
+                @SerialName("last_message_metadata") val lastMessageMetadata: JsonObject? = null,
+                @SerialName("last_message_is_read") val lastMessageIsRead: Boolean = false,
+                @SerialName("unread_count") val unreadCount: Long = 0L,
+            )
+            val rows = supabase.postgrest.rpc("get_inbox_previews").decodeList<InboxPreviewRow>()
+            buildMap {
+                for (row in rows) {
+                    val msgId = row.lastMessageId ?: continue
+                    val created = row.lastMessageTimeCreated ?: continue
+                    put(
+                        row.chatId,
+                        MessageRow(
+                            id = msgId,
+                            chatId = row.chatId,
+                            userId = row.lastMessageUserId.orEmpty(),
+                            content = row.lastMessageContent.orEmpty(),
+                            timeCreated = created,
+                            timeEdited = null,
+                            isRead = row.lastMessageIsRead,
+                            messageType = row.lastMessageType ?: "text",
+                            metadata = row.lastMessageMetadata,
+                        ),
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            println("ChatRepository: get_inbox_previews RPC failed: ${e.redactedRestMessage()}")
+            emptyMap()
+        }
+    }
+
+    /**
+     * Newest message per chat. Prefers [fetchInboxPreviewsFromRpc]; falls back to per-chat queries.
      */
     private suspend fun fetchLatestMessageRowPerChat(chatIds: List<String>): Map<String, MessageRow> {
         if (chatIds.isEmpty()) return emptyMap()
+        val fromRpc = fetchInboxPreviewsFromRpc()
+        if (fromRpc.isNotEmpty()) {
+            return chatIds.distinct().mapNotNull { id -> fromRpc[id]?.let { id to it } }.toMap()
+        }
         val distinctIds = chatIds.distinct()
         val limitParallel = Semaphore(12)
         suspend fun queryLatestRow(chatId: String): MessageRow? {

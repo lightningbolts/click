@@ -7,7 +7,7 @@
 
 ## Module Purpose
 
-The calls module implements **real-time voice and video** between Click connections. It coordinates:
+The calls module implements **real-time voice and video** for 1:1 connections and **verified group cliques** (up to 8 members). It coordinates:
 
 1. **Signaling** over Supabase Realtime (invite / accept / decline / cancel)
 2. **Token fetch** from the companion web API (`/api/livekit/token`)
@@ -70,7 +70,18 @@ Channel naming: **`calls:user:{userId}`**
 | `CallCancel` | `callId`, `senderId`, `reason` | Either party |
 | `CallRoomConnected` | `callId`, `userId` | After LiveKit join (coordination) |
 
-Outbound invites use per-peer channels stored in `outboundChannels`; inbound uses a single `inboundChannel` per logged-in user.
+Outbound invites use per-peer channels stored in `outboundChannels` (lazy: torn down in `cleanupAfterCall()`); inbound uses a single `inboundChannel` per logged-in user.
+
+### Group calls
+
+- `GroupCallInvite` — group chat id, member list, shared LiveKit room (`click-group-{groupId}-{suffix}`)
+- `startOutgoingGroupCall()` — fans out `CallInvite` + push to each member's `calls:user:{id}` channel
+- Token mint: POST `/api/livekit/token` with `group_id` + `group_members` verification (max **8** participants)
+- UI: group `ChatView` call menu (mobile + web dashboard)
+
+### VoIP busy path
+
+When callee is already in a call (in-app or PushKit wake), respond `busy=true` on Realtime before caller timeout.
 
 ### `CallCoordinator` — token fetch
 
