@@ -75,6 +75,14 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 
 `ChatViewModel` is the deepest integrator: it mirrors realtime message streams into per-chat caches while respecting `AppDataManager` connection and archive sets.
 
+**Chat open / inbox preview (2026-07):**
+
+- `loadChatMessages` bridges `Loading → Success` before ephemeral Realtime subscribe; duplicate opens for the same connection are deduped via `inFlightLoadConnectionId`.
+- `pendingChatLoadId` retries automatically when `setCurrentUser` runs after a null-user early return.
+- `startGlobalMessageListRealtime` restarts with backoff on collector failure.
+- `ChatPushInboxBridge.inboxPushEvents` and `RealtimeCoordinator.inboxVersion` patch connection-list previews without a full `loadChats` round-trip.
+- `_decryptedPreviews` is populated from `bumpConnectionInChatList` when decrypt succeeds.
+
 ### Global search architecture
 
 `GlobalSearchViewModel` builds a **unified result list** from local SSOT first, then supplements with remote search:

@@ -539,6 +539,14 @@ object AppDataManager {
     }
 
     private fun updateInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
+        applyInboxFeedChatActivity(connectionId, lastMessagePreview)
+    }
+
+    fun updateInboxFeedChatActivityFromPush(connectionId: String, lastMessagePreview: Message) {
+        applyInboxFeedChatActivity(connectionId, lastMessagePreview)
+    }
+
+    private fun applyInboxFeedChatActivity(connectionId: String, lastMessagePreview: Message) {
         if (connectionId.isBlank()) return
         val updated = _inboxFeedChats.value.map { row ->
             if (row.connection.id != connectionId) return@map row

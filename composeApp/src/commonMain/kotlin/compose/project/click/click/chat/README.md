@@ -75,7 +75,8 @@ Per-chat Realtime sessions are **short-lived** and torn down when the user leave
 
 | Phase | Behavior |
 |-------|----------|
-| **Join** | `joinChatEphemeral(chatId, peerUserId)` creates a `ChatEphemeralSession`: single Realtime channel, typing `broadcastFlow`, peer presence `track` |
+| **Join** | `joinChatEphemeralChannel` creates typing/presence on `chat:{chatId}` — **non-blocking** for paint (8s subscribe timeout; load continues on timeout) |
+| **Open paint** | `ChatViewModel.loadChatMessages` bridges `Loading → Success` immediately after chat id resolve, **before** ephemeral join |
 | **Typing** | `TypingBroadcastPayload` broadcast on the channel; exposed as `Flow<TypingStatus>` |
 | **Presence refresh** | Presence `track` refreshed every **25 s** (`PRESENCE_TRACK_REFRESH_MS = 25_000L`) |
 | **Leave** | `leaveChatEphemeral(chatId)` cancels jobs, `untrack()`, `unsubscribe()`, removes from `ephemeralSessions` map |

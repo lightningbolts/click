@@ -91,8 +91,14 @@ Web (`click-web`) and mobile share the same `data` shape so `CallSessionManager.
 ```
 OS notification tap / data message
         │
-        ├─ chat_message ──► ChatDeepLinkManager.setPendingChat(connectionId)
-        │                      └─ App.kt LaunchedEffect → navigateTo(Connections) + pendingChatId
+        ├─ chat_message (receive) ──► ChatPushInboxBridge.applyChatMessagePush
+        │                      ├─ AppDataManager.updateConnectionChatActivity
+        │                      ├─ ChatSessionCaches.mergeTimeline
+        │                      └─ ChatViewModel.inboxPushEvents → bumpConnectionInChatList
+        │
+        ├─ chat_message (tap) ──► ChatDeepLinkManager.setPendingChat(connectionId)
+        │                      └─ App.kt → navigateTo(Connections) + pendingChatId
+        │                         (ConnectionsScreen + ChatView load thread; deduped)
         │
         ├─ incoming_call ──► CallSessionManager.onIncomingPush(data)
         │                      └─ ActiveCallOverlay / CallPreviewOverlay
@@ -106,6 +112,7 @@ OS notification tap / data message
 
 | Class | Role |
 |-------|------|
+| `ChatPushInboxBridge` | Push receipt → inbox preview + warm timeline for fast open |
 | `ChatDeepLinkManager` | Pending `connectionId` and `hubId` StateFlows |
 | `ChatNotificationDismisser` | Clears tray notifications when chat is opened |
 | `ChatPushNotifier` | Outbound chat push trigger after send |

@@ -47,6 +47,18 @@ initializeData()
 
 [`data/realtime/RealtimeCoordinator.kt`](realtime/RealtimeCoordinator.kt) owns one app-scoped `messages` insert flow and one `connections` junction flow. ViewModels subscribe to shared `SharedFlow`s instead of opening duplicate Supabase channels.
 
+### ChatSessionCaches (shared session state)
+
+[`repository/ChatSessionCaches.kt`](repository/ChatSessionCaches.kt) is a process-wide singleton holding:
+
+- `chatId → connectionId / groupId` routing (seeded on inbox load via `seedInboxChatRouting`)
+- E2EE crypto cache (`ResolvedChatCrypto`)
+- `ChatTimelineCache` hot timelines
+
+All `SupabaseChatRepository` instances delegate to it so `RealtimeCoordinator` inserts see the same routing and decrypt keys as the UI repository — without extra PostgREST lookups when `AppDataManager.connections` already has `user_ids`.
+
+`bumpInboxFromPush()` invalidates `isInboxFeedFresh()` when a push arrives; wired from [`ChatPushInboxBridge`](../notifications/ChatPushInboxBridge.kt).
+
 ### Inbox RPC
 
 [`SupabaseChatRepository.fetchInboxPreviewsFromRpc()`](repository/SupabaseChatRepository.kt) calls Postgres `get_inbox_previews()` — one round-trip for latest message + unread counts (replaces per-chat N+1).

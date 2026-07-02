@@ -1000,7 +1000,6 @@ fun App() {
                 val connId = deepLinkConnectionId ?: return@LaunchedEffect
                 if (connId.isBlank() || currentUser.id.isBlank()) return@LaunchedEffect
                 chatViewModel.setCurrentUser(currentUser.id)
-                chatViewModel.loadChatMessages(connId)
                 ChatNotificationDismisser.dismissForThread(connId, connId)
                 ChatDeepLinkManager.consume()
                 pendingChatId = connId

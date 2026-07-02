@@ -195,6 +195,10 @@ flowchart TD
 | Group inbox | Batched queries in `fetchGroupUserChatsWithDetails` |
 | List keys | `LazyColumn` uses `key = { it.connection.id }` |
 | Load UX | `loadChats` keeps Success state while refreshing in background |
+| Chat session caches | `ChatSessionCaches` shares routing/crypto/timeline across all `SupabaseChatRepository` instances |
+| Chat open (2026-07) | Loading→Success bridge runs **before** ephemeral Realtime subscribe; subscribe has 8s timeout |
+| Inbox previews | Global `messageInserts` + `ChatPushInboxBridge` patch list rows without opening chat |
+| Push open | `ChatPushInboxBridge` warms timeline; deduped `loadChatMessages` from deep link |
 | Overlap batching | `util/AvailabilityOverlapPrefetch.kt` + `ViewerAvailabilityBubblesCache` |
 | Junction SSOT | `seedConnectionJunctionCache` after every snapshot apply |
 

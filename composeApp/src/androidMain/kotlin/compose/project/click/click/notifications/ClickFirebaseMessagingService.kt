@@ -129,6 +129,16 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val fallbackPreview = "Open Click to view it"
         val body = if (decrypted != fallbackPreview) decrypted else previewFromServer ?: decrypted
 
+        if (connectionId.isNotBlank() || chatId.isNotBlank()) {
+            ChatPushInboxBridge.applyChatMessagePush(
+                chatId = chatId,
+                connectionId = connectionId,
+                senderUserId = message.data["sender_user_id"] ?: "",
+                previewText = body,
+                messageId = message.data["message_id"],
+            )
+        }
+
         val deepLinkId = chatId.ifBlank { connectionId }
         val launchIntent = if (deepLinkId.isNotBlank()) {
             MainActivity.createChatDeepLinkIntent(

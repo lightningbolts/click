@@ -55,7 +55,9 @@ import kotlinx.datetime.Clock
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatSessionCaches
 import compose.project.click.click.data.realtime.RealtimeCoordinator
+import compose.project.click.click.notifications.ChatPushInboxBridge
 import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
 import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
@@ -379,6 +381,8 @@ class ChatViewModel(
     private var debouncedChatListRefreshJob: Job? = null
     private var vibeCheckTimerJob: Job? = null
     private var loadChatMessagesJob: Job? = null
+    private var pendingChatLoadId: String? = null
+    private var inFlightLoadConnectionId: String? = null
     private var lastTypingSent: Long = 0L
     private val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()
     /** Matches AppDataManager silent prefetch depth (recent active + archived + groups). */
@@ -473,6 +477,21 @@ class ChatViewModel(
                 threads.keys.forEach { connectionId ->
                     patchChatListRowFromCachedThread(connectionId)
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            RealtimeCoordinator.inboxVersion.collect {
+                val state = _chatListState.value as? ChatListState.Success ?: return@collect
+                state.chats.forEach { row ->
+                    patchChatListRowFromCachedThread(row.connection.id)
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            ChatPushInboxBridge.inboxPushEvents.collect { (connectionId, message) ->
+                bumpConnectionInChatList(connectionId, message)
             }
         }
 
@@ -583,6 +602,10 @@ class ChatViewModel(
         _currentUserId.value = userId
         startGlobalConnectionsRealtime(userId)
         startGlobalMessageListRealtime()
+        pendingChatLoadId?.let { pendingId ->
+            pendingChatLoadId = null
+            loadChatMessages(pendingId)
+        }
         if (userUnchanged && _chatListState.value is ChatListState.Success) return
         loadChats(isForced = false)
     }
@@ -677,28 +700,37 @@ class ChatViewModel(
     private fun startGlobalMessageListRealtime() {
         globalMessageListJob?.cancel()
         globalMessageListJob = viewModelScope.launch {
-            try {
-                val userId = _currentUserId.value ?: return@launch
-                RealtimeCoordinator.ensureStarted(userId)
-                RealtimeCoordinator.messageInserts.collect { event ->
-                    chatRepository.mergeCachedTimelineMessage(event.connectionId, event.message)
-                    syncPrefetchFromHotTimeline(event.connectionId)
-                    bumpConnectionInChatList(event.connectionId, event.message)
-                    if (event.connectionId == currentConnectionId) {
-                        val viewerId = _currentUserId.value ?: return@collect
-                        viewModelScope.launch {
-                            val vaulted = vaultMessagesForUi(event.chatId, viewerId, listOf(event.message))
-                                .firstOrNull() ?: event.message
-                            val user = resolveMessageUser(vaulted.user_id, event.chatId)
-                                ?: User(id = vaulted.user_id, name = null, createdAt = 0L)
-                            applyInsertedMessage(vaulted, user, viewerId)
+            var attempt = 0
+            while (isActive) {
+                try {
+                    val userId = _currentUserId.value ?: return@launch
+                    RealtimeCoordinator.ensureStarted(userId)
+                    RealtimeCoordinator.messageInserts.collect { event ->
+                        chatRepository.mergeCachedTimelineMessage(event.connectionId, event.message)
+                        syncPrefetchFromHotTimeline(event.connectionId)
+                        bumpConnectionInChatList(event.connectionId, event.message)
+                        if (event.connectionId == currentConnectionId) {
+                            val viewerId = _currentUserId.value ?: return@collect
+                            viewModelScope.launch {
+                                val vaulted = vaultMessagesForUi(event.chatId, viewerId, listOf(event.message))
+                                    .firstOrNull() ?: event.message
+                                val user = resolveMessageUser(vaulted.user_id, event.chatId)
+                                    ?: User(id = vaulted.user_id, name = null, createdAt = 0L)
+                                applyInsertedMessage(vaulted, user, viewerId)
+                            }
                         }
                     }
+                    return@launch
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    attempt++
+                    println(
+                        "ChatViewModel: global message list realtime unavailable " +
+                            "(attempt $attempt): ${e.redactedRestMessage()}",
+                    )
+                    delay(minOf(30_000L, 500L * attempt))
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                println("ChatViewModel: global message list realtime unavailable: ${e.redactedRestMessage()}")
             }
         }
     }
@@ -753,6 +785,7 @@ class ChatViewModel(
                         cachedUsers = cachedUsers,
                         persistedInbox = persistedInbox,
                     )
+                    chatRepository.seedInboxChatRouting(rows)
                     _chatListState.value = ChatListState.Success(rows)
                     prefetchChatPayloads(userId, rows)
                     return@launch
@@ -836,6 +869,7 @@ class ChatViewModel(
                         val visibilityFiltered = applyChatListVisibility(mergedWithLocalPreview)
                         pruneStaleReadClearedHints(visibilityFiltered)
                         val finalRows = applyUnreadClearHintsToInboxRows(visibilityFiltered)
+                        chatRepository.seedInboxChatRouting(finalRows)
                         _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
                             AppDataManager.persistInboxFeedChats(finalRows)
@@ -1374,6 +1408,8 @@ class ChatViewModel(
             ?.chats?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
         val connectionId = cachedChat?.connection?.id ?: chatId
 
+        applyPushWarmPrefetch(connectionId, chatId)
+
         syncPrefetchFromHotTimeline(connectionId)
 
         payloadFromLocalCache(connectionId)?.let { disk ->
@@ -1386,6 +1422,7 @@ class ChatViewModel(
 
         val userId = _currentUserId.value
         if (userId == null) {
+            pendingChatLoadId = chatId
             val successMatchesTarget = (_chatMessagesState.value as? ChatMessagesState.Success)?.let { s ->
                 s.chatDetails.connection.id == connectionId ||
                     (!s.chatDetails.chat.id.isNullOrBlank() && s.chatDetails.chat.id == chatId)
@@ -1407,6 +1444,14 @@ class ChatViewModel(
             }
             if (!successMatchesTarget) {
                 _chatMessagesState.value = ChatMessagesState.Loading
+            }
+            return
+        }
+
+        if (loadChatMessagesJob?.isActive == true && inFlightLoadConnectionId == connectionId) {
+            syncPrefetchFromHotTimeline(connectionId)
+            if (currentConnectionId == connectionId) {
+                applyHotTimelineToOpenChatIfNewer(connectionId)
             }
             return
         }
@@ -1495,6 +1540,7 @@ class ChatViewModel(
             _chatMessagesState.value = ChatMessagesState.Loading
         }
 
+        inFlightLoadConnectionId = connectionId
         loadChatMessagesJob?.cancel()
         loadChatMessagesJob = viewModelScope.launch {
             try {
@@ -1556,12 +1602,7 @@ class ChatViewModel(
                         hydratedChatDetails.connection.user_ids,
                     )
                 }
-
-                chatRepository.joinChatEphemeralChannel(
-                    apiChatId,
-                    userId,
-                    hydratedChatDetails.otherUser.id,
-                )
+                chatRepository.seedInboxChatRouting(listOf(hydratedChatDetails))
 
                 var payload = resolveCachedChatPayload(resolvedConnectionId)
                 val cacheFresh = payload != null &&
@@ -1581,6 +1622,14 @@ class ChatViewModel(
                         messages = bridgeMessages,
                         chatDetails = hydratedChatDetails,
                         isLoadingMessages = bridgeMessages.isEmpty(),
+                    )
+                }
+
+                val ephemeralDeferred = async {
+                    chatRepository.joinChatEphemeralChannel(
+                        apiChatId,
+                        userId,
+                        hydratedChatDetails.otherUser.id,
                     )
                 }
 
@@ -1604,7 +1653,10 @@ class ChatViewModel(
                     )
                 }
 
-                payload = payload ?: return@launch
+                payload = payload ?: run {
+                    ephemeralDeferred.await()
+                    return@launch
+                }
                 syncPrefetchFromHotTimeline(resolvedConnectionId)
                 applyOpenedChatPayload(
                     hydratedChatDetails = hydratedChatDetails,
@@ -1613,6 +1665,8 @@ class ChatViewModel(
                     connectionId = resolvedConnectionId,
                     payload = payload,
                 )
+
+                ephemeralDeferred.await()
 
                 subscribeToNewMessages(apiChatId, userId)
                 startTypingMonitoring(apiChatId)
@@ -1627,6 +1681,7 @@ class ChatViewModel(
                 if (hydratedChatDetails.groupClique == null && !chatDetails.connection.has_begun) {
                     supabaseRepository.updateConnectionHasBegun(resolvedConnectionId, true)
                 }
+                ChatPushInboxBridge.consumeWarmMessage(resolvedConnectionId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1643,6 +1698,44 @@ class ChatViewModel(
                     _chatMessagesState.value =
                         ChatMessagesState.Error(e.redactedRestMessage().ifBlank { "Failed to load messages" })
                 }
+            } finally {
+                if (inFlightLoadConnectionId == connectionId) {
+                    inFlightLoadConnectionId = null
+                }
+            }
+        }
+    }
+
+    private fun applyPushWarmPrefetch(connectionId: String, chatId: String) {
+        val warm = ChatPushInboxBridge.peekWarmMessage(connectionId) ?: return
+        val viewerId = _currentUserId.value
+        if (viewerId != null && connectionId !in prefetchedChatPayloads) {
+            val sender = AppDataManager.getConnectedUser(warm.user_id)
+                ?: User(id = warm.user_id, name = "Unknown", createdAt = 0L)
+            prefetchedChatPayloads[connectionId] = PrefetchedChatPayload(
+                messages = listOf(
+                    MessageWithUser(
+                        message = warm,
+                        user = sender,
+                        isSent = warm.user_id == viewerId,
+                    ),
+                ),
+                reactionsByMessageId = emptyMap(),
+                icebreakerPrompts = emptyList(),
+                showIcebreakerPanel = false,
+            )
+        }
+        bumpConnectionInChatList(connectionId, warm)
+        val apiChatId = (_chatListState.value as? ChatListState.Success)
+            ?.chats
+            ?.firstOrNull { it.connection.id == connectionId }
+            ?.chat
+            ?.id
+            ?.takeIf { it.isNotBlank() }
+            ?: chatId.takeIf { it != connectionId }
+        if (!apiChatId.isNullOrBlank() && connectionId.isNotBlank()) {
+            viewModelScope.launch {
+                ChatSessionCaches.seedConnectionRouting(apiChatId, connectionId)
             }
         }
     }
@@ -2485,6 +2578,10 @@ class ChatViewModel(
     /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
     private fun bumpConnectionInChatList(connectionId: String, message: Message) {
         AppDataManager.updateConnectionChatActivity(connectionId, message.timeCreated, message)
+        val preview = message.previewLabel()
+        if (preview.isNotBlank() && preview != "New message") {
+            _decryptedPreviews.value = _decryptedPreviews.value + (connectionId to preview)
+        }
         val state = _chatListState.value as? ChatListState.Success ?: run {
             loadChats(isForced = true)
             return

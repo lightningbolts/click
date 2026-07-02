@@ -432,4 +432,87 @@ class ChatViewModelTest {
         assertEquals(MessageDeliveryState.READ, row.deliveryState)
         assertEquals(readStamp, row.readAt)
     }
+
+    @Test
+    fun setCurrentUser_retriesPendingChatLoad() = runVmTest {
+        val selfId = "user-self"
+        val connectionId = "conn-1"
+        val apiChatId = "chat-api-1"
+        val now = 1_700_000_000_000L
+        val connection = Connection(
+            id = connectionId,
+            created = now,
+            expiry = Long.MAX_VALUE,
+            geo_location = GeoLocation(0.0, 0.0),
+            user_ids = listOf(selfId, "other"),
+            chat = Chat(id = apiChatId, connectionId = connectionId),
+            has_begun = true,
+            expiry_state = "active",
+        )
+        val details = ChatWithDetails(
+            chat = connection.chat,
+            connection = connection,
+            otherUser = User(id = "other", name = "Other"),
+            lastMessage = null,
+            unreadCount = 0,
+        )
+        val fake = FakeChatRepository(
+            onFetchChatWithDetails = { _, uid -> if (uid == selfId) details else null },
+            onFetchMessagesForChat = { _, _ -> emptyList() },
+            onFetchChatParticipants = { listOf(User(id = selfId, name = "Me")) },
+            onFetchReactionsForChat = { emptyList() },
+        )
+        val vm = testChatViewModel(chatRepository = fake)
+        vm.loadChatMessages(connectionId)
+        assertTrue(vm.chatMessagesState.value is ChatMessagesState.Loading)
+        vm.setCurrentUser(selfId)
+        advanceUntilIdle()
+        assertIs<ChatMessagesState.Success>(vm.chatMessagesState.value)
+    }
+
+    @Test
+    fun pushInboxBridge_updatesDecryptedPreviewOnList() = runVmTest {
+        val selfId = "user-self"
+        val connectionId = "conn-1"
+        val now = 1_700_000_000_000L
+        val connection = Connection(
+            id = connectionId,
+            created = now,
+            expiry = Long.MAX_VALUE,
+            geo_location = GeoLocation(0.0, 0.0),
+            user_ids = listOf(selfId, "other"),
+            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            has_begun = true,
+            expiry_state = "active",
+        )
+        val row = ChatWithDetails(
+            chat = connection.chat,
+            connection = connection,
+            otherUser = User(id = "other", name = "Other"),
+            lastMessage = null,
+            unreadCount = 0,
+        )
+        val fake = FakeChatRepository(
+            onFetchDirectUserChatsWithDetails = { listOf(row) },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
+        )
+        val vm = testChatViewModel(chatRepository = fake)
+        vm.setCurrentUser(selfId)
+        advanceUntilIdle()
+        vm.loadChats(isForced = true)
+        advanceUntilIdle()
+
+        compose.project.click.click.notifications.ChatPushInboxBridge.applyChatMessagePush(
+            chatId = "chat-api-1",
+            connectionId = connectionId,
+            senderUserId = "other",
+            previewText = "Ping from push",
+        )
+        advanceUntilIdle()
+
+        assertEquals("Ping from push", vm.decryptedPreviews.value[connectionId])
+        val list = vm.chatListState.value as ChatListState.Success
+        assertEquals("Ping from push", list.chats.first().lastMessage?.content)
+    }
 }

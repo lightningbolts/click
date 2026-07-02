@@ -83,6 +83,8 @@ class FakeChatRepository(
         messageTimelineCache.mergeMessage(connectionId, message)
     }
 
+    override suspend fun seedInboxChatRouting(chats: List<ChatWithDetails>) {}
+
     override suspend fun startGlobalPresence(userId: String) = onStartGlobalPresence(userId)
 
     override suspend fun stopGlobalPresence() = onStopGlobalPresence()

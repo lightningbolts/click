@@ -264,9 +264,27 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         if handleIncomingCallNotification(userInfo) {
             completionHandler(.newData)
-        } else {
-            completionHandler(.noData)
+            return
         }
+        if let type = userInfo["type"] as? String, type == "chat_message" {
+            let chatId = userInfo["chat_id"] as? String ?? ""
+            let connectionId = userInfo["connection_id"] as? String ?? ""
+            let senderUserId = userInfo["sender_user_id"] as? String ?? ""
+            let preview = userInfo["preview_text"] as? String ?? "New message"
+            let messageId = userInfo["message_id"] as? String
+            if !chatId.isEmpty || !connectionId.isEmpty {
+                ClickKt.applyChatMessagePushFromNotification(
+                    chatId: chatId,
+                    connectionId: connectionId,
+                    senderUserId: senderUserId,
+                    previewText: preview,
+                    messageId: messageId
+                )
+                completionHandler(.newData)
+                return
+            }
+        }
+        completionHandler(.noData)
     }
 
     private var runtimeDefaults: UserDefaults {

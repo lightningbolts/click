@@ -158,6 +158,9 @@ interface ChatRepository {
 
     fun mergeCachedTimelineMessage(connectionId: String, message: Message)
 
+    /** Seeds chat-id → connection/group routing for realtime inserts without per-message DB lookups. */
+    suspend fun seedInboxChatRouting(chats: List<ChatWithDetails>)
+
     suspend fun addCliqueMember(groupId: String, newMemberUserId: String): Result<Unit>
 
     suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit>

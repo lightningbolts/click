@@ -9,6 +9,7 @@ import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
+import compose.project.click.click.notifications.ChatPushInboxBridge
 import compose.project.click.click.notifications.savePendingPushToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,23 @@ fun savePushToken(token: String, platform: String, tokenType: String) {
 fun setChatDeepLink(chatId: String, connectionId: String = "") {
     ChatNotificationDismisser.dismissForThread(chatId, connectionId.ifBlank { chatId })
     ChatDeepLinkManager.setPendingChat(chatId)
+}
+
+/** iOS background/foreground chat push — updates inbox previews without opening the thread. */
+fun applyChatMessagePushFromNotification(
+    chatId: String,
+    connectionId: String,
+    senderUserId: String,
+    previewText: String,
+    messageId: String? = null,
+) {
+    ChatPushInboxBridge.applyChatMessagePush(
+        chatId = chatId,
+        connectionId = connectionId,
+        senderUserId = senderUserId,
+        previewText = previewText,
+        messageId = messageId,
+    )
 }
 
 /** iOS (and tests): open ephemeral hub from `click://hub/{id}` or universal link. */
