@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -79,6 +80,7 @@ class ChatViewModelTest {
     fun setupTokenStorage() {
         // AppDataManager eagerly constructs AuthRepository → createTokenStorage() on first class load.
         initTokenStorage(ApplicationProvider.getApplicationContext())
+        runBlocking { AppDataManager.clearData() }
     }
 
     @Test
@@ -103,7 +105,9 @@ class ChatViewModelTest {
     @Test
     fun loadChats_repositoryReturnsEmpty_setsSuccessWithEmptyList() = runVmTest {
         val fake = FakeChatRepository(
-            onFetchUserChatsWithDetails = { emptyList() }
+            onFetchDirectUserChatsWithDetails = { emptyList() },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
         )
         val vm = testChatViewModel(
             chatRepository = fake,

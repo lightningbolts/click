@@ -55,7 +55,7 @@ fun configuredReleaseSigning(config: com.android.build.api.dsl.ApkSigningConfig)
 kotlin {
     androidTarget {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
 
@@ -67,7 +67,7 @@ kotlin {
             baseName = "ComposeApp"
             isStatic = true
             freeCompilerArgs += listOf("-Xbinary=bundleId=compose.project.click.click")
-            export("com.mohamedrejeb.calf:calf-ui:0.9.0")
+            export("com.mohamedrejeb.calf:calf-ui:0.12.0")
         }
 
         val nativeHeaderDir = rootProject.file("iosApp/SharedNative")
@@ -136,7 +136,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
-            api("com.mohamedrejeb.calf:calf-ui:0.9.0")
+            api("com.mohamedrejeb.calf:calf-ui:0.12.0")
 
             // Supabase dependencies
             implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:3.0.2"))
@@ -221,8 +221,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
