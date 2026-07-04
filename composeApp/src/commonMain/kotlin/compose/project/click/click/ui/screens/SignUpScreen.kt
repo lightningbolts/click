@@ -13,7 +13,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import compose.project.click.click.ui.components.native.NativeBackButton
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
@@ -141,7 +141,7 @@ fun SignUpScreen(
             )
     ) {
         // Back Button - Positioned absolutely at top left with proper clickable surface
-        IconButton(
+        NativeBackButton(
             onClick = onLoginClick,
             modifier = Modifier
                 .statusBarsPadding()
@@ -150,14 +150,9 @@ fun SignUpScreen(
                 .size(48.dp)
                 .shadow(2.dp, CircleShape)
                 .background(MaterialTheme.colorScheme.surface, CircleShape)
-                .zIndex(2f)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back to Login",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
+                .zIndex(2f),
+            tint = MaterialTheme.colorScheme.primary,
+        )
 
         // Main Content
         Column(

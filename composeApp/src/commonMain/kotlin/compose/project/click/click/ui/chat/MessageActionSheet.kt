@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import compose.project.click.click.ui.components.native.NativeBackButton
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -110,13 +110,10 @@ internal fun MessageActionSheet(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = { emojiPickMode = false }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = onSurface,
-                        )
-                    }
+                    NativeBackButton(
+                        onClick = { emojiPickMode = false },
+                        tint = onSurface,
+                    )
                     Text(
                         "Choose emoji",
                         style = MaterialTheme.typography.titleMedium,

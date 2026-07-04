@@ -18,6 +18,15 @@ Run before merging any Copilot-generated code:
 - [ ] NFC read path still functional
 - [ ] NFC write path still functional (after implementation)
 
+## Native UI Bridging
+- [ ] iOS nav buttons show system glass (not Compose `LiquidGlassPill`)
+- [ ] iOS back buttons use `chevron.left` SF Symbol via `NativeBackButton`
+- [ ] Chat composer +/send align with 44.dp aux buttons
+- [ ] Call/overflow menus preserve confirm-dialog flows
+- [ ] Connection list long-press still opens `ConnectionActionSheet`
+- [ ] Android visuals unchanged (M3 fallbacks)
+- [ ] `ui/components/native/README.md` matches implemented APIs
+
 ## Core Flow
 - [ ] Tap → ConnectionInsert creation still fires
 - [ ] 30-minute Vibe Check expiry still set

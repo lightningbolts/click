@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
+import compose.project.click.click.ui.components.native.NativeNavButton
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -144,13 +145,15 @@ internal fun DisposableCameraChrome(
                 ),
         )
 
-        GlassIconButton(
+        NativeNavButton(
+            icon = Icons.Filled.Close,
+            contentDescription = if (hasCapture) "Retake photo" else "Close camera",
             onClick = onDismiss,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
                 .padding(start = 16.dp, top = 12.dp),
-            contentDescription = if (hasCapture) "Retake photo" else "Close camera",
+            tint = Color.White,
         )
 
         Surface(
@@ -376,29 +379,12 @@ private fun DisposableRollFilterSlider(
 
 @Composable
 private fun FlipCameraButton(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(52.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.28f))
-            .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {
-                    PlatformHapticsPolicy.lightImpact()
-                    onClick()
-                },
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Cameraswitch,
-            contentDescription = "Flip camera",
-            tint = Color.White,
-            modifier = Modifier.size(26.dp),
-        )
-    }
+    NativeNavButton(
+        icon = Icons.Filled.Cameraswitch,
+        contentDescription = "Flip camera",
+        onClick = onClick,
+        tint = Color.White,
+    )
 }
 
 @Composable

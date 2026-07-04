@@ -91,7 +91,7 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
         val dayKey = messageDayKey(messageWithUser.message.timeCreated)
         if (currentDayKey != null && dayKey != currentDayKey) {
             out += ChatTimelineEntry.DaySeparator(
-                key = "separator-nf-$currentDayKey",
+                key = "separator-nf-$currentDayKey-${messageWithUser.message.id}",
                 label = formatConversationDayLabel(currentDayTimestamp),
             )
         }
@@ -106,8 +106,9 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
     }
 
     if (currentDayKey != null) {
+        val oldestMessageId = newestFirst.last().message.id
         out += ChatTimelineEntry.DaySeparator(
-            key = "separator-nf-tail-$currentDayKey",
+            key = "separator-nf-tail-$currentDayKey-$oldestMessageId",
             label = formatConversationDayLabel(currentDayTimestamp),
         )
     }

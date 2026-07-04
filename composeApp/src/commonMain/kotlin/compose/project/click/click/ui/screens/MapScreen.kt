@@ -37,6 +37,10 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.native.NativeContextMenuChip
+import compose.project.click.click.ui.components.native.NativeContextMenuItem
+import compose.project.click.click.ui.components.native.NativeNavButton
+import compose.project.click.click.ui.components.native.NavButtonStyle
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
@@ -660,11 +664,10 @@ private fun MapExpandedMapChrome(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MapLiquidGlassIconButton(
+            NativeNavButton(
                 icon = Icons.Filled.Close,
                 contentDescription = "Minimize map",
                 onClick = onCollapseMap,
-                glassStrength = glassStrength,
                 size = 44.dp,
             )
             MapLayerFilterDropdown(
@@ -685,46 +688,19 @@ private fun MapExpandedMapChrome(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MapLiquidGlassIconButton(
+            NativeNavButton(
                 icon = Icons.Filled.AddLocationAlt,
                 contentDescription = "Drop beacon",
                 onClick = onDropBeacon,
-                glassStrength = glassStrength,
+                style = NavButtonStyle.Prominent,
                 size = 56.dp,
+                tint = PrimaryBlue,
             )
             Spacer(modifier = Modifier.weight(1f))
             MapZoomGlassControls(
                 onZoomIn = onZoomIn,
                 onZoomOut = onZoomOut,
                 glassStrength = glassStrength,
-            )
-        }
-    }
-}
-
-@Composable
-private fun MapLiquidGlassIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    glassStrength: Float,
-    size: Dp,
-) {
-    LiquidGlassPill(
-        modifier = Modifier
-            .size(size)
-            .clickable(onClick = onClick),
-        cornerRadiusDp = (size.value / 2f).toInt().coerceAtLeast(22),
-        backgroundStrength = glassStrength,
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
@@ -741,18 +717,16 @@ private fun MapZoomGlassControls(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        MapLiquidGlassIconButton(
+        NativeNavButton(
             icon = Icons.Filled.Add,
             contentDescription = "Zoom in",
             onClick = onZoomIn,
-            glassStrength = glassStrength,
             size = 48.dp,
         )
-        MapLiquidGlassIconButton(
+        NativeNavButton(
             icon = Icons.Filled.Remove,
             contentDescription = "Zoom out",
             onClick = onZoomOut,
-            glassStrength = glassStrength,
             size = 48.dp,
         )
     }
@@ -788,110 +762,20 @@ private fun MapLayerFilterDropdown(
     modifier: Modifier = Modifier,
     opensDownward: Boolean = false,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
-    val style = LocalPlatformStyle.current
-    val menuSurface = MaterialTheme.colorScheme.surface
-    val onMenuSurface = MaterialTheme.colorScheme.onSurface
-    val menuOutline = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-    val itemCount = MapLayerFilter.entries.size
-    val menuUpOffset = if (opensDownward) {
-        8.dp
-    } else {
-        -(itemCount * 48 + 24).dp
-    }
-    val menuWidth = 240.dp
     val triggerWidth = 132.dp
-    val glassStrength = if (style.isIOS) 0.64f else 0.4f
+    val menuItems = remember(selected) {
+        MapLayerFilter.entries.map { filter ->
+            NativeContextMenuItem(label = filter.label, onClick = { onToggle(filter) })
+        }
+    }
 
-    Box(
+    NativeContextMenuChip(
+        label = mapLayerFilterShortLabel(selected),
+        items = menuItems,
         modifier = modifier
             .widthIn(max = triggerWidth)
             .wrapContentWidth(Alignment.End),
-    ) {
-        LiquidGlassPill(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 40.dp, max = 48.dp)
-                .clickable { expanded = true },
-            cornerRadiusDp = 20,
-            backgroundStrength = glassStrength,
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = mapLayerFilterShortLabel(selected),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-        // Same horizontal origin as the pill; full-opacity surface for legibility.
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .width(menuWidth)
-                .wrapContentWidth(Alignment.Start)
-                .zIndex(20f),
-            offset = DpOffset(0.dp, -menuUpOffset),
-            shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
-            containerColor = menuSurface,
-            tonalElevation = if (isIOS) 0.dp else 2.dp,
-            shadowElevation = if (isIOS) 0.dp else 8.dp,
-            border = if (isIOS) {
-                BorderStroke(0.5.dp, menuOutline)
-            } else {
-                null
-            },
-        ) {
-            MapLayerFilter.entries.forEach { filter ->
-                val isSelected = when (filter) {
-                    MapLayerFilter.ALL -> MapLayerFilter.ALL in selected
-                    else -> filter in selected
-                }
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            filter.label,
-                            color = onMenuSurface,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    onClick = {
-                        onToggle(filter)
-                        expanded = false
-                    },
-                    leadingIcon = {
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = onMenuSurface,
-                            )
-                        } else {
-                            Spacer(Modifier.size(24.dp))
-                        }
-                    },
-                )
-            }
-        }
-    }
+    )
 }
 
 @Composable

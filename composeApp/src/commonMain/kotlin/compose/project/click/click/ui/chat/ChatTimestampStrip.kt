@@ -39,7 +39,7 @@ internal object ChatTimestampStripDefaults {
 }
 
 /** Same gains as swipe-to-reply in [ChatMessageBubble] (do not change reply; mirror here). */
-private const val TimestampPeekTrackGain = 1f
+private const val TimestampPeekTrackGain = 0.4f
 private const val TimestampPeekOverflowRubberGain = 0.12f
 
 @Composable

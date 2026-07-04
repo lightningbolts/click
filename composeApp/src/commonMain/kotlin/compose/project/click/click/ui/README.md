@@ -61,7 +61,9 @@ Click's visual language is **liquid glass**: frosted surfaces, grabbers, adaptiv
 | `GlassFullscreenMediaOverlay` | Full-bleed photo/video preview in chat |
 | `GlassSnackbarHost` / `UnifiedToast` | Non-blocking feedback |
 | `AppScreenScaffold` / `ScreenChrome` | Safe-area + keyboard-aware chrome for chat and sheets |
-| `LiquidGlassPill` / `BentoGlassOptionRow` | Segmented controls and option lists |
+| `LiquidGlassPill` / `BentoGlassOptionRow` | Decorative Compose glass (headers, chips) — **not** iOS-native chrome |
+
+**Platform-native controls** (`components/native/`) — authentic iOS liquid glass via `UIKitView` + SF Symbols; Material 3 on Android. See [`components/native/README.md`](components/native/README.md). Use these for nav buttons, composer controls, context menus, and call preview — never parallel `if (isIOS)` branches in screens.
 
 ### Key screen flows
 

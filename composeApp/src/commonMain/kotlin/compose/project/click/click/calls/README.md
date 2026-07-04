@@ -133,6 +133,7 @@ Tracks LiveKit connection lifecycle: `Idle` → `Connecting` → `Connected` →
 | Type | Role |
 |------|------|
 | **`PlatformIncomingCallUi`** | expect/actual — surfaces full-screen incoming call on Android; iOS defers to CallKit |
+| **`NativeCallPreviewHost`** | expect/actual — foreground in-app call preview: iOS `UIAlertController`, Android `CallPreviewOverlay` |
 | **iOS CallKit / PushKit** | `iosApp/iosApp/` Swift — VoIP push wakes app, CallKit presents native call UI |
 | **`CallPushNotifier`** | Dispatches VoIP/data push for incoming calls when app backgrounded |
 | **`CallRingtonePlayer`** | Outgoing ringback + incoming ringtone (stopped on accept) |
@@ -149,7 +150,8 @@ On session end, `CallSessionManager` inserts a message via `SupabaseChatReposito
 
 | File | Role |
 |------|------|
-| `CallOverlays.kt` | Compose overlays bound to `overlayState` |
+| `CallOverlays.kt` | Compose overlays bound to `overlayState` (Android preview via `NativeCallPreviewHost`) |
+| `ui/components/native/NativeCallPreviewHost.kt` | expect/actual foreground call preview host |
 | `CallOverlayTransitionPolicy.kt` | Animation policy between overlay states |
 | `CallVideoSurface.kt` | expect/actual video renderer surface |
 | `CallPushPayload.kt` | Push payload parsing helpers |

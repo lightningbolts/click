@@ -121,6 +121,8 @@ import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secr
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.components.native.NativeNavButton
+import compose.project.click.click.ui.components.native.NavButtonStyle
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
@@ -184,7 +186,6 @@ import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowli
 import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.orderedGroupMembersForPicker // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
@@ -281,6 +282,9 @@ fun ConnectionsListView(
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val toastState = rememberGlassToastState()
     var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Active, 1 = Groups, 2 = Archived
+    val showCreateClickFab = selectedTabIndex == 0 && currentUserId != null && !isListObscured
+    val createClickFabSize = 56.dp
+    val createClickFabClearance = if (showCreateClickFab) createClickFabSize + 16.dp else 0.dp
     val tabContentOffsetX = remember { Animatable(0f) }
     val tabContentAlpha = remember { Animatable(1f) }
     var previousTabIndexForAnim by remember { mutableStateOf(selectedTabIndex) }
@@ -711,7 +715,7 @@ fun ConnectionsListView(
                                 start = 20.dp,
                                 end = 20.dp,
                                 top = listTopPadding,
-                                bottom = bottomChrome,
+                                bottom = bottomChrome + createClickFabClearance,
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -797,41 +801,34 @@ fun ConnectionsListView(
     }
     }
 
-    val showCreateClickFab = selectedTabIndex == 0 && currentUserId != null
+    if (showCreateClickFab) {
+        NativeNavButton(
+            icon = Icons.Filled.Groups,
+            contentDescription = "Create verified click",
+            onClick = {
+                selectedCliqueFriendIds = emptySet()
+                cliqueSheetVisible = true
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .zIndex(51f)
+                .padding(end = 20.dp, bottom = fabAboveNav),
+            style = NavButtonStyle.Prominent,
+            size = createClickFabSize,
+            tint = PrimaryBlue,
+        )
+    }
 
-    Row(
+    GlassToastHost(
+        state = toastState,
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .zIndex(50f)
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 20.dp, bottom = fabAboveNav),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = if (showCreateClickFab) 12.dp else 0.dp),
-        ) {
-            GlassToastHost(
-                state = toastState,
-                modifier = Modifier.align(Alignment.CenterEnd),
-            )
-        }
-        if (showCreateClickFab) {
-            FloatingActionButton(
-                onClick = {
-                    selectedCliqueFriendIds = emptySet()
-                    cliqueSheetVisible = true
-                },
-                modifier = Modifier.size(56.dp),
-                containerColor = PrimaryBlue,
-                contentColor = Color.White,
-            ) {
-                Icon(Icons.Filled.Groups, contentDescription = "Create verified click")
-            }
-        }
-    }
+            .padding(
+                end = if (showCreateClickFab) 20.dp + createClickFabSize + 12.dp else 20.dp,
+                bottom = fabAboveNav,
+            ),
+    )
 
     val cliquePickerCandidates = remember(verifiedCliquePickableOneToOneChats) {
         verifiedCliquePickableOneToOneChats.map { it.otherUser }
@@ -1396,16 +1393,12 @@ private fun ActiveHubFeedRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(
+        NativeNavButton(
+            icon = Icons.Filled.MoreVert,
+            contentDescription = "Hub options",
             onClick = onOpenMenu,
-            modifier = Modifier.size(36.dp),
-        ) {
-            Icon(
-                Icons.Filled.MoreVert,
-                contentDescription = "Hub options",
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            size = 36.dp,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

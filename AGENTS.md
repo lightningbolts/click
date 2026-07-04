@@ -32,10 +32,11 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 ### Testing
 
 - **Kotlin unit tests:** `./gradlew :composeApp:testDebugUnitTest`
+- **iOS compile + tests:** `./gradlew :composeApp:compileKotlinIosSimulatorArm64 :composeApp:iosSimulatorArm64Test`
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
 - **No Python test suite** exists for the Flask server; test manually with `curl`.
 
-### Non-obvious caveats
+- **Native UI bridges:** see `composeApp/src/commonMain/kotlin/compose/project/click/click/ui/components/native/README.md` — use expect/actual components instead of `if (isIOS)` in screens.
 
 - The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
 - iOS builds require Xcode (macOS only) and are not runnable in Cloud Agent VMs.

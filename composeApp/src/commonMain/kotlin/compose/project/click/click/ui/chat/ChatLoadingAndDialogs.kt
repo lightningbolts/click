@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import compose.project.click.click.ui.components.native.NativeBackButton
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import androidx.compose.material3.Icon
@@ -71,13 +71,7 @@ internal fun ChatWarmLoadingView(
                 .height(56.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBackPressed) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            NativeBackButton(onClick = onBackPressed)
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = title,
@@ -114,13 +108,7 @@ internal fun ChatChannelLoadingView(
                     .height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBackPressed) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                NativeBackButton(onClick = onBackPressed)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Chat",

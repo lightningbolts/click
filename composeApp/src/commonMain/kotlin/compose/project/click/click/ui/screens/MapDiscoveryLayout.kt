@@ -41,7 +41,8 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.FloatingActionButton
+import compose.project.click.click.ui.components.native.NativeNavButton
+import compose.project.click.click.ui.components.native.NavButtonStyle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -608,31 +609,33 @@ internal fun MapDiscoveryScreen(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .zIndex(1f)
-                .fillMaxWidth()
-                .padding(
-                    start = AppScreenDefaults.HorizontalPadding,
-                    end = AppScreenDefaults.HorizontalPadding,
-                    top = statusBarTop,
-                ),
-        ) {
-            DiscoveryFloatingHeader(
-                collapseFraction = collapseFraction,
-                title = "Discovery",
-                subtitle = statsLine,
-                selectedSortIndex = sortMode,
-                onSortSelected = { index ->
-                    if (index == sortMode) return@DiscoveryFloatingHeader
-                    sortMode = index
-                    listState.requestScrollToItem(0, 0)
-                },
-                onOpenSearch = onOpenSearch,
-                onRefresh = onRefreshDiscovery,
-                isRefreshing = discoveryFeedRefreshing,
-            )
+        if (!mapPipExpanded) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(1f)
+                    .fillMaxWidth()
+                    .padding(
+                        start = AppScreenDefaults.HorizontalPadding,
+                        end = AppScreenDefaults.HorizontalPadding,
+                        top = statusBarTop,
+                    ),
+            ) {
+                DiscoveryFloatingHeader(
+                    collapseFraction = collapseFraction,
+                    title = "Discovery",
+                    subtitle = statsLine,
+                    selectedSortIndex = sortMode,
+                    onSortSelected = { index ->
+                        if (index == sortMode) return@DiscoveryFloatingHeader
+                        sortMode = index
+                        listState.requestScrollToItem(0, 0)
+                    },
+                    onOpenSearch = onOpenSearch,
+                    onRefresh = onRefreshDiscovery,
+                    isRefreshing = discoveryFeedRefreshing,
+                )
+            }
         }
 
         if (!mapPipExpanded) {
@@ -647,14 +650,14 @@ internal fun MapDiscoveryScreen(
                     ),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                FloatingActionButton(
+                NativeNavButton(
+                    icon = Icons.Filled.AddLocationAlt,
+                    contentDescription = "Drop beacon",
                     onClick = onDropBeacon,
-                    modifier = Modifier.size(56.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
-                }
+                    style = NavButtonStyle.Prominent,
+                    size = 56.dp,
+                    tint = PrimaryBlue,
+                )
             }
 
             Box(
@@ -679,22 +682,17 @@ internal fun MapDiscoveryScreen(
                 } else {
                     MapPipPreviewPlaceholder(Modifier.fillMaxSize())
                 }
-                IconButton(
+                NativeNavButton(
+                    icon = Icons.Filled.OpenInFull,
+                    contentDescription = "Expand map",
                     onClick = expandMap,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .zIndex(4f)
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(GlassSheetTokens.GlassSurface),
-                ) {
-                    Icon(
-                        Icons.Filled.OpenInFull,
-                        contentDescription = "Expand map",
-                        tint = GlassSheetTokens.OnOled,
-                    )
-                }
+                        .zIndex(4f),
+                    size = 40.dp,
+                    tint = GlassSheetTokens.OnOled,
+                )
             }
         }
 

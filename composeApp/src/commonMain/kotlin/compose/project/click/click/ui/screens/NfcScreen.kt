@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import compose.project.click.click.ui.components.native.NativeBackButton
 import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -165,13 +165,7 @@ fun NfcScreen(
                         title = "Tap to Connect",
                         subtitle = "BLE + ultrasonic handshake",
                         navigationIcon = {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                            NativeBackButton(onClick = onBackPressed)
                         },
                         actions = {
                             IconButton(onClick = { proximityManager.openRadiosSettings() }) {

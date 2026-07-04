@@ -98,6 +98,8 @@ sealed class NavigationItem(route, title, icon, sfSymbol)
 
 Each item carries a Material `ImageVector` for Android/Compose and an `sfSymbol` string for iOS native tab bar parity.
 
+**Header and map icons** extend the same pattern via [`NavIconSfSymbols.kt`](../ui/components/native/NavIconSfSymbols.kt) in `ui/components/native/` — maps `ImageVector` → SF Symbol for `NativeNavButton` and context menus outside the tab bar.
+
 ### AppScreenScaffold chrome
 
 `ui/components/AppScreenScaffold.kt` is the standard layout for tab-root screens:

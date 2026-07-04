@@ -83,6 +83,9 @@ import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.components.native.NativeNavButton
+import compose.project.click.click.ui.components.native.NavButtonStyle
+import compose.project.click.click.ui.components.native.NativeTextInputRow
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -112,7 +115,6 @@ internal fun ConnectionChatMessageComposer(
     val messageSendError by viewModel.messageSendError.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
-    var attachmentMenuExpanded by remember { mutableStateOf(false) }
     val composerFocusRequester = remember { FocusRequester() }
     var hadSubmitInFlight by remember { mutableStateOf(false) }
 
@@ -354,7 +356,7 @@ internal fun ConnectionChatMessageComposer(
                     top = innerVerticalPad,
                     bottom = innerVerticalPad,
                 )
-                BasicTextField(
+                NativeTextInputRow(
                     value = messageInput,
                     onValueChange = { viewModel.updateMessageInput(it) },
                     modifier = Modifier
@@ -363,191 +365,121 @@ internal fun ConnectionChatMessageComposer(
                         .heightIn(min = auxButtonSize)
                         .align(Alignment.BottomCenter)
                         .focusRequester(composerFocusRequester),
+                    placeholder = when {
+                        editingMessageId != null -> "Edit message…"
+                        isGroupChat -> "Message the group…"
+                        else -> "Message ${chatDetails.otherUser.name}…"
+                    },
                     enabled = true,
-                    textStyle = composerTextStyleCentered.merge(
-                        TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                    ),
+                    singleLine = false,
+                    maxLines = 10,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Sentences,
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.None,
                     ),
-                    singleLine = false,
-                    minLines = 1,
-                    maxLines = 10,
-                    interactionSource = composerFieldInteraction,
-                    cursorBrush = SolidColor(PrimaryBlue),
-                    decorationBox = { innerTextField ->
-                        OutlinedTextFieldDefaults.DecorationBox(
-                            value = messageInput,
-                            innerTextField = innerTextField,
-                            enabled = true,
-                            singleLine = false,
-                            visualTransformation = VisualTransformation.None,
-                            interactionSource = composerFieldInteraction,
-                            placeholder = {
-                                Text(
-                                    when {
-                                        editingMessageId != null -> "Edit message…"
-                                        isGroupChat -> "Message the group…"
-                                        else -> "Message ${chatDetails.otherUser.name}…"
-                                    },
-                                    style = composerTextStyleCentered,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                )
-                            },
-                            colors = fieldColors,
-                            contentPadding = fieldDecorPadding,
-                            container = {
-                                OutlinedTextFieldDefaults.Container(
-                                    enabled = true,
-                                    isError = false,
-                                    interactionSource = composerFieldInteraction,
-                                    modifier = Modifier,
-                                    colors = fieldColors,
-                                    shape = fieldShape,
-                                )
-                            },
-                        )
-                    },
+                    focusRequester = composerFocusRequester,
                 )
-                ChatAttachmentMenuAnchorHost(
-                    expanded = attachmentMenuExpanded,
-                    onExpandedChange = { attachmentMenuExpanded = it },
-                    anchorSize = auxButtonSize,
-                    anchorInteraction = attachInteraction,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .zIndex(4f)
-                        .focusProperties { canFocus = false },
-                    anchor = {
-                        val bgAlpha = if (isSending) 0.12f else 0.24f
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                        ),
-                                    ),
-                                )
-                                .chatSpringPressScale(attachInteraction),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = "Attach",
-                                tint = attachTint,
-                                modifier = Modifier.size(attachIconSize),
-                            )
-                        }
-                    },
-                    menuContent = {
-                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            ChatAttachmentMenuRow(
+                ChatAttachmentMenuButton(
+                    items = buildList {
+                        add(
+                            ChatAttachmentMenuAction(
                                 label = "Click Drops",
                                 icon = Icons.Filled.PhotoCamera,
                                 onClick = {
                                     PlatformHapticsPolicy.heavyImpact()
                                     PlatformHapticsPolicy.successNotification()
-                                    attachmentMenuExpanded = false
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
                                     onOpenDisposableRoll()
                                 },
-                            )
-                            if (tetherPingEnabled) {
-                                ChatAttachmentMenuRow(
+                            ),
+                        )
+                        if (tetherPingEnabled) {
+                            add(
+                                ChatAttachmentMenuAction(
                                     label = "Ping Tether",
                                     icon = Icons.Filled.Explore,
                                     enabled = !pingTetherLoading,
                                     onClick = {
-                                        if (pingTetherLoading) return@ChatAttachmentMenuRow
+                                        if (pingTetherLoading) return@ChatAttachmentMenuAction
                                         PlatformHapticsPolicy.successNotification()
-                                        attachmentMenuExpanded = false
                                         onPingTether()
                                     },
-                                )
-                            }
-                            ChatAttachmentMenuRow(
+                                ),
+                            )
+                        }
+                        add(
+                            ChatAttachmentMenuAction(
                                 label = "Photo library",
                                 icon = Icons.Outlined.Image,
                                 onClick = {
                                     PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
                                     mediaPickers.openPhotoLibrary()
                                 },
-                            )
-                            ChatAttachmentMenuRow(
+                            ),
+                        )
+                        add(
+                            ChatAttachmentMenuAction(
                                 label = "Take photo",
                                 icon = Icons.Outlined.PhotoCamera,
                                 onClick = {
                                     PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
                                     mediaPickers.openCamera()
                                 },
-                            )
-                            ChatAttachmentMenuRow(
+                            ),
+                        )
+                        add(
+                            ChatAttachmentMenuAction(
                                 label = "Voice message",
                                 icon = Icons.Outlined.Mic,
                                 onClick = {
                                     PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
                                     mediaPickers.openVoiceRecorder()
                                 },
-                            )
-                            ChatAttachmentMenuRow(
+                            ),
+                        )
+                        add(
+                            ChatAttachmentMenuAction(
                                 label = "File",
                                 icon = Icons.Outlined.AttachFile,
                                 onClick = {
                                     PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
                                     mediaPickers.openFilePicker()
                                 },
-                            )
-                        }
+                            ),
+                        )
                     },
+                    anchorSize = auxButtonSize,
+                    anchorInteraction = attachInteraction,
+                    anchorEnabled = !isSending,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .zIndex(4f)
+                        .focusProperties { canFocus = false },
+                    icon = Icons.Filled.Add,
+                    contentDescription = "Attach",
+                    tint = attachTint,
+                    style = NavButtonStyle.Prominent,
                 )
-                Box(
+                NativeNavButton(
+                    icon = if (editingMessageId != null) Icons.Filled.Check else Icons.AutoMirrored.Filled.Send,
+                    contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
+                    onClick = {
+                        PlatformHapticsPolicy.lightImpact()
+                        viewModel.sendMessage()
+                    },
+                    enabled = canSend,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .size(auxButtonSize)
                         .zIndex(4f)
-                        .focusProperties { canFocus = false }
-                        .chatSpringPressScale(sendInteraction)
-                        .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                        .background(sendGradient)
-                        .clickable(
-                            interactionSource = sendInteraction,
-                            indication = null,
-                            enabled = canSend,
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                viewModel.sendMessage()
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (editingMessageId != null) {
-                            Icons.Filled.Check
-                        } else {
-                            Icons.AutoMirrored.Filled.Send
-                        },
-                        contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
-                        tint = if (canSend) {
-                            Color.White
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                        },
-                        modifier = Modifier.size(sendIconSize),
-                    )
-                }
+                        .focusProperties { canFocus = false },
+                    size = auxButtonSize,
+                    style = NavButtonStyle.Prominent,
+                    tint = if (canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                )
             }
         }
     }

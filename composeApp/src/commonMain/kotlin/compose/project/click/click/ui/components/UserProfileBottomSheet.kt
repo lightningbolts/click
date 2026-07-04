@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,7 +67,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.ui.components.native.NativeNavButton
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
@@ -779,9 +781,12 @@ fun UserProfileBottomSheet(
                     color = GlassSheetTokens.OnOled,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = { dismiss() }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GlassSheetTokens.OnOled)
-                }
+                NativeNavButton(
+                    icon = Icons.Filled.Close,
+                    contentDescription = "Close",
+                    onClick = { dismiss() },
+                    tint = GlassSheetTokens.OnOled,
+                )
             }
 
             when {
@@ -827,6 +832,10 @@ fun UserProfileBottomSheet(
                         emptyList()
                     }
 
+                    val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
+                    val connId = p.sharedConnection?.id
+                    val isCore = connId != null && connId in coreConnectionIds
+
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         GlassCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -837,18 +846,13 @@ fun UserProfileBottomSheet(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(88.dp)
-                                        .clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue))),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = u.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                        color = LightBlue.copy(alpha = 0.96f),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 32.sp,
+                                CoreConnectionAvatarFrame(isCore = isCore, avatarSize = 88.dp) {
+                                    ConnectionListUserAvatarFace(
+                                        displayName = u.name,
+                                        email = u.email,
+                                        avatarUrl = u.image,
+                                        userId = u.id,
+                                        modifier = Modifier.fillMaxSize(),
                                     )
                                 }
                                 Column {

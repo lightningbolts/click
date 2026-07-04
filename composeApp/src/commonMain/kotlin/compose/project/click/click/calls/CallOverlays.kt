@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
+import compose.project.click.click.ui.components.native.NativeNavButton
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlin.math.roundToInt
@@ -430,49 +431,34 @@ fun ActiveCallOverlay(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalIconButton(
+                    NativeNavButton(
+                        icon = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                        contentDescription = if (isMuted) "Unmute" else "Mute",
                         onClick = { callManager.setMicrophoneEnabled(isMuted) },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                            contentDescription = if (isMuted) "Unmute" else "Mute",
-                            tint = Color.White
-                        )
-                    }
-                    FilledTonalIconButton(
+                        size = 48.dp,
+                        tint = Color.White,
+                    )
+                    NativeNavButton(
+                        icon = Icons.Filled.SpeakerPhone,
+                        contentDescription = if (isSpeakerEnabled) "Turn speaker off" else "Turn speaker on",
                         onClick = { callManager.setSpeakerEnabled(!isSpeakerEnabled) },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SpeakerPhone,
-                            contentDescription = if (isSpeakerEnabled) "Turn speaker off" else "Turn speaker on",
-                            tint = if (isSpeakerEnabled) LightBlue else Color.White,
-                        )
-                    }
-                    FilledTonalIconButton(
+                        size = 48.dp,
+                        tint = if (isSpeakerEnabled) LightBlue else Color.White,
+                    )
+                    NativeNavButton(
+                        icon = if (isVideoEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                        contentDescription = if (isVideoEnabled) "Turn camera off" else "Turn camera on",
                         onClick = { callManager.setCameraEnabled(!isVideoEnabled) },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isVideoEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                            contentDescription = if (isVideoEnabled) "Turn camera off" else "Turn camera on",
-                            tint = Color.White
-                        )
-                    }
-                    IconButton(
+                        size = 48.dp,
+                        tint = Color.White,
+                    )
+                    NativeNavButton(
+                        icon = Icons.Filled.CallEnd,
+                        contentDescription = "End call",
                         onClick = onEndCall,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CallEnd,
-                            contentDescription = "End call",
-                            tint = Color.White
-                        )
-                    }
+                        size = 56.dp,
+                        tint = Color.White,
+                    )
                 }
             }
         }

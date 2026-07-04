@@ -131,10 +131,13 @@ Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts arou
 
 See [`PERFORMANCE.md`](PERFORMANCE.md) for hotspots, scale failure modes, and July 2026 remediation (inbox RPC, `RealtimeCoordinator`, gated map prefetch).
 
-**Compile (Android + iOS):**
+- **Native UI bridging:** `ui/components/native/` expect/actuals (`NativeNavButton`, `NativeContextMenuBox`, `NativeTextInputRow`, `NativeCallPreviewHost`) with iOS 26+ `UIGlassEffect` gate; Android M3 fallbacks.
+
+**Compile + test (Android + iOS):**
 
 ```bash
-./gradlew :composeApp:compileDebugKotlinAndroid :composeApp:compileKotlinIosSimulatorArm64
+./gradlew :composeApp:compileDebugKotlinAndroid :composeApp:testDebugUnitTest
+./gradlew :composeApp:compileKotlinIosSimulatorArm64 :composeApp:iosSimulatorArm64Test
 ```
 
 ---

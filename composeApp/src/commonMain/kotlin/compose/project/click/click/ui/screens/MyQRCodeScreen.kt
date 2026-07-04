@@ -2,7 +2,7 @@ package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import compose.project.click.click.ui.components.native.NativeBackButton
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,13 +27,7 @@ fun MyQRCodeScreen(
         AppScreenWithFloatingHeader(
             title = "My QR Code",
             navigationIcon = {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+                NativeBackButton(onClick = onNavigateBack)
             },
         ) { contentModifier ->
             Column(

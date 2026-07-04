@@ -24,7 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import compose.project.click.click.ui.components.LiquidGlassPill
+import compose.project.click.click.ui.components.native.NativeBackButton
+import compose.project.click.click.ui.components.native.NativeContextMenuIconButton
+import compose.project.click.click.ui.components.native.NativeContextMenuItem
+import compose.project.click.click.ui.components.native.NativeNavButton
+import compose.project.click.click.ui.components.native.NativeTextInputRow
+import compose.project.click.click.ui.components.native.NavButtonStyle
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -77,7 +83,8 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatAttachmentMenuAnchorHost // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentMenuAction // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentMenuButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
@@ -157,7 +164,6 @@ fun HubChatScreen(
     val isCreator by viewModel.isCreator.collectAsState()
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
-    var settingsMenuExpanded by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -273,23 +279,27 @@ fun HubChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = topInset)
-                        .height(56.dp)
                         .padding(horizontal = 20.dp)
                         .testTag(ChatGlassHeaderPlateTestTag),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically,
+                    val hubHeaderNavSize = 44.dp
+                    LiquidGlassPill(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadiusDp = 28,
                     ) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = MaterialTheme.colorScheme.onSurface,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 56.dp)
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            NativeBackButton(
+                                onClick = onNavigateBack,
+                                size = hubHeaderNavSize,
                             )
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = hubDetails.name,
                                 style = MaterialTheme.typography.titleMedium,
@@ -306,65 +316,40 @@ fun HubChatScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Box {
-                            IconButton(onClick = { settingsMenuExpanded = true }) {
-                                Icon(
-                                    Icons.Filled.MoreVert,
-                                    contentDescription = "Hub settings",
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = settingsMenuExpanded,
-                                onDismissRequest = { settingsMenuExpanded = false },
-                            ) {
-                                val items = visibleHubSettingsMenuItems(
-                                    currentUserId = currentUserId,
-                                    creatorId = resolvedCreatorId,
-                                )
-                                if (HubSettingsMenuItem.Leave in items) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Leave Hub",
-                                                color = MaterialTheme.colorScheme.error,
-                                            )
-                                        },
-                                        onClick = {
-                                            settingsMenuExpanded = false
-                                            showLeaveConfirm = true
-                                        },
-                                        modifier = Modifier.testTag("hub_settings_leave"),
+                        val hubSettingsItems = remember(currentUserId, resolvedCreatorId) {
+                            visibleHubSettingsMenuItems(
+                                currentUserId = currentUserId,
+                                creatorId = resolvedCreatorId,
+                            ).mapNotNull { item ->
+                                when (item) {
+                                    HubSettingsMenuItem.Leave -> NativeContextMenuItem(
+                                        label = "Leave Hub",
+                                        onClick = { showLeaveConfirm = true },
+                                        destructive = true,
                                     )
-                                }
-                                if (HubSettingsMenuItem.Edit in items) {
-                                    DropdownMenuItem(
-                                        text = { Text("Edit Hub") },
+                                    HubSettingsMenuItem.Edit -> NativeContextMenuItem(
+                                        label = "Edit Hub",
                                         onClick = {
-                                            settingsMenuExpanded = false
                                             editNameDraft = hubDetails.name
                                             editCategoryDraft = hubDetails.category
                                             showEditDialog = true
                                         },
-                                        modifier = Modifier.testTag("hub_settings_edit"),
                                     )
-                                }
-                                if (HubSettingsMenuItem.Delete in items) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Delete Hub",
-                                                color = MaterialTheme.colorScheme.error,
-                                            )
-                                        },
-                                        onClick = {
-                                            settingsMenuExpanded = false
-                                            showDeleteConfirm = true
-                                        },
-                                        modifier = Modifier.testTag("hub_settings_delete"),
+                                    HubSettingsMenuItem.Delete -> NativeContextMenuItem(
+                                        label = "Delete Hub",
+                                        onClick = { showDeleteConfirm = true },
+                                        destructive = true,
                                     )
                                 }
                             }
+                        }
+                        NativeContextMenuIconButton(
+                            icon = Icons.Filled.MoreVert,
+                            contentDescription = "Hub settings",
+                            items = hubSettingsItems,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            size = hubHeaderNavSize,
+                        )
                         }
                     }
                 }
@@ -678,7 +663,7 @@ fun HubChatScreen(
 
 /**
  * Hub composer strip modeled exactly on [ConnectionChatMessageComposer]:
- * `+` attachment button (left) → BasicTextField (center) → gradient send button (right).
+ * `+` attachment button (left) → [NativeTextInputRow] (center) → native send button (right).
  * Same sizes, shapes, and spring press animations.
  */
 @Composable
@@ -696,55 +681,18 @@ private fun HubChatInputBar(
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
     val composerRowHPad = 8.dp
-    val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
-    val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
-    val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
     val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
     val fieldSideInset = auxButtonSize + composerGap
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val attachInteraction = remember { MutableInteractionSource() }
-    val sendInteraction = remember { MutableInteractionSource() }
     val composerStripInteraction = remember { MutableInteractionSource() }
-    val composerFieldInteraction = remember { MutableInteractionSource() }
     val composerFocusRequester = remember { FocusRequester() }
-    var attachmentMenuExpanded by remember { mutableStateOf(false) }
 
     val canSend = !inLobby && !isOutOfBounds && draft.trim().isNotEmpty()
     val enabled = !inLobby && !isOutOfBounds && !isSending
     val attachTint = PrimaryBlue.copy(alpha = 0.92f)
-    val sendGradient = Brush.linearGradient(
-        colors = if (canSend) {
-            listOf(PrimaryBlue, LightBlue)
-        } else {
-            listOf(
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.surfaceVariant,
-            )
-        },
-    )
-    val composerInputTextStyle = MaterialTheme.typography.bodyMedium
-    val composerTextStyleCentered = composerInputTextStyle.merge(
-        TextStyle(
-            lineHeightStyle = LineHeightStyle(
-                alignment = LineHeightStyle.Alignment.Center,
-                trim = LineHeightStyle.Trim.Both,
-            ),
-        ),
-    )
-
-    val fieldColors = rememberChatComposerFieldColors()
-    val fieldShape = RoundedCornerShape(fieldCorner)
-    val approxLineBodyDp = 24.dp
-    val innerVerticalPad = ((auxButtonSize - approxLineBodyDp) / 2).coerceIn(6.dp, 12.dp)
-    val innerHorizontalPad = 12.dp
-    val fieldDecorPadding = PaddingValues(
-        start = innerHorizontalPad,
-        end = innerHorizontalPad,
-        top = innerVerticalPad,
-        bottom = innerVerticalPad,
-    )
 
     Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
@@ -776,7 +724,7 @@ private fun HubChatInputBar(
                     .fillMaxWidth()
                     .heightIn(min = auxButtonSize),
             ) {
-                BasicTextField(
+                NativeTextInputRow(
                     value = draft,
                     onValueChange = viewModel::updateDraft,
                     modifier = Modifier
@@ -785,57 +733,46 @@ private fun HubChatInputBar(
                         .heightIn(min = auxButtonSize)
                         .align(Alignment.BottomCenter)
                         .focusRequester(composerFocusRequester),
+                    placeholder = when {
+                        inLobby -> "Chat unlocks when 3+ join"
+                        isOutOfBounds -> "You are no longer at this location"
+                        else -> "Message the hub…"
+                    },
                     enabled = enabled,
-                    textStyle = composerTextStyleCentered.merge(
-                        TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                    ),
+                    singleLine = false,
+                    maxLines = 10,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Sentences,
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.None,
                     ),
-                    singleLine = false,
-                    minLines = 1,
-                    maxLines = 10,
-                    interactionSource = composerFieldInteraction,
-                    cursorBrush = SolidColor(PrimaryBlue),
-                    decorationBox = { innerTextField ->
-                        OutlinedTextFieldDefaults.DecorationBox(
-                            value = draft,
-                            innerTextField = innerTextField,
-                            enabled = enabled,
-                            singleLine = false,
-                            visualTransformation = VisualTransformation.None,
-                            interactionSource = composerFieldInteraction,
-                            placeholder = {
-                                Text(
-                                    if (inLobby) "Chat unlocks when 3+ join"
-                                    else if (isOutOfBounds) "You are no longer at this location"
-                                    else "Message the hub…",
-                                    style = composerTextStyleCentered,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                )
-                            },
-                            colors = fieldColors,
-                            contentPadding = fieldDecorPadding,
-                            container = {
-                                OutlinedTextFieldDefaults.Container(
-                                    enabled = enabled,
-                                    isError = false,
-                                    interactionSource = composerFieldInteraction,
-                                    modifier = Modifier,
-                                    colors = fieldColors,
-                                    shape = fieldShape,
-                                )
-                            },
-                        )
-                    },
+                    focusRequester = composerFocusRequester,
                 )
 
                 // ── Attach button (left, same as ConnectionChatMessageComposer) ─
-                ChatAttachmentMenuAnchorHost(
-                    expanded = attachmentMenuExpanded,
-                    onExpandedChange = { attachmentMenuExpanded = it },
+                ChatAttachmentMenuButton(
+                    items = listOf(
+                        ChatAttachmentMenuAction(
+                            label = "Photo library",
+                            icon = Icons.Outlined.Image,
+                            enabled = enabled,
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                mediaPickers.openPhotoLibrary()
+                            },
+                        ),
+                        ChatAttachmentMenuAction(
+                            label = "Take photo",
+                            icon = Icons.Outlined.PhotoCamera,
+                            enabled = enabled,
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                mediaPickers.openCamera()
+                            },
+                        ),
+                    ),
                     anchorSize = auxButtonSize,
                     anchorInteraction = attachInteraction,
                     anchorEnabled = enabled,
@@ -843,92 +780,33 @@ private fun HubChatInputBar(
                         .align(Alignment.BottomStart)
                         .zIndex(4f)
                         .focusProperties { canFocus = false },
-                    anchor = {
-                        val bgAlpha = if (isSending || inLobby) 0.12f else 0.24f
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                        ),
-                                    ),
-                                )
-                                .chatSpringPressScale(attachInteraction),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = "Attach",
-                                tint = if (enabled) attachTint else attachTint.copy(alpha = 0.35f),
-                                modifier = Modifier.size(attachIconSize),
-                            )
-                        }
-                    },
-                    menuContent = {
-                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            ChatAttachmentMenuRow(
-                                label = "Photo library",
-                                icon = Icons.Outlined.Image,
-                                enabled = enabled,
-                                onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    attachmentMenuExpanded = false
-                                    mediaPickers.openPhotoLibrary()
-                                },
-                            )
-                            ChatAttachmentMenuRow(
-                                label = "Take photo",
-                                icon = Icons.Outlined.PhotoCamera,
-                                enabled = enabled,
-                                onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    attachmentMenuExpanded = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    mediaPickers.openCamera()
-                                },
-                            )
-                        }
-                    },
+                    icon = Icons.Filled.Add,
+                    contentDescription = "Attach",
+                    tint = if (enabled) attachTint else attachTint.copy(alpha = 0.35f),
+                    style = NavButtonStyle.Prominent,
                 )
 
-                // ── Send button (right, gradient pill, same as ConnectionChatMessageComposer) ─
-                Box(
+                NativeNavButton(
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = "Send",
+                    onClick = {
+                        PlatformHapticsPolicy.lightImpact()
+                        viewModel.sendMessage()
+                        composerFocusRequester.requestFocus()
+                    },
+                    enabled = canSend,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .size(auxButtonSize)
                         .zIndex(4f)
-                        .focusProperties { canFocus = false }
-                        .chatSpringPressScale(sendInteraction)
-                        .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                        .background(sendGradient)
-                        .clickable(
-                            interactionSource = sendInteraction,
-                            indication = null,
-                            enabled = canSend,
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                viewModel.sendMessage()
-                                composerFocusRequester.requestFocus()
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = if (canSend) {
-                            Color.White
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                        },
-                        modifier = Modifier.size(sendIconSize),
-                    )
-                }
+                        .focusProperties { canFocus = false },
+                    size = auxButtonSize,
+                    style = NavButtonStyle.Prominent,
+                    tint = if (canSend) {
+                        Color.White
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                    },
+                )
             }
         }
     }

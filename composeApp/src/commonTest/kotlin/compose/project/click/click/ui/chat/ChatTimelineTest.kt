@@ -173,11 +173,36 @@ class ChatTimelineTest {
         val trailing = entries.last() as ChatTimelineEntry.DaySeparator
         // The trailing separator is labeled using the earliest message's day
         // (day1). formatConversationDayLabel depends on "now", so we just
-        // verify the key is stamped with the day1 dayKey, not the day2 one.
+        // verify the key is stamped with the day1 dayKey and oldest message id.
         assertTrue(
-            trailing.key.endsWith(messageDayKey(day1a)),
-            "Trailing separator key should end with day1 key, got ${trailing.key}",
+            trailing.key.contains(messageDayKey(day1a)),
+            "Trailing separator key should contain day1 key, got ${trailing.key}",
         )
+        assertTrue(
+            trailing.key.endsWith("-a"),
+            "Trailing separator key should end with oldest message id, got ${trailing.key}",
+        )
+    }
+
+    @Test
+    fun newestFirst_keysAreUniqueWhenSameDayReappearsInTimeline() {
+        // Non-contiguous same-day clusters (e.g. pagination merge or clock skew) used to
+        // emit duplicate `separator-nf-<dayKey>` keys and crash LazyColumn.
+        val dayA1 = tsLocal(2026, 4, 22, 18, 0)
+        val dayB = tsLocal(2026, 4, 21, 12, 0)
+        val dayA2 = tsLocal(2026, 4, 22, 8, 0)
+        val dayC = tsLocal(2026, 4, 20, 9, 0)
+
+        val entries = buildChatTimelineEntriesNewestFirst(
+            listOf(
+                mwu("newest-a", dayA1),
+                mwu("middle-b", dayB),
+                mwu("older-a", dayA2),
+                mwu("oldest-c", dayC),
+            ),
+        )
+        val keys = entries.map { it.key }
+        assertEquals(keys.toSet().size, keys.size, "Keys must be unique, got $keys")
     }
 
     @Test

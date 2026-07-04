@@ -54,7 +54,7 @@ import compose.project.click.click.navigation.bottomNavItems
 import compose.project.click.click.ui.components.PlatformBottomBar
 import compose.project.click.click.calls.ActiveCallOverlay
 import compose.project.click.click.calls.CallOverlayState
-import compose.project.click.click.calls.CallPreviewOverlay
+import compose.project.click.click.ui.components.native.NativeCallPreviewHost
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
 import compose.project.click.click.data.api.ApiClient
@@ -2180,9 +2180,27 @@ fun App() {
                                             scaleY = callPreviewScale
                                         },
                                 ) {
-                                    CallPreviewOverlay(
+                                    NativeCallPreviewHost(
                                         overlayState = previewOverlayUiState,
-                                        currentUserId = appDataUser?.id,
+                                        callerName = previewOverlayUiState.let { state ->
+                                            val invite = when (state) {
+                                                is CallOverlayState.Outgoing -> state.invite
+                                                is CallOverlayState.Incoming -> state.invite
+                                                is CallOverlayState.Connecting -> state.invite
+                                                is CallOverlayState.Ended -> state.invite
+                                                CallOverlayState.Idle -> null
+                                            }
+                                            invite?.counterpartName(appDataUser?.id) ?: "Connection"
+                                        },
+                                        isVideo = previewOverlayUiState.let { state ->
+                                            when (state) {
+                                                is CallOverlayState.Outgoing -> state.invite.videoEnabled
+                                                is CallOverlayState.Incoming -> state.invite.videoEnabled
+                                                is CallOverlayState.Connecting -> state.invite.videoEnabled
+                                                is CallOverlayState.Ended -> state.invite?.videoEnabled == true
+                                                CallOverlayState.Idle -> false
+                                            }
+                                        },
                                         onAccept = { CallSessionManager.acceptIncomingCall() },
                                         onDecline = { CallSessionManager.declineIncomingCall() },
                                         onCancel = { CallSessionManager.cancelCurrentCall() },

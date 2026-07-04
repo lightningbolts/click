@@ -14,7 +14,22 @@ The platform layer defines **where shared Kotlin ends and native code begins** i
 - **Deep link and Universal Link routing** into shared navigation (`App.kt`, `ConnectionDeepLinkRouter`, `ChatDeepLinkManager`)
 - **Source-set conventions** so new features default to `commonMain` and only spill to platform code when necessary
 
-This README covers cross-cutting platform contracts. Feature-specific actuals are documented in sibling module READMEs ([`proximity/`](./proximity/README.md), [`crypto/`](./crypto/README.md), [`calls/`](./calls/README.md)).
+This README covers cross-cutting platform contracts. Feature-specific actuals are documented in sibling module READMEs ([`proximity/`](./proximity/README.md), [`crypto/`](./crypto/README.md), [`calls/`](./calls/README.md), [`ui/components/native/`](../ui/components/native/README.md)).
+
+### UI native bridges (`ui/components/native/`)
+
+Presentation-layer `expect`/`actual` composables for authentic iOS liquid glass on interactive controls:
+
+| Component | iOS | Android |
+|-----------|-----|---------|
+| `NativeNavButton` | `UIKitView` + `IosLiquidGlassChrome` + `UIButton` SF Symbol | M3 `IconButton` |
+| `NativeContextMenuBox` | `UIContextMenuInteraction` + `UIMenu` | `DropdownMenu` |
+| `NativeTextInputRow` | `UITextView` in glass container | `BasicTextField` |
+| `NativeCallPreviewHost` | `UIAlertController` (foreground) | `CallPreviewOverlay` |
+
+**`IosLiquidGlassChrome`** shares the `isLiquidGlass` version gate with [`BottomBar.ios.kt`](../ui/components/BottomBar.ios.kt) (`UIDevice.systemVersion >= 26.0`). Haptics route through [`PlatformHapticsPolicy.kt`](../../PlatformHapticsPolicy.kt).
+
+Screens call bridge APIs from `commonMain` only — no `if (isIOS)` for these controls.
 
 ---
 

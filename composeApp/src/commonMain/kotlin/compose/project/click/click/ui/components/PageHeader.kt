@@ -25,9 +25,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import compose.project.click.click.ui.components.native.NativeNavButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,8 +38,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.PlatformHapticsPolicy
-
 enum class HeaderDisplayMode {
     Large,
     Inline
@@ -206,19 +203,13 @@ fun HeaderSearchIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
-        onClick = {
-            PlatformHapticsPolicy.heavyImpact()
-            onClick()
-        },
+    NativeNavButton(
+        icon = Icons.Filled.Search,
+        contentDescription = "Search",
+        onClick = onClick,
         modifier = modifier,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Search,
-            contentDescription = "Search",
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-        )
-    }
+        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+    )
 }
 
 /** Reload action for discovery feed headers (pull-to-refresh alternative). */
@@ -228,20 +219,14 @@ fun HeaderRefreshIconButton(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
-        onClick = {
-            if (enabled) PlatformHapticsPolicy.heavyImpact()
-            onClick()
-        },
+    NativeNavButton(
+        icon = Icons.Filled.Refresh,
+        contentDescription = "Refresh feed",
+        onClick = onClick,
         enabled = enabled,
         modifier = modifier,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Refresh,
-            contentDescription = "Refresh feed",
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.85f else 0.4f),
-        )
-    }
+        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.85f else 0.4f),
+    )
 }
 
 @Composable

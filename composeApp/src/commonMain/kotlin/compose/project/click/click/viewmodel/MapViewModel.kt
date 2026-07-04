@@ -1391,8 +1391,8 @@ class MapViewModel : ViewModel() {
     }
 
     private fun anchorLatLonForProgrammaticCamera(): Pair<Double, Double>? {
-        lastKnownCameraTarget?.let { return it.latitude to it.longitude }
         _visibleBounds.value?.let { return it.centerLat to it.centerLon }
+        lastKnownCameraTarget?.let { return it.latitude to it.longitude }
         _defaultCameraTarget.value?.let { return it.latitude to it.longitude }
         val state = _mapState.value
         if (state is MapState.Success) {

@@ -181,6 +181,7 @@ import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowli
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
 import compose.project.click.click.encounter.tetherCompassMessage // pragma: allowlist secret
@@ -190,8 +191,11 @@ import compose.project.click.click.collaboration.CollaborationSessionManager // 
 import compose.project.click.click.encounter.recentEncounterId // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.buildCallContextMenuItems // pragma: allowlist secret
+import compose.project.click.click.ui.chat.buildConnectionContextMenuItems // pragma: allowlist secret
+import compose.project.click.click.ui.components.native.NativeBackButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.native.NativeContextMenuIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.native.NativeNavButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
@@ -384,10 +388,11 @@ fun ChatView(
         }
     }
 
-    // Connection action sheet (archive, delete, report, block)
-    var showConnectionSheet by remember { mutableStateOf(false) }
+    // Connection confirm dialogs (archive, delete, report, block)
     var showRenameGroupDialog by remember { mutableStateOf(false) }
     var renameGroupDraft by remember { mutableStateOf("") }
+    var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
+    var dialogGroupId by remember { mutableStateOf<String?>(null) }
     // Message context sheet (reactions, edit, delete, copy)
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
@@ -397,7 +402,6 @@ fun ChatView(
     val tetherPayload by EncounterTetherManager.activeTetherPayload.collectAsState()
     var tetherToastMessage by remember { mutableStateOf<String?>(null) }
     var tetherSenderAck by remember { mutableStateOf<String?>(null) }
-    var showCallMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(nudgeResult) {
         val r = nudgeResult ?: return@LaunchedEffect
@@ -491,13 +495,7 @@ fun ChatView(
                                 .height(56.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                            NativeBackButton(onClick = onBackPressed)
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Chat",
@@ -705,37 +703,42 @@ fun ChatView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = topInset)
-                                .height(56.dp)
                                 .padding(horizontal = 20.dp)
                                 .testTag(ChatGlassHeaderPlateTestTag),
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically
+                            val chatHeaderAvatarSize = 44.dp
+                            val chatHeaderNavSize = 44.dp
+                            LiquidGlassPill(
+                                modifier = Modifier.fillMaxWidth(),
+                                cornerRadiusDp = 28,
                             ) {
-                                IconButton(onClick = onBackPressed) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 56.dp)
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                NativeBackButton(
+                                    onClick = onBackPressed,
+                                    size = chatHeaderNavSize,
+                                )
 
                                 if (isGroupChat) {
-                                    val chatHeaderGroupAvatarSize = 34.dp
                                     val groupAvatarUrl = chatDetails.groupClique?.avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
                                     val groupClusterWidth = if (groupAvatarUrl != null) {
-                                        chatHeaderGroupAvatarSize
+                                        chatHeaderAvatarSize
                                     } else {
                                         groupAvatarClusterWidth(
                                             chatDetails.groupMemberUsers.size,
-                                            chatHeaderGroupAvatarSize,
+                                            chatHeaderAvatarSize,
                                         )
                                     }
                                     Box(
                                         modifier = Modifier
                                             .width(groupClusterWidth)
-                                            .heightIn(min = 40.dp)
+                                            .height(chatHeaderAvatarSize)
                                             .clickable(
                                                 interactionSource = remember { MutableInteractionSource() },
                                                 indication = ripple(bounded = false, radius = 22.dp),
@@ -748,7 +751,7 @@ fun ChatView(
                                     ) {
                                         GroupAvatar(
                                             members = chatDetails.groupMemberUsers,
-                                            avatarSize = chatHeaderGroupAvatarSize,
+                                            avatarSize = chatHeaderAvatarSize,
                                             avatarUrl = groupAvatarUrl,
                                         )
                                     }
@@ -756,7 +759,7 @@ fun ChatView(
                                     val isPeerCore = chatDetails.connection.id in coreConnectionIds
                                     CoreConnectionAvatarFrame(
                                         isCore = isPeerCore,
-                                        avatarSize = 36.dp,
+                                        avatarSize = chatHeaderAvatarSize,
                                         onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
                                     ) {
                                         AvatarWithOnlineIndicator(
@@ -777,9 +780,12 @@ fun ChatView(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = chatHeaderAvatarSize),
+                                    verticalArrangement = Arrangement.Center,
+                                ) {
                                     Text(
                                         text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
                                         style = MaterialTheme.typography.titleMedium,
@@ -845,7 +851,6 @@ fun ChatView(
                                 }
 
                                 if (!isGroupChat && chatHasIntentOverlap) {
-                                    Spacer(modifier = Modifier.width(4.dp))
                                     Icon(
                                         Icons.Filled.Bolt,
                                         contentDescription = "Shared availability",
@@ -854,174 +859,133 @@ fun ChatView(
                                     )
                                 }
 
-                                if (isGroupChat) {
-                                    IconButton(
-                                        onClick = {
-                                            renameGroupDraft = groupTitle
-                                            showRenameGroupDialog = true
-                                        },
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Edit,
-                                            contentDescription = "Rename group",
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        )
-                                    }
+                                val groupCallMemberIds = remember(chatDetails.groupClique) {
+                                    chatDetails.groupClique?.memberUserIds.orEmpty()
                                 }
-
-                                Box(modifier = Modifier.size(48.dp)) {
-                                    IconButton(
-                                        onClick = { showCallMenu = true },
-                                        modifier = Modifier.fillMaxSize(),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Call,
-                                            contentDescription = "Call options",
-                                            tint = PrimaryBlue.copy(alpha = 0.85f)
-                                        )
-                                    }
-                                    val menuStyle = LocalPlatformStyle.current
-                                    val density = LocalDensity.current
-                                    val callMenuSpring = spring<Float>(
-                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                        stiffness = Spring.StiffnessMedium,
-                                    )
-                                    val callMenuEnter =
-                                        fadeIn(animationSpec = callMenuSpring) +
-                                            scaleIn(
-                                                initialScale = 0.92f,
-                                                animationSpec = callMenuSpring,
-                                            )
-                                    val callMenuExit =
-                                        fadeOut(animationSpec = callMenuSpring) +
-                                            scaleOut(
-                                                targetScale = 0.96f,
-                                                animationSpec = callMenuSpring,
-                                            )
-                                    var keepIosCallMenuMounted by remember { mutableStateOf(false) }
-                                    var iosCallMenuContentVisible by remember { mutableStateOf(false) }
-                                    LaunchedEffect(showCallMenu) {
-                                        if (showCallMenu) {
-                                            keepIosCallMenuMounted = true
-                                            iosCallMenuContentVisible = false
-                                            withFrameNanos { }
-                                            iosCallMenuContentVisible = true
-                                        } else {
-                                            iosCallMenuContentVisible = false
-                                            delay(150)
-                                            keepIosCallMenuMounted = false
-                                        }
-                                    }
-                                    val groupCallMemberIds = remember(chatDetails.groupClique) {
-                                        chatDetails.groupClique?.memberUserIds.orEmpty()
-                                    }
-                                    val startVoiceCall = {
-                                        showCallMenu = false
-                                        if (isGroupChat) {
-                                            val groupId = chatDetails.groupClique?.groupId
-                                            val chatId = chatDetails.chat.id
-                                            if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                CallSessionManager.startOutgoingGroupCall(
-                                                    groupId = groupId,
-                                                    chatId = chatId,
-                                                    memberIds = groupCallMemberIds,
-                                                    videoEnabled = false,
-                                                )
-                                            }
-                                        } else {
-                                            CallSessionManager.startOutgoingCall(
-                                                connectionId = chatDetails.connection.id,
-                                                otherUserId = chatDetails.otherUser.id,
-                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                val startVoiceCall = {
+                                    if (isGroupChat) {
+                                        val groupId = chatDetails.groupClique?.groupId
+                                        val chatId = chatDetails.chat.id
+                                        if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                            CallSessionManager.startOutgoingGroupCall(
+                                                groupId = groupId,
+                                                chatId = chatId,
+                                                memberIds = groupCallMemberIds,
                                                 videoEnabled = false,
                                             )
                                         }
+                                    } else {
+                                        CallSessionManager.startOutgoingCall(
+                                            connectionId = chatDetails.connection.id,
+                                            otherUserId = chatDetails.otherUser.id,
+                                            otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                            videoEnabled = false,
+                                        )
                                     }
-                                    val startVideoCall = {
-                                        showCallMenu = false
-                                        if (isGroupChat) {
-                                            val groupId = chatDetails.groupClique?.groupId
-                                            val chatId = chatDetails.chat.id
-                                            if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                CallSessionManager.startOutgoingGroupCall(
-                                                    groupId = groupId,
-                                                    chatId = chatId,
-                                                    memberIds = groupCallMemberIds,
-                                                    videoEnabled = true,
-                                                )
-                                            }
-                                        } else {
-                                            CallSessionManager.startOutgoingCall(
-                                                connectionId = chatDetails.connection.id,
-                                                otherUserId = chatDetails.otherUser.id,
-                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                }
+                                val startVideoCall = {
+                                    if (isGroupChat) {
+                                        val groupId = chatDetails.groupClique?.groupId
+                                        val chatId = chatDetails.chat.id
+                                        if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                            CallSessionManager.startOutgoingGroupCall(
+                                                groupId = groupId,
+                                                chatId = chatId,
+                                                memberIds = groupCallMemberIds,
                                                 videoEnabled = true,
                                             )
                                         }
-                                    }
-                                    if (menuStyle.isIOS) {
-                                        if (keepIosCallMenuMounted) {
-                                            Popup(
-                                                alignment = Alignment.TopStart,
-                                                offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
-                                                onDismissRequest = { showCallMenu = false },
-                                                properties = PopupProperties(
-                                                    focusable = true,
-                                                    dismissOnBackPress = true,
-                                                    dismissOnClickOutside = true,
-                                                ),
-                                            ) {
-                                                androidx.compose.animation.AnimatedVisibility(
-                                                    visible = iosCallMenuContentVisible,
-                                                    enter = callMenuEnter,
-                                                    exit = callMenuExit,
-                                                ) {
-                                                    ChatCallOptionsIosSurface(
-                                                        onVoice = startVoiceCall,
-                                                        onVideo = startVideoCall,
-                                                    )
-                                                }
-                                            }
-                                        }
                                     } else {
-                                        DropdownMenu(
-                                            expanded = showCallMenu,
-                                            onDismissRequest = { showCallMenu = false },
-                                            shape = RoundedCornerShape(22.dp),
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                            tonalElevation = 8.dp,
-                                            shadowElevation = 16.dp
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = { Text(if (isGroupChat) "Group voice call" else "Voice call") },
-                                                leadingIcon = {
-                                                    Icon(Icons.Filled.Call, contentDescription = null)
-                                                },
-                                                onClick = {
-                                                    PlatformHapticsPolicy.lightImpact()
-                                                    startVoiceCall()
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(if (isGroupChat) "Group video call" else "Video call") },
-                                                leadingIcon = {
-                                                    Icon(Icons.Filled.Videocam, contentDescription = null)
-                                                },
-                                                onClick = {
-                                                    PlatformHapticsPolicy.lightImpact()
-                                                    startVideoCall()
-                                                }
-                                            )
-                                        }
+                                        CallSessionManager.startOutgoingCall(
+                                            connectionId = chatDetails.connection.id,
+                                            otherUserId = chatDetails.otherUser.id,
+                                            otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                            videoEnabled = true,
+                                        )
                                     }
                                 }
-                                // Overflow / connection options
-                                IconButton(onClick = { showConnectionSheet = true }) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = "More options",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    if (isGroupChat) {
+                                        NativeNavButton(
+                                            icon = Icons.Outlined.Edit,
+                                            contentDescription = "Rename group",
+                                            onClick = {
+                                                renameGroupDraft = groupTitle
+                                                showRenameGroupDialog = true
+                                            },
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                            size = chatHeaderNavSize,
+                                        )
+                                    }
+                                    NativeContextMenuIconButton(
+                                        icon = Icons.Filled.Call,
+                                        contentDescription = "Call options",
+                                        items = buildCallContextMenuItems(
+                                            isGroupChat = isGroupChat,
+                                            onVoice = startVoiceCall,
+                                            onVideo = startVideoCall,
+                                        ),
+                                        tint = PrimaryBlue.copy(alpha = 0.85f),
+                                        size = chatHeaderNavSize,
                                     )
+                                    val headerConn = chatDetails.connection
+                                    NativeContextMenuIconButton(
+                                        icon = Icons.Filled.MoreVert,
+                                        contentDescription = "More options",
+                                        items = buildConnectionContextMenuItems(
+                                            chatDetails = chatDetails,
+                                            currentUserId = currentUserId,
+                                            isArchived = headerConn.id in archivedConnectionIds,
+                                            isServerLifecycleArchived = headerConn.isServerLifecycleArchived(),
+                                            isCore = headerConn.id in coreConnectionIds,
+                                            onMenuAction = { action ->
+                                                val connId = headerConn.id
+                                                when (action) {
+                                                    ConnectionMenuAction.Nudge -> viewModel.sendNudge()
+                                                    ConnectionMenuAction.Archive -> {
+                                                        viewModel.archiveConnection { success ->
+                                                            if (success) onBackPressed()
+                                                        }
+                                                    }
+                                                    ConnectionMenuAction.Unarchive -> {
+                                                        viewModel.unarchiveConnection(connId)
+                                                    }
+                                                    ConnectionMenuAction.AddToCore -> {
+                                                        viewModel.addConnectionToCore(connId)
+                                                    }
+                                                    ConnectionMenuAction.RemoveFromCore -> {
+                                                        viewModel.removeConnectionFromCore(connId)
+                                                    }
+                                                    ConnectionMenuAction.MarkUnread -> {
+                                                        viewModel.markConversationUnread(connId)
+                                                    }
+                                                    ConnectionMenuAction.RequestRemove -> {
+                                                        pendingConnectionDialog = ConnectionSheetDialog.Remove
+                                                    }
+                                                    ConnectionMenuAction.RequestReport -> {
+                                                        pendingConnectionDialog = ConnectionSheetDialog.Report()
+                                                    }
+                                                    ConnectionMenuAction.RequestBlock -> {
+                                                        pendingConnectionDialog = ConnectionSheetDialog.Block
+                                                    }
+                                                    ConnectionMenuAction.RequestLeaveGroup -> {
+                                                        dialogGroupId = chatDetails.groupClique?.groupId
+                                                        pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
+                                                    }
+                                                    ConnectionMenuAction.RequestDeleteGroup -> {
+                                                        dialogGroupId = chatDetails.groupClique?.groupId
+                                                        pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
+                                                    }
+                                                }
+                                            },
+                                        ),
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                        size = chatHeaderNavSize,
+                                    )
+                                }
                                 }
                             }
                         }
@@ -1472,64 +1436,6 @@ fun ChatView(
             messageWithUser = contextMenuMessage!!,
             viewModel = viewModel,
             onDismiss = { contextMenuMessage = null }
-        )
-    }
-
-    var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
-    var dialogGroupId by remember { mutableStateOf<String?>(null) }
-
-    // Connection action sheet
-    if (showConnectionSheet) {
-        val successState = chatMessagesState as? ChatMessagesState.Success
-        val sheetConn = successState?.chatDetails?.connection
-        ConnectionActionSheet(
-            chatDetails = successState?.chatDetails,
-            currentUserId = currentUserId,
-            isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
-            isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
-            isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
-            onDismiss = { showConnectionSheet = false },
-            onMenuAction = { action ->
-                val details = successState?.chatDetails
-                val connId = sheetConn?.id
-                when (action) {
-                    ConnectionMenuAction.Nudge -> viewModel.sendNudge()
-                    ConnectionMenuAction.Archive -> {
-                        viewModel.archiveConnection { success ->
-                            if (success) onBackPressed()
-                        }
-                    }
-                    ConnectionMenuAction.Unarchive -> {
-                        if (connId != null) viewModel.unarchiveConnection(connId)
-                    }
-                    ConnectionMenuAction.AddToCore -> {
-                        if (connId != null) viewModel.addConnectionToCore(connId)
-                    }
-                    ConnectionMenuAction.RemoveFromCore -> {
-                        if (connId != null) viewModel.removeConnectionFromCore(connId)
-                    }
-                    ConnectionMenuAction.MarkUnread -> {
-                        if (connId != null) viewModel.markConversationUnread(connId)
-                    }
-                    ConnectionMenuAction.RequestRemove -> {
-                        pendingConnectionDialog = ConnectionSheetDialog.Remove
-                    }
-                    ConnectionMenuAction.RequestReport -> {
-                        pendingConnectionDialog = ConnectionSheetDialog.Report()
-                    }
-                    ConnectionMenuAction.RequestBlock -> {
-                        pendingConnectionDialog = ConnectionSheetDialog.Block
-                    }
-                    ConnectionMenuAction.RequestLeaveGroup -> {
-                        dialogGroupId = details?.groupClique?.groupId
-                        pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
-                    }
-                    ConnectionMenuAction.RequestDeleteGroup -> {
-                        dialogGroupId = details?.groupClique?.groupId
-                        pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
-                    }
-                }
-            },
         )
     }
 
