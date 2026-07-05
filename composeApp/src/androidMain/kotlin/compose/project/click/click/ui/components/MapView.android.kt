@@ -2,6 +2,7 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -132,13 +133,18 @@ actual fun PlatformMap(
     // Collapsed PiP must not host a live GoogleMap — the AndroidView layer steals taps from Compose.
     if (!mapGesturesEnabled) {
         Box(
-            modifier = modifier.background(Color(0xFF121212)),
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(0xFF121212)),
         )
         return
     }
 
+    // GoogleMap is a SurfaceView-backed AndroidView: it must receive explicit max constraints.
+    // Parent scale animations (e.g. AnimatedVisibility scaleIn) also break SurfaceView compositing.
+    Box(modifier = modifier.fillMaxSize()) {
     GoogleMap(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
         properties = mapProperties,
         uiSettings = MapUiSettings(
@@ -252,6 +258,7 @@ actual fun PlatformMap(
             )
             }
         }
+    }
     }
 }
 
