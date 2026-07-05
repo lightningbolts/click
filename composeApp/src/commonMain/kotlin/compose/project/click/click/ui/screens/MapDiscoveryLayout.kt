@@ -307,21 +307,6 @@ private fun rubberBandPullOffset(current: Float, delta: Float, maxPull: Float): 
 }
 
 @Composable
-private fun MapPipPreviewPlaceholder(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.background(GlassSheetTokens.OledBlack),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Map,
-            contentDescription = null,
-            tint = GlassSheetTokens.OnOledMuted.copy(alpha = 0.45f),
-            modifier = Modifier.size(40.dp),
-        )
-    }
-}
-
-@Composable
 internal fun MapDiscoveryScreen(
     feedItems: List<DiscoveryFeedItem>,
     discoveryFeedPending: Boolean,
@@ -676,11 +661,18 @@ internal fun MapDiscoveryScreen(
                         detectTapGestures(onTap = { expandMap() })
                     },
             ) {
-                if (platformStyle.isIOS) {
-                    mapContent(Modifier.fillMaxSize(), false)
-                } else {
-                    MapPipPreviewPlaceholder(Modifier.fillMaxSize())
-                }
+                mapContent(Modifier.fillMaxSize(), false)
+                // PiP hosts a lite GoogleMap (SurfaceView); this layer keeps expand taps on Compose.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2f)
+                        .clickable(
+                            interactionSource = pipInteraction,
+                            indication = null,
+                            onClick = expandMap,
+                        ),
+                )
                 IconButton(
                     onClick = expandMap,
                     modifier = Modifier

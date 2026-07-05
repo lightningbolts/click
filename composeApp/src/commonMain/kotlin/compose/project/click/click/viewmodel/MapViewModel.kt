@@ -121,7 +121,10 @@ class MapViewModel : ViewModel() {
     companion object {
         // Session memory for map camera across map screen exits/returns.
         private var lastKnownCameraTarget: CameraTarget? = null
+        private const val DEFAULT_USER_MAP_ZOOM = 14.0
     }
+
+    private var seededDeviceCameraThisSession = false
 
     // Base data state
     private val _mapState = MutableStateFlow<MapState>(MapState.Loading)
@@ -698,10 +701,22 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * Computes a one-time default camera based on all valid connection coordinates.
+     * Computes a one-time default camera. Prefers the user's GPS fix; falls back to connection bounds.
      */
     private fun ensureDefaultCameraTarget(connections: List<Connection>) {
         if (_defaultCameraTarget.value != null) return
+
+        deviceLocationCameraTarget()?.let { userTarget ->
+            _defaultCameraTarget.value = userTarget
+            if (_cameraTarget.value == null) {
+                _cameraTarget.value = userTarget
+            }
+            if (_zoomLevel.value == 10.0) {
+                _zoomLevel.value = userTarget.zoom
+            }
+            prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
+            return
+        }
 
         val valid = connections.mapNotNull { c -> c.connectionMapGeo()?.let { g -> c to g } }
 
@@ -721,7 +736,6 @@ class MapViewModel : ViewModel() {
             zoom = targetZoom
         )
         _defaultCameraTarget.value = computedTarget
-        lastKnownCameraTarget = computedTarget
 
         // If we don't already have an active camera move, apply this default as a one-shot initial camera.
         if (_cameraTarget.value == null) {
@@ -737,6 +751,45 @@ class MapViewModel : ViewModel() {
         // Simulators often report a default location far from test hubs; without this, hubs only
         // appear after the user expands the map and viewport bounds fire a fetch.
         prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
+    }
+
+    /**
+     * Applies the first GPS fix of a map session so PiP preview and the expanded map frame the user.
+     */
+    fun updateMapDeviceLocation(latitude: Double, longitude: Double) {
+        if (!latitude.isFinite() || !longitude.isFinite()) return
+        if (latitude == 0.0 && longitude == 0.0) return
+        AppDataManager.noteDeviceLocation(latitude, longitude)
+        if (AppDataManager.ghostModeEnabled.value) return
+        if (!locationService.hasLocationPermission()) return
+
+        val target = CameraTarget(
+            latitude = latitude,
+            longitude = longitude,
+            zoom = DEFAULT_USER_MAP_ZOOM,
+        )
+
+        if (_defaultCameraTarget.value == null) {
+            _defaultCameraTarget.value = target
+        }
+
+        if (!seededDeviceCameraThisSession) {
+            seededDeviceCameraThisSession = true
+            _cameraTarget.value = target
+            if (_zoomLevel.value <= 10.01) {
+                _zoomLevel.value = DEFAULT_USER_MAP_ZOOM
+            }
+        }
+    }
+
+    private fun deviceLocationCameraTarget(): CameraTarget? {
+        if (!locationService.hasLocationPermission()) return null
+        val loc = AppDataManager.lastKnownDeviceLocation.value ?: return null
+        return CameraTarget(
+            latitude = loc.first,
+            longitude = loc.second,
+            zoom = DEFAULT_USER_MAP_ZOOM,
+        )
     }
 
     fun toggleLayerFilter(filter: MapLayerFilter) {
@@ -1598,7 +1651,9 @@ class MapViewModel : ViewModel() {
      */
     fun onMapScreenEntered() {
         if (_cameraTarget.value == null) {
-            val raw = lastKnownCameraTarget ?: _defaultCameraTarget.value
+            val raw = lastKnownCameraTarget
+                ?: deviceLocationCameraTarget()
+                ?: _defaultCameraTarget.value
             if (raw != null) {
                 val safeZoom = raw.zoom.coerceIn(4.0, 20.0)
                 val target = if (abs(raw.zoom - safeZoom) > 0.01) {
