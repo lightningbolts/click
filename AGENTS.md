@@ -27,7 +27,7 @@ Runs on port 5000. Requires `server/.env` with `SUPABASE_URL`, `SUPABASE_KEY`, `
 ```
 ./gradlew :composeApp:assembleDebug
 ```
-Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<key>` (placeholder value works for builds). The `google-services.json` is optional; the build gracefully skips the Google Services plugin when it is absent.
+Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<key>` (placeholder value works for builds). If `local.properties` is missing, Gradle falls back to checked-in `local.defaults.properties` so iOS framework embed and IDE sync still configure. The `google-services.json` is optional; the build gracefully skips the Google Services plugin when it is absent.
 
 ### Testing
 
@@ -37,8 +37,8 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 
 ### Non-obvious caveats
 
-- The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
+- The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI/Xcode when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
 - iOS builds require Xcode (macOS only) and are not runnable in Cloud Agent VMs.
 - The `click-web` Next.js companion app (LiveKit token endpoint, QR flows) is a **separate repository** and not present in this workspace.
 - Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic server or mobile build testing.
-- `server/.env` and `local.properties` are both gitignored. They must be recreated on each fresh checkout.
+- `server/.env` and `local.properties` are both gitignored. They must be recreated on each fresh checkout (or rely on `local.defaults.properties` for Gradle configure-only steps such as iOS framework embedding).

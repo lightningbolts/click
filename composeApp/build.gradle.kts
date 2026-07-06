@@ -191,6 +191,8 @@ kotlin {
 
 secrets {
     propertiesFileName = "local.properties"
+    // Lets Gradle configure (and iOS embedAndSignAppleFrameworkForXcode) when local.properties is absent.
+    defaultPropertiesFileName = "local.defaults.properties"
 }
 
 android {

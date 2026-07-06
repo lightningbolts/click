@@ -113,11 +113,15 @@ From this directory:
 
 Use Android Studio’s **composeApp** run configuration, or install the debug APK from `composeApp/build/outputs/`.
 
+Create `local.properties` at the repo root with `sdk.dir` and `MAPS_API_KEY` (see [`AGENTS.md`](./AGENTS.md)). If the file is missing, Gradle uses checked-in `local.defaults.properties` so the project still configures (required for Xcode’s Kotlin framework step).
+
 ### iOS
 
 1. Open [`iosApp/iosApp.xcodeproj`](./iosApp/iosApp.xcodeproj) in Xcode.  
 2. Resolve Swift packages (**LiveKit** and transitive deps).  
 3. Select the **iosApp** scheme, set signing team, build and run.
+
+Xcode’s **Compile Kotlin Framework** phase runs `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode`. That Gradle configure step needs `MAPS_API_KEY` via `local.properties` or the checked-in `local.defaults.properties` fallback (Xcode Cloud writes `local.properties` in [`iosApp/ci_scripts/ci_pre_xcodebuild.sh`](./iosApp/ci_scripts/ci_pre_xcodebuild.sh)).
 
 ### Database and server-side setup
 
