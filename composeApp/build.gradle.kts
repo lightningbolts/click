@@ -95,7 +95,6 @@ kotlin {
             implementation("androidx.core:core-ktx:1.17.0")
             implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
             implementation("io.livekit:livekit-android:2.20.3")
-            // WebView-based map needs no native Map SDK dependency
 
             // Ktor Android engine
             implementation("io.ktor:ktor-client-android:3.0.1")
@@ -109,7 +108,7 @@ kotlin {
             implementation("androidx.camera:camera-view:1.3.1")
             implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
-            // Google Maps
+            // Google Maps (requires MAPS_API_KEY in local.properties — injected via google-secrets plugin)
             implementation("com.google.maps.android:maps-compose:4.3.3")
             implementation("com.google.android.gms:play-services-maps:18.2.0")
             implementation("com.google.android.gms:play-services-location:21.0.1")
@@ -190,6 +189,10 @@ kotlin {
     }
 }
 
+secrets {
+    propertiesFileName = "local.properties"
+}
+
 android {
     namespace = "compose.project.click.click"
     compileSdk = 36
@@ -200,7 +203,6 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 8
         versionName = "grouchy"
-        // MapLibre doesn't require an API key
     }
     packaging {
         resources {

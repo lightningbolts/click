@@ -1,6 +1,8 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -302,21 +304,6 @@ private fun rubberBandPullOffset(current: Float, delta: Float, maxPull: Float): 
     if (delta <= 0f) return current
     val resistance = 1f - (current / maxPull).coerceIn(0f, 0.9f)
     return (current + delta * resistance.coerceAtLeast(0.15f)).coerceIn(0f, maxPull)
-}
-
-@Composable
-private fun MapPipPreviewPlaceholder(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.background(GlassSheetTokens.OledBlack),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Map,
-            contentDescription = null,
-            tint = GlassSheetTokens.OnOledMuted.copy(alpha = 0.45f),
-            modifier = Modifier.size(40.dp),
-        )
-    }
 }
 
 @Composable
@@ -674,11 +661,18 @@ internal fun MapDiscoveryScreen(
                         detectTapGestures(onTap = { expandMap() })
                     },
             ) {
-                if (platformStyle.isIOS) {
-                    mapContent(Modifier.fillMaxSize(), false)
-                } else {
-                    MapPipPreviewPlaceholder(Modifier.fillMaxSize())
-                }
+                mapContent(Modifier.fillMaxSize(), false)
+                // PiP hosts a lite GoogleMap (SurfaceView); this layer keeps expand taps on Compose.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2f)
+                        .clickable(
+                            interactionSource = pipInteraction,
+                            indication = null,
+                            onClick = expandMap,
+                        ),
+                )
                 IconButton(
                     onClick = expandMap,
                     modifier = Modifier
@@ -698,20 +692,33 @@ internal fun MapDiscoveryScreen(
             }
         }
 
-        AnimatedVisibility(
-            visible = mapPipExpanded,
-            enter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+        // GoogleMap on Android is SurfaceView-backed; scale transforms from scaleIn/scaleOut
+        // leave the map blank. iOS MapKit tolerates the PiP expand animation.
+        val mapOverlayEnter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+            if (platformStyle.isIOS) {
                 scaleIn(
                     animationSpec = tween(300, easing = FastOutSlowInEasing),
                     initialScale = 0.88f,
                     transformOrigin = TransformOrigin(0.92f, 0.92f),
-                ),
-            exit = fadeOut(tween(280, easing = FastOutSlowInEasing)) +
+                )
+            } else {
+                EnterTransition.None
+            }
+        val mapOverlayExit = fadeOut(tween(280, easing = FastOutSlowInEasing)) +
+            if (platformStyle.isIOS) {
                 scaleOut(
                     animationSpec = tween(320, easing = FastOutSlowInEasing),
                     targetScale = 0.72f,
                     transformOrigin = TransformOrigin(0.92f, 0.92f),
-                ),
+                )
+            } else {
+                ExitTransition.None
+            }
+
+        AnimatedVisibility(
+            visible = mapPipExpanded,
+            enter = mapOverlayEnter,
+            exit = mapOverlayExit,
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(30f),
