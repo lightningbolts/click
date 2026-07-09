@@ -3,5 +3,5 @@ MCP TOOL USAGE
 - When commanded to "Index this project", run `index_repository` immediately with zero preliminary exploration or verification searches.
 
 CODE PRACTICES
-- Make sure all test cases pass and builds compile correctly for both iOS, Android, and Web whenever applicable.
+- Make sure all test cases pass and builds compile correctly for all iOS, Android, and Web whenever applicable.
 - Ensure NO regressions to the UI layout and backend existing logic. It is imperative for the implementation to be 100% correct because this will go into production and our company will depend on these features.
