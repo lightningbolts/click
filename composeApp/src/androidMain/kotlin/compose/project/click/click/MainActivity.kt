@@ -28,6 +28,7 @@ import compose.project.click.click.ui.utils.AppSystemSettings
 import compose.project.click.click.ui.utils.initAppSystemSettings
 import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
 import compose.project.click.click.data.SupabaseConfig
+import com.google.android.gms.maps.MapsInitializer
 import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
@@ -35,6 +36,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+
+        MapsInitializer.initialize(applicationContext)
 
         configureScreenWakeForCalls(intent)
 

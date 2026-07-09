@@ -5,9 +5,9 @@ cd ../..
 
 echo "Generating local.properties..."
 
-# Create the file with dummy values or environment variables
-# Note: if your app CRASHES without real keys, you must set 
-# MAPS_API_KEY in Xcode Cloud Environment Variables.
+# Create the file with dummy values or environment variables.
+# Xcode Cloud / local dev should override with real keys in local.properties.
+# When local.properties is absent, Gradle falls back to checked-in local.defaults.properties.
 cat <<EOF > local.properties
 sdk.dir=$HOME/Library/Android/sdk
 MAPS_API_KEY=${MAPS_API_KEY:-"dummy_key_for_build"}

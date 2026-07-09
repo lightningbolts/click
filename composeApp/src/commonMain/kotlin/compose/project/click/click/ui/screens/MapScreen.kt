@@ -87,6 +87,9 @@ import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.ui.components.GlassmorphicOverlay
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
+/** Neighborhood zoom for the discovery PiP map preview. */
+private const val MapPipPreviewZoom = 14.5
+
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
  *
@@ -130,8 +133,16 @@ fun MapScreen(
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val discoveryFeedPending by viewModel.discoveryFeedPending.collectAsState()
     val locationService = remember { LocationService() }
-    var userLat by remember { mutableStateOf<Double?>(null) }
-    var userLon by remember { mutableStateOf<Double?>(null) }
+    val cachedDeviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
+    var userLat by remember {
+        mutableStateOf(AppDataManager.lastKnownDeviceLocation.value?.first)
+    }
+    var userLon by remember {
+        mutableStateOf(AppDataManager.lastKnownDeviceLocation.value?.second)
+    }
+
+    val effectiveUserLat = userLat ?: cachedDeviceLocation?.first
+    val effectiveUserLon = userLon ?: cachedDeviceLocation?.second
 
     val frictionUi by TelemetryBatcher.uiState.collectAsState()
 
@@ -145,6 +156,7 @@ fun MapScreen(
         val loc = locationService.getCurrentLocation()
         userLat = loc?.latitude ?: userLat
         userLon = loc?.longitude ?: userLon
+        loc?.let { viewModel.updateMapDeviceLocation(it.latitude, it.longitude) }
         TelemetryBatcher.updateHexbinFromCoordinates(userLat, userLon)
     }
 
@@ -153,7 +165,18 @@ fun MapScreen(
     }
 
     LaunchedEffect(userLat, userLon) {
-        TelemetryBatcher.updateHexbinFromCoordinates(userLat, userLon)
+        val lat = userLat ?: return@LaunchedEffect
+        val lon = userLon ?: return@LaunchedEffect
+        viewModel.updateMapDeviceLocation(lat, lon)
+        TelemetryBatcher.updateHexbinFromCoordinates(lat, lon)
+    }
+
+    LaunchedEffect(cachedDeviceLocation) {
+        cachedDeviceLocation?.let { (lat, lon) ->
+            if (userLat == null) userLat = lat
+            if (userLon == null) userLon = lon
+            viewModel.updateMapDeviceLocation(lat, lon)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -322,6 +345,8 @@ fun MapScreen(
                                     mapGesturesEnabled = mapGesturesEnabled,
                                     showCompass = !mapPipExpanded,
                                     cameraTarget = cameraTarget,
+                                    userLat = effectiveUserLat,
+                                    userLon = effectiveUserLon,
                                     onPinTapped = { pin ->
                                         TelemetryBatcher.recordActionTaken()
                                         if (pin.kind == MapPinKind.CONNECTION) {
@@ -1564,6 +1589,8 @@ private fun MapContent(
     mapGesturesEnabled: Boolean = true,
     showCompass: Boolean = true,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
+    userLat: Double? = null,
+    userLon: Double? = null,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -1589,13 +1616,24 @@ private fun MapContent(
         is MapRenderData.IndividualPins -> emptyList()
     }
 
+    // Prefer an active programmatic target; otherwise frame the user's GPS (PiP + first open).
+    val previewMode = !mapGesturesEnabled
+    val mapCenterLat = cameraTarget?.latitude ?: userLat
+    val mapCenterLon = cameraTarget?.longitude ?: userLon
+    val mapZoom = when {
+        previewMode && mapCenterLat != null && mapCenterLon != null -> MapPipPreviewZoom
+        cameraTarget != null -> zoom
+        mapCenterLat != null && mapCenterLon != null -> MapPipPreviewZoom
+        else -> zoom
+    }
+
     PlatformMap(
         modifier = modifier,
         pins = pins,
         clusters = clusters,
-        zoom = zoom,
-        centerLat = cameraTarget?.latitude,
-        centerLon = cameraTarget?.longitude,
+        zoom = mapZoom,
+        centerLat = mapCenterLat,
+        centerLon = mapCenterLon,
         ghostMode = ghostMode,
         mapGesturesEnabled = mapGesturesEnabled,
         showCompass = showCompass,

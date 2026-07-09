@@ -1,10 +1,9 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -20,6 +19,8 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import compose.project.click.click.ui.components.markerHueDegrees
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -45,9 +46,18 @@ actual fun PlatformMap(
     onCameraAnimationComplete: () -> Unit,
     onMapGesture: () -> Unit,
 ) {
+    val locationService = remember { LocationService() }
+    val hasLocationPermission = locationService.hasLocationPermission()
+    val canShowMyLocation = !ghostMode && mapGesturesEnabled && hasLocationPermission
+    val previewMode = !mapGesturesEnabled
+    val deviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
+
     // Determine center position
+    val resolvedCenterLat = centerLat ?: deviceLocation?.first
+    val resolvedCenterLon = centerLon ?: deviceLocation?.second
     val initialCenter = when {
-        centerLat != null && centerLon != null -> LatLng(centerLat, centerLon)
+        resolvedCenterLat != null && resolvedCenterLon != null ->
+            LatLng(resolvedCenterLat, resolvedCenterLon)
         pins.isNotEmpty() -> LatLng(pins.first().latitude, pins.first().longitude)
         clusters.isNotEmpty() -> LatLng(clusters.first().latitude, clusters.first().longitude)
         else -> LatLng(40.7580, -73.9855) // Default to NYC
@@ -59,19 +69,22 @@ actual fun PlatformMap(
 
     // One effect: lat/lon + zoom use newLatLngZoom together. A separate zoomTo effect kept the
     // old viewport center and broke cluster zoom.
-    LaunchedEffect(centerLat, centerLon, zoom) {
-        if (centerLat != null && centerLon != null) {
-            val target = LatLng(centerLat, centerLon)
+    LaunchedEffect(resolvedCenterLat, resolvedCenterLon, zoom, previewMode) {
+        if (resolvedCenterLat != null && resolvedCenterLon != null) {
+            val target = LatLng(resolvedCenterLat, resolvedCenterLon)
             val z = zoom.toFloat()
             val pos = cameraPositionState.position
-            val moved = abs(pos.target.latitude - centerLat) > 1e-5 ||
-                abs(pos.target.longitude - centerLon) > 1e-5
+            val moved = abs(pos.target.latitude - resolvedCenterLat) > 1e-5 ||
+                abs(pos.target.longitude - resolvedCenterLon) > 1e-5
             val zoomChanged = abs(pos.zoom - z) > 0.05f
             if (moved || zoomChanged) {
-                cameraPositionState.animate(
-                    update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(target, z),
-                )
-                onCameraAnimationComplete()
+                val update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(target, z)
+                if (previewMode) {
+                    cameraPositionState.move(update)
+                } else {
+                    cameraPositionState.animate(update = update)
+                    onCameraAnimationComplete()
+                }
             }
         }
         // Do not call zoomTo from ViewModel zoom when center is null — the GoogleMap owns
@@ -111,15 +124,14 @@ actual fun PlatformMap(
             }
     }
 
-    // Map properties - grayscale when ghost mode
-    val mapProperties = remember(ghostMode) {
+    // Map properties - grayscale when ghost mode. PiP preview uses the same tiles with gestures off.
+    val mapProperties = remember(ghostMode, canShowMyLocation) {
         MapProperties(
-            isMyLocationEnabled = !ghostMode,
+            // Enabling my-location without runtime permission crashes with SecurityException.
+            isMyLocationEnabled = canShowMyLocation,
             mapStyleOptions = if (ghostMode) {
-                // Grayscale style for ghost mode
                 MapStyleOptions(GRAYSCALE_MAP_STYLE)
             } else {
-                // Dark mode style for normal mode
                 MapStyleOptions(DARK_MAP_STYLE)
             }
         )
@@ -129,29 +141,24 @@ actual fun PlatformMap(
     val clusterIconCache = remember { mutableMapOf<String, BitmapDescriptor>() }
     val labeledPinCache = remember { mutableMapOf<String, BitmapDescriptor>() }
 
-    // Collapsed PiP must not host a live GoogleMap — the AndroidView layer steals taps from Compose.
-    if (!mapGesturesEnabled) {
-        Box(
-            modifier = modifier.background(Color(0xFF121212)),
-        )
-        return
-    }
-
+    // GoogleMap is a SurfaceView-backed AndroidView: it must receive explicit max constraints.
+    // Parent scale animations (e.g. AnimatedVisibility scaleIn) also break SurfaceView compositing.
+    Box(modifier = modifier.fillMaxSize()) {
     GoogleMap(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
         properties = mapProperties,
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
-            compassEnabled = showCompass,
-            myLocationButtonEnabled = !ghostMode,
+            compassEnabled = showCompass && !previewMode,
+            myLocationButtonEnabled = canShowMyLocation,
             scrollGesturesEnabled = mapGesturesEnabled,
             zoomGesturesEnabled = mapGesturesEnabled,
             rotationGesturesEnabled = mapGesturesEnabled,
             tiltGesturesEnabled = mapGesturesEnabled,
         )
     ) {
-        // Render individual pins
+        if (previewMode) return@GoogleMap
         pins.forEach { pin ->
             key(pin.id) {
                 val markerHue = pin.markerHueDegrees()
@@ -252,6 +259,7 @@ actual fun PlatformMap(
             )
             }
         }
+    }
     }
 }
 
