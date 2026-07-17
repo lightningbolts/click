@@ -6,6 +6,7 @@ import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalIsDarkMode
+import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -650,9 +651,14 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
             }
             pin != null -> {
                 val isHub = pin.kind == MapPinKind.COMMUNITY_HUB
+                val isAlert = pin.beaconKind == MapBeaconKind.HAZARD ||
+                    pin.beaconKind == MapBeaconKind.SOS ||
+                    pin.kind == MapPinKind.BEACON_ALERT
                 val cap = pin.caption?.trim().orEmpty()
                 view.glyphText = when {
                     isHub && cap.isNotEmpty() -> cap
+                    isAlert && (cap.isEmpty() || cap == BeaconPinMetrics.AlertGlyph) ->
+                        BeaconPinMetrics.AlertGlyph
                     cap.isEmpty() -> ""
                     cap.length <= 3 -> cap
                     else -> cap.take(3)

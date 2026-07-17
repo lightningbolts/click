@@ -273,11 +273,19 @@ data class ProximityBindOkResponseDto(
 @Serializable
 data class ProximityBindPendingResponseDto(
     val success: Boolean = true,
-    val status: String,
+    val status: String = "pending",
     @SerialName("pending_handshake_id") val pendingHandshakeId: String,
-    @SerialName("expires_at") val expiresAt: String,
+    @SerialName("expires_at") val expiresAt: String = "",
     @SerialName("encounter_logged") val encounterLogged: Boolean = false,
     val matches: List<User> = emptyList(),
+)
+
+/** HTTP 503 — connection create failed; handshake left unmatched for GET recovery. */
+@Serializable
+private data class ProximityBindUnavailableResponseDto(
+    val error: String? = null,
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
 )
 
 /** HTTP 200 — server ignored an empty peer-evidence payload (no DB row). */
@@ -1261,8 +1269,9 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
 
     /**
      * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
-     * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200 or
-     * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet).
+     * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200,
+     * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet),
+     * or HTTP 503 with `pending_handshake_id` (connection create failed; GET recovery).
      */
     suspend fun postProximityHandshake(
         body: ProximityHandshakePostBody,
@@ -1296,9 +1305,50 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                     val dto = response.body<ProximityBindPendingResponseDto>()
                     Result.success(ProximityHandshakePostResult.PendingMatch(dto))
                 }
+                503 -> {
+                    val raw = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                    val unavailable = runCatching {
+                        json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
+                    }.getOrNull()
+                    val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
+                    if (pendingId.isNotEmpty()) {
+                        Result.success(
+                            ProximityHandshakePostResult.PendingMatch(
+                                ProximityBindPendingResponseDto(
+                                    success = false,
+                                    status = unavailable?.error ?: "connection_unavailable",
+                                    pendingHandshakeId = pendingId,
+                                    expiresAt = unavailable?.expiresAt.orEmpty(),
+                                ),
+                            ),
+                        )
+                    } else {
+                        clickWebFailure(response)
+                    }
+                }
                 else -> clickWebFailure(response)
             }
         } catch (e: ClientRequestException) {
+            val status = e.response.status.value
+            if (status == 503) {
+                val raw = runCatching { e.response.bodyAsText() }.getOrNull().orEmpty()
+                val unavailable = runCatching {
+                    json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
+                }.getOrNull()
+                val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
+                if (pendingId.isNotEmpty()) {
+                    return Result.success(
+                        ProximityHandshakePostResult.PendingMatch(
+                            ProximityBindPendingResponseDto(
+                                success = false,
+                                status = unavailable?.error ?: "connection_unavailable",
+                                pendingHandshakeId = pendingId,
+                                expiresAt = unavailable?.expiresAt.orEmpty(),
+                            ),
+                        ),
+                    )
+                }
+            }
             clickWebFailure(e.response)
         } catch (e: Exception) {
             Result.failure(e)

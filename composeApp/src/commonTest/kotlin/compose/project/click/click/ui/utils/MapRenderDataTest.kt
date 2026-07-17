@@ -28,18 +28,19 @@ class MapRenderDataTest {
         val event = beacon("event-1", MapBeaconKind.EVENT, lat, lon)
         val soundtrack = beacon("ost-1", MapBeaconKind.SOUNDTRACK, lat, lon)
         val hazard = beacon("haz-1", MapBeaconKind.HAZARD, lat, lon)
+        val sos = beacon("sos-1", MapBeaconKind.SOS, lat, lon)
         val utility = beacon("util-1", MapBeaconKind.UTILITY, lat, lon)
         val social = beacon("soc-1", MapBeaconKind.SOCIAL_VIBE, lat, lon)
 
         val rendered = determineMapRenderData(
             connections = connections,
-            beacons = listOf(event, soundtrack, hazard, utility, social),
+            beacons = listOf(event, soundtrack, hazard, sos, utility, social),
             zoomLevel = 10.0,
         )
 
         val clusters = assertIs<MapRenderData.Clusters>(rendered)
         val standaloneIds = clusters.standaloneBeacons.map { it.id }.toSet()
-        assertEquals(setOf("event-1", "ost-1", "haz-1", "util-1"), standaloneIds)
+        assertEquals(setOf("event-1", "ost-1", "haz-1", "sos-1", "util-1"), standaloneIds)
 
         val clusteredBeaconIds = clusters.clusters.flatMap { it.beaconPoints }.map { it.id }.toSet()
         assertFalse("event-1" in clusteredBeaconIds)

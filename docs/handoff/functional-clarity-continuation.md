@@ -69,6 +69,24 @@ Also merged earlier: **PR #44 `map_color_android`** — Android light-mode map u
 - ViewModels / BLE / Realtime / LiveKit untouched except for bugfixes above.
 - §0 automated gates (Android compile + unit tests, iOS sim compile) were green after these landings — **re-run after further merges**.
 
+### 1.5 Code audit (2026-07-17) — claim vs tree
+
+Static audit of Track B / B+ claims. **Do not treat as device pass.**
+
+| # | Code audit verdict | Residual risk |
+|---|--------------------|---------------|
+| **1** | Server VERIFIED; client was PARTIAL → **hardened** (503 + `pending_handshake_id` → recover) | Device multi-phone still required |
+| **2** | Server VERIFIED; client was PARTIAL → **hardened** (fetch-by-id + duplicate-key re-lookup) | Group aggregate + pairwise rows can still look like “dupes” in inbox |
+| **3** | Auto-clique gate VERIFIED; 1:1 DM CTA **hardened** (Success snackbar “Message”) | Coalesce / PendingConfirmation UX still open on device |
+| **4** | VERIFIED (`EVENT` standalone + ALL-layer visibility) | Device list/map parity |
+| **6–8** | VERIFIED | Android hardware |
+| **9** | Was open → **hardened** (`BeaconPinMetrics` + SOS standalone) | Device visual confirm |
+| **12–19, 21–25** | VERIFIED in tree | Device smoke |
+| **13 / #20** | PARTIAL | Forced OLED search/profile; `surfaceContainer` not fully wired; dead `OledSheetTheme` — deferred |
+| **Keychain -50** | Was open → **hardened** (`SecItemUpdate` / param retry) | Device auth flake confirm |
+
+Deferred (document only): legacy `bind-proximity-connection` edge-fn parity; ultrasonic production-frequency TODO; theme PARTIALs above.
+
 ---
 
 ## 2. What still needs fixing
@@ -87,29 +105,30 @@ All “code landed” rows below still require **device smoke**. Do not false-pa
 
 | # | Title | Pri | Status | Notes |
 |---|--------|-----|--------|-------|
-| **3** | Handshake → clear 1:1 DM UX | P1 | Partial | Auto-clique gated; polish/device UX still open |
+| **3** | Handshake → clear 1:1 DM UX | P1 | Code hardened — needs device repro | Auto-clique gated; Success snackbar “Message” → open chat; coalesce/PendingConfirmation still open |
 | **4** | Events missing from list view | P1 | Code fix landed — needs device repro | `EVENT` in `standaloneKinds`; ALL-layer `isVisibleEventBeacon` |
 | **5** | Map not rendering in color | P2 | Basemap code fixed | Confirm on Android light device; leave open if still wrong |
-| **9** | Hazard beacon icon oversized | P2 | Confirmed | Pin size inconsistency |
+| **9** | Hazard beacon icon oversized | P2 | Code hardened — needs device repro | Shared `BeaconPinMetrics`; SOS in `standaloneKinds` |
 | **10** | General visual bugs | P2 | Open | Spot-check after smoke |
 | **11** | Android-specific roll-up | P0–P2 | Open | See `04-android-focus.md` |
+| **13** | Profile / search sheet theme | P1 | PARTIAL | OLED profile OK; `UnifiedSearchSheet` still forced dark |
 | **23** | Transparent nav underlay | P1 | Code landed | Confirm no seam / material mismatch on device; icons readable over varied Home content |
-| — | iOS Keychain `status: -50` | P1 | Open if blocks auth | `IosTokenStorage` set failures — separate from LazyColumn crashes |
+| — | iOS Keychain `status: -50` | P1 | Code hardened — needs device repro | `IosTokenStorage` update/retry path |
 
 ### 2.3 Regression debt (not run on device)
 
 | Gate | Status |
 |------|--------|
-| §0 automated (Gradle + `npm test`) | Re-check after merge; was green post Track B / B+ |
+| §0 automated (Gradle + `npm test`) | Green after code-audit hardenings (2026-07-17): Android compile + unit tests, iOS sim compile, click-web jest |
 | Smoke [`02-smoke-10min.md`](../regression-testing/02-smoke-10min.md) | **Not run on device** |
 | Full checklist [`01-full-checklist.md`](../regression-testing/01-full-checklist.md) | **Not run** |
 | Android focus [`04-android-focus.md`](../regression-testing/04-android-focus.md) | **Not run** |
 
 ### 2.4 Recommended next engineering order
 
-1. **Device smoke** Track B P0s + chat timeline (#21) + verified click (#14/#18) + transparent nav (#23) + events (#4).
-2. **P1 polish:** #3 1:1 handshake UX on device; Keychain -50 if auth flakes.
-3. **P2:** #5 confirm, #9 hazard size, #10 visual sweep.
+1. **Device smoke** Track B P0s + chat timeline (#21) + verified click (#14/#18) + transparent nav (#23) + events (#4) + #3 Message CTA + Keychain auth.
+2. **P1 theme PARTIAL:** #13 UnifiedSearch forced dark / #20 `surfaceContainer` wiring.
+3. **P2:** #5 confirm, #9 hazard visual, #10 visual sweep.
 4. **Track C** mock layout redesigns (separate chat) — see §3.
 
 ---
@@ -221,8 +240,9 @@ Read first:
 - [x] P0 known issues (#1, #2, #6, #7, #8) **code** landed.
 - [x] Chat timeline order/dupes, picker keys, profile sheet, transparent nav **code** landed (#17–#23).
 - [x] P1 #4 events list/map parity **code** landed (device verify still open).
+- [x] Code audit residuals hardened: client 503 recover, confirm dedup, Keychain -50, 1:1 Message CTA, hazard pin metrics (2026-07-17).
 - [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
 - [ ] Track C layout redesigns completed or explicitly scheduled.
 
-**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4).
+**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4) + #3/#9/Keychain hardenings.

@@ -1,7 +1,7 @@
 # Click — Known Issues Audit
 
 **Date:** 2026-07-17 (updated)  
-**Scope:** Codebase audit against the Issue Spec Sheet (#1–11) plus Track B+ device-filed issues (#12–23).  
+**Scope:** Codebase audit against the Issue Spec Sheet (#1–11) plus Track B+ device-filed issues (#12–25) and iOS Keychain.  
 **Status legend:**
 
 | Status | Meaning |
@@ -22,34 +22,38 @@ Continuation status: [`../handoff/functional-clarity-continuation.md`](../handof
 
 | # | Title | Type | Status | Priority |
 |---|--------|------|--------|----------|
-| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro | P0 |
-| 2 | Duplicate connections | Bug | Code fix landed — needs device repro | P0 |
-| 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Partial / misfiled (auto-clique gated) | P1 |
+| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro (client 503 recover hardened 2026-07-17) | P0 |
+| 2 | Duplicate connections | Bug | Code fix landed — needs device repro (confirm fetch-by-id + dup-key hardened 2026-07-17) | P0 |
+| 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Code fix landed — needs device repro (auto-clique + Message CTA) | P1 |
 | 4 | Events missing from list view | Bug | Code fix landed — needs device repro | P1 |
 | 5 | Map not rendering in color | Bug / design ambiguity | Confirmed (basemap code fixed — device confirm) | P2 |
 | 6 | Android calls not working | Bug | Code fix landed — needs device repro | P0 |
 | 7 | Voice message crashes Android | Bug | Code fix landed — needs device repro | P0 |
 | 8 | Group chat creation crashes app | Bug | Code fix landed — needs device repro | P0 |
-| 9 | Hazard beacon icon oversized | UI bug | Confirmed inconsistency | P2 |
+| 9 | Hazard beacon icon oversized | UI bug | Code fix landed — needs device repro (`BeaconPinMetrics`) | P2 |
 | 10 | General visual bugs | UI | Open | P2 |
 | 11 | Android-specific bugs (roll-up) | Bug | Open (see #6–7 + matrix) | P0–P2 |
 | 12 | Add Click interactive-back card flicker | UI bug | Code fix landed — needs device repro | P1 |
-| 13 | Profile sheets dark/light inconsistency | UI bug | Code fix landed — needs device repro | P1 |
+| 13 | Profile sheets dark/light inconsistency | UI bug | Partial (profile OLED OK; UnifiedSearch forced dark) | P1 |
 | 14 | Create verified click dialog crash (scroll/click) | Bug | Code fix landed — needs device repro | P0 |
 | 15 | Segment tabs highlight covers text | UI bug | Code fix landed — needs device repro | P1 |
 | 16 | Dark mode text contrast | UI | Code fix landed — needs device repro | P1 |
 | 17 | Chat interactive-back LazyColumn duplicate key crash | Bug | Code fix landed — needs device repro | P0 |
 | 18 | Verified click picker duplicate LazyColumn UUID keys | Bug | Code fix landed — needs device repro | P0 |
 | 19 | Chat scroll lag / teleport on load-older | Bug | Code fix landed — needs device repro | P0 |
-| 20 | Dark mode surfaces too light | UI | Code fix landed — needs device repro | P2 |
+| 20 | Dark mode surfaces too light | UI | Partial (`surfaceContainer` not fully wired) | P2 |
 | 21 | Chat timeline out-of-order days + duplicate bubbles | Bug | Code fix landed — needs device repro | P0 |
 | 22 | Profile sheet OLED / avatar / top spacing | UI | Code fix landed — needs device repro | P1 |
 | 23 | Nav bar opaque band (materials differ under nav) | UI | Code fix landed — needs device repro | P1 |
 | 24 | Connections list flicker after chat interactive-back | UI | Code fix landed — needs device repro | P0 |
+| 25 | Inbox preview jumps to old timestamp after scroll-up | Bug | Code fix landed — needs device repro | P0 |
+| — | iOS Keychain `status: -50` | Bug | Code fix landed — needs device repro | P1 |
 
 **Track B (2026-07-16):** Code fixes for P0 `#1`, `#2`, `#6`, `#7`, `#8` (and `#3` auto-clique side effect).  
 
-**Track B+ UI (2026-07-16 → 2026-07-17):** `#12`–`#23` from device feedback (chat timeline, profile, transparent nav). Do **not** mark `[KNOWN-N]` pass until verified on device.
+**Track B+ UI (2026-07-16 → 2026-07-17):** `#12`–`#25` from device feedback (chat timeline, profile, transparent nav, inbox preview). Do **not** mark `[KNOWN-N]` pass until verified on device.
+
+**Code audit hardenings (2026-07-17):** client 503 → `recoverPendingProximityHandshake`; confirm path fetch-by-`preflightConnectionId` + duplicate-key re-lookup; Success “Message” CTA; `BeaconPinMetrics` + SOS standalone; Keychain `SecItemUpdate` / `-50` retry.
 
 ---
 
@@ -89,6 +93,11 @@ Server marks handshake rows matched without a durable connection for the full BF
 - `bindProximityHandshake`: on `ensureConnectionForMemberSet` failure, return 503 and **do not** call `markPendingHandshakesMatched` (leaves GET recovery viable).
 - Pairwise clique edge ensure failures for N>2 return 503 instead of silent warn.
 - Pairwise edges created during group bind use `forceActive: true` (promote `pending` → `active`).
+
+### Client hardening (2026-07-17 code audit)
+
+- `ApiClient.postProximityHandshake` treats HTTP **503** with `pending_handshake_id` as recoverable pending (same path as HTTP 202).
+- `ConnectionViewModel` starts `recoverPendingProximityHandshake` instead of hard `Error` when the server leaves the handshake unmatched.
 
 ### Suggested regression cases
 
@@ -139,6 +148,11 @@ Dedup is incomplete across server/client paths and group-vs-pair cardinality; gr
 - Client: 12s re-tap debounce + in-flight guard; confirm path passes `preflightConnectionId` from bind.
 - `findConnectionRowForUserPair` requires `user_ids.size == 2`.
 
+### Client hardening (2026-07-17 code audit)
+
+- `createConnectionOnline` restores by `preflightConnectionId` via `fetchConnectionById` **before** insert.
+- Insert races that hit unique pair constraints re-lookup the pair and restore instead of failing/duplicating.
+
 ### Suggested regression cases
 
 - [ ] 1:1 tap twice → still one Active 1:1 row for that pair
@@ -171,7 +185,7 @@ Handshake flow should let users create a direct message connection, not just a g
 ### Why it may feel “groups only”
 
 1. Coalesce delays 2-user GPS-only matches (waiting for a third).  
-2. After context save, [`ConnectionViewModel.saveContextTags`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/viewmodel/ConnectionViewModel.kt) runs `createVerifiedClique` when `memberUserIds.size >= 2` — **including 1:1** — which can create a 2-person group row alongside the DM.  
+2. After context save, success previously only snackbar’d / navigated to Connections Active — **no open-chat CTA**.  
 3. Multi-phone rooms bias toward group clique UX.
 
 ### Suggested regression cases
@@ -179,6 +193,7 @@ Handshake flow should let users create a direct message connection, not just a g
 - [ ] Exactly two phones tap → Active shows a **1:1** thread; chat is DM-shaped
 - [ ] No unexpected “Groups” membership for a pure 1:1 tap (or document if 2-person clique is intentional)
 - [ ] Three phones → group path as designed
+- [ ] After 1:1 Success, snackbar **Message** opens the new chat
 
 ### Product clarification
 
@@ -188,6 +203,9 @@ Treat as **UX/product fix**: keep server 1:1; stop auto-clique for size==2 unles
 
 - `saveContextTags` auto-clique gated to `tagging.isGroup && memberUserIds.size >= 3` (no 2-person clique after 1:1 tap).
 
+### UX hardening (2026-07-17 code audit)
+
+- `ConnectionState.Success` snackbar offers **Message** action → `pendingChatId` deep-link into Connections chat.
 ---
 
 ## 4. Events missing from list view
@@ -413,13 +431,19 @@ Hazard icon sized consistently with other UI / map icons.
 | Android | Default / labeled pin with ~10.dp radius colored dot — no fixed ⚠ |
 | iOS | `MKMarkerAnnotationView`; `glyphText` = first 3 chars of **caption**, not ⚠; title has ⚠️ but callout disabled |
 
-Also: SOS shares high z-index with HAZARD but is **not** in `standaloneKinds` (can cluster away at low zoom).
+Also: SOS shares high z-index with HAZARD but was **not** in `standaloneKinds` (could cluster away at low zoom).
+
+### Fix landed (2026-07-17 code audit)
+
+- Shared [`BeaconPinMetrics`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/utils/BeaconPinMetrics.kt): compact circle radius + alert glyph `⚠`.
+- Hazard/SOS pins default caption to alert glyph so Android uses labeled compact circles (not oversized `defaultMarker`) and iOS `glyphText` shows `⚠`.
+- `SOS` added to `standaloneKinds` alongside `HAZARD`.
 
 ### Suggested regression cases
 
 - [ ] Drop hazard → pin size matches event/utility pins visually
 - [ ] Compare Android / iOS / web side-by-side against design asset
-
+- [ ] SOS remains standalone when zoomed out
 ---
 
 ## 10. General visual bugs
@@ -800,6 +824,35 @@ Global `subscribeToMessageInserts` treated UPDATE like INSERT and `bumpConnectio
 
 ---
 
+## iOS Keychain `status: -50` (errSecParam)
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Auth / iOS token persistence |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P1 |
+
+### Expected
+
+JWT / refresh tokens persist to Keychain across app updates; set failures are handled without silent Keychain miss.
+
+### Evidence
+
+[`IosTokenStorage`](../../composeApp/src/iosMain/kotlin/compose/project/click/click/data/storage/TokenStorage.ios.kt) previously used delete+`SecItemAdd` only; on failure logged `status: $status` (including `-50` / `errSecParam`) and still treated NSUserDefaults as success.
+
+### Fix landed (2026-07-17 code audit)
+
+- Prefer `SecItemUpdate`, fall back to `SecItemAdd`; on duplicate / param error retry update.
+- Log structured Keychain failures; warn when defaults saved but Keychain write failed.
+
+### Suggested regression cases
+
+- [ ] Sign in on iOS → Keychain holds JWT (no `-50` spam in console)
+- [ ] App update / relaunch → session restores from Keychain
+
+---
+
 ## Cross-cutting architecture notes
 
 ```mermaid
@@ -833,5 +886,6 @@ Tri-Factor is not classic NFC-only; BLE is one of three factors. Group registrat
 6. ~~**P1** Profile sheet + transparent nav (#22, #23)~~ — code landed; device verify
 7. ~~**P0** Connections list flicker after chat back (#24)~~ — code landed; device verify
 8. ~~**P1** Event list/map parity (#4)~~ — code landed; device verify; finish 1:1 UX (#3) on device
-9. **P2** Map color intent (#5); hazard icon (#9); visual sweep (#10)
-10. **Track C** Design-asset layout redesigns — see [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md) §3
+9. ~~**P1** Client 503 recover / confirm dedup / Keychain -50 / Message CTA / hazard pins~~ — code hardened 2026-07-17; device verify
+10. **P2** Map color intent (#5); hazard visual confirm (#9); visual sweep (#10); theme PARTIAL (#13/#20)
+11. **Track C** Design-asset layout redesigns — see [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md) §3

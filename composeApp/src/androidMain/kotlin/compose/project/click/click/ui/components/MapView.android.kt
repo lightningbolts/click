@@ -21,6 +21,7 @@ import com.google.maps.android.compose.*
 import compose.project.click.click.ui.components.markerHueDegrees
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.ui.theme.LocalIsDarkMode
+import compose.project.click.click.ui.utils.BeaconPinMetrics
 import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -332,7 +333,7 @@ private fun bitmapDescriptorForLabeledPin(
 ): BitmapDescriptor {
     val padH = with(density) { 8.dp.roundToPx() }
     val padV = with(density) { 4.dp.roundToPx() }
-    val pinRadius = with(density) { 10.dp.roundToPx() }
+    val pinRadius = with(density) { BeaconPinMetrics.CircleRadiusDp.dp.roundToPx() }
     val gap = with(density) { 4.dp.roundToPx() }
     val corner = with(density) { 6.dp.toPx() }
     val maxLabelPx = with(density) { 132.dp.roundToPx() }

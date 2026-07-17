@@ -1179,6 +1179,8 @@ fun App() {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
                         revealConnectionId = state.connection.id
+                        val peerName = state.connectedUser.name?.trim()?.takeIf { it.isNotEmpty() } ?: "user"
+                        val chatId = state.connection.id
                         if (state.connection.isPendingSync()) {
                             connectionRevealState = null
                             snackbarHostState.showSnackbar("Connection saved offline. It will sync automatically when you're back online.")
@@ -1186,13 +1188,29 @@ fun App() {
                         } else if (connectionRevealState != null) {
                             connectionRevealState = connectionRevealState?.copy(
                                 phase = ConnectionRevealPhase.Success,
-                                connectedName = state.connectedUser.name
+                                connectedName = peerName
                             )
                             delay(900)
                             navigateTo(NavigationItem.Connections.route)
                             connectionRevealState = null
+                            val messageResult = snackbarHostState.showSnackbar(
+                                message = "Connected with $peerName!",
+                                actionLabel = "Message",
+                                duration = SnackbarDuration.Long,
+                            )
+                            if (messageResult == SnackbarResult.ActionPerformed) {
+                                pendingChatId = chatId
+                            }
                         } else {
-                            snackbarHostState.showSnackbar("Connected with ${state.connectedUser.name ?: "user"}!")
+                            navigateTo(NavigationItem.Connections.route)
+                            val messageResult = snackbarHostState.showSnackbar(
+                                message = "Connected with $peerName!",
+                                actionLabel = "Message",
+                                duration = SnackbarDuration.Long,
+                            )
+                            if (messageResult == SnackbarResult.ActionPerformed) {
+                                pendingChatId = chatId
+                            }
                         }
                         connectionViewModel.resetConnectionState()
                     }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
@@ -110,7 +111,16 @@ data class MapPin(
                         ?: label
                     truncateMapPinCaption(raw, 12).takeIf { it.isNotEmpty() }
                 }
-                MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.SOS, MapBeaconKind.STUDY,
+                MapBeaconKind.HAZARD, MapBeaconKind.SOS -> {
+                    val creatorCaption = beacon.creatorDisplayName
+                        ?.takeIf { beacon.showCreatorName && it.isNotBlank() }
+                        ?.let { truncateMapPinCaption(it, 12) }
+                    creatorCaption
+                        ?: beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
+                            ?.takeIf { it.isNotEmpty() }
+                        ?: BeaconPinMetrics.AlertGlyph
+                }
+                MapBeaconKind.UTILITY, MapBeaconKind.STUDY,
                 MapBeaconKind.EVENT -> {
                     val creatorCaption = beacon.creatorDisplayName
                         ?.takeIf { beacon.showCreatorName && it.isNotBlank() }

@@ -398,6 +398,7 @@ fun determineMapRenderData(
     val standaloneKinds = setOf(
         MapBeaconKind.SOUNDTRACK,
         MapBeaconKind.HAZARD,
+        MapBeaconKind.SOS,
         MapBeaconKind.UTILITY,
         MapBeaconKind.EVENT,
     )
